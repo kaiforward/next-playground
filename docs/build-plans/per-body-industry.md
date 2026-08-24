@@ -202,6 +202,53 @@ claim 4 (cumulative to t=10000): tier-0 extractor levels shed=2 across 2 (tick,s
 claim 1 (t=10000): systems whose extractionEff differs from generation = 0 of 600
 ```
 
+### Re-measure at spec review (2026-08-25) — both vectors and the realised product
+
+The original run folded the extraction modifier only; the spec review (finding 3) required the
+quality vector and the realised product measured too. Same instrument extended (slots ordered by
+ground value `qual × mod`; "today" = the pooled product `effPool × qualPool` the read site
+multiplies; "prefix" = worked-prefix mean of per-slot products, the amended spec's definition).
+This reading **supersedes** the original eff-only magnitudes wherever the spec quotes a buff size.
+
+```
+Meaning:    The full switch is roughly three times the size the eff-only reading suggested, and
+            the quality half is the bigger contributor; a tiny negative tail exists because
+            today's product-of-pooled-means can overshoot the honest per-slot mean.
+Claim:      The realised worked-prefix multiplier differs materially from today's pooled product.
+Number:     81.8% of pairs differ at 10K (417/510; signed median +29.36%, p90 +67.79%, max
+            +184.42%, min −2.63%, 3 negative); 92.9% at 1K (median +29.82%). Split: eff-only
+            median +4.94%, qual-only median +24.43% (10K). Validation: eff and qual pools both
+            matched stored columns 0-mismatch.
+Horizon:    both — t=1,000 and t=10,000.
+Cohort:     developed systems, homeworld (92.9% differing) vs colony (77.6%). Seed 42, 600
+            systems, real runWorldTick.
+Licenses:   Confirms the terminal falsifier clearance a fortiori and sizes the buff the simulate
+            gate must read against a pre-change baseline. Does NOT license: equilibrium claims
+            (10K is founding era), or treating the small negative tail as a player-facing nerf
+            path (3 pairs, ≤2.6%, an artifact of today's overshooting approximation).
+```
+
+```
+=== t=1000 (seed 42, 600 systems) ===
+instrument validation: bodySum-vs-column=0  effPool-vs-stored=0  qualPool-vs-stored=0
+(system,resource) pairs with built extractors: 140
+realised: pairs differing: 130 (92.9%); negative: 1
+  realised relDiff: median=29.82%  p90=51.34%  max=84.62%  min=-1.91%
+  eff-only: median=9.37%  p90=21.95%  max=33.63%  min=-20.36%
+  qual-only: median=17.94%  p90=42.77%  max=58.90%  min=-12.96%
+
+=== t=10000 (seed 42, 600 systems) ===
+instrument validation: bodySum-vs-column=0  effPool-vs-stored=0  qualPool-vs-stored=0
+(system,resource) pairs with built extractors: 510
+realised: pairs differing: 417 (81.8%); negative: 3
+  [homeworld] pairs=140 differing=130 (92.9%)   [colony] pairs=370 differing=287 (77.6%)
+  realised relDiff: median=29.36%  p90=67.79%  max=184.42%  min=-2.63%
+  eff-only: median=4.94%  p90=20.90%  max=47.89%  min=-22.77%
+  qual-only: median=24.43%  p90=61.89%  max=192.85%  min=-16.65%
+    system-210 arable: built=2/59 over 5 bodies  today=0.592 prefix=1.684 (184.4%)
+    system-619 ore: built=1/21 over 5 bodies  today=0.710 prefix=1.767 (148.8%)
+```
+
 ## Spec
 
 **What changes:** A system's raw-resource extraction stops being penalised for deposits nobody
@@ -230,10 +277,14 @@ decisions encoded, quoted:
 
 **Evidence** (full frame in `## Evidence` above):
 
-- Prefix-vs-pool differs on 76.9% of worked (system, resource) pairs at 10K (median +10.69%),
-  91.4% at 1K; colony cohort 71.4%. *Licenses:* ships the mechanical switch; does NOT license
-  treating the switch as tuning-neutral (it is a broad tier-0 output buff read at the feature's
-  simulate gate) nor any equilibrium claim (10K is founding era).
+- Realised worked-prefix multiplier differs from today's pooled product on 81.8% of worked
+  (system, resource) pairs at 10K (92.9% at 1K; colony cohort 77.6%), **median +29.4%, p90
+  +67.8%, max +184%**; the quality half contributes more than the modifier half (median +24.4%
+  vs +4.9%); 3 of 417 differing pairs read slightly negative (min −2.6%). Both-vector re-measure
+  at the spec review (2026-08-25), superseding the original eff-only reading. *Licenses:* ships
+  the mechanical switch; does NOT license treating the switch as tuning-neutral (it is a large
+  tier-0 output buff, first read against a pre-change baseline at the feature's simulate gate)
+  nor any equilibrium claim (10K is founding era).
 - `extractionEff` is generation-frozen, 0/600 systems drifted at either horizon. *Licenses:* no
   hidden tick-time writer to reconcile with; the writer change is confined to generation +
   count/lock events.
@@ -248,8 +299,15 @@ release). The build planner remains yield-blind — tier-0 opportunity scoring d
 does not add one; scoring the marginal slot is a named possible follow-up, not shipped behaviour.
 No per-body population, markets, unrest or any per-tick per-body state. The bundled visual system
 view is a separate follow-on with its own prototype gate. The economy-type label stays derived
-from all-bodies potential, not worked ground (deliberate — identity from endowment;
-`lib/engine/economy-type.ts:3`). Habitable-land/growth quality is untouched (already
+from all-bodies potential, not worked ground (deliberate — identity from endowment), **by
+mechanism, not assertion**: `substrateAggregates` keeps returning the pooled potential vectors
+(renamed `potential*`), which remain the inputs to `deriveEconomyTypeLabel` at
+`lib/engine/universe-gen.ts:351` and `:631`; the worked-prefix fold is a separate derivation
+applied to the `WorldSystem` columns only, and on the homeworld-prefab path it runs **after**
+`s.buildings` is stamped (`universe-gen.ts:628` — today's assignment order at `:625` would fold
+against no extractors). `economy-type.ts:3`'s "display-only" docstring is corrected as part of
+this change — event targeting reads the label (see the Events row). Habitable-land/growth
+quality is untouched (already
 worked-prefix-based, `lib/engine/habitability.ts:61`). No constant is retuned to offset the
 output buff; calibration stays at the coarse health bar per AGENTS.md.
 
@@ -258,72 +316,115 @@ output buff; calibration stays at the coarse health bar per AGENTS.md.
 **Definitions.** A **slot** is one authored deposit of resource `r` on one unlocked body; a body
 with `countOre = 3` contributes three ore slots, each carrying that body's quality multiplier
 (`qualOre`, `lib/world/types.ts:297-304`) and its archetype's `extractionModifier`
-(`lib/constants/bodies.ts:37-38`). The **slot order** for `(system, r)` sorts slots by per-slot
-ground value `qual × extractionModifier` descending, tie-broken by the body's position in
-`world.bodies` (generation order — stable, save-deterministic). The **worked prefix** is the
-first `n` slots of that order, where `n` is the system's built extractor count for `r`'s good
-(`extractorsOnResource`, `lib/engine/directed-build.ts:517-524`).
+(`lib/constants/bodies.ts:37-38`). A slot's **ground value** is the product
+`qual × extractionModifier` — one number per slot, the yield an extractor working that deposit
+realises. The **slot order** for `(system, r)` sorts slots by ground value descending, tie-broken
+by the body's position in `world.bodies` (generation order — stable, save-deterministic). The
+**worked prefix** is the first `n` slots of that order, where `n` is the system's built extractor
+level count for the **resource** `r` — summed across every tier-0 good that draws on it, the same
+shared figure the build cap uses (`extractorsOnResource`, `lib/engine/directed-build.ts:516-524`).
 
-**The two yield vectors change writer, not reader.** Today both are all-unlocked-bodies pools
-written once at generation: `extractionEff` the deposit-count-weighted mean modifier
-(`lib/engine/body-gen.ts:190-198`) and `yieldMult` the deposit-grade vector
-(`lib/engine/body-gen.ts:173`). Under this spec each becomes the mean of its own per-slot value
-over the **worked prefix** — same slot set, same order, two vectors kept separate because
-`extractionModifier` is authored "kept as its own aggregate (never folded into yieldMult)"
-(`lib/constants/bodies.ts:37`). The production read site is untouched: tier-0 output stays
+**The realised multiplier is the worked-prefix mean of ground values — exact, not approximate.**
+Today the read site multiplies two all-unlocked-bodies pools written once at generation:
+`extractionEff` (deposit-count-weighted mean modifier, `lib/engine/body-gen.ts:190-198`) and
+`yieldMult` (deposit-grade vector, `lib/engine/body-gen.ts:173`), as
 `rate × yieldMult[r] × extractionEff[r] × familyAnchorBuff` (`lib/engine/industry.ts:472-474`).
-Accepted approximation, stated: the product of the two worked means is not identical to the mean
-of per-slot products when quality and modifier vary independently across worked bodies; the
-cross-term is accepted to keep the two vectors' authored meanings and the entire reader graph
-unchanged.
+Under this spec the realised tier-0 multiplier for `r` is defined as **the mean of ground values
+over the worked prefix** — the physically honest figure, since each worked deposit contributes
+its own quality on its own body. Storage keeps the read site and the two columns' authored
+meanings intact by decomposing: the `eff` column holds the worked-prefix mean of
+`extractionModifier` (its authored meaning, "kept as its own aggregate",
+`lib/constants/bodies.ts:37`, preserved for the UI), and the `yield` column holds
+`meanOfGroundValues ÷ meanOfModifiers`, so the read-site product equals the mean of ground
+values **exactly** — no cross-term, no approximation. **Caveat every reader must respect: the
+`eff` column alone is NOT monotone under unlock** — only the realised product is (below); no
+mechanic may treat the modifier column as an unlock-stable quantity.
 
-**Recompute triggers and the staleness invariant.** The worked-prefix fold recomputes for a
-`(system, r)` whenever its extractor count changes (a landed build level, a decay shed) or any
-body's lock state changes, applied in the same mutation that changes the count or lock — no tick
-ever reads a vector inconsistent with current counts. All other ticks read the cached columns
-exactly as today (`effOf`/`yieldsOf`, `lib/engine/resources.ts:199-206`; consumed into
-`TickSystem` rows at `lib/world/tick.ts:255-256`). Per-tick cost is unchanged by construction;
-recompute cost is one fold over ≤~8 bodies × the affected resource, on construction-cycle events
-only.
+**Recompute triggers, the write path, and the staleness invariant.** The fold recomputes for a
+`(system, r)` whenever its extractor level count changes (a landed build level, a decay shed) or
+the unlocked-class set changes, applied at the mutation site — no tick ever reads a column
+inconsistent with current counts. The change must open three seams, because today none exists:
+(1) the fold's per-body inputs (`bodyType` + `count*`/`qual*`) are read from `world.bodies` **at
+the mutation site** — build-landing (`applyBuildingIncreases`, `lib/world/tick.ts:554-574`) and
+the decay teardown — never joined onto every tick row (`toTickSystems`'s existing per-body scan,
+`lib/world/tick.ts:196-204`, is not extended, which is what keeps per-tick cost unchanged);
+(2) `TickSystem.yields`/`extractionEff` become rows those two sites write; (3) the tick→world
+merge (`mergeSystemsIntoWorld`, `lib/world/tick.ts:268-323`) gains the yield/eff column writes —
+today it carries neither, so a recompute that does not reach the merge is a silent no-op. All
+other ticks read the cached columns exactly as today (`effOf`/`yieldsOf`,
+`lib/engine/resources.ts:199-206`, consumed at `lib/world/tick.ts:255-256`). The recompute is
+one fold over ≤~8 bodies for the affected resource, on construction-cycle events only. (The
+invariant is stated on its own terms; habitability's quality cache is a looser per-cycle pattern
+with a read-side fallback, `lib/engine/habitability.ts:6-11, 134-144`, and is precedent for the
+*derived-occupancy idea*, not for this write discipline.)
 
 **Edge behaviour.**
 
-- `n = 0` (no extractors): both vectors read neutral 1.0 for `r`, as the empty pool does today
-  (`lib/engine/body-gen.ts:187-188`); output is 0 regardless.
-- `n ≥ all slots`: the fold clamps at the all-slots mean — the same overrun rule land quality
-  ships (`systemHabitabilityQuality`'s clamp, habitability.md). Cannot arise through play
-  (`computeBuildOptions` rejects past the deposit cap, `lib/engine/build-options.ts:88`;
-  Evidence: 0 violations) — defensive for hand-edited or corrupted saves.
-- **Unlock/lock re-sorts, and unlock is monotone non-negative:** a newly unlocked body's slots
-  insert wherever their ground value falls in the order. Inserting slots into a set can only
-  raise or hold a top-`n` mean, so an unlock never reduces any yield — the dilution hazard is
-  dead by construction, not by tuning. A body *locking* (no shipped cause; future war/disaster
-  surface) can reduce it, which is the intended reading of losing ground. Same re-sort property
-  land fill already has on unlock (`substrateAggregates` rebuild, `lib/engine/body-gen.ts:166-174`).
+- `n = 0` **with deposits present**: both columns read the **first slot in the order** — the
+  best ground, the yield the first extractor would get — mirroring habitability's zero-occupancy
+  arm (a seed colony reads its best body's score, not a mean, `lib/engine/habitability.ts:50-53`).
+  Neutral 1.0 keeps only its authored meaning, "no deposits of `r` at all"
+  (`countWeightedMean`, `lib/engine/resources.ts:110-128`) — it never also means "unworked", so
+  the prospecting read (what would this field give me?) survives on every unbuilt resource, in
+  the Industry deposit table and the generation-time market seed alike. Output is 0 at `n = 0`
+  regardless.
+- `n ≥ all slots`: the fold clamps at the all-slots mean of ground values — the same overrun
+  rule land quality ships (`systemHabitabilityQuality`'s clamp, habitability.md). Cannot arise
+  through play (`computeBuildOptions` rejects past the deposit cap,
+  `lib/engine/build-options.ts:88`; Evidence: 0 violations) — defensive for corrupted saves.
+- **Unlock/lock re-sorts, and unlock is monotone non-negative on the realised multiplier:** a
+  newly unlocked body's slots insert wherever their ground value falls in the order. The worked
+  set is the top-`n` slots by ground value and the realised multiplier is their mean; adding
+  slots to the candidate pool can only raise or hold a top-`n` mean, so an unlock never reduces
+  realised yield — dead by construction, not by tuning. (The decomposed `eff` column alone can
+  move either way; only the product carries the guarantee.) A body *locking* (no shipped cause;
+  future war/disaster surface) can reduce it — the intended reading of losing ground. Note the
+  trigger's real shape: lock state is a static per-archetype class flag, not per-body state
+  (`lib/constants/bodies.ts:39-40`, `lib/world/types.ts:281-305` has no lock column), so a
+  future unlock is a galaxy-wide class flip re-aggregated per system hosting that class, not a
+  per-system mutation.
 - **Decay sheds the worst ground first:** `n` shrinking drops slots from the back of the order,
-  so shedding never lowers the per-level yield of what remains.
+  so the realised multiplier of what remains never falls. A statement about the derivation only —
+  decay's own mechanics (which building types shed, when) are untouched.
 - **Save/load:** no new `World` fields and no schema change — the existing eff/qual columns
-  become a maintained cache. On load, both vectors are recomputed from bodies + buildings before
-  the first tick, so pre-change saves silently adopt worked-prefix yields (their stored pooled
-  values are discarded, not migrated).
+  become a maintained cache. The recompute hook is a pure `rebuildWorkedYieldColumns(world)`
+  applied in `deserialiseWorld`'s ok arm (`lib/world/save.ts:67-92`) — the one seam every load
+  path (`loadGame`, `lib/services/game.ts:82-88`, worker boot, save-files, the harness) passes
+  through — so pre-change saves silently adopt worked-prefix yields before their first tick.
+  **`SAVE_FORMAT_VERSION` does not bump**, stated against `save.ts:6-11`'s changed-meaning rule:
+  the stored column values are recomputed on load and therefore never read across the version
+  boundary.
 
-**Derived per-body read (new).** One pure derivation — given a system's bodies and extractor
-counts, return per body and resource: slots worked / slots total (new — emitted by the same
-engine module that owns the slot order, consumed by services only, never by the tick). Surfaces:
-Astrography body cards (`components/system/body-card.tsx`) show worked/total per deposit; the
-Industry deposit table's per-resource yield figure (`summariseDeposits`,
-`lib/services/universe.ts:175`) reads the worked-fold columns and so changes value, not shape.
-All new player-facing strings go through `/game-copy`.
+**Derived per-body read (new), and the marginal-yield display rule.** One pure derivation —
+given a system's bodies and extractor counts, return per body and resource: slots worked / slots
+total, plus the **marginal slot** (the `(n+1)`th slot in the order — the ground the next
+extractor would work). New — emitted by the same engine module that owns the slot order,
+consumed by services only, never by the tick. Surfaces: **the headline figure on an Industry
+deposit-table row is the marginal yield — what the next extractor built here gets** (at `n = 0`
+that is the best slot, so the prospecting read and the headline are one rule); the worked
+average — the number production actually uses — is the secondary read beside it ("working 4 of 9
+slots · avg 120%"). Owner decision (Kai, 2026-08-25): a stepping-down "next" is
+expectation-setting where a sliding-down average reads as decay — accepted in exactly this
+shape. Astrography body cards (`components/system/body-card.tsx`) show worked/total per deposit.
+The deposit table's underlying figures (`summariseDeposits`, `lib/services/universe.ts:175`)
+change value and gain the marginal column; exact wording through `/game-copy`.
 
 **What the simulation observably does differently.** Tier-0 production rises wherever the worked
-prefix beats the pool — at the measured cohort, ~77% of worked pairs, median ~+10% (Evidence).
-Everything downstream of the two vectors inherits coherently through the existing parameter
-graph: capacity rates, input demand, honest demand, `demandRate` (the pricing anchor,
+prefix beats today's pooled product — at the re-measured cohort, 81.8% of worked pairs at 10K
+(92.9% at 1K), **median +29.4%, p90 +67.8%, max +184%**, with the quality half the larger
+contributor (median +24.4% qual-only vs +4.9% eff-only) and a handful of pairs slightly negative
+(3 of 417, min −2.6% — today's product-of-pooled-means can overshoot the honest per-slot mean).
+Everything downstream of the columns inherits coherently through the existing parameter graph:
+capacity rates, input demand, honest demand, `demandRate` (the pricing anchor,
 `lib/tick/adapters/memory/population.ts:156`), logistics classification and the founding seam
 (`lib/services/construction.ts:60-61`). The feature's gate is `npm run simulate` at both
-horizons: conservation identities hold, and the tier-0 output/cover movement is read cohorted
-(producer vs consumer markets, homeworld vs colony) against the coarse health bar — no NaN, no
-runaway, no pinning, dispersion and liquidity intact.
+horizons, compared against a **pre-change baseline run** (same seed and system count) quoted in
+the PR: conservation identities hold; tier-0 output/cover movement read cohorted (producer vs
+consumer market role × homeworld vs colony); **plus the two second-order reads this review
+added: over-served tier-0 deficits / idle extractor levels (the planner sizes at an assumed 1.0
+multiplier, conservative today, optimistic once realised yield exceeds 1) and tier-0 shed
+counts** — all against the coarse health bar (no NaN, no runaway, no pinning; dispersion and
+liquidity intact).
 
 ### Hazard worksheet
 
@@ -351,9 +452,10 @@ economy-type.ts (label derivation).
 
 Ruling: every reader consumes the vectors as "the yield extraction actually achieves", so the
 redefinition moves all of them together **deliberately** — that coherence is the feature. The one
-reader kept on the *old* meaning is the economy-type label (potential, all-bodies —
-`deriveEconomyTypeLabel`, `lib/engine/universe-gen.ts:631`), which keeps reading the
-generation-time potential vector and is called out in Not claimed. The writers change; no read
+reader kept on the *old* meaning is the economy-type label — and that separation is now a named
+mechanism, not an assertion: `substrateAggregates`' returns are renamed `potential*` and stay the
+label's input at `universe-gen.ts:351/:631`, while the worked fold writes the `WorldSystem`
+columns only (see Not claimed for the prefab ordering constraint). The writers change; no read
 site changes.
 
 **2. Constants read for their authored meaning:**
@@ -363,23 +465,24 @@ site changes.
 | `extractionModifier` | "Extraction work modifier in (0, 1] — per-body difficulty, kept as its own aggregate (never folded into yieldMult)" (`lib/constants/bodies.ts:37`) | per-slot difficulty term, aggregated in its own vector | yes — the fold set changes, the separation is preserved |
 | `qual*` columns | "pure ground-grade multiplier" (habitability.md, Deposit quality) | per-slot grade term, own vector | yes |
 | `techLocked` | tech-locked classes contribute zero counts/weight/land (`lib/engine/body-gen.ts:154-156`) | slot-eligibility gate | yes |
+| `countWeightedMean`'s neutral 1.0 | "the shared 'nothing here, read neutral' convention" — total count 0 (`lib/engine/resources.ts:110-113`) | "no deposits of `r` at all" ONLY — the unworked-deposits state reads the best slot instead (Edge behaviour) | yes — caught at review; the first draft overloaded it |
 
 **3. Systems sweep** (brainstorm sweep re-verified at spec depth):
 
 | System | Interaction |
 |---|---|
-| Events | none — modifiers multiply production after yield (`SPEC.md`, Events→Economy); no event reads either vector (impact: absent) |
+| Events | modifiers: none — all economy effects are `production_rate` rate-multipliers applied after yield (`lib/engine/industry.ts:472-474`; verified across `lib/constants/events.ts` at review). Targeting: **indirect** — `targetFilter.economyTypes` (`lib/engine/events.ts:256-257`, spread `:401-403`) reads `economyType`, derived from the pooled potential vector; eight shipped definitions gate on it (mining_boom/asteroid_impact 'extraction', blight 'agricultural', war et al.), so the label MUST stay on the potential vectors (Not claimed) or event targeting shifts galaxy-wide |
 | Population + migration | inherits via `demandRate` rewrite (`population.ts:156`) — intended; land fill untouched |
-| Unrest / regime | none directly — moves only through satisfaction as any output change does |
-| Industry + staffing | the changed surface; staffing untouched (labour is head-count, not yield) |
-| Infrastructure decay | count decreases trigger the refold, same mutation; shed-worst-first is new observable behaviour; fixture-proven (Evidence: 2 sheds/10K) |
+| Unrest / regime | none directly — moves only through satisfaction as any output change does (grep clean at review) |
+| Industry + staffing | the changed surface; staffing untouched (labour is head-count, not yield; verified at review) |
+| Infrastructure decay | count decreases trigger the refold at the teardown site. The loop the shed rule closes with the idle channel (`infrastructure-decay.ts:6-11`) was traced at review: each shed raises the per-level yield of the remainder, which can re-arm the idle countdown — **damped, not runaway** (total output = Σ top-n ground values, strictly monotone in n), converging to a LOWER equilibrium extractor count at the same demand, freeing deposit slots and cutting maintenance. Fixture-proven (Evidence: 2 sheds/10K — the sim cannot exercise it); the gate reads shed counts and idle tier-0 levels rather than assuming termination |
 | Directed logistics | declared reader (6/9) — classification inherits the new rates; no code change |
-| Directed build / planner | declared reader (7/9) via fixtures but scoring is yield-blind (no ref in directed-build.ts) — unchanged, named in Not claimed |
-| Colonisation + founding | founding seam reads both vectors (`construction.ts:60-61`) — colonies open with worked-fold yields; intended |
-| Treasury / purse | none direct — production tax inherits realised output |
+| Directed build / planner | scoring is yield-blind (`perUnit`, `directed-build.ts:897/1038`; level sizing `Math.ceil(servedOutput / perUnit)` `:1063`) — **unchanged in code, changed in effect**: the assumed 1.0 multiplier is conservative today (realised pooled product < 1) and optimistic once the worked prefix lifts realised yield above 1, so tier-0 commitments over-serve their deficits — surplus output, idle levels, the idle-decay channel arming. Gate reads added (Behaviour). Yield-aware sizing is booked on the planner-necessity roadmap row |
+| Colonisation + founding | founding seam reads both vectors (`construction.ts:60-61`) — colonies open with worked-fold yields; intended. Colony target choice unaffected (`colonisation-value.ts:122-166` reads counts+land only; verified at review) |
+| Treasury / purse | **indirect but proportional** — production tax is assessed on realised units (`lib/engine/treasury.ts:87-101`), so the tier-0 buff raises faction income roughly in proportion, funding charter fees and build work. Expected observable at the gate: faster founding cadence and higher balances at both horizons; read cohorted, not as a health-bar pass |
 | Factions + relations | none — no reader |
-| Save format | no shape change; columns become recomputed-on-load cache (Behaviour, Save/load) |
-| Harness metrics | tier-0 cover/output shift galaxy-wide — the simulate gate reads them cohorted; characterisation bands touching tier-0 output may need re-derivation at implementation |
+| Save format | no shape change; columns become recomputed-on-load cache via `deserialiseWorld`'s ok arm; SAVE_FORMAT_VERSION explicitly not bumped (Behaviour, Save/load) |
+| Harness metrics | named exposed bands, not a hedge: `lib/tick-harness/__tests__/runner-founding.test.ts:39-40` (opening satisfaction / deprived colonies), `:62-63` (`demandHunting.flipRate` band 0.005–0.012, two-sided), `:104-110` (`materialsShort` stalls > 0 — a big supply buff can zero them). Each re-derived with reasoning on the implementation branch, never widened to accommodate |
 
 **4. Claims with numbers** — all carried in `## Evidence` (seed 42, 600 systems, t=1K and t=10K,
 cohorted homeworld/colony). One labelled inference: *quality-pool dilution mirrors modifier-pool
@@ -397,10 +500,14 @@ worked fold kills both by the same construction)*.
 | lock state | `BODY_ARCHETYPES[bodyType].techLocked` | boolean, static classes |
 | eff/qual columns | `effOf`/`yieldsOf` (`resources.ts:199-206`) | ResourceVector, this spec's write target |
 
-**6. Aggregates that move for other reasons:** tier-0 median cover moves with producer/consumer
-cohort mix and with founding-era colony count — the gate reads cohorted (market role × world
-cohort) per measurement-traps.md; and 10K is founding era, so movement is recovery-timing, not
-equilibrium level.
+**6. Aggregates that move for other reasons:** the gate compares against a **pre-change baseline
+run** (seed 42, 600 systems, both horizons, taken on main before the change lands and quoted in
+the PR beside the post-change run): tier-0 output and cover split by producer/consumer market
+role × homeworld/colony cohort. The confound is documented by this spec's own evidence: the
+developed cohort grows 20 → 164 between horizons and the homeworld cohort differs from the
+colony cohort by ~15 points (92.9% vs 77.6% differing pairs), so any galaxy-wide median moves
+with founding-era colony count alone — only the within-cohort comparison is evidence about this
+change. 10K is founding era: movement there is recovery-timing, never equilibrium level.
 
 ### Falsifiers (provenance: moved here unedited)
 
