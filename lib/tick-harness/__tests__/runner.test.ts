@@ -488,21 +488,21 @@ describe("runTickHarness: the cycle-gated samplers", () => {
     // readings and the rate would collapse by an order of magnitude — this test's whole point is
     // that a per-tick sampler cannot land in the band asserted below, not the rate's own magnitude.
     //
-    // Under the calm regime left by the industry-land budget's deletion this branch (accepted,
-    // Kai 2026-08-24), the rate no longer clears 0.005 at any horizon: it grows with horizon as the
-    // post-founding economy matures, then asymptotes — probe-backed at 0.00448 (18,000 ticks),
-    // 0.00450 (19,000), 0.00448 (20,000). A fixed, adequately-late horizon lands inside that
-    // asymptote rather than hunting for a bound the tables no longer cross, so read at 20,000 —
-    // BUSY's own horizon plus 10,000 — and pin the observation is TAKEN (rate > 0, a per-tick
-    // sampler diluted by CYCLE_LENGTH would still clear that alone) and stays inside the measured
-    // band (< 0.005). A future rate ≥ 0.005 here means demand-hunting pressure has returned.
+    // Under the construction-cost site ranking (which concentrates tier-1+ production into hubs),
+    // the rate grows with horizon and asymptotes near 0.0086 — probe-backed at ECONOMY_SCALE=1:
+    // 0.00380 (12,000 ticks), 0.00618 (16,000), 0.00735 (20,000), 0.00798 (24,000), successive
+    // deltas halving per 4,000 ticks (geometric tail ≈ 0.0086). Read at a fixed 20,000 — BUSY's
+    // own horizon plus 10,000 — and pin the measured band: above 0.005 (a per-tick sampler
+    // diluted by CYCLE_LENGTH would read ~0.0003 and can never clear it — the sampling-cadence
+    // discrimination this test exists for) and below 0.012 (~1.5× the asymptote; drifting past
+    // it means demand-hunting pressure has shifted regime again and the band needs re-deriving).
     const results = await runTickHarness({
       systemCount: BUSY.systemCount,
       seed: BUSY.seed,
       tickCount: BUSY.tickCount + 10_000,
     });
-    expect(results.demandHunting.flipRate).toBeGreaterThan(0);
-    expect(results.demandHunting.flipRate).toBeLessThan(0.005);
+    expect(results.demandHunting.flipRate).toBeGreaterThan(0.005);
+    expect(results.demandHunting.flipRate).toBeLessThan(0.012);
   }, 180_000);
 });
 

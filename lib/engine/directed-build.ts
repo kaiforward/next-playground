@@ -32,7 +32,7 @@ import {
 } from "@/lib/engine/colonisation-value";
 import {
   labourDemand, housingPopCap, skill1Demand, skill2Demand, skill1Cap, skill2Cap,
-  familyAnchorBuff, familyThroughput, inputDemandFromProduction,
+  familyAnchorBuff, familyThroughput, inputDemandFromProduction, labourFulfilment,
 } from "@/lib/engine/industry";
 
 /** Market state for one good at one system — the build planner's per-good input. */
@@ -894,25 +894,86 @@ function planFactionBundles(
       // higher (the snowball): buffed output means more served demand per unit of capacity.
       const perUnit = baseUnit * familyAnchorBuff(site.buildings, goodId);
 
-      // Score: allocate this site's output capacity to its reachable deficits,
-      // nearest-first, summing served ÷ route cost (capacity + proximity). Ordering only.
-      let capOutput = capUnits * perUnit;
-      let score = 0;
-      for (const r of reachable) {
-        if (capOutput <= 0) break;
-        const short = deficitMap.get(r.sysId) ?? 0;
-        if (short <= 0) continue;
-        const take = Math.min(capOutput, short);
-        score += take / r.cost;
-        capOutput -= take;
+      let score: number;
+      if (isTier0) {
+        // Tier-0 (deposit-slot capacity) scoring is untouched: allocate this site's finite output
+        // capacity to its reachable deficits, nearest-first, summing served ÷ route cost (capacity +
+        // proximity). Ordering only.
+        let capOutput = capUnits * perUnit;
+        score = 0;
+        for (const r of reachable) {
+          if (capOutput <= 0) break;
+          const short = deficitMap.get(r.sysId) ?? 0;
+          if (short <= 0) continue;
+          const take = Math.min(capOutput, short);
+          score += take / r.cost;
+          capOutput -= take;
+        }
+      } else {
+        // Tier-1+: `capUnits` is Infinity (buildableUnits — no land ceiling left to bind it), so the
+        // old capacity-scored channel degenerated: every site can always serve the full reachable
+        // shortfall, `familyAnchorBuff` no longer differentiates a site's SCORE (only its level
+        // sizing), and ranking collapsed to demand-weighted proximity alone. That channel was standing
+        // in for cost-to-create-output; score that cost directly instead.
+        //
+        // Numerator: the same demand-weighted-by-proximity sum as tier-0, uncapped — nothing bounds
+        // how much of the reachable shortfall this site COULD serve, so every reachable deficit
+        // counts in full (`take = short`, no capOutput to exhaust).
+        let demandProximity = 0;
+        let totalServed = 0;
+        for (const r of reachable) {
+          const short = deficitMap.get(r.sysId) ?? 0;
+          if (short <= 0) continue;
+          demandProximity += short / r.cost;
+          totalServed += short;
+        }
+        // Denominator: marginal construction work per delivered unit of output = this good's own
+        // build cost amortised over its (buffed) per-level output, plus — only when the site carries
+        // NO specialisation complex of any family yet (COMPLEX_TYPES, ANCHOR_CAP 1 site-wide, the same
+        // gate complexLift itself uses) — the complex's build cost amortised over the FULL demand this
+        // opportunity would serve (`totalServed`). A big shortfall then easily outweighs the one-off
+        // complex surcharge; a small one doesn't. A site that already anchors a complex pays no
+        // surcharge at all, which is what lets it outrank an equidistant complex-less greenfield site.
+        const buildWorkPerUnit = workCostPerLevel(goodId) / perUnit;
+        const family = FAMILY_BY_GOOD[goodId];
+        let hasComplex = false;
+        if (family) {
+          for (const t of COMPLEX_TYPES) {
+            if ((site.buildings[t] ?? 0) > 0) { hasComplex = true; break; }
+          }
+        }
+        const complexSurchargePerUnit = family && !hasComplex && totalServed > 0
+          ? workCostPerLevel(family.complexType) / totalServed
+          : 0;
+        const marginalWorkPerUnit = buildWorkPerUnit + complexSurchargePerUnit;
+
+        // Fold projected staffing of the marginal unit (one more level of `goodId`, on top of the
+        // site's CURRENT buildings and population — the same headcount projection `estStaffing` reads,
+        // lib/engine/build-options.ts) so an unstaffable site does not outrank a staffed hub.
+        // Headcount only (`labourFulfil`), not the skill-1/skill-2 ceiling gates: those ceilings are
+        // raised by co-built academies as part of the SAME bundle (`academyLift`/`fitFor`, below,
+        // sized off exactly this production count), so a fresh site with no academy yet would
+        // otherwise always score a skill-drawing good at 0 regardless of population — the ceiling
+        // isn't a property of the site, it's a property of the bundle this opportunity is about to
+        // build. Multiplicative: score scales directly with how much of the marginal unit's headcount
+        // draw the site's existing population actually covers. Never negative; for any site with
+        // population > 0 it is never exactly zero either, since `labourFulfilment` is a ratio of two
+        // positives — only a genuinely pop-0 site drives it to 0, which is correct: nothing there could
+        // staff the build at all. The after-pick labour gate (`fitFor`, below) is unchanged — this only
+        // affects RANKING.
+        const nextBuildings = { ...site.buildings, [goodId]: (site.buildings[goodId] ?? 0) + 1 };
+        const staffingFactor = labourFulfilment(site.population, labourDemand(nextBuildings));
+
+        score = totalServed > 0 ? (demandProximity / marginalWorkPerUnit) * staffingFactor : 0;
       }
       if (score <= 0) {
-        // Every entry `deficitSystemIds` contains carries a strictly positive shortfall by
+        // Tier-0: every entry `deficitSystemIds` contains carries a strictly positive shortfall by
         // construction (see remainingByGood above), `perUnit` is bounded below by `baseUnit > 0` via
         // familyAnchorBuff (never < 1), and `reachable` is non-empty here — so `score` reaching 0
-        // should not be possible given today's invariants. Guarded rather than assumed, and recorded
-        // as "no-consumer" (the closest fit of the five) rather than forcing a new reason for a state
-        // that should be unreachable.
+        // should not be possible given today's invariants. Tier-1+: `score` legitimately reaches 0
+        // only for a population-0 site (the staffing fold above), which correctly has nothing to rank.
+        // Guarded rather than assumed either way, and recorded as "no-consumer" (the closest fit of
+        // the five) rather than forcing a new reason for what should be a rare, uninteresting state.
         recordUnrankedDrop(site.systemId, "no-consumer");
         continue;
       }

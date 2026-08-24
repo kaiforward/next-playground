@@ -448,6 +448,11 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   ships on the map, and designing a second flow view before this pass changes what flows is
   backwards. Its approved HTML prototype survives as an input —
   [ui-ws2-map-modes.md](./planned/ui-ws2-map-modes.md) (P2, flow-viz).
+  **Input-proximity weighting in build-planner site ranking** (Kai, 2026-08-24): tier-1+
+  site scoring currently gates on input suppliers existing (`inputsAvailable`,
+  `lib/engine/directed-build.ts`) as a yes/no; weighting by route cost to those suppliers
+  would favour integrated hubs. Deliberately left out of the post-industry-land-cut ranking
+  recut because it overlaps this pass's hub/chain design — pick it up here.
   **Carry necessity into the routing calculations too** (Kai, 2026-08-16). The same gap the build
   planner has: logistics decides what to haul from shortfall quantity and route cost, and a unit of
   unmet food ranks alongside a unit of unmet luxuries. Sibling of the necessity-weighting row under

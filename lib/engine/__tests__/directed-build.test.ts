@@ -1086,15 +1086,15 @@ function crossFamilyDeficitScenario(): BuildSystemState[] {
   return [deficitMetals, deficitFuel, producer];
 }
 
-// Two producers with identical space-bound metals capacity; C already carries the heavy-industry
-// complex (its footprint pre-paid in extra general space so remaining capacity matches B's). The
-// shortfall sits between B's unbuffed reach (1.0×) and C's buffed reach (1.4×), so both sites are
-// capacity-limited at score time and C's buffed per-unit must rank it first.
+// Two equidistant producers (`reachable` costs every route 1), same population, both able to host
+// ore-fed metals: B is a bare greenfield, C already carries the heavy-industry complex. Tier-1+
+// capacity is unbounded (buildableUnits — no land ceiling left to bind it), so neither site is
+// capacity-limited; what differs is the marginal construction work per delivered unit (the score's
+// score) — B must pay the complex's build cost (amortised over the deficit it would serve) to reach
+// ANCHOR_MIN_THROUGHPUT, C already carries the complex and pays nothing, so C's lower cost-per-unit
+// outranks B at the same proximity.
 function anchoredVsGreenfieldScenario(): BuildSystemState[] {
   const capUnits = 20;
-  // The assessment commits (1 + margin) × demand × cap of the flow. Neither site is capacity-limited
-  // any more — tier-1+ `buildableUnits` is unbounded (no industry-land budget left to cap it) — see
-  // the FINDING above the skipped "snowball" test for what that broke.
   const committedDeficit = capUnits * OUTPUT_PER_UNIT.metals * 1.15;
   const demand = committedDeficit / ((1 + DIRECTED_BUILD.PROVISION_MARGIN) * DIRECTED_BUILD.BUILD_RATE_CAP);
   const deficit: BuildSystemState = {
@@ -1118,21 +1118,12 @@ function anchoredVsGreenfieldScenario(): BuildSystemState[] {
 }
 
 describe("complex co-build", () => {
-  // FINDING (2026-08-24, habitability-seeding Task 15): this Prove no longer holds and is not
-  // patched over here — it is reporting a real behavioural consequence of deleting the industry-
-  // land budget, not a stale fixture. The opportunity SCORE loop (planFactionBundles,
-  // lib/engine/directed-build.ts) computes `take = min(capOutput, short)`; capOutput is now
-  // `Infinity × perUnit` for every tier-1+ site (buildableUnits returns Infinity), so `take` always
-  // equals the full reachable shortfall regardless of `perUnit` — the anchor buff (familyAnchorBuff)
-  // can no longer raise a site's score relative to an unbuffed competitor at the same route cost.
-  // With scores now tied, `opportunities.sort()`'s stable order (site insertion order: A, B, C here)
-  // decides the winner instead — confirmed empirically: the greenfield site B now wins the WHOLE
-  // deficit and builds its own heavy_industry_complex from scratch (23 metals + a fresh complex),
-  // while C — which already carried a pre-paid complex — gets nothing. The buff still matters for
-  // LEVEL SIZING once a site is chosen (fewer levels for the same output), just not for ranking.
-  // Left un-asserted pending an owner decision on whether the snowball ranking needs a non-land
-  // signal now that land can no longer differentiate sites.
-  it.skip("routes family production to the site already carrying the complex (the snowball)", () => {
+  // The opportunity score prices the marginal construction work per delivered unit
+  // directly (lib/engine/directed-build.ts, the tier-1+ branch of the score loop) instead of the
+  // deleted capacity channel. C already anchors the family's complex, so it pays no complex
+  // surcharge; B (equidistant, same population) would have to build one from scratch, so its
+  // marginal work per unit is strictly higher and it ranks below C.
+  it("routes family production to the site already carrying the complex (the snowball)", () => {
     const builds = planFactionBuilds(anchoredVsGreenfieldScenario(), reachable, DEV_REFS);
     const atAnchored = countFor(builds, "C", "metals");
     const atGreenfield = countFor(builds, "B", "metals");
@@ -1172,6 +1163,89 @@ describe("complex co-build", () => {
     const total = complexBuilds.reduce((s, b) => s + b.count, 0);
     expect(total).toBeLessThanOrEqual(1);
     expect(new Set(complexBuilds.map((b) => b.buildingType)).size).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("construction-cost score — distance and staffing", () => {
+  // Distance still matters: a complex-anchored site pays no complex surcharge, but a greenfield site
+  // close enough to the demand still wins on route cost alone. Both sites carry local ore (satisfies
+  // the input gate) and a population far beyond anything the marginal metals level could need
+  // (staffingFactor ≈ 1 at both, so it does not confound the comparison).
+  //
+  // Crossover arithmetic (metals: OUTPUT_PER_UNIT 5, workCostPerLevel 20; heavy_industry_complex
+  // workCostPerLevel 40, buffMult 1.4 — read via the constants, not hand-copied):
+  //   demand 100 ⇒ rateDeficit D = (1 + PROVISION_MARGIN) × demand × BUILD_RATE_CAP = 1.1 × 100 × 0.4 = 44
+  //   marginalWorkPerUnit(greenfield)  = 20/5 + 40/D = 4 + 40/44 ≈ 4.909  (pays the complex surcharge)
+  //   marginalWorkPerUnit(anchored)    = 20/(5×1.4) = 20/7 ≈ 2.857        (already anchored, no surcharge)
+  //   score(site) = (D / routeCost) / marginalWorkPerUnit(site)
+  // At equal route cost the anchored site wins (2.857 < 4.909 ⇒ higher score) — that's the "snowball"
+  // test above. Here the anchored site is pushed twice as far (route cost 2 vs 1): its score more than
+  // halves (44/2/2.857 ≈ 7.70) while the greenfield's stays put (44/1/4.909 ≈ 8.97), so the greenfield
+  // wins despite paying to build its own complex from scratch.
+  it("a greenfield site wins over an anchored one once route cost outweighs the complex surcharge", () => {
+    const demand = 100;
+    const deficit: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "metals", stock: 0, demand, production: 0, capacityProduction: 0 }],
+    };
+    const greenfield: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 1e9, control: "developed",
+      buildings: { ore: 5 },
+      depositCounts: emptyResourceVector(), peopleLand: 0, goods: [],
+    };
+    const anchoredButFar: BuildSystemState = {
+      systemId: "C", factionId: "f1", population: 1e9, control: "developed",
+      buildings: { ore: 5, [HEAVY_INDUSTRY_COMPLEX]: 1 },
+      depositCounts: emptyResourceVector(), peopleLand: 0, goods: [],
+    };
+    const farRoute: RouteCost = (from, to) => {
+      if (to !== "A") return null;
+      if (from === "B") return 1;
+      if (from === "C") return 2;
+      return null;
+    };
+    const builds = planFactionBuilds([deficit, greenfield, anchoredButFar], farRoute, DEV_REFS);
+    expect(countFor(builds, "B", "metals")).toBeGreaterThan(0);
+    expect(countFor(builds, "C", "metals")).toBe(0);
+  });
+
+  // A site with LESS spare labour to staff the marginal unit must not outrank an otherwise-equal site
+  // with more — and critically, the starved site here can still legally build if picked first (its
+  // after-pick labour gate, `fitFor`, passes), so the only thing that can be relied on to route the
+  // build to the better-staffed site is the RANKING itself, not the unchanged after-pick gate.
+  //
+  // Both sites already anchor the heavy-industry complex AND a vocational school sized well past
+  // metals' skill-1 draw (so neither needs a fresh academy — `fitFor`'s labour draw is just the
+  // production levels themselves) and carry the same local ore, at the same route cost, so
+  // `demandProximity` and `marginalWorkPerUnit` are bit-identical between the two candidates; only
+  // population differs. Numbers (metals: labour 18 unskilled + 7 skill1 = 25/level; ore: 10/level;
+  // heavy_industry_complex: 12 unskilled; vocational_school: 15 unskilled, licenses 150 skill-1 —
+  // metals' whole run here draws at most 7×7=49, well under that): base labour demand at
+  // 5 ore + 1 complex + 1 school = 5×10 + 12 + 15 = 77; + one marginal metals level = 102. `starved`
+  // (population 90) clears the after-pick gate (102 < 90 + 25 = 115) but its projected headroom
+  // (90/102 ≈ 0.882) is strictly below `staffed` (population 300, fully covers 102 ⇒ factor 1) — so
+  // `staffed` must outrank it.
+  it("a site with less spare staffing does not outrank an otherwise-equal, better-staffed site", () => {
+    const sharedBuildings = { ore: 5, [HEAVY_INDUSTRY_COMPLEX]: 1, [VOCATIONAL_SCHOOL_TYPE]: 1 };
+    const deficit: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "metals", stock: 0, demand: 110, production: 0, capacityProduction: 0 }],
+    };
+    const starved: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 90, control: "developed",
+      buildings: sharedBuildings,
+      depositCounts: emptyResourceVector(), peopleLand: 0, goods: [],
+    };
+    const staffed: BuildSystemState = {
+      systemId: "C", factionId: "f1", population: 300, control: "developed",
+      buildings: sharedBuildings,
+      depositCounts: emptyResourceVector(), peopleLand: 0, goods: [],
+    };
+    const builds = planFactionBuilds([deficit, starved, staffed], reachable, DEV_REFS);
+    expect(countFor(builds, "C", "metals")).toBeGreaterThan(0);
+    expect(countFor(builds, "B", "metals")).toBe(0);
   });
 });
 
@@ -1351,27 +1425,26 @@ describe("planFactionProposals — Build blocked (blockedBuilds)", () => {
     expect(plan.blockedBuilds.some((b) => b.systemId === "B")).toBe(false);
   });
 
-  // FINDING (2026-08-24, habitability-seeding Task 15): "no-whole-level" is now UNREACHABLE for any
-  // tier-1+ good. `maxLevels = Math.min(Math.floor(capUnits), Math.ceil(servedOutput / opp.perUnit))`
-  // (lib/engine/directed-build.ts, planFactionBundles) — `capUnits` is `Infinity` for every tier-1+
-  // good (buildableUnits, no land ceiling left), so `Math.floor(capUnits)` is `Infinity` and the min
-  // collapses to `Math.ceil(servedOutput / opp.perUnit)`, which is always ≥ 1 whenever
-  // `servedOutput > 0` (the only way this code path is reached at all — see the `servedOutput <= 0`
-  // guard just above it). The old land-fit case this drop reason existed for (real capacity, too
-  // small for one whole level) can now only happen for a TIER-0 good (deposit slots are still
-  // finite) — confirmed empirically, this fixture now reports NO block at all. Left un-asserted
-  // pending an owner decision on whether `BuildDropReason` should drop "no-whole-level" for tier-1+
-  // or whether some other ceiling should be reinstated.
-  it.skip("reports no-whole-level when capacity is real but too small for even one whole level (the post-ranking whole-level check, droppedRoi > 0)", () => {
+  // "no-whole-level" stays
+  // UNREACHABLE for any tier-1+ good — the construction-cost score touches only the RANKING loop, not
+  // `maxLevels = Math.min(Math.floor(capUnits), Math.ceil(servedOutput / opp.perUnit))` in the
+  // post-ranking loop below it, and `capUnits` is still `Infinity` for tier-1+ (buildableUnits — no
+  // land ceiling left), so `Math.floor(capUnits)` still swallows the min whenever `servedOutput > 0`.
+  // The original tier-1+ fixture is deleted rather than left skipped; the reason is not dead, though —
+  // it is still real for TIER-0 goods, whose deposit-slot capacity is finite and untouched by this
+  // task (Tier-0 scoring is explicitly out of scope). Revived below against a tier-0 extractor instead.
+  it("reports no-whole-level when capacity is real but too small for even one whole level (the post-ranking whole-level check, droppedRoi > 0)", () => {
     const deficit: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
       depositCounts: emptyResourceVector(), peopleLand: 0,
-      goods: [{ goodId: "metals", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
+      goods: [{ goodId: "ore", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
     };
+    // Half a deposit slot: buildableUnits (tier-0) reads 0.5 — real, positive capacity, but
+    // Math.floor(0.5) = 0 whole levels. Tier-0 scoring (capacity-capped, unlike tier-1+) still produces a
+    // positive score off that same 0.5 units of capacity, so the drop is a RANKED one (droppedRoi > 0).
     const builder: BuildSystemState = {
-      systemId: "B", factionId: "f1", population: 200, control: "developed",
-      buildings: { ore: 5 }, // local ore satisfies the input gate; tier-0 so it costs no general space
-      depositCounts: emptyResourceVector(), peopleLand: 0, goods: [],
+      systemId: "B", factionId: "f1", population: 200, control: "developed", buildings: {},
+      depositCounts: makeResourceVector({ ore: 0.5 }), peopleLand: 0, goods: [],
     };
     const plan = planFactionProposals([deficit, builder], () => 1, [], DEV_REFS);
     const blocked = plan.blockedBuilds.find((b) => b.systemId === "B");
@@ -3020,38 +3093,27 @@ describe("planFactionBuilds — nearest-first allocation and buffed ranking", ()
     expect(countFor(builds, "S", "ore")).toBe(1);
   });
 
-  // FINDING (2026-08-24, habitability-seeding Task 15): same root cause as the "snowball" FINDING
-  // above `anchoredVsGreenfieldScenario` — "capacity-bound" no longer exists for a tier-1+ good
-  // (`buildableUnits` is `Infinity`), so the buffed site's score no longer beats the unbuffed one's;
-  // both take the whole deficit at a tied score and the stable sort's insertion order decides.
-  it.skip("ranks a complex-anchored site by its BUFFED output when both sites are capacity-bound", () => {
-    // One metals level of room at each site; the committed deficit is exactly what the anchored
-    // site's buffed level ships and more than the greenfield's. The anchored site must take the
-    // whole deficit, leaving the greenfield nothing.
-    const base = OUTPUT_PER_UNIT.metals;
-    const buffed = base * 1.4;
-    const deficit: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
-      depositCounts: emptyResourceVector(), peopleLand: 0,
-      goods: [{
-        goodId: "metals", stock: 0, production: 0, capacityProduction: 0,
-        demand: buffed / ((1 + DIRECTED_BUILD.PROVISION_MARGIN) * DIRECTED_BUILD.BUILD_RATE_CAP),
-      }],
+  // Deleted: duplicated `anchoredVsGreenfieldScenario` above under a "capacity-bound"
+  // framing that no longer applies — tier-1+ `buildableUnits` is unbounded, so there is no capacity
+  // ceiling left for two sites to be "bound" by. The revived "snowball" test right above already
+  // covers the surviving claim (an equidistant complex-anchored site outranks a bare greenfield one)
+  // against the new cost-to-create-output signal; nothing here would exercise a different code path.
+
+  // Regression pin: tier-0 (deposit-slot) scoring is UNTOUCHED by the construction-cost score — ore
+  // still ranks on `min(capOutput, short) / routeCost`, capacity-weighted, not the tier-1+ cost
+  // formula. S carries 3x T's deposit slots but sits twice as far; against a deficit exactly large
+  // enough for S's full capacity (3 levels' output), S's capacity edge (score 12/2=6) still beats T's
+  // proximity edge (score 4/1=4) — S takes the WHOLE deficit and T is left with nothing, exactly the
+  // capacity+proximity blend the tier-0 branch has always computed.
+  it("tier-0 (deposit-slot) ranking is unchanged: capacity still outweighs proximity the same way", () => {
+    const routes: RouteCost = (from, to) => {
+      if (from === "S") return to === "A" ? 2 : null;
+      if (from === "T") return to === "A" ? 1 : null;
+      return null;
     };
-    const greenfield: BuildSystemState = {
-      systemId: "B", factionId: "f1", population: 1e9, control: "developed",
-      buildings: { ore: 5, [VOCATIONAL_SCHOOL_TYPE]: 1 },
-      depositCounts: emptyResourceVector(), peopleLand: 0, goods: [],
-    };
-    const anchored: BuildSystemState = {
-      systemId: "C", factionId: "f1", population: 1e9, control: "developed",
-      buildings: { ore: 5, [VOCATIONAL_SCHOOL_TYPE]: 1, [HEAVY_INDUSTRY_COMPLEX]: 1 },
-      depositCounts: emptyResourceVector(),
- peopleLand: 0, goods: [],
-    };
-    const builds = planFactionBuilds([deficit, greenfield, anchored], reachable, DEV_REFS);
-    expect(countFor(builds, "C", "metals")).toBe(1);
-    expect(countFor(builds, "B", "metals")).toBe(0);
+    const builds = planFactionBuilds([consumer("A", 3), miner("S", 3), miner("T", 1)], routes, DEV_REFS);
+    expect(countFor(builds, "S", "ore")).toBe(3);
+    expect(countFor(builds, "T", "ore")).toBe(0);
   });
 });
 

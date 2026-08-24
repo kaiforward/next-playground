@@ -1163,6 +1163,32 @@ Proves:     (1) a system with zero free anything except labour still builds a fa
             true behaviour, not rejection).
 Consumes:   T1-T5, T7.
 
+### Task 15b — planner site ranking: construction cost replaces the lost capacity channel
+Added 2026-08-24 (Kai): with tier-1+ capacity unbounded, `familyAnchorBuff` cancels out of
+the opportunity score (`capOutput` saturates every reachable deficit at every site), so
+ranking degraded to demand-weighted proximity alone and the planner will stand up a new
+complex at a slightly-closer greenfield site over extending a nearby hub. The capacity
+channel was a proxy for cost-to-create-output; score that cost directly.
+Files:      `lib/engine/directed-build.ts` (the opportunity score, ~:893-908),
+            `lib/engine/__tests__/directed-build.test.ts` (the two Task-15 `it.skip`s
+            revive here against the new signal).
+Interface:  score = Σ(served ÷ route cost) ÷ marginal construction work per delivered unit.
+            Marginal work per unit = workCostPerLevel(building) ÷ buffed perUnit, plus — when
+            the good's family complex is absent at the site — the complex's own
+            workCostPerLevel amortised over the demand this opportunity actually serves
+            (Σ take), so a big shortfall justifies a new complex and a small one doesn't.
+            Ranking also folds projected staffing of the marginal unit (the existing labour
+            projection, `labourStateFromParts`) so an unstaffable site does not outrank a
+            staffed hub; the after-pick labour gate is unchanged. Tier-0 (deposit-capacity)
+            scoring is untouched.
+Proves:     (1) an anchored site beats an equidistant greenfield site (skip revived);
+            (2) distance still matters — a greenfield site wins when the demand mass sits
+            far enough from the hub that route costs dominate the complex surcharge;
+            (3) "no-whole-level"/second skip resolved per the new signal (revive or delete
+            with stated reason); (4) a site with no spare staffing does not outrank an
+            otherwise-equal staffed site; (5) tier-0 ranking unchanged (regression pin).
+Consumes:   recut T15.
+
 ### Task 16 — re-derivations: colonisation value, development
 Files:      `lib/engine/colonisation-value.ts` + `lib/constants/colonisation.ts`
             (LAND_GENERAL_WEIGHT term deleted), `docs/active/gameplay/colonisation.md` (:222
