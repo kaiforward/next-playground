@@ -1193,9 +1193,9 @@ Files:      `components/system/industry-rows.ts` (GeneralLand type + generalLand
             SubstrateSpace re-export), `lib/services/system-industry-readout.ts`.
             Rides along (T13 booking, Issues): the contributing-body predicate/ordering
             extraction to one engine export consumed by all three restatement sites.
-Interface:  Industry tab renders a people-land used/free bar (display name: Kai's call,
-            candidate "Habitable land") and a deposit worked/authored bar; hatch = free,
-            uniformly. Code field name stays `peopleLand`.
+Interface:  Industry tab renders a people-land used/free bar — display name "Habitable land"
+            (Kai, 2026-08-24) — and a deposit worked/authored bar; hatch = free, uniformly.
+            Code field name stays `peopleLand`.
 Proves:     (1) housing appears only in the people-land bar (cross-contamination fails);
             (2) bar maths in a node-tested helper (jsdom rule); (3) deposit bar reads counts,
             never land units; (4) habitableFree/factoryFree AND industry-land vocabulary gone
