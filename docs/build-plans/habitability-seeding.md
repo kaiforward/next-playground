@@ -1016,21 +1016,9 @@ Proves:     (1) the rendered multiplier is the service value, format-only (a NaN
 Consumes:   T7, T13 (BodyView vocabulary).
 
 ### Task 15 — Industry tab: one bar per budget
-Files:      `components/system/industry-rows.ts` (:244-272), `components/system/industry-panel.tsx`
-            (:670-680, :938-950, :1035-1045), `lib/services/system-industry-readout.ts`,
-            `lib/types/api.ts` (SubstrateSpace re-export).
-Interface:  The general-land partition type (`housing/factory/habitableFree/factoryFree`) is
-            deleted; each budget renders its own used/free bar from T3's three pairs; space
-            tables read the renamed budgets; deposits bar reads worked/authored counts.
-Reuse:      the panel's existing bar idiom (`COPPER_HATCH` legend rows), `CompositionBar`
-            (segments) where a split within one budget is needed — props read this session. No
-            new component.
-Proves:     (1) housing appears only in the people-land bar and factories only in the industry
-            bar (cross-contamination fails the test); (2) the bar partition maths lives in a
-            node-tested helper (jsdom style rule — the component test asserts text/roles, the
-            helper asserts sums); (3) the deposit bar reads counts, never land units; (4) the
-            retired habitableFree/factoryFree vocabulary is gone from DOM text and code.
-Consumes:   T3, T5.
+SUPERSEDED by the 2026-08-24 amendment (end of file): the industry-land budget itself is
+deleted, so the industry tab renders two bars, not three. The replacement tasks 15-18 live in
+the amendment section.
 
 ### Gate D — ship gate
 Arms:       T13-T15 (and the whole branch).
@@ -1063,7 +1051,8 @@ evidence's own Licenses lines.
 - `docs/SPEC.md`: substrate/body model, colonisation floor, population growth, surfaces — and
   the system interaction map rows touching space/habitability.
 - Active docs: grep `docs/active/` for `habitableSpace`, `generalSpace`, `garden_world`,
-  `availableSpace`, `habitable` at fold time and rewrite in present tense (colonisation.md's
+  `availableSpace`, `habitable`, `industryLand`, `industry land`, `LAND_GENERAL_WEIGHT`
+  (amendment 2026-08-24) at fold time and rewrite in present tense (colonisation.md's
   floor language at minimum — it is referenced from `expansion.ts`'s header).
 - `docs/ROADMAP.md`: delete the habitability-seeding row; the events-revisit row (line 77) and
   charter-pricing lever (line 43) stay — they are this feature's named deferrals.
@@ -1112,3 +1101,113 @@ review: the abandonment change's newborn-guard interaction checked against real 
 so Gates B-D can read the metrics they gate on; the save bump pinned to T2 with the
 one-shipped-bump rule stated. No task contains code, branch logic or a derived formula — the
 deposit-count derivation and score table are spec-authored and carried verbatim.
+
+## Amendment (2026-08-24) — the industry-land budget is deleted
+
+**Owner decision (Kai, 2026-08-24): "let's just cut it, this simplifies a lot here and we
+gain nothing really by having the limits."** Called at Task 15, after Gates A-C, before any
+Task 15 code.
+
+**What changes:** each body carries TWO budgets — people land and authored deposit counts.
+Industry buildings (factories, academies, complexes, centres) bill no land at all: labour,
+demand and decay bound them — the Vic3 read the evidence section already recorded (land-caps
+extraction only; urban industry binds on employment). Housing still bills people land;
+extractors still bill deposit slots. Nothing else in spec v2.1 moves: scores, quality,
+growth coupling, the colonisation floor, claims and abandonment are all people-land-side.
+
+**Evidence for the cut** (temp/industry-land-probe.ts, new tables, seed 42, t=10K, 182
+developed systems): industry-land utilisation max 38.0% (a homeworld, 171/450), colonies max
+0.3%, zero systems ≥50%. Old-model 30K read (temp/space-utilisation-30k.txt) shows the same
+direction at triple the horizon. The budget binds nowhere at any measured horizon; a
+constraint that never bites is authoring burden plus UI noise. Reference-game re-read: EU5's
+per-location cap grows with settlement rank/population (development), not land — corrected
+from the evidence section's "never by a land budget"; only extraction is land-capped in Vic3.
+
+**Deliberately kept open** (booked on the ROADMAP pop-wealth row, 2026-08-24): housing
+quality as a happiness/wealth investment — composes with the monetary basket there; nothing
+here forecloses it.
+
+**Accepted narrowings** (owner-visible, restate in the PR):
+- Development's industry axis becomes extraction-only (worked levels vs authored counts) —
+  with industry land gone there is no static industry-capacity number to normalise factory
+  levels against, so factories leave the development read. Development is a claim-pacing
+  heuristic calibrated to the coarse bar only (Gate C); accepted.
+- `DEPOSIT_SLOT_FOOTPRINT` (T12) existed to make counts commensurate with land units in that
+  same axis; it is deleted with the axis, not re-derived.
+- The field is removed from v16 rather than bumping again (one-shipped-bump rule; v16 is
+  branch-only, never shipped). A save still carrying `industryLand` loads cleanly with the
+  stale field harmlessly ignored — `save.ts`'s own bump rule ("a REMOVED field needs a bump
+  only where losing its value misreads the world") is satisfied, since nothing reads it
+  after the cut. No save is invalidated.
+
+### Task 15 (recut) — delete the budget: tables, generation, world shape, build rule
+Files:      `lib/constants/bodies.ts` (per-class industryLand ranges), `lib/constants/
+            substrate-gen.ts` (DEPOSIT_SLOT_FOOTPRINT), `lib/engine/body-gen.ts`,
+            `lib/engine/universe-gen.ts` (aggregates), `lib/engine/homeworld-prefab.ts`,
+            `lib/world/types.ts` + `lib/world/gen.ts` + `lib/types/guards.ts` + save
+            round-trip (field removed from v16), `lib/engine/industry.ts` (`summariseSpace`
+            → two pairs; `industryLandUsed` deleted), `lib/engine/build-options.ts` (:77),
+            `lib/engine/construction-centre.ts` (:89 + the committedSpace reservation
+            machinery), `lib/engine/directed-build.ts` (:546, :565 land conjunct, :987),
+            `lib/services/alerts.ts` + `lib/services/universe.ts` (threading), tick rows/
+            adapters/world interfaces that carry the column.
+Interface:  `SubstrateSpace { people, deposit }`; no engine or planner path reads an
+            industry-land number anywhere; industry builds are gated by labour/economics and
+            (extractors) deposit slots only.
+Proves:     (1) a system with zero free anything except labour still builds a factory (the
+            old gate deleted, not weakened); (2) housing and extractor gates unchanged
+            (people-land floor and slot caps still bind — regression pins); (3) `industryLand`
+            has zero code hits repo-wide after the sweep (grep, the T5 idiom); (4) a v16 save
+            round-trips without the field, and a fixture still carrying it loads cleanly with
+            the stale field ignored (the guard checks version + meta shape only — assert the
+            true behaviour, not rejection).
+Consumes:   T1-T5, T7.
+
+### Task 16 — re-derivations: colonisation value, development
+Files:      `lib/engine/colonisation-value.ts` + `lib/constants/colonisation.ts`
+            (LAND_GENERAL_WEIGHT term deleted), `docs/active/gameplay/colonisation.md` (:222
+            documents the exact L(c) formula being shortened — rewrite with the term),
+            `lib/engine/development.ts` + `lib/engine/development-points.ts` (industry axis =
+            worked levels ÷ authored counts; `industryPotential` re-cut; complexTerm's
+            `industryLand > 0` gate becomes `peopleLand > 0 || depositCounts > 0` — industry
+            needs no land of its own, but a system with literally no substrate must still
+            read a true 0, not a phantom complex), tick adapter `developmentRefs` callers.
+            Compile-forced riders (tsc catches, listed for the implementer):
+            `lib/services/system-development.ts:20` (`developmentPotential` input) and
+            `lib/world/tick.ts:1571,1616` (`landGeneralWeight` wiring).
+Interface:  L/U valuation carries people-land and deposit terms only; T11's Prove-1 bound
+            (U-leads on real candidates) re-asserted against the shortened L.
+Proves:     (1) T11's U-leads bound still holds with the term deleted (re-run, not assumed);
+            (2) development reads non-degenerate on the Gate C fixtures (capitals ≈ same
+            order of magnitude as before, no NaN/zero-pinning); (3) no second land coefficient
+            appears anywhere (the T12 one-coefficient grep, re-run); (4) a zero-substrate
+            system (no people land, no deposits) reads developmentPotential exactly 0 — the
+            gate replacement can't silently become `true`.
+Consumes:   T10-T12, recut T15.
+
+### Task 17 — UI: two bars, astrography, vocabulary
+Files:      `components/system/industry-rows.ts` (GeneralLand type + generalLand() deleted),
+            `components/system/industry-panel.tsx` (MagBar → per-budget used/free bars,
+            prototype variant A minus the industry bar), `components/system/body-card.tsx`
+            (industry-land line removed), `lib/types/api.ts` (BodyView.industryLand removed,
+            SubstrateSpace re-export), `lib/services/system-industry-readout.ts`.
+            Rides along (T13 booking, Issues): the contributing-body predicate/ordering
+            extraction to one engine export consumed by all three restatement sites.
+Interface:  Industry tab renders a people-land used/free bar (display name: Kai's call,
+            candidate "Habitable land") and a deposit worked/authored bar; hatch = free,
+            uniformly. Code field name stays `peopleLand`.
+Proves:     (1) housing appears only in the people-land bar (cross-contamination fails);
+            (2) bar maths in a node-tested helper (jsdom rule); (3) deposit bar reads counts,
+            never land units; (4) habitableFree/factoryFree AND industry-land vocabulary gone
+            from DOM text and code; (5) the extracted predicate is consumed at all three
+            former restatement sites (import asserted, restatements gone).
+Consumes:   T13, T14, recut T15.
+
+### Task 18 — instruments recut + gate reads
+Files:      `scripts/substrate-coherence.ts` (industry-land invariants/targets deleted,
+            aggregate identity re-stated over the two budgets), harness reads if any name
+            the column.
+Then the session runs: full suite; `npm run build`; `npm run report:coherence`;
+`npm run simulate` both horizons (fresh quotes — the Gate A-C numbers predate the cut and
+may not be quoted for it). Gate D (browser smoke + 30K trajectory run) proceeds as written,
+over the two-budget UI.

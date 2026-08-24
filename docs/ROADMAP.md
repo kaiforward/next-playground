@@ -187,6 +187,9 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   deficit anchor — cleared with #211/#212 and the `TARGET_COVER` role split: pricing keeps the floored
   `demandRate` denominator, logistics and founding read real demand. Unlocks the strata-as-private-builder
   mechanic on the social-strata row above — wealth pops hold is what a private builder spends.
+  Also carries **housing quality as a happiness/wealth investment** (Kai, 2026-08-24): better housing
+  raised through pop wealth/happiness rather than (only) direct construction — the Vic3 read, where
+  standard-of-living is consumption-driven; design it here so it composes with the monetary basket.
 - **[L] Expanded pop tiers / social strata** — today's tiering is labour-grade only. Richer strata carry
   their own baskets. Composes with adaptive expectation (per-class expectation is how Victoria 3 derives
   its reference); nothing breaks if it never lands.
