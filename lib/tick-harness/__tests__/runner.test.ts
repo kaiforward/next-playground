@@ -399,7 +399,7 @@ describe("runTickHarness: the whole-run flow log", () => {
       rows.reduce((sum, r) => sum + r.quantity, 0),
       9,
     );
-  }, 180_000);
+  }, 360_000); // measured 128s locally; CI runners ~2.1x slower — headroom, not a hang allowance
 
   it("starts the haul-budget ledger at the logistics warm-up tick, not before", async () => {
     // The ledger accumulates budget spend only from LOGISTICS_WARMUP_TICKS onward BY CONSTRUCTION
@@ -480,7 +480,7 @@ describe("runTickHarness: the cycle-gated samplers", () => {
     // And what it read is a colony that has lived a cycle, not one still holding its manifest.
     expect(stock.meanOpeningSatisfaction).toBeGreaterThan(0.5);
     expect(stock.openingDeprivedCount).toBeLessThan(stock.sampledCount / 2);
-  }, 180_000);
+  }, 300_000); // measured 99s locally; CI runners ~2.1x slower — headroom, not a hang allowance
 
   it("takes the demand-hunting flip as a per-cycle observation", async () => {
     // flipRate's denominator is decided readings, and a reading is taken once per economy cycle.
@@ -746,5 +746,5 @@ describe("runTickHarness: logistics instruments", () => {
     const pinned = await runTickHarness({ ...config, drawBrakeCeiling: "anchor" });
     expect(live.logisticsActivity.transferCount).toBeGreaterThan(0);
     expect(pinned.logisticsActivity.totalQuantity).not.toBeCloseTo(live.logisticsActivity.totalQuantity, 6);
-  }, 240_000);
+  }, 420_000); // measured ~138s locally (two full harness runs); CI ~2.1x slower
 });
