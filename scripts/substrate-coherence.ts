@@ -1,5 +1,5 @@
 /**
- * Tracked generation census for the three-budget substrate (habitability-seeding).
+ * Tracked generation census for the two-budget substrate (habitability-seeding).
  * Run: npm run report:coherence
  *
  * Reads the gen-time calibration targets (docs/build-plans/habitability-seeding.md,
@@ -9,7 +9,7 @@
  *
  * INVARIANTS are the only fatal thing here (non-zero exit): they replace the retired
  * partition-exhaustiveness identity (`partitionBody`/`SPACE_PER_SIZE`, deleted T2) with the
- * three-budget model's own guarantees — dead classes contribute zero people land, deposit
+ * two-budget model's own guarantees — dead classes contribute zero people land, deposit
  * counts are integer and in-table-range, system aggregates equal the sum of their contributing
  * unlocked bodies, and no below-floor system reads as colony-sizeable.
  */
@@ -83,7 +83,7 @@ function fullBuildOutPopCap(peopleLand: number): number {
 }
 
 // ── Invariants ────────────────────────────────────────────────────
-// Every check below re-implements the three-budget spec from scratch (BODY_ARCHETYPES + the
+// Every check below re-implements the two-budget spec from scratch (BODY_ARCHETYPES + the
 // generated body/system fields) rather than importing body-gen.ts's own aggregation code, so a
 // regression in that code is what this census is positioned to catch.
 
@@ -155,8 +155,6 @@ function validateAggregateConsistency(systems: GeneratedSystem[]): string[] {
     if (Math.abs(expectedPeopleLand - sys.peopleLand) > EPS) {
       errors.push(`${sys.name}: peopleLand aggregate ${sys.peopleLand.toFixed(3)} != Σ above-threshold unlocked bodies ${expectedPeopleLand.toFixed(3)}`);
     }
-    // industryLand aggregate check deleted with the budget itself (habitability-seeding, Task 15).
-    // Task 18 re-states this instrument's identities over the two remaining budgets (people, deposit).
     for (const r of RESOURCE_TYPES) {
       const expectedCount = unlocked.reduce((sum, b) => sum + b.counts[r], 0);
       if (Math.abs(expectedCount - sys.depositCounts[r]) > EPS) {

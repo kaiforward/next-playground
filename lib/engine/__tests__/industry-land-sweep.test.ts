@@ -6,9 +6,8 @@ import { fileURLToPath } from "node:url";
 /**
  * Repo-wide grep red-proof: the
  * industry-land budget is deleted everywhere it was authored, generated, aggregated, or gated on.
- * A handful of `industryLand` mentions legitimately remain — each is a compile-preserving deviation
- * this task recorded for a LATER task (16 or 17) to finish deleting, and each carries its own
- * doc-comment naming that task. This test pins the exact allowlist so a NEW, undocumented
+ * Every compile-preserving deviation the deletion left behind has been closed, so the allowlist
+ * below is empty. It stays as a named set (rather than deleting the mechanism) so a NEW, undocumented
  * `industryLand` reference (a reintroduced gate, a copy-pasted fixture field, a careless revert)
  * fails loudly instead of slipping back in silently.
  */
@@ -20,13 +19,10 @@ describe("industryLand — repo-wide sweep", () => {
   const SKIP_DIR_NAMES = new Set(["node_modules", ".git", "__tests__"]);
 
   /**
-   * Every non-test source file still allowed to mention `industryLand`. One remains:
-   * `scripts/substrate-coherence.ts` is this branch's own live-in-flight instrument — not shipped
-   * product code — exempt until its own recut (Task 18) deletes the mention.
+   * Every non-test source file still allowed to mention `industryLand`. Empty by design —
+   * the budget is fully deleted; any future hit is unexpected and fails the test below.
    */
-  const ALLOWED_FILES = new Set([
-    "scripts/substrate-coherence.ts",
-  ]);
+  const ALLOWED_FILES = new Set<string>([]);
 
   function listFiles(dir: string): string[] {
     const out: string[] = [];
@@ -57,8 +53,9 @@ describe("industryLand — repo-wide sweep", () => {
     expect(unexpected).toEqual([]);
   });
 
-  // Non-vacuity: the allowlist itself is not empty and the scan actually walks real files — a
-  // scanner that silently found nothing would let this whole test pass for the wrong reason.
+  // Non-vacuity: the allowlist is now empty (every deviation closed), so the sweep test above
+  // only means something if the scan actually walks real files — a scanner that silently found
+  // nothing would let it pass for the wrong reason regardless of allowlist contents.
   it("the scan actually finds source files (non-vacuity)", () => {
     let total = 0;
     for (const dir of SCAN_DIRS) total += listFiles(join(repoRoot, dir)).length;
