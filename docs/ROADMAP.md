@@ -148,6 +148,12 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   raises food builds on its own, and what is missing is the *tiebreak* when several goods are short at
   once. And the unit bias that skews the ranking toward bulk goods is **13×** (`ship_frames` 0.6 →
   `gas` 8.0 across all 26 goods), not the "orders of magnitude" an earlier finding claimed.
+  **Also fold in: tier-0 yield-awareness** (booked from the per-body-industry spec, 2026-08-24).
+  Tier-0 opportunity scoring is yield-blind — nothing in `lib/engine/directed-build.ts` reads
+  `extractionEff` or `yields`. Once per-body-industry ships, the marginal slot's ground value
+  (quality × extraction modifier of the next unworked deposit in the system's slot order) is a
+  cheap lookup that should scale a tier-0 opportunity's projected output in the score, so a
+  shortfall served from poor ground ranks below the same shortfall served from good ground.
   *Next step:* `/measure` how often survival and non-survival opportunities actually compete inside one
   planner run, both horizons, cohorted by developed systems — the weighting's value depends entirely on
   that rate, and Kai's prior is that it is often.
