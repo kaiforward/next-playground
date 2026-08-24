@@ -42,7 +42,7 @@ Every system is built from a **physical substrate** — one sun and 1–N bodies
 - **High-population systems** (population above a high threshold) read as developed: raw-dominant deposits → `industrial`; neither food- nor raw-dominant → `tech`; otherwise → `core`.
 - **Sparse/mid-population systems** follow their dominant deposit: food-dominant (arable + biomass share) → `agricultural`; raw-dominant (ore + minerals + gas + radioactive share) → `extraction`; otherwise (a mixed raw base) → `refinery`.
 
-Because raw building blocks are needed in huge volume and most bodies carry *some* extractable deposit, the galaxy reads **extraction-dominant by design** — the intended barren-but-alive shape (see [the available-space model](./economy-substrate-v2-available-space.md) for how deposit slots and habitability produce it), not a generation flaw. The label itself is **display-only**: nothing in the economy tick reads economy type — production derives from `WorldBuilding` counts and per-resource yield (see [economy.md](./economy.md)); the label drives only UI badges and `Region.dominantEconomy`.
+Because raw building blocks are needed in huge volume and most bodies carry *some* extractable deposit, the galaxy reads **extraction-dominant by design** — see [Habitability & the Substrate](./habitability.md) for how deposit counts and habitability scores produce it — not a generation flaw. The label itself is **display-only**: nothing in the economy tick reads economy type — production derives from `WorldBuilding` counts and per-resource yield (see [economy.md](./economy.md)); the label drives only UI badges and `Region.dominantEconomy`.
 
 ### Systems
 

@@ -11,61 +11,13 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 ---
 
-## In progress
-
-- **Queued row 1 (habitability seeding)** is in flight on `feat/habitability-seeding` — spec
-  v2.1 in `docs/build-plans/habitability-seeding.md`, next step `/implement-plan`. The row stays
-  below as the item of record.
-
----
-
 ## Queued
 
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-1. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
-   colonisation is overwhelming — too many viable targets at once, with nothing pacing which to take.
-   Direction (Kai, 2026-08-12): cut how many systems are viable at generation so expansion starts
-   slow, and let the rest of the galaxy open up later, when terraforming and specialist-housing
-   technologies exist. Kai's read is that this slows the simulation rather than breaking it.
-   **A third lever, and the cheapest: colonisation automation defaults off**, with AI founding slowed
-   enough that a player can reasonably keep up by hand (Kai, 2026-08-12). Settled alongside the
-   attention layer, whose Tracker owns the *surface* for a forming colony; this row owns the pacing.
-   The knob already exists: `habitableFraction` is housing-per-space efficiency
-   (`habitableSpace = generalSpace × habitableFraction`), and the expensive, low-yield
-   specialist-habitation *building* was recorded as a hook at that same decision — see
-   [negative-space-economy.md](./planned/negative-space-economy.md).
-   **Design input for the unlock mechanic (Kai, 2026-08-24):** per-resource extraction yield is
-   the deposit-count-weighted mean of `extractionModifier` over UNLOCKED bodies
-   (`lib/engine/body-gen.ts:190-198`), and live extractor output reads it at tick time — so
-   unlocking a low-modifier, deposit-heavy body would immediately reduce every existing
-   extractor's output in that system (capacity up, current production down: a felt penalty for
-   progress, worst on heavy extractors). Cannot fire today (no unlock mechanic; the pool is
-   fixed at generation). Options for the design pass: freeze efficiency per built extractor;
-   pool per body instead of per system where unlocks make the concession gameplay-visible; or
-   make unlocking an explicit player choice so the dilution trade is theirs.
-   **Honest dependency:** there is no technology or progression system in the codebase today — a grep
-   for terraforming or technology finds only event and faction flavour text. "Gated behind
-   technology" is therefore a new system, not a constant change, and the sequencing of the two is
-   itself part of the design.
-   **A second pacing lever, from the EU5 read (2026-08-12): price the charter by distance and by
-   concurrent-colony count.** EU5 scales a colonial charter's cost with population, distance and how
-   many charters you already hold, plus a monthly upkeep per active colony, and caps expeditions at
-   roughly one per two years. Ours is `max(CHARTER_FEE_MIN, CHARTER_FEE_SPEND_MULT × maintenanceBill)`
-   (`lib/constants/colonisation.ts:81-89`) — it scales with faction *size* only, so neither distance
-   nor concurrency is priced. Both are cost-shaped ways to slow expansion without making systems
-   dead, and they compose with (rather than replace) the viability cut. Overlaps the control-shaped
-   **claim pricing** item in [player-seat-roadmap.md](./planned/player-seat-roadmap.md) — settle the
-   two together, not twice.
-   *Next step:* `/implement-plan` from the committed build plan (`docs/build-plans/habitability-seeding.md` — the
-   measure/spec/review trail lives there). The feature absorbed the deposit/general-space
-   rationalisation and the habitability score/threshold/quality model by owner decision.
-   *Don't:* re-propose barren-but-alive (tiny artificial habitation on dead worlds so they read as
-   mining outposts). It shipped, was measured (78→140 near-empty outpost colonies by in-world year
-   20 — the early-game sprawl this row exists to cut), and was retired by owner decision 2026-08-23:
-   dead bodies carry zero people land and dead systems are uncolonisable until the technology phase
-   (working file: docs/build-plans/habitability-seeding.md).
+Nothing queued right now — pull from Unqueued.
+
 ---
 
 ## Unqueued
@@ -83,6 +35,58 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   *Next step:* pick the shell (Tauri vs Electron).
 
 **Economy / simulation**
+- **[L] Growth gated behind habitation/terraforming technology.** Habitability seeding shipped the
+  first half of the original two-part direction (Kai, 2026-08-12) — cutting how many systems are
+  viable at generation. This row is the second half: open the rest of the galaxy later, once
+  terraforming and specialist-housing technologies exist, so expansion paces itself through
+  progression rather than staying permanently capped by the generation cut alone.
+  **A cheap lever meanwhile: colonisation automation defaults off**, with AI founding slowed enough
+  that a player can reasonably keep up by hand (Kai, 2026-08-12).
+  **A pacing lever from the EU5 read (2026-08-12): price the charter by distance and by
+  concurrent-colony count.** EU5 scales a colonial charter's cost with population, distance and how
+  many charters you already hold, plus a monthly upkeep per active colony, and caps expeditions at
+  roughly one per two years. Ours is `max(CHARTER_FEE_MIN, CHARTER_FEE_SPEND_MULT × maintenanceBill)`
+  (`lib/constants/colonisation.ts:81-89`) — it scales with faction *size* only, so neither distance
+  nor concurrency is priced. Both are cost-shaped ways to slow expansion without making systems
+  dead, and they compose with (rather than replace) the shipped viability cut. Overlaps the
+  control-shaped **claim pricing** item in
+  [player-seat-roadmap.md](./planned/player-seat-roadmap.md) — settle the two together, not twice.
+  **Design input for the unlock mechanic (Kai, 2026-08-24):** per-resource extraction yield is
+  the deposit-count-weighted mean of `extractionModifier` over UNLOCKED bodies
+  (`lib/engine/body-gen.ts:190-198`), and live extractor output reads it at tick time — so
+  unlocking a low-modifier, deposit-heavy body would immediately reduce every existing
+  extractor's output in that system (capacity up, current production down: a felt penalty for
+  progress, worst on heavy extractors). Cannot fire today (no unlock mechanic; the pool is
+  fixed at generation). Options for the design pass: freeze efficiency per built extractor;
+  pool per body instead of per system where unlocks make the concession gameplay-visible; or
+  make unlocking an explicit player choice so the dilution trade is theirs. Interacts with the
+  per-body-industry row below (a per-body model dissolves this hazard; a frozen-at-start pool
+  sidesteps it).
+  **Honest dependency:** there is no technology or progression system in the codebase today — a grep
+  for terraforming or technology finds only event and faction flavour text. "Gated behind
+  technology" is therefore a new system, not a constant change, and the sequencing of the two is
+  itself part of the design.
+  *Next step:* `/brainstorm` the technology/terraforming system itself before any of these levers can
+  be designed against it.
+  *Don't:* re-propose barren-but-alive (tiny artificial habitation on dead worlds so they read as
+  mining outposts) as a way to open the tech-phase's dead systems early. It shipped, was measured
+  (78→140 near-empty outpost colonies by in-world year 20), and was retired by owner decision
+  2026-08-23: dead bodies carry zero habitable land and dead systems are uncolonisable until the
+  technology phase (see [habitability.md](./active/gameplay/habitability.md)).
+- **[M] Bodies and the mechanics above them — the per-body industry question.** Booked from the
+  habitability-seeding Gate D discussion (Kai, 2026-08-24); the generation work and the two-budget
+  space model are settled — this row is about how bodies compose with mechanics built on top.
+  Today extraction pools per-system (count-weighted yield fixed at generation) and space/occupancy
+  accounting is system-level, which reads confusingly at the edges: if a tundra world hosts the
+  system's only radioactive deposit, the extractor physically belongs there, yet its land bills
+  against the system's occupied worlds. Question: is there a performant way to know where industry
+  actually sits per body — which would also unlock per-body yield instead of the game-start pool?
+  Interacts with the tech-unlock yield-dilution input on the growth-gated-behind-technology row
+  above (a per-body model dissolves that hazard; a frozen-at-start pool sidesteps it).
+  *Next step:* /brainstorm when it comes forward — after the technology-phase design exists to
+  design against.
+  *Don't:* re-litigate the two-budget generation model or the deleted industry-land budget; both
+  are settled and orthogonal to where industry physically sits.
 - **[M] Events revisit — the developed/universal split and the coverage re-base.** Deferred by
   explicit decision at the habitability-seeding spec review (2026-08-23): "let's just leave
   events as is and we'll revisit and do the split properly". Two halves: (1) split event types
@@ -492,6 +496,12 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   cycle 1 reverted the mutator-class exclusions in `stryker.config.mjs`, so the re-sweep will
   re-report the ~204 already-accepted noise-class survivors (`temp/fix-wave/noise-ledger.md`) —
   don't re-triage them.
+  **Widened (habitability-seeding, 2026-08-24):** two items this branch owes overnight, folded into
+  the same batch rather than a separate one — (1) a scoped `npm run mutation` sweep of this branch's
+  diff (`lib/` files touched by habitability seeding); (2) a thin-margin re-measure of the
+  cadence-invariance harness bands the branch's changes sit close to: the `build12` buildings-gate
+  fixture's 1.2× margin and `FOUNDING_TOL`'s 1.7×/1.6× margins — re-derive both now the archetype
+  tables are settled (post-Gate-A).
   *Next step:* schedule the overnight batch (`--concurrency 8`, pre-approved) for a window Kai isn't
   using the machine.
 - **[M] Sim gates beyond the four founding identities** — agreed rule: a gate fails only when the
