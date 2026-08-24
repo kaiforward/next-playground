@@ -2,6 +2,8 @@
 export interface CompositionSegment {
   label: string;
   value: number;
+  /** Any CSS background value — a solid `var(--color-*)` token, or a gradient (e.g. the
+   *  repeating-linear-gradient hatch the Industry tab uses for a budget's free share). */
   color: string;
 }
 

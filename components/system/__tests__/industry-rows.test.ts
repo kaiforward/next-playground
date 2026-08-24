@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { depositRows, depositRowProblems, depositTypeProblems, generalLand, idleLevelSplit, staffedLevels } from "../industry-rows";
+import { depositRows, depositRowProblems, depositTypeProblems, idleLevelSplit, staffedLevels } from "../industry-rows";
 import type { DepositTypeRow } from "../industry-rows";
 import { BUILDING_TYPES } from "@/lib/constants/industry";
-import type { SystemDepositSummary, SystemIndustryReadout, SubstrateSpace, IdleReason } from "@/lib/engine/industry";
+import type { SystemDepositSummary, SystemIndustryReadout, IdleReason } from "@/lib/engine/industry";
 
 const T = 0.75;
 /** `buildProblems`'s `inputLabel` — identity is enough for these fixtures. */
@@ -199,27 +199,6 @@ describe("staffedLevels", () => {
     // ceiling; staffedFraction × count (2) is the labour figure that belongs on screen.
     const producer: Parameters<typeof staffedLevels>[0] = { tier: 0, used: 1, staffedFraction: 1, count: 2 };
     expect(staffedLevels(producer)).toBe(2);
-  });
-});
-
-describe("generalLand", () => {
-  // The industry-land budget is deleted (habitability-seeding amendment, Task 15): `SubstrateSpace`
-  // no longer carries an `industry` budget, so `generalLand` is a compile-preserving stub reading
-  // factory/factoryFree as a fixed 0 until Task 17 deletes this type and function outright along
-  // with the industry-land UI vocabulary they exist to feed.
-  it("reads the people-land budget through unchanged, and the deleted industry budget as 0", () => {
-    const space: SubstrateSpace = {
-      people: { used: 52, total: 70 },
-      deposit: { used: 40, total: 80 },
-    };
-    const g = generalLand(space);
-    expect(g.housing).toBe(52);
-    expect(g.factory).toBe(0);
-    expect(g.habitableFree).toBe(18); // people 70 − 52
-    expect(g.factoryFree).toBe(0);
-    expect(g.habitable).toBe(70);
-    expect(g.general).toBe(70);
-    expect(g.housing + g.factory + g.habitableFree + g.factoryFree).toBeCloseTo(g.general);
   });
 });
 

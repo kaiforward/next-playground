@@ -122,9 +122,6 @@ export function getSystemSubstrate(systemId: string): SystemSubstrateData {
       counts: depositCountsOf(b),
       quality: qualityOf(b),
       peopleLand: b.peopleLand,
-      // WorldBody no longer carries industryLand (habitability-seeding cut it) — compile-preserving
-      // 0 until Task 17 removes the field from BodyView itself and the astrography UI that reads it.
-      industryLand: 0,
       extractionModifier: arch.extractionModifier,
       occupied: occupied.has(b.id),
     };

@@ -133,9 +133,6 @@ describe("getSystemSubstrate", () => {
     expect(bodyView.counts).toEqual(expectedSlots);
     expect(bodyView.quality).toEqual(expectedQuality);
     expect(bodyView.peopleLand).toBe(body.peopleLand);
-    // WorldBody no longer carries industryLand (habitability-seeding cut it, Task 15) — BodyView's
-    // field is a compile-preserving 0 (lib/services/universe.ts) until Task 17 removes it outright.
-    expect(bodyView.industryLand).toBe(0);
     expect(bodyView.extractionModifier).toBe(BODY_ARCHETYPES[body.bodyType].extractionModifier);
   });
 

@@ -20,18 +20,11 @@ describe("industryLand — repo-wide sweep", () => {
   const SKIP_DIR_NAMES = new Set(["node_modules", ".git", "__tests__"]);
 
   /**
-   * Every non-test source file still allowed to mention `industryLand` — each is a documented,
-   * compile-preserving deviation this task recorded for Task 16 (development/colonisation-value
-   * re-derivation) or Task 17 (UI/BodyView cleanup) to finish. Task 18's own instrument recut
-   * (scripts/substrate-coherence.ts) is exempt entirely since it is this branch's own live-in-flight
-   * instrument, not shipped product code.
+   * Every non-test source file still allowed to mention `industryLand`. One remains:
+   * `scripts/substrate-coherence.ts` is this branch's own live-in-flight instrument — not shipped
+   * product code — exempt until its own recut (Task 18) deletes the mention.
    */
   const ALLOWED_FILES = new Set([
-    // Task 17 — BodyView / astrography UI cleanup.
-    "lib/types/api.ts",
-    "lib/services/universe.ts",
-    "components/system/body-card.tsx",
-    // Task 18 — this branch's own live instrument, recut in that task.
     "scripts/substrate-coherence.ts",
   ]);
 

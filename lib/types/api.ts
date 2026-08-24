@@ -275,8 +275,6 @@ export interface BodyView {
   /** This body's authored people-land budget — dark (present but non-functional) when locked or
    *  below `HABITABILITY_THRESHOLD`. */
   peopleLand: number;
-  /** This body's authored industry-land budget. */
-  industryLand: number;
   /** Extraction work modifier in (0,1]. Extractors are a per-system pool with no body attribution,
    *  so this is presented as a contribution WEIGHT to the system's shared effective yield, never
    *  the yield of an extractor placed on this body specifically (spec §1). */

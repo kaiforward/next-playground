@@ -10,8 +10,8 @@ import { isEconomicallyActive } from "@/lib/engine/control";
 import { unrestContributors, unrestTrend } from "@/lib/engine/unrest-readout";
 import { crowdingPressure, type SupplyState } from "@/lib/engine/population";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
-import { contributingBodiesSorted, habitabilityFillOrder } from "@/lib/utils/substrate";
-import { systemHabitabilityQuality } from "@/lib/engine/habitability";
+import { habitabilityFillOrder } from "@/lib/utils/substrate";
+import { contributingBodiesSorted, systemHabitabilityQuality } from "@/lib/engine/habitability";
 import type { SystemPopulationData, SystemUnrestRead } from "@/lib/types/api";
 import type { World, WorldSystem } from "@/lib/world/types";
 

@@ -52,7 +52,8 @@ import { CONSTRUCTION } from "@/lib/constants/construction";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
 import { depositCountsOf, yieldsOf, effOf, RESOURCE_TYPES } from "@/lib/engine/resources";
-import { BODY_ARCHETYPES, HABITABILITY_THRESHOLD } from "@/lib/constants/bodies";
+import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
+import { isContributingBody } from "@/lib/engine/habitability";
 import { hopRouteCost, type ColonyEstablishCandidate } from "@/lib/engine/directed-build";
 import type { ClaimCandidate } from "@/lib/engine/expansion";
 import { housingPopCap } from "@/lib/engine/industry";
@@ -195,7 +196,7 @@ export function toTickSystems(world: World): TickSystem[] {
   const habitabilityBodiesBySystem = new Map<string, { score: number; peopleLand: number }[]>();
   for (const b of world.bodies) {
     const arch = BODY_ARCHETYPES[b.bodyType];
-    if (arch.techLocked || arch.scores.default < HABITABILITY_THRESHOLD) continue;
+    if (!isContributingBody({ score: arch.scores.default, locked: arch.techLocked })) continue;
     const entry = { score: arch.scores.default, peopleLand: b.peopleLand };
     const list = habitabilityBodiesBySystem.get(b.systemId);
     if (list) list.push(entry);

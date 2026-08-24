@@ -22,7 +22,6 @@ function body(overrides: Partial<BodyView> = {}): BodyView {
     counts: emptyResourceVector(),
     quality: emptyResourceVector(),
     peopleLand: 480,
-    industryLand: 220,
     extractionModifier: 1.0,
     occupied: false,
     ...overrides,

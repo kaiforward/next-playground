@@ -10,6 +10,7 @@
  * whatever `bodies`/`population` it is handed — it has no caching policy of its own.
  */
 import { POP_CENTRE_DENSITY } from "@/lib/constants/industry";
+import { HABITABILITY_THRESHOLD } from "@/lib/constants/bodies";
 
 /** One people-land-contributing body's static summary — the fold's only per-body inputs. */
 export interface HabitabilityBody {
@@ -78,4 +79,27 @@ export function systemHabitabilityQuality(
   // Unreachable given occupiedLand < totalLand above (the walk must cross occupiedLand before
   // exhausting every body's land) — kept as a defensive fallback, never a silent NaN.
   return { quality: weighted / cumulative, frontierIndex: sorted.length - 1 };
+}
+
+/**
+ * The fold's contributing-body predicate: unlocked, and score at or above `HABITABILITY_THRESHOLD`
+ * (the same floor `systemHabitabilityQuality` implicitly assumes its `bodies` argument was already
+ * filtered to — see the module docstring). THE canonical statement of "does this body contribute
+ * people land at all" — every read-side site that needs to answer that question imports this rather
+ * than restating the two conditions inline (score-vs-threshold, unlocked) where they can silently
+ * drift apart. `lib/world/tick.ts`'s `habitabilityBodiesBySystem` (assembling this fold's own input)
+ * and `lib/utils/substrate.ts`'s `contributingBodiesSorted` (the read-side order every occupancy
+ * consumer shares) both consume it.
+ */
+export function isContributingBody(body: { score: number; locked: boolean }): boolean {
+  return !body.locked && body.score >= HABITABILITY_THRESHOLD;
+}
+
+/**
+ * `isContributingBody`, filtered and sorted score-descending — the fold's own occupancy order, and
+ * the shared order every read-side occupancy consumer (`occupiedBodyIds`, `habitabilityFillOrder`,
+ * both `lib/utils/substrate.ts`) derives from rather than re-sorting independently.
+ */
+export function contributingBodiesSorted<T extends { score: number; locked: boolean }>(bodies: T[]): T[] {
+  return bodies.filter(isContributingBody).sort((a, b) => b.score - a.score);
 }

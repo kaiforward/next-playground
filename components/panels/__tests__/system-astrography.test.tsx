@@ -37,7 +37,7 @@ describe("SystemAstrography — the system-level people-land header, absolute no
           id: "b1", bodyType: "temperate_world", archetypeName: "Temperate World",
           score: 1.0, locked: false, size: 1.1,
           counts: emptyResourceVector(), quality: emptyResourceVector(),
-          peopleLand: 500, industryLand: 200, extractionModifier: 1.0, occupied: true,
+          peopleLand: 500, extractionModifier: 1.0, occupied: true,
         },
       ],
     };

@@ -6,8 +6,8 @@ import { QUALITY_BAND_DOT, QUALITY_BAND_TEXT, QUALITY_BAND_LABEL } from "@/lib/c
 import type { BodyView } from "@/lib/types/api";
 
 /**
- * One physical body in a system's substrate — the three-budget story (people land, industry land,
- * extraction contribution weight) plus the deposits it hosts. The left-accent stripe and an
+ * One physical body in a system's substrate — the people-land budget and extraction contribution
+ * weight plus the deposits it hosts. The left-accent stripe and an
  * "Occupied" badge mark a body inside the system's current fill-best-first occupied prefix (the
  * cached habitability quality fold, read straight off `body.occupied` — this component computes nothing).
  * That replaces the retired per-body `habitable: boolean` and its "Habitable" badge: habitability
@@ -44,9 +44,6 @@ export function BodyCard({ body }: { body: BodyView }) {
         </span>
         <span>
           People land <span className="font-mono text-text-secondary">{body.peopleLand.toFixed(0)}</span>
-        </span>
-        <span>
-          Industry land <span className="font-mono text-text-secondary">{body.industryLand.toFixed(0)}</span>
         </span>
         <Tooltip>
           <TooltipTriggerLabel className="text-xs">

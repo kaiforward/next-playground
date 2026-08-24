@@ -9,7 +9,7 @@
 import type { ResourceType, QualityBandId } from "@/lib/types/game";
 import { BUILDING_TYPES } from "@/lib/constants/industry";
 import { buildingHealth } from "@/lib/engine/industry";
-import type { SystemDepositSummary, SystemIndustryReadout, SubstrateSpace, IndustryHealth, IdleReason } from "@/lib/engine/industry";
+import type { SystemDepositSummary, SystemIndustryReadout, IndustryHealth, IdleReason } from "@/lib/engine/industry";
 import { buildProblems, type ProblemItem } from "@/components/system/needs-view";
 
 /** Severity ordering for the worst-of-contributors aggregation (collapsing is worst, idle sits
@@ -239,49 +239,4 @@ export function depositRowProblems(
 ): ProblemItem[] {
   if (row.types.length !== 1) return [];
   return depositTypeProblems(row.types[0], popNeed, inputLabel);
-}
-
-/**
- * The general-land READOUT: people land and industry land are two disjoint budgets (housing
- * never draws industry land and vice versa — see `SubstrateSpace`), combined here into one
- * display total so the existing single-bar readout keeps compiling. `general`/`habitable` are
- * NOT a partition of one shared pool any more; this shape is a display convenience, not a
- * physical constraint — a full two-bar redesign is a later task.
- */
-export interface GeneralLand {
-  /** People land drawn by housing. */
-  housing: number;
-  /** Industry land drawn by factories / academies / complexes / centres. */
-  factory: number;
-  /** People land still free — housing can grow here. */
-  habitableFree: number;
-  /** Industry land still free — factories/academies/complexes/centres can grow here. */
-  factoryFree: number;
-  /** Combined display total: people land total + industry land total. */
-  general: number;
-  /** Total people land. */
-  habitable: number;
-}
-
-/**
- * Combine the two disjoint land budgets into one display readout: housing/factory used, each
- * budget's own free remainder, and a combined total. Housing + factory + habitableFree +
- * factoryFree always sum to `general` (people.total + industry.total) — an identity, not a
- * partition, since people and industry land never compete for the same units.
- *
- * Compile-preserving deviation: `SubstrateSpace` no longer carries an `industry` budget
- * (habitability-seeding deleted the industry-land budget everywhere, Task 15) — factory/
- * factoryFree read a fixed 0 until Task 17 deletes this type and function along with the
- * industry-land UI vocabulary they exist to feed.
- */
-export function generalLand(space: SubstrateSpace): GeneralLand {
-  const housing = Math.max(0, space.people.used);
-  const factory = 0;
-  const habitableFree = Math.max(0, space.people.total - space.people.used);
-  const factoryFree = 0;
-  return {
-    housing, factory, habitableFree, factoryFree,
-    general: space.people.total,
-    habitable: space.people.total,
-  };
 }

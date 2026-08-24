@@ -1,6 +1,7 @@
 import { RESOURCE_TYPES } from "@/lib/engine/resources";
 import { bandForMultiplier, depositDisplayName } from "@/lib/engine/substrate-space";
 import { HABITABILITY_THRESHOLD } from "@/lib/constants/bodies";
+import { contributingBodiesSorted } from "@/lib/engine/habitability";
 import type { QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
 
 /** One body's deposit as a named physical feature — astrography flavour. */
@@ -52,18 +53,6 @@ export interface OccupancyBody {
   score: number;
   peopleLand: number;
   locked: boolean;
-}
-
-/**
- * The ONE place the fold's contributing-body predicate (unlocked, score ≥
- * `HABITABILITY_THRESHOLD`) and its score-descending sort live — `lib/world/tick.ts`'s
- * `habitabilityBodiesBySystem` and `lib/engine/body-gen.ts`'s generation-time aggregate restate the
- * predicate independently (different per-call shapes, generation vs. read-side), but every read-side
- * consumer of the cached fold's ORDER (`occupiedBodyIds`, `habitabilityFillOrder`) derives from this
- * shared helper rather than adding a fourth restatement.
- */
-export function contributingBodiesSorted<T extends { score: number; locked: boolean }>(bodies: T[]): T[] {
-  return bodies.filter((b) => !b.locked && b.score >= HABITABILITY_THRESHOLD).sort((a, b) => b.score - a.score);
 }
 
 /**

@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { systemHabitabilityQuality } from "../habitability";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { systemHabitabilityQuality, isContributingBody, contributingBodiesSorted } from "../habitability";
 import { POP_CENTRE_DENSITY } from "@/lib/constants/industry";
 import { generateWorld } from "@/lib/world/gen";
 import { BODY_ARCHETYPES, HABITABILITY_THRESHOLD } from "@/lib/constants/bodies";
@@ -96,5 +99,44 @@ describe("systemHabitabilityQuality: homeworld integration flavour", () => {
     // the prefab's exact footprint, so the homeworld's opening population always fits inside it
     // alone — quality reads exactly the top (garden) body's score.
     expect(quality).toBe(1.0);
+  });
+});
+
+describe("isContributingBody / contributingBodiesSorted", () => {
+  it("excludes a locked body and a sub-threshold body, keeps score-descending order for the rest", () => {
+    const best = { score: 1.0, locked: false };
+    const good = { score: HABITABILITY_THRESHOLD, locked: false };
+    const subThreshold = { score: HABITABILITY_THRESHOLD - 0.01, locked: false };
+    const lockedGood = { score: 1.0, locked: true };
+    expect(isContributingBody(best)).toBe(true);
+    expect(isContributingBody(subThreshold)).toBe(false);
+    expect(isContributingBody(lockedGood)).toBe(false);
+    expect(contributingBodiesSorted([good, best, subThreshold, lockedGood])).toEqual([best, good]);
+  });
+});
+
+/**
+ * The contributing-body predicate/ordering was once independently restated at three sites (this
+ * engine fold, `lib/world/tick.ts`'s `habitabilityBodiesBySystem`, `lib/utils/substrate.ts`'s
+ * `contributingBodiesSorted`/`occupiedBodyIds`); the ONE shared definition above replaced them.
+ * This is the structural red-proof that the other two sites actually import it rather than keeping
+ * their own inline copy — a behavioural test alone can't distinguish "imports the shared
+ * predicate" from "coincidentally restates the same two conditions".
+ */
+describe("contributing-body predicate — consumed at the former restatement sites, not re-stated", () => {
+  const here = fileURLToPath(import.meta.url);
+  const repoRoot = join(dirname(here), "..", "..", "..");
+  const read = (relPath: string) => readFileSync(join(repoRoot, relPath), "utf8");
+
+  it("lib/world/tick.ts imports isContributingBody from the engine fold and no longer inlines the threshold/locked check", () => {
+    const src = read("lib/world/tick.ts");
+    expect(src).toMatch(/import\s*\{\s*isContributingBody\s*\}\s*from\s*["']@\/lib\/engine\/habitability["']/);
+    expect(src).not.toMatch(/techLocked\s*\|\|\s*arch\.scores\.default\s*<\s*HABITABILITY_THRESHOLD/);
+  });
+
+  it("lib/utils/substrate.ts imports contributingBodiesSorted from the engine fold rather than defining its own", () => {
+    const src = read("lib/utils/substrate.ts");
+    expect(src).toMatch(/import\s*\{\s*contributingBodiesSorted\s*\}\s*from\s*["']@\/lib\/engine\/habitability["']/);
+    expect(src).not.toMatch(/export function contributingBodiesSorted/);
   });
 });

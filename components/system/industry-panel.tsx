@@ -37,7 +37,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { InfoIcon } from "@/components/ui/icons";
 import { Tooltip, TooltipTrigger, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
 import { useDialog } from "@/components/ui/dialog";
-import { depositRows, depositRowProblems, depositTypeProblems, generalLand, idleLevelSplit, staffedLevels, type DepositRow, type DepositTypeRow, type GeneralLand } from "@/components/system/industry-rows";
+import { CompositionBar } from "@/components/ui/composition-bar";
+import { depositRows, depositRowProblems, depositTypeProblems, idleLevelSplit, staffedLevels, type DepositRow, type DepositTypeRow } from "@/components/system/industry-rows";
 import { classifyGhosts, type GhostGroup, type GhostRow } from "@/components/system/industry-ghosts";
 import { buildProblems, needSeverity, problemGlyph, SEVERITY_GLYPH, SEVERITY_TEXT, type ProblemItem } from "@/components/system/needs-view";
 import { NeedCells, NeedsTable } from "@/components/system/needs-table";
@@ -81,10 +82,13 @@ const HEALTH: Record<IndustryHealth, { label: string; badge: BadgeColor; text: s
 };
 
 // Faint light hatch = idle labour capacity; red hatch = skill jobs no academy can license; copper
-// hatch = free habitable land (housing can still grow here).
+// hatch = free habitable land (housing can still grow here); dim grey hatch = free deposit slots —
+// its own, dimmer tone (distinct from the copper land hatch) so the two budget bars read as separate
+// stories at a glance, per the approved prototype (temp/industry-bars-prototype.html, variant A).
 const IDLE_HATCH = "repeating-linear-gradient(135deg, transparent 0 4px, rgba(201,209,217,0.06) 4px 8px)";
 const GAP_HATCH = "repeating-linear-gradient(135deg, rgba(240,97,109,0.45) 0 4px, transparent 4px 8px)";
 const COPPER_HATCH = "repeating-linear-gradient(135deg, rgba(208,106,66,0.45) 0 2px, transparent 2px 6px)";
+const DEPOSIT_FREE_HATCH = "repeating-linear-gradient(135deg, rgba(139,148,158,0.25) 0 2px, transparent 2px 6px)";
 
 /**
  * The at-a-glance health signal: a shape coloured by health, carrying the health word as its
@@ -667,20 +671,6 @@ function BuildingsTable({
   );
 }
 
-/** General-land magnitude bar: housing / factory / habitable-free (hatched) / factory-only free. */
-function MagBar({ land }: { land: GeneralLand }) {
-  const total = land.general > 0 ? land.general : 1;
-  const w = (v: number) => `${(v / total) * 100}%`;
-  return (
-    <div className="flex h-3.5 overflow-hidden border border-border bg-surface-active">
-      <div className="border-r-2 border-surface bg-accent" style={{ width: w(land.housing) }} />
-      <div className="border-r-2 border-surface bg-accent-muted" style={{ width: w(land.factory) }} />
-      <div className="border-r-2 border-surface" style={{ width: w(land.habitableFree), backgroundImage: COPPER_HATCH }} />
-      <div style={{ width: w(land.factoryFree) }} />
-    </div>
-  );
-}
-
 // ── Labour card (preserved) ──────────────────────────────────────────────────
 
 function LegendTooltip() {
@@ -935,11 +925,13 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
   const contributorsFor = (resource: DepositRow["resource"]) =>
     extractors.filter((b) => BUILDING_TYPES[b.buildingType]?.resource === resource);
 
-  const depStaffed = depRows.reduce((s, r) => s + r.staffed, 0);
-  const depSlots = depRows.reduce((s, r) => s + r.depositCounts, 0);
-  const land = generalLand(space);
-  const generalUsed = land.housing + land.factory;
-  const generalFree = land.habitableFree + land.factoryFree;
+  // Two independent budgets (SubstrateSpace: people land, deposit slots) — neither is derived from
+  // the other, so each gets its own worked/authored or used/free readout and bar rather than a
+  // combined figure. `space.deposit` already carries built-extractor-levels-vs-authored-slots
+  // (`summariseSpace`, lib/engine/industry.ts) — the SAME counts `depRows`' own built/depositCounts
+  // sum to, so the deposit card reads it straight rather than re-deriving from depRows.
+  const depositFree = Math.max(0, space.deposit.total - space.deposit.used);
+  const peopleFree = Math.max(0, space.people.total - space.people.used);
 
   const onCancelOrder = (projectId: string) => cancelOrder.mutate({ projectId });
 
@@ -1012,8 +1004,16 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           <PoolHead
             title="Deposit land"
             sub="extractors"
-            right={<><span className="text-text-primary">{depStaffed.toFixed(1)}</span>/{Math.round(depSlots)} staffed</>}
+            right={<><span className="text-text-primary">{formatMagnitude(space.deposit.used)}</span>/{formatMagnitude(space.deposit.total)} worked · <span className="text-accent">{formatMagnitude(depositFree)} free</span></>}
           />
+          <div className="mb-1">
+            <CompositionBar
+              segments={[
+                { label: "Worked", value: space.deposit.used, color: "var(--color-secondary)" },
+                { label: "Free", value: depositFree, color: DEPOSIT_FREE_HATCH },
+              ]}
+            />
+          </div>
           <DepositTable
             rows={depRows}
             contributorsFor={contributorsFor}
@@ -1028,19 +1028,23 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
         </Card>
       )}
 
-      {/* General land — aggregate capacity */}
+      {/* Habitable land — the people-land budget housing draws on. Factories/academies/complexes/
+          support buildings bill neither land budget (labour, demand and decay bound them instead —
+          SubstrateSpace's own docstring), so the buildings table below is NOT a second consumer of
+          this bar's total; it just happens to share the card. */}
       <Card variant="bordered" padding="xs">
         <PoolHead
-          title="General land"
-          sub="housing + factories"
-          right={<><span className="text-text-primary">{formatMagnitude(generalUsed)}</span>/{formatMagnitude(land.general)} · <span className="text-accent">{formatMagnitude(generalFree)} free</span></>}
+          title="Habitable land"
+          sub="housing"
+          right={<><span className="text-text-primary">{formatMagnitude(space.people.used)}</span>/{formatMagnitude(space.people.total)} · <span className="text-accent">{formatMagnitude(peopleFree)} free</span></>}
         />
-        <MagBar land={land} />
-        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-text-secondary">
-          <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 bg-accent" /> Housing {formatMagnitude(land.housing)}</span>
-          <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 bg-accent-muted" /> Factories {formatMagnitude(land.factory)}</span>
-          <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 border border-border" style={{ backgroundImage: COPPER_HATCH }} /> Habitable {formatMagnitude(land.habitable)}</span>
-          <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 border border-border bg-surface-active" /> Free {formatMagnitude(generalFree)}</span>
+        <div className="mb-1">
+          <CompositionBar
+            segments={[
+              { label: "Housing", value: space.people.used, color: "var(--color-accent)" },
+              { label: "Free", value: peopleFree, color: COPPER_HATCH },
+            ]}
+          />
         </div>
         <BuildingsTable
           groups={buildingGroups}
