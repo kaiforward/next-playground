@@ -16,7 +16,20 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-Nothing queued right now — pull from Unqueued.
+1. **[M] Bodies and the mechanics above them — the per-body industry question.** Booked from the
+  habitability-seeding Gate D discussion (Kai, 2026-08-24); the generation work and the two-budget
+  space model are settled — this row is about how bodies compose with mechanics built on top.
+  Today extraction pools per-system (count-weighted yield fixed at generation) and space/occupancy
+  accounting is system-level, which reads confusingly at the edges: if a tundra world hosts the
+  system's only radioactive deposit, the extractor physically belongs there, yet its land bills
+  against the system's occupied worlds. Question: is there a performant way to know where industry
+  actually sits per body — which would also unlock per-body yield instead of the game-start pool?
+  Interacts with the tech-unlock yield-dilution input on the growth-gated-behind-technology row
+  above (a per-body model dissolves that hazard; a frozen-at-start pool sidesteps it).
+  *Next step:* /brainstorm. Queued ahead of logistics by owner decision (2026-08-24): the
+  logistics mechanics build on bodies, so this discussion lands first.
+  *Don't:* re-litigate the two-budget generation model or the deleted industry-land budget; both
+  are settled and orthogonal to where industry physically sits.
 
 ---
 
@@ -73,20 +86,6 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   (78→140 near-empty outpost colonies by in-world year 20), and was retired by owner decision
   2026-08-23: dead bodies carry zero habitable land and dead systems are uncolonisable until the
   technology phase (see [habitability.md](./active/gameplay/habitability.md)).
-- **[M] Bodies and the mechanics above them — the per-body industry question.** Booked from the
-  habitability-seeding Gate D discussion (Kai, 2026-08-24); the generation work and the two-budget
-  space model are settled — this row is about how bodies compose with mechanics built on top.
-  Today extraction pools per-system (count-weighted yield fixed at generation) and space/occupancy
-  accounting is system-level, which reads confusingly at the edges: if a tundra world hosts the
-  system's only radioactive deposit, the extractor physically belongs there, yet its land bills
-  against the system's occupied worlds. Question: is there a performant way to know where industry
-  actually sits per body — which would also unlock per-body yield instead of the game-start pool?
-  Interacts with the tech-unlock yield-dilution input on the growth-gated-behind-technology row
-  above (a per-body model dissolves that hazard; a frozen-at-start pool sidesteps it).
-  *Next step:* /brainstorm when it comes forward — after the technology-phase design exists to
-  design against.
-  *Don't:* re-litigate the two-budget generation model or the deleted industry-land budget; both
-  are settled and orthogonal to where industry physically sits.
 - **[M] Events revisit — the developed/universal split and the coverage re-base.** Deferred by
   explicit decision at the habitability-seeding spec review (2026-08-23): "let's just leave
   events as is and we'll revisit and do the split properly". Two halves: (1) split event types
