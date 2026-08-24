@@ -71,17 +71,18 @@ const VISIBLE_VITALS: SystemVitalsData = {
 const VISIBLE_SUBSTRATE: SystemSubstrateData = {
   visibility: "visible",
   sunClass: "yellow",
-  availableSpace: 10,
-  habitableSpace: 5,
+  peopleLand: 5,
   bodies: [
     {
       id: "b1",
       bodyType: "barren_rock",
       archetypeName: "Barren Rock",
-      habitable: false,
-      size: 1,
-      slots: ZERO_RESOURCES,
+      score: 0,
+      locked: false,
+      counts: ZERO_RESOURCES,
       quality: ZERO_RESOURCES,
+      peopleLand: 0,
+      occupied: false,
     },
   ],
 };

@@ -12,7 +12,8 @@ function sys(overrides: Partial<TickSystem>): TickSystem {
     factionId: "f1", control: "developed", governmentType: "federation",
     population: 1000, popCap: 1200,
     unrest: 0, buildings: { ore: 5 }, buildingIdleCycles: {}, collapseDebt: 0,
-    yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+    yields: unitResourceVector(), extractionEff: unitResourceVector(),
+    depositCounts: emptyResourceVector(), peopleLand: 0,
     ...overrides,
   };
 }

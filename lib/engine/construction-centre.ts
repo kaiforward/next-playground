@@ -13,9 +13,9 @@
 import type { WorldConstructionProject } from "@/lib/world/types";
 import type { BuildProposal, BuildSystemState, Proposal } from "@/lib/engine/directed-build";
 import { proposalRoi } from "@/lib/engine/construction";
-import { generalSpaceUsed, labourDemand } from "@/lib/engine/industry";
+import { labourDemand } from "@/lib/engine/industry";
 import { isEconomicallyActive } from "@/lib/engine/control";
-import { BUILDING_TYPES, CONSTRUCTION_CENTRE_TYPE, effectiveSpaceCost } from "@/lib/constants/industry";
+import { CONSTRUCTION_CENTRE_TYPE } from "@/lib/constants/industry";
 import { workCostPerLevel } from "@/lib/constants/construction";
 
 export interface CentreValuationParams {
@@ -25,12 +25,6 @@ export interface CentreValuationParams {
   paybackHorizon: number;
   /** Reference cycles of pool drain that define the funding frontier (CONSTRUCTION.BACKLOG_WINDOW). */
   backlogWindow: number;
-}
-
-/** General space a queued build order will consume when it lands. Tier-0 sits on deposit slots → 0. */
-function queuedSpace(buildingType: string, levels: number): number {
-  if (BUILDING_TYPES[buildingType]?.resource) return 0;
-  return levels * effectiveSpaceCost(buildingType);
 }
 
 /**
@@ -64,34 +58,19 @@ export function planCentreProposal(
   }
   if (bestStarvedRoi <= 0) return null;
 
-  // Siting: the developed system with the most spare labour that can physically host the centre,
-  // net of space already committed by the queue and this cycle's proposals. Deterministic: spare
-  // labour desc → remaining space desc → systemId asc.
-  const committedSpace = new Map<string, number>();
-  for (const p of openProjects) {
-    if (p.kind !== "build") continue;
-    committedSpace.set(p.systemId, (committedSpace.get(p.systemId) ?? 0) + queuedSpace(p.buildingType, p.levels));
-  }
-  for (const p of ordered) {
-    if (p.kind !== "build") continue;
-    let space = 0;
-    for (const item of p.items) space += queuedSpace(item.buildingType, item.levels);
-    committedSpace.set(p.systemId, (committedSpace.get(p.systemId) ?? 0) + space);
-  }
-
-  const footprint = effectiveSpaceCost(CONSTRUCTION_CENTRE_TYPE);
-  let site: { systemId: string; spare: number; space: number } | null = null;
+  // Siting: the developed system with the most spare labour — a centre bills no land at all, so
+  // nothing here needs to reserve space against the queue or this cycle's proposals. Deterministic:
+  // spare labour desc → systemId asc.
+  let site: { systemId: string; spare: number } | null = null;
   for (const s of systems) {
     if (!isEconomicallyActive(s.control)) continue;
-    const space = s.generalSpace - generalSpaceUsed(s.buildings) - (committedSpace.get(s.systemId) ?? 0);
-    if (space < footprint) continue;
     const spare = Math.max(0, s.population - labourDemand(s.buildings));
     if (
       site === null ||
       spare > site.spare ||
-      (spare === site.spare && (space > site.space || (space === site.space && s.systemId < site.systemId)))
+      (spare === site.spare && s.systemId < site.systemId)
     ) {
-      site = { systemId: s.systemId, spare, space };
+      site = { systemId: s.systemId, spare };
     }
   }
   if (site === null) return null;

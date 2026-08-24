@@ -93,9 +93,9 @@ yield_g           = system yieldMult[resource(g)]  for tier-0 extractables, else
 
 `labourFulfilment` is one uniform system-wide ratio — population is the labour pool, and if labour demand exceeds population the whole industrial base operates below capacity. `inputGate_g` is the recipe-input availability throttle (always 1 for tier-0; see [Supply Chain & Input-Gating](#supply-chain--input-gating)). Key constraints by building tier:
 
-- **Tier-0 extractors** — output goods are the eight tradeable raw materials (water, ore, gas, …), each extracted from a body resource deposit with no recipe (`inputGate = 1`). Their building count is capped at world-gen by the system's **deposit slots** (a per-resource extractor ceiling), and their output is scaled by the resource's **yield multiplier** (`yieldMult`, the mean quality of the filled slots) — so both how *much* (slots) and how *rich* (quality) a body's deposits are drive extraction. See [the available-space substrate model](./economy-substrate-v2-available-space.md).
-- **Tier-1+ manufacturers** — bounded by **general space** and labour, **and input-gated**: each building type carries an `inputs` recipe and draws those inputs from local market stock each tick. A manufacturer short of any input throttles its output proportionally (`inputGate_g < 1`), so shortages cascade down the chain. See [Supply Chain & Input-Gating](#supply-chain--input-gating).
-- **Population centres** (the `housing` building type) — a non-production type: they do not appear in production sums. Instead `popCap = Σ(pop-centre count × POP_CENTRE_DENSITY)`, sourced **entirely from built centres** on a body's habitable land — there is no body baseline (the v1 `bodyBaselinePopCap` is retired). Centres are sized at seed to staff the system's labour demand, but their `count` is no longer frozen — both it and the `popCap` it yields are **downward-mutable**, recomputed live each economy shard from the surviving housing (see [Infrastructure Decay](#infrastructure-decay)). See [the available-space model](./economy-substrate-v2-available-space.md).
+- **Tier-0 extractors** — output goods are the eight tradeable raw materials (water, ore, gas, …), each extracted from a body resource deposit with no recipe (`inputGate = 1`). Their building count is capped at world-gen by the system's **authored deposit counts** (a per-resource extractor ceiling), and their output is scaled by the resource's **yield multiplier** (`yieldMult`, the capacity-weighted mean quality of the system's deposits for that resource) and by a per-system **extraction-efficiency** pool (fixed at generation from the contributing bodies' habitability class) — so how *much* (counts), how *rich* (quality) and how *hospitable* (efficiency) a body's deposits are all drive extraction. See [Habitability & the Substrate](./habitability.md).
+- **Tier-1+ manufacturers** — bounded by labour and **input-gated**: each building type carries an `inputs` recipe and draws those inputs from local market stock each tick. A manufacturer short of any input throttles its output proportionally (`inputGate_g < 1`), so shortages cascade down the chain. See [Supply Chain & Input-Gating](#supply-chain--input-gating).
+- **Population centres** (the `housing` building type) — a non-production type: they do not appear in production sums. Instead `popCap = Σ(pop-centre count × POP_CENTRE_DENSITY)`, sourced **entirely from built centres** on a system's **habitable land** — there is no body baseline (the v1 `bodyBaselinePopCap` is retired). Centres are sized at seed to staff the system's labour demand, but their `count` is no longer frozen — both it and the `popCap` it yields are **downward-mutable**, recomputed live each economy shard from the surviving housing (see [Infrastructure Decay](#infrastructure-decay)). See [Habitability & the Substrate](./habitability.md).
 
 **Consumption** — two channels drain each good's stock:
 
@@ -295,7 +295,7 @@ No gameplay effect keys off the band — effects read Provision or the grievance
 
 **Strikes** are derived each tick from `unrest` (no separate stored flag): above the strike threshold, a smooth suppression multiplier scales down production output only. People still consume — consumption is never suppressed. The strike state feeds back into the next economy tick's production.
 
-**Growth / decline** is logistic with **symmetric** growth/decline rates: population grows toward `popCap` when the system is well-fed and calm, and declines under high unrest. Seeding places systems below `popCap` (population is a **continuous magnitude** — a tiny outpost seeds at e.g. `pop 0.3`, never rounded to a false 0), so the live tick ramps each up toward its labour-staffing cap and then holds. Today growth is gated mainly by housing-headroom × satisfaction; making it track economic *viability* (can the world feed/employ its people) is the booked **SP4 phase** "Population ← economic viability" (see [available-space model](./economy-substrate-v2-available-space.md) and [economy-simulation-vision.md](../../planned/economy-simulation-vision.md) §13).
+**Growth / decline** is logistic with **symmetric** growth/decline rates: population grows toward `popCap` when the system is well-fed and calm, and declines under high unrest. Seeding places systems below `popCap` (population is a **continuous magnitude** — a tiny outpost seeds at e.g. `pop 0.3`, never rounded to a false 0), so the live tick ramps each up toward its labour-staffing cap and then holds. Today growth is gated mainly by housing-headroom × satisfaction; making it track economic *viability* (can the world feed/employ its people) is the booked **SP4 phase** "Population ← economic viability" (see [Habitability & the Substrate](./habitability.md) and [economy-simulation-vision.md](../../planned/economy-simulation-vision.md) §13).
 
 **Stability** is the public-facing readout of `unrest`, rendered as a choropleth map mode and a per-system badge. It is the SP2 replacement for the former prosperity choropleth — same pipeline, new source. Unrest bins into five labels (`lib/utils/stability.ts`), cold to hot:
 
@@ -378,10 +378,11 @@ The economy→population **satisfaction handoff** (`ctx.results`) is purely in-m
 Viewed another way, the simulation stacks four layers from static to real-time:
 
 ```
-1  Base identity (static)      bodies (deposit slots × quality + general/
-                               habitable space) + seeded industrial base
-                               (WorldBuilding counts on available space,
-                               recipes) -> per-good production rates
+1  Base identity (static)      bodies (deposit counts × quality + habitable
+                               land) + seeded industrial base
+                               (WorldBuilding counts against habitable land
+                               and deposit counts; recipes) -> per-good
+                               production rates
                                (capacity-driven, input-gated, tier-0 × yield);
                                civilian + production-input consumption rates;
                                demand rate -> cycles-of-supply pricing reference;

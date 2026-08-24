@@ -20,7 +20,7 @@ describe("isSunClass / toSunClass", () => {
 
 describe("isBodyArchetypeId / toBodyArchetypeId", () => {
   it("accepts catalog archetypes", () => {
-    expect(isBodyArchetypeId("garden_world")).toBe(true);
+    expect(isBodyArchetypeId("temperate_world")).toBe(true);
     expect(toBodyArchetypeId("asteroid_belt")).toBe("asteroid_belt");
   });
   it("rejects unknown values", () => {

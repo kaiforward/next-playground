@@ -90,6 +90,14 @@ export interface TickProcessorResult {
   /** People moved this cycle start (colonist delivery + edge diffusion), conserved flows only.
    *  Calibration instrumentation — surfaced via runWorldTick().instrumentation, never broadcast. */
   migrationMoved?: { colonists: number; diffusion: number };
+  /** Per-system colonist-delivery inflow this cycle start — the positive (sink) side of
+   *  `allocateColonists`' conserved deltas, keyed by the receiving system. A system absent from the
+   *  map received no delivery this cycle. Calibration instrumentation only, the per-system twin of
+   *  `migrationMoved.colonists` (which sums this map galaxy-wide) — the harness's pump-watch cohort
+   *  fold needs the per-system figure to compare against per-system population change, something the
+   *  galaxy total cannot answer. Surfaced via `runWorldTick().instrumentation`, never broadcast or
+   *  persisted. */
+  colonistDeliveryBySystem?: Map<string, number>;
   /** Founding materials staged this cycle, one entry per draw a colony made on its founder.
    *  Calibration instrumentation — the cost side of colonisation, invisible to any galaxy-wide
    *  average because foundings are rare. */
@@ -119,6 +127,15 @@ export interface TickProcessorResult {
    * reports the finding; it never writes `control` itself.
    */
   abandonedSystems?: string[];
+  /** The same abandonment-Rule-2 findings as `abandonedSystems` above, paired with the cause read at
+   *  the triggering cycle: `"famine-collapse"` when that system's supply state carried
+   *  `survivalShortfall` this cycle (Rule 1's crisis term drove the decline), `"decline-to-empty"`
+   *  otherwise — a marginal-land system whose quality-scaled growth never cleared unrest, with no
+   *  famine involved. Purely observational (unlike `abandonedSystems`, this never gates a `control`
+   *  write) and calibration instrumentation only — surfaced via `runWorldTick().instrumentation`,
+   *  never broadcast or persisted. Every key here is also a member of `abandonedSystems` this same
+   *  cycle; the two are built from the same loop and can never disagree on membership. */
+  abandonedSystemsByCause?: Map<string, "famine-collapse" | "decline-to-empty">;
   /** Per-system overshoot-death amount removed this cycle — the non-conserved sink inside
    *  `populationDelta`'s gate (fires only above the strike-level unrest gate), already scaled by
    *  this run's catch-up factor. A system absent from the map lost none this cycle (the gate did not
@@ -223,6 +240,7 @@ export type TickInstrumentation = Pick<
   TickProcessorResult,
   | "buildCommitmentsByGood"
   | "migrationMoved"
+  | "colonistDeliveryBySystem"
   | "foundingManifests"
   | "foundingStalls"
   | "logisticsBudget"
@@ -230,6 +248,7 @@ export type TickInstrumentation = Pick<
   | "overshootDeathBySystem"
   | "growthBySystem"
   | "teardownLevelsBySystem"
+  | "abandonedSystemsByCause"
 >;
 
 /** The full payload one tick's run hands to the broadcast layer. */

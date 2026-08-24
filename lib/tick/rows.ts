@@ -20,6 +20,7 @@ import type { EconomyType, GovernmentType, ResourceVector } from "@/lib/types/ga
 import type { SystemControl } from "@/lib/world/types";
 import type { SupplyRegime } from "@/lib/engine/population";
 import type { BuildDropReason } from "@/lib/engine/directed-build";
+import type { SystemHabitabilityQuality } from "@/lib/engine/habitability";
 
 export interface TickSystem {
   id: string;
@@ -84,14 +85,33 @@ export interface TickSystem {
    *  as `buildBlocked` above, written directly by the directed-build processor's own
    *  `applyColonyOpportunityUpdates` (`lib/tick/world/directed-build-world.ts`). */
   colonyOpportunity?: { value: number; work: number };
+  /**
+   * Static per-body {score, peopleLand} summary for this system's people-land-contributing bodies
+   * (unlocked, above `HABITABILITY_THRESHOLD`) — the fill-best-first quality fold's input
+   * (`systemHabitabilityQuality`, `lib/engine/habitability.ts`). Unsorted; the fold sorts
+   * internally. Sourced from `World.bodies` by the `toTickSystems` join — unlike `peopleLand`
+   * below (a system-row aggregate), the fold needs the PER-BODY breakdown the aggregate discards.
+   * Optional so a fixture built before this field existed (most processors' test `sys()` helpers
+   * never touch habitability) reads as no contributing bodies, never a required literal every
+   * TickSystem construction site must supply. */
+  habitabilityBodies?: { score: number; peopleLand: number }[];
+  /** Cached fill-best-first habitability quality, optional — the `toTickSystems` join passes
+   *  `WorldSystem.habitabilityQuality` through UNCOERCED, same absence convention as `provision`/
+   *  `supplyBand`/`criticalWeight` above: absent means never assessed. Written directly onto this
+   *  row by the population processor's world adapter via the generic row-mutation path
+   *  (`applyPopulationUpdates`, `lib/tick/adapters/memory/population.ts`), merged back the same way
+   *  `provisionExpectation` is (see `lib/world/types.ts` for the field's full docstring). */
+  habitabilityQuality?: SystemHabitabilityQuality;
   /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */
   yields: ResourceVector;
+  /** Per-resource extraction-work efficiency — deposit-count-weighted mean of the contributing
+   *  bodies' extractionModifier; feeds tier-0 production alongside `yields` (never folded into it). */
+  extractionEff: ResourceVector;
   /** Body-derived deposit-slot capacity per resource — caps tier-0 extractor builds. */
-  slotCap: ResourceVector;
-  /** Body-derived fungible build space — tier-1+ factories + housing draw here. */
-  generalSpace: number;
-  /** Habitable subset of build space — additionally caps housing. */
-  habitableSpace: number;
+  depositCounts: ResourceVector;
+  /** Body-derived habitable land — caps housing. Factories, academies, complexes and construction
+   *  centres bill no land at all. */
+  peopleLand: number;
 }
 
 export interface TickConnection {

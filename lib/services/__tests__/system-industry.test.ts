@@ -4,6 +4,7 @@ import { setWorld, clearWorld } from "@/lib/world/store";
 import { getSystemIndustry } from "@/lib/services/universe";
 import { ServiceError } from "@/lib/services/errors";
 import { BUILDING_TYPES } from "@/lib/constants/industry";
+import { depositCountsOf, RESOURCE_TYPES } from "@/lib/engine/resources";
 import type { World, WorldSystem } from "@/lib/world/types";
 
 const VALID_BANDS = ["poor", "average", "good", "rich"];
@@ -29,21 +30,21 @@ describe("getSystemIndustry", () => {
     expect(data.visibility).toBe("visible");
     if (data.visibility !== "visible") throw new Error("expected visible");
 
-    // Space partition mirrors the world columns; deposit = available − general.
-    expect(data.space.available).toBe(system.availableSpace);
-    expect(data.space.general).toBe(system.generalSpace);
-    expect(data.space.habitable).toBe(system.habitableSpace);
-    expect(data.space.deposit).toBeCloseTo(system.availableSpace - system.generalSpace, 6);
-    for (const v of [data.space.depositWorked, data.space.generalUsed, data.space.habitableUsed]) {
-      expect(Number.isFinite(v)).toBe(true);
-      expect(v).toBeGreaterThanOrEqual(0);
+    // Two independent budgets mirror the world columns' totals.
+    expect(data.space.people.total).toBe(system.peopleLand);
+    const authoredDepositTotal = RESOURCE_TYPES.reduce((sum, r) => sum + depositCountsOf(system)[r], 0);
+    expect(data.space.deposit.total).toBe(authoredDepositTotal);
+    for (const budget of [data.space.people, data.space.deposit]) {
+      expect(Number.isFinite(budget.used)).toBe(true);
+      expect(budget.used).toBeGreaterThanOrEqual(0);
+      expect(Number.isFinite(budget.total)).toBe(true);
     }
 
     // Deposits: one row per resource with slots, worked within cap, valid band.
     for (const d of data.deposits) {
-      expect(d.slotCap).toBeGreaterThan(0);
+      expect(d.depositCounts).toBeGreaterThan(0);
       expect(d.worked).toBeGreaterThanOrEqual(0);
-      expect(d.worked).toBeLessThanOrEqual(d.slotCap);
+      expect(d.worked).toBeLessThanOrEqual(d.depositCounts);
       expect(Number.isFinite(d.yieldMult)).toBe(true);
       expect(VALID_BANDS).toContain(d.band);
     }

@@ -35,14 +35,19 @@ import type { World } from "@/lib/world/types";
  * full-scale harness gate's job (experiments/examples/cadence-invariance-*.yaml),
  * which measures goods hauled per wall-clock — the metric a 60-system CI run can't see.
  *
- * Treasury balance gets its own, looser tolerance: it inherits the same fundQueue
- * redistribution noise as buildings (construction bills are billed off pendingWork,
- * which forks on the divergent RNG stream), plus its own settlement-boundary rounding
- * as cycles land on different ticks — the honest cycle12 baseline is ~2.2e-2, an order
- * of magnitude above the shared TOL. TREASURY_TOL sits between: dropping `catchUp`
- * from a single income term (heads tax) diverges to ~2.0e-1 — still ~3.3x past
- * TREASURY_TOL — while TREASURY_TOL itself clears the honest baseline with >2.5x
- * headroom.
+ * Treasury balance gets its own, looser tolerance, gated on the cycle12 arm ONLY: it
+ * inherits the same fundQueue redistribution noise as buildings (construction bills are
+ * billed off pendingWork, which forks on the divergent RNG stream), plus its own
+ * settlement-boundary rounding as cycles land on different ticks — the honest cycle12
+ * baseline is 2.0e-3–3.4e-2 across seeds. TREASURY_TOL sits between: dropping `catchUp`
+ * from a single income term (heads tax) diverges cycle12 to ~2.7e-1 — well past
+ * TREASURY_TOL — while TREASURY_TOL clears the honest baseline.
+ *
+ * The build12 arm's treasury total is deliberately NOT gated. At this window the reading
+ * measures cycle-phase alignment, not rate: honest cross-seed divergence spans
+ * 6.4e-2–4.0e-1 while the construction-billing `catchUp` break lands at ~9.8e-1, so no
+ * tolerance both clears honest noise and catches the break. The construction-side
+ * `catchUp` seam is gated by the buildings figure on the build12 arm instead.
  */
 
 const SEED = 745878428; // colonies + cycle starts in-window (shared with the ECONOMY_SCALE invariance test)
@@ -65,17 +70,26 @@ const STATE_TICKS = 480;
  */
 const FOUNDING_TICKS = 5760;
 const TOL = 5e-3;
-const TREASURY_TOL = 6e-2; // measured honest baseline ~2.24e-2 — see header note
+const TREASURY_TOL = 6e-2; // cycle12 arm only — honest baseline 2.0e-3–3.4e-2 across seeds; see header note
 /**
  * Founding money gets its own bar rather than borrowing the treasury balance's. Measured over
- * FOUNDING_TICKS the honest cross-arm diffs are 1.27e-2 (cycle12) / 1.08e-2 (build12) — well inside
- * TREASURY_TOL, and reusing that number would have left the arm blind: mis-scaling the founding
- * money seam by `catchUp` (`spent = plan.cost × share × catchUp` in the directed-build staging path,
- * exactly the class of break this arm exists for) drives build12 to 5.47e-2, which TREASURY_TOL's
- * 6e-2 would have let through. 3e-2 sits between: ~2.4x headroom over the honest baseline, ~1.8x
- * past it for that break.
+ * FOUNDING_TICKS on this fixture's primary seed, the honest cross-arm diff is 3.56e-2 (build12) —
+ * cycle12's is far smaller (4.90e-3) because the mis-scaling this arm exists to catch only touches
+ * the construction cadence. Reusing TREASURY_TOL is still wrong for the same reason as before: a
+ * mis-scaled founding money seam (`spent = plan.cost × share × catchUp` in the directed-build
+ * staging path) now drives build12 to 9.35e-2, well past TREASURY_TOL's 6e-2 too.
+ *
+ * The honest figure grew roughly 3x from the pre-habitability-seeding measurement (1.08e-2 →
+ * 3.56e-2): colonisation under the archetype tables is scarcer and its founding-money lumps land
+ * less predictably relative to the two cadences, so the phase noise this arm rides is bigger by
+ * construction, not a regression. A LONGER window does not recover separation — checked directly
+ * (doubling FOUNDING_TICKS to 11,520): the base run's founding expense grows only ~0.4-0.5% past
+ * 5,760 (the era genuinely is over by then, confirming the header's premise), while the honest
+ * build12 diff drifts up to 3.96e-2 and the broken one to 9.72e-2 — the gap does not open with more
+ * ticks, so widening the window buys nothing. The tolerance moves instead: 6e-2 sits between,
+ * ~1.7x headroom over the honest baseline, ~1.6x under the break.
  */
-const FOUNDING_TOL = 3e-2;
+const FOUNDING_TOL = 6e-2;
 // Adaptive-expectation guard: the memory update sub-steps at catchUpFactor(cadence.cycle) rather
 // than rate-scaling (lib/engine/expectation.ts), specifically BECAUSE it is nonlinear
 // (branch-switching) and therefore NOT invariant under the relaxation-rate's own scaling trick.
@@ -232,11 +246,15 @@ describe("cadence interval invariance", () => {
           dBld,
           `${name}: buildings rate diverges — base ${base.buildings} vs ${v.buildings} (rel ${dBld.toExponential(2)})`,
         ).toBeLessThan(TOL);
-        const dTre = relDiff(base.treasuryBalance, v.treasuryBalance);
-        expect(
-          dTre,
-          `${name}: treasury balance rate diverges — base ${base.treasuryBalance.toFixed(1)} vs ${v.treasuryBalance.toFixed(1)} (rel ${dTre.toExponential(2)})`,
-        ).toBeLessThan(TREASURY_TOL);
+        // build12's treasury total is phase-dominated at this window and is not gated —
+        // see the header's treasury note. Its construction `catchUp` seam is gated by dBld above.
+        if (name !== "build12") {
+          const dTre = relDiff(base.treasuryBalance, v.treasuryBalance);
+          expect(
+            dTre,
+            `${name}: treasury balance rate diverges — base ${base.treasuryBalance.toFixed(1)} vs ${v.treasuryBalance.toFixed(1)} (rel ${dTre.toExponential(2)})`,
+          ).toBeLessThan(TREASURY_TOL);
+        }
         const dFnd = relDiff(base.foundingExpense, v.foundingExpense);
         expect(
           dFnd,

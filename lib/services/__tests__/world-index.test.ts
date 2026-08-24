@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld } from "@/lib/world/store";
-import { regionInfos } from "@/lib/services/world-index";
+import { regionInfos, bodiesBySystem } from "@/lib/services/world-index";
 import type { World, WorldSystem } from "@/lib/world/types";
 
 let world: World;
@@ -25,6 +25,36 @@ function groupSystemsByRegion(systems: WorldSystem[]): Map<string, WorldSystem[]
   }
   return byRegion;
 }
+
+describe("bodiesBySystem", () => {
+  it("groups every body under its owning system, with no body dropped or duplicated", () => {
+    const index = bodiesBySystem();
+    const totalIndexed = [...index.values()].reduce((sum, list) => sum + list.length, 0);
+    expect(totalIndexed).toBe(world.bodies.length);
+    for (const b of world.bodies) {
+      const list = index.get(b.systemId);
+      expect(list).toBeDefined();
+      expect(list!.some((row) => row.id === b.id)).toBe(true);
+    }
+  });
+
+  it("returns undefined for a system with no bodies, not an empty array standing in for absence", () => {
+    const systemWithNoBodies = world.systems.find(
+      (s) => !world.bodies.some((b) => b.systemId === s.id),
+    );
+    if (systemWithNoBodies === undefined) return; // fixture-dependent; skip if every system has a body
+    expect(bodiesBySystem().get(systemWithNoBodies.id)).toBeUndefined();
+  });
+
+  it("rebuilds after a world swap rather than serving a stale index from the previous world", () => {
+    const firstSystemId = world.systems[0].id;
+    const before = bodiesBySystem().get(firstSystemId)?.length ?? 0;
+    const extraBody = { ...world.bodies[0], id: "extra-body-for-index-test", systemId: firstSystemId };
+    setWorld({ ...world, bodies: [...world.bodies, extraBody] });
+    const after = bodiesBySystem().get(firstSystemId)?.length ?? 0;
+    expect(after).toBe(before + 1);
+  });
+});
 
 describe("regionInfos", () => {
   it("carries each region's own row fields through", () => {

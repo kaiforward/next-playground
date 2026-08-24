@@ -12,7 +12,6 @@ import {
   extractorsByResource,
   summariseDeposits,
   summariseSpace,
-  generalSpaceUsed,
   industryHealth,
   buildingHealth,
   computeLabourState,
@@ -58,7 +57,6 @@ import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { ECONOMY_CONSTANTS, ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { USED_SLACK } from "@/lib/constants/infrastructure";
 import { brakeKnee, productionCeiling } from "@/lib/engine/tick";
-import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { unitResourceVector, makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import { HEAVY_INDUSTRY_COMPLEX } from "@/lib/constants/industry";
@@ -167,6 +165,31 @@ describe("buildingProduction", () => {
     const withYield = buildingProduction(buildings, "metals", FULL, yields);
     expect(withYield).toBeCloseTo(base, 6);
   });
+
+  it("defaults extractionEff to a neutral 1.0 vector when omitted", () => {
+    const buildings = { ore: 4 };
+    const withoutArg = buildingProduction(buildings, "ore", FULL, unitResourceVector());
+    const withUnitEff = buildingProduction(buildings, "ore", FULL, unitResourceVector(), unitResourceVector());
+    expect(withoutArg).toBeCloseTo(withUnitEff, 10);
+  });
+
+  it("Proves (5): an extractionModifier-style efficiency of 0.5 halves tier-0 output", () => {
+    const buildings = { ore: 4 };
+    const yields = unitResourceVector();
+    const fullEff = unitResourceVector();
+    const halfEff = makeResourceVector({ ore: 0.5 });
+    const base = buildingProduction(buildings, "ore", FULL, yields, fullEff);
+    const halved = buildingProduction(buildings, "ore", FULL, yields, halfEff);
+    expect(halved).toBeCloseTo(base * 0.5, 6);
+  });
+
+  it("Proves (5): the same 0.5 efficiency leaves tier-1+ output untouched", () => {
+    const buildings = { metals: 3 };
+    const halfOreEff = makeResourceVector({ ore: 0.5 });
+    const base = buildingProduction(buildings, "metals", FULL, unitResourceVector(), unitResourceVector());
+    const withHalvedOreEff = buildingProduction(buildings, "metals", FULL, unitResourceVector(), halfOreEff);
+    expect(withHalvedOreEff).toBeCloseTo(base, 6);
+  });
 });
 
 describe("capacityGoodRates", () => {
@@ -253,17 +276,6 @@ describe("inputDemandFromProduction", () => {
 
   it("returns 0 for a good nothing consumes as an input", () => {
     expect(inputDemandFromProduction("luxuries", new Map([["metals", 4]]))).toBe(0);
-  });
-});
-
-describe("generalSpaceUsed", () => {
-  it("sums factory + housing footprint; excludes tier-0 extractors (deposit land)", () => {
-    // ore is a tier-0 extractor (sits on a deposit slot); metals + housing sit on general space.
-    expect(generalSpaceUsed({ ore: 4, metals: 2, [HOUSING_TYPE]: 5 }))
-      .toBeCloseTo((2 + 5) * DEFAULT_SPACE_COST, 6);
-  });
-  it("ignores non-positive counts", () => {
-    expect(generalSpaceUsed({ metals: -3, fuel: 2 })).toBeCloseTo(2 * DEFAULT_SPACE_COST, 6);
   });
 });
 
@@ -839,33 +851,32 @@ describe("extractorsByResource", () => {
 });
 
 describe("summariseSpace", () => {
-  it("partitions available into deposit/general/habitable and tracks built land per partition", () => {
-    // available 100, general 40 → deposit 60; habitable 10.
-    // ore×4 extractors sit on deposit land; metals×2 factories + housing×5 sit on general; housing also on habitable.
-    const space = summariseSpace(100, 40, 10, { ore: 4, metals: 2, [HOUSING_TYPE]: 5 });
-    expect(space.available).toBe(100);
-    expect(space.general).toBe(40);
-    expect(space.habitable).toBe(10);
-    expect(space.deposit).toBe(60);
-    expect(space.depositWorked).toBeCloseTo(4 * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT, 6);
-    expect(space.generalUsed).toBeCloseTo((2 + 5) * DEFAULT_SPACE_COST, 6);
-    expect(space.habitableUsed).toBeCloseTo(5 * DEFAULT_SPACE_COST, 6);
+  it("computes two independent used/total pairs: people (housing), deposit (extractor levels)", () => {
+    // peopleLand 10, deposit counts ore 20 + gas 5 = 25 total.
+    // ore×4 extractors work deposit slots; metals (a factory, no land at all) is ignored entirely;
+    // housing×5 sits on people land.
+    const counts = makeResourceVector({ ore: 20, gas: 5 });
+    const space = summariseSpace(10, counts, { ore: 4, metals: 2, [HOUSING_TYPE]: 5 });
+    expect(space.people).toEqual({ used: 5 * DEFAULT_SPACE_COST, total: 10 });
+    expect(space.deposit).toEqual({ used: 4, total: 25 });
   });
-  it("clamps deposit to zero when general exceeds available (degenerate input)", () => {
-    expect(summariseSpace(10, 40, 5, {}).deposit).toBe(0);
+  it("reads zero used across both budgets when nothing is built", () => {
+    const space = summariseSpace(10, emptyResourceVector(), {});
+    expect(space.people.used).toBe(0);
+    expect(space.deposit.used).toBe(0);
   });
 });
 
 describe("summariseDeposits", () => {
   it("summarises present deposits: slot cap, worked slots, effective yield + its band", () => {
-    const slotCap = makeResourceVector({ ore: 12, gas: 2 });
+    const depositCounts = makeResourceVector({ ore: 12, gas: 2 });
     const worked = makeResourceVector({ ore: 5, gas: 0 });
     const yields = makeResourceVector({ ore: 1.55, gas: 1 }); // ore 1.55 → "good"; gas unworked 1.0 → "average"
-    const deposits = summariseDeposits(slotCap, worked, yields);
-    // Only ore + gas have slots; sorted by slotCap descending → ore first.
+    const deposits = summariseDeposits(depositCounts, worked, yields);
+    // Only ore + gas have slots; sorted by depositCounts descending → ore first.
     expect(deposits.map((d) => d.resource)).toEqual(["ore", "gas"]);
     const ore = deposits[0];
-    expect(ore.slotCap).toBe(12);
+    expect(ore.depositCounts).toBe(12);
     expect(ore.worked).toBe(5);
     expect(ore.yieldMult).toBeCloseTo(1.55, 6);
     expect(ore.band).toBe("good"); // 1.55 ≤ 1.8

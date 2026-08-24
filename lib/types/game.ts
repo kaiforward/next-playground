@@ -36,14 +36,17 @@ export type ResourceVector = Record<ResourceType, number>;
 /** Sun class — gates which body archetypes a system can roll. */
 export type SunClass = "blue_white" | "yellow" | "orange_dwarf" | "red_dwarf";
 
-/** Body archetype ids (one per curated world/belt kind). */
+/** Body archetype ids (one per curated world/belt kind), freezing → volcanic. */
 export type BodyArchetypeId =
-  | "garden_world"
+  | "frozen_world"
+  | "tundra_world"
+  | "boreal_world"
   | "ocean_world"
+  | "temperate_world"
+  | "gaia_world"
   | "jungle_world"
   | "arid_world"
   | "volcanic_world"
-  | "frozen_world"
   | "barren_rock"
   | "gas_giant"
   | "asteroid_belt";

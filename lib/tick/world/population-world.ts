@@ -7,6 +7,7 @@
  */
 import type { UnrestParams, PopulationParams, SupplyRegime } from "@/lib/engine/population";
 import type { ExpectationParams } from "@/lib/engine/expectation";
+import type { SystemHabitabilityQuality } from "@/lib/engine/habitability";
 export interface PopulationStateView {
   systemId: string;
   population: number;
@@ -16,6 +17,17 @@ export interface PopulationStateView {
    *  Optional: absent means never seeded — `readExpectation` (lib/engine/expectation.ts) is the
    *  only place that turns absence into a value, never a `?? 0` at this seam. */
   provisionExpectation?: number;
+  /** Static per-body {score, peopleLand} summary for this system's people-land-contributing
+   *  bodies, carried from `TickSystem.habitabilityBodies` (`lib/tick/rows.ts`) unmodified — the
+   *  fill-best-first quality fold's input (`systemHabitabilityQuality`,
+   *  `lib/engine/habitability.ts`). Absent (a fixture that never set it) reads as no contributing
+   *  bodies. */
+  habitabilityBodies?: { score: number; peopleLand: number }[];
+  /** This cycle's OPENING cached habitability quality, carried from
+   *  `TickSystem.habitabilityQuality` UNCOERCED — absent means the population processor has never
+   *  assessed this system before. The fold-site caching policy (recompute the persisted value
+   *  only when `frontierIndex` changes) lives in the processor, not here. */
+  habitabilityQuality?: SystemHabitabilityQuality;
 }
 
 export interface PopulationUpdate {
@@ -47,6 +59,15 @@ export interface PopulationUpdate {
    *  never-classified-this-cycle absence as `supplyBand`. Un-clamped: the adapter guards only
    *  finiteness and non-negativity (`lib/world/types.ts`). */
   criticalWeight?: number;
+  /** This cycle's resolved habitability quality (`lib/engine/habitability.ts`): the freshly
+   *  computed fold result when the occupied prefix crossed a body boundary this cycle
+   *  (`frontierIndex` changed), or the SAME value the system opened this cycle with when it
+   *  didn't — the processor's fold-site cache. The processor itself always writes this (a cached
+   *  reading must never regress to "unassessed" once assessed); optional here only so a
+   *  hand-built `PopulationUpdate` fixture that predates this field (and isn't testing
+   *  habitability at all) still type-checks — same no-write-a-lie fallback as `provisionExpectation`
+   *  handles an absent write. */
+  habitabilityQuality?: SystemHabitabilityQuality;
 }
 
 export interface PopulationWorld {

@@ -35,9 +35,9 @@ function makeSystem(id: string, population: number): TickSystem {
     buildingIdleCycles: {},
     collapseDebt: 0,
     yields: unitResourceVector(),
-    slotCap: emptyResourceVector(),
-    generalSpace: 100,
-    habitableSpace: 100,
+    extractionEff: unitResourceVector(),
+    depositCounts: emptyResourceVector(),
+    peopleLand: 100,
   };
 }
 

@@ -1,6 +1,7 @@
 import type { StarSystemInfo, SunClass, GoodTier, BodyArchetypeId, ResourceVector } from "./game";
 import type { SubstrateGoodRate, ConsumptionBreakdown } from "@/lib/engine/physical-economy";
 import type { SupplyRegime } from "@/lib/engine/population";
+import type { FillOrderRow } from "@/lib/utils/substrate";
 
 export interface TradeFlowEdgeInfo {
   /** Net source system for the dominant good (where particles spawn). */
@@ -204,6 +205,21 @@ export type SystemPopulationData =
       provision: SystemProvisionRead;
       /** The unrest floor's contributor breakdown and trend — see `SystemUnrestRead`. */
       unrestBreakdown: SystemUnrestRead;
+      /** The fill-best-first habitability quality (`lib/engine/habitability.ts`) as it multiplies
+       *  the growth term (`populationDelta`'s `quality` parameter), resolved through the SAME
+       *  shared three-tier contract every consumer shares (`resolveEffectiveHabitabilityQuality`):
+       *  the persisted fold-site cache if present; else a fresh compute over this system's
+       *  contributing bodies at its current population (a just-founded or just-crossed colony's
+       *  first read, before the tick has cached one); 1 (neutral) only when there is no
+       *  contributing body to fold over at all — matching the population processor's own fallback
+       *  (`lib/tick/processors/population.ts`'s `growthQuality`). `lib/services/universe.ts`'s
+       *  `getSystemSubstrate` resolves its occupied-body badges through the same function, so the
+       *  two panels can never disagree. */
+      growthMultiplier: number;
+      /** Every people-land-contributing body in fill-best-first order, decomposing
+       *  `growthMultiplier` into the bodies it comes from (spec §3: quality is always a story about
+       *  bodies, never a bare number) — see `habitabilityFillOrder`. */
+      fillOrder: FillOrderRow[];
     }
   | { visibility: "unknown" };
 
@@ -250,12 +266,23 @@ export interface BodyView {
   id: string;
   bodyType: BodyArchetypeId;
   archetypeName: string;
-  habitable: boolean;
-  size: number;
-  /** Per-resource deposit slots on this body (0 = no deposit). */
-  slots: ResourceVector;
+  /** This body's default-pop habitability score — the archetype's static rating. Presented as a
+   *  BAND (`habitabilityScoreBand`, `lib/utils/substrate.ts`), never a bare number or the retired
+   *  per-body `habitable: boolean`. */
+  score: number;
+  /** True when this body's archetype is tech-locked (contributes no land or counts yet). */
+  locked: boolean;
+  /** Per-resource deposit slot counts on this body (0 = no deposit). */
+  counts: ResourceVector;
   /** Per-resource intrinsic quality multiplier on this body (0 = no deposit). */
   quality: ResourceVector;
+  /** This body's authored people-land budget — dark (present but non-functional) when locked or
+   *  below `HABITABILITY_THRESHOLD`. */
+  peopleLand: number;
+  /** True when this body sits inside the system's current fill-best-first occupied prefix (the
+   *  cached habitability quality fold, derived by the service via `occupiedBodyIds` — the component computes
+   *  nothing). False for an unassessed system as well as for a body past the frontier. */
+  occupied: boolean;
 }
 /**
  * Physical substrate for one system — the static "what is physically here":
@@ -267,10 +294,8 @@ export type SystemSubstrateData =
   | {
       visibility: "visible";
       sunClass: SunClass;
-      /** Total available surface space across all bodies (SPACE_PER_SIZE × Σ size). */
-      availableSpace: number;
       /** Habitable surface across all bodies. */
-      habitableSpace: number;
+      peopleLand: number;
       bodies: BodyView[];
     }
   | { visibility: "unknown" };
@@ -291,7 +316,7 @@ export type SystemIndustryData =
       visibility: "visible";
       /** Stored unrest integral 0…1. Drives the decay-loop and the coarse health read. */
       unrest: number;
-      /** Available-space partition + built-out land per partition (headroom). */
+      /** The two disjoint land/deposit budgets (people, deposit) and built-out use of each. */
       space: SubstrateSpace;
       /** Per-resource deposit-fill rows: slot cap, worked slots, effective yield + band. */
       deposits: SystemDepositSummary[];

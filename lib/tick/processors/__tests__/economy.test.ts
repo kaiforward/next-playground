@@ -94,9 +94,9 @@ function makeProducerSystem(id: string, unrest: number): TickSystem {
     buildingIdleCycles: {},
     collapseDebt: 0,
     yields: unitResourceVector(),
-    slotCap: emptyResourceVector(),
-    generalSpace: 0,
-    habitableSpace: 0,
+    extractionEff: unitResourceVector(),
+    depositCounts: emptyResourceVector(),
+    peopleLand: 0,
   };
 }
 
@@ -116,9 +116,9 @@ function makeConsumerSystem(id: string, unrest: number): TickSystem {
     buildingIdleCycles: {},
     collapseDebt: 0,
     yields: unitResourceVector(),
-    slotCap: emptyResourceVector(),
-    generalSpace: 0,
-    habitableSpace: 0,
+    extractionEff: unitResourceVector(),
+    depositCounts: emptyResourceVector(),
+    peopleLand: 0,
   };
 }
 
@@ -544,9 +544,9 @@ describe("economy processor: supply-chain input-gating", () => {
         buildingIdleCycles: {},
         collapseDebt: 0,
         yields: unitResourceVector(),
-        slotCap: emptyResourceVector(),
-        generalSpace: 0,
-        habitableSpace: 0,
+        extractionEff: unitResourceVector(),
+        depositCounts: emptyResourceVector(),
+        peopleLand: 0,
       };
     }
 

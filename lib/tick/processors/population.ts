@@ -4,6 +4,7 @@ import {
   type UnrestParams,
 } from "@/lib/engine/population";
 import { ABANDON_POP_FLOOR, CROWDING } from "@/lib/constants/population";
+import { systemHabitabilityQuality } from "@/lib/engine/habitability";
 import { readExpectation, updateExpectation } from "@/lib/engine/expectation";
 import { catchUpFactor } from "@/lib/tick/shard";
 import { clamp } from "@/lib/utils/math";
@@ -61,11 +62,17 @@ export async function runPopulationProcessor(
   // identically in both runs), so the difference isolates it exactly with no defensive clamp.
   // Absent system ⇒ 0, kept sparse for the same reason.
   const growthBySystem = new Map<string, number>();
-  // Abandonment Rule 2 (the death line): systems this cycle found in survival shortfall with
-  // post-delta population below ABANDON_POP_FLOOR. Reported, never applied here — this processor
+  // Abandonment Rule 2 (the death line): systems this cycle found with post-delta population
+  // below ABANDON_POP_FLOOR, famine or not. Reported, never applied here — this processor
   // stays pure and leaves the control-flip/reset to the tick body (lib/world/tick.ts), the sole
   // owner of `control` writes.
   const abandonedSystems: string[] = [];
+  // Calibration-only: the same finding tagged with its cause, read at the SAME cycle the trigger
+  // fires — `supply.survivalShortfall` (already computed above from this cycle's supply state) is
+  // Rule 1's own famine flag, so a system abandoning while it holds is a famine-collapse and one
+  // abandoning without it declined to empty on non-famine stress alone (Rule 2 has no famine conjunct).
+  // Never applied, never gates a `control` write — purely observational, unlike `abandonedSystems`.
+  const abandonedSystemsByCause = new Map<string, "famine-collapse" | "decline-to-empty">();
   for (const s of states) {
     const d = signals.dissatisfactionBySystem.get(s.systemId) ?? 0;
     // Unreachable in real play: the economy processor writes dissatisfactionBySystem and
@@ -106,23 +113,43 @@ export async function runPopulationProcessor(
     const grievance = grievanceShortfall(effective, P);
     const supplyTerm = supplyUnrestTerm(grievance, d, supply, scaledUnrest);
     const unrest = accumulateUnrest(s.unrest, supplyTerm, floor, scaledUnrest);
+    // Fill-best-first habitability quality (lib/engine/habitability.ts) multiplies the growth
+    // term only, and reads THIS CYCLE'S OPENING cached reading (`s.habitabilityQuality`) — never
+    // a fresh per-cycle fold, so growth moves with the fold-site caching policy below (recompute
+    // only on a frontier-index crossing), not every tick's raw occupancy. A system the processor
+    // has never assessed before (no opening cache — its first fold since colonisation) falls back
+    // to a fresh compute over this cycle's OPENING population, mirroring crowdingPressure's
+    // cycle-start read just above, rather than a neutral default — a real colony always has at
+    // least one positive-people-land body (the colonisability floor), so this reads a real score.
+    // With no body summary at all (nothing cached, nothing to fold — real play never produces
+    // this, the cache-write below skips the same case) growth runs at the raw rate.
+    const opening = s.habitabilityQuality
+      ?? (s.habitabilityBodies && s.habitabilityBodies.length > 0
+        ? systemHabitabilityQuality(s.habitabilityBodies, s.population)
+        : undefined);
+    const growthQuality = opening ? opening.quality : 1;
     // The delta reads the unrest this cycle just produced, so unrest resolves forward within the
     // cycle while crowding lags it by one. Growth/decline keep the absolute d — the
     // political/biological split: unrest (political) judges against memory, population change
     // (biological) reads the goods themselves.
-    const delta = populationDelta(s.population, s.popCap, d, unrest, params.population);
+    const delta = populationDelta(s.population, s.popCap, d, unrest, params.population, growthQuality);
     const population = Math.max(0, s.population + delta * catchUp);
-    // Abandonment Rule 2: famine (survival shortfall) AND the post-delta population has collapsed
-    // below the floor — the colony is over. Reads the SAME `supply` this cycle already resolved
-    // (the famine conjunct is the newborn guard: an unlucky opening never reads this on its own).
-    if (supply.survivalShortfall && population < ABANDON_POP_FLOOR) abandonedSystems.push(s.systemId);
+    // Abandonment Rule 2 (the death line): the post-delta population alone decides — famine is no
+    // longer a conjunct. A colony that declines to empty under sustained non-famine stress (a
+    // marginal-land world whose quality-scaled growth can't clear unrest, see populationDelta's
+    // docstring) abandons exactly the same as a starved one; ABANDON_POP_FLOOR (1, well under
+    // COLONY_SEED_POP 2) is the newborn guard now — an unlucky first cycle can't cross it alone.
+    if (population < ABANDON_POP_FLOOR) {
+      abandonedSystems.push(s.systemId);
+      abandonedSystemsByCause.set(s.systemId, supply.survivalShortfall ? "famine-collapse" : "decline-to-empty");
+    }
     // Isolates the death component of `delta` by re-running the same pure fold with the death rate
     // zeroed — growth and decline are unaffected by that rate, so the difference is exactly what the
     // gate removed, without re-implementing populationDelta's internal formula here (which would
     // silently drift from the engine if its shape ever changed). Observational only: `delta` itself,
     // and therefore `population` above, is untouched.
     const deltaWithoutDeath = populationDelta(
-      s.population, s.popCap, d, unrest, { ...params.population, overshootDeathRate: 0 },
+      s.population, s.popCap, d, unrest, { ...params.population, overshootDeathRate: 0 }, growthQuality,
     );
     const overshootDeath = Math.max(0, deltaWithoutDeath - delta) * catchUp;
     if (overshootDeath > 0) overshootDeathBySystem.set(s.systemId, overshootDeath);
@@ -130,10 +157,38 @@ export async function runPopulationProcessor(
     // cancels decline and death exactly (both subtract identically in each run), leaving the growth
     // product alone.
     const deltaWithoutGrowth = populationDelta(
-      s.population, s.popCap, d, unrest, { ...params.population, growthRate: 0 },
+      s.population, s.popCap, d, unrest, { ...params.population, growthRate: 0 }, growthQuality,
     );
     const growth = (delta - deltaWithoutGrowth) * catchUp;
     if (growth > 0) growthBySystem.set(s.systemId, growth);
+    // Fill-best-first habitability quality (lib/engine/habitability.ts): computed fresh every
+    // cycle from this cycle's post-delta population, but only APPLIED to the persisted cache when
+    // the occupied prefix crosses a body boundary (frontierIndex changing) — population movement
+    // within the same body keeps whatever the system opened this cycle with. That is exactly
+    // correct (not merely a cheap approximation) for the dominant single-people-land-body case:
+    // with one body in the prefix, quality is mathematically the top body's score at every
+    // population level, so re-applying a fresh compute there would always be a no-op anyway. A
+    // never-before-assessed system (habitabilityQuality absent) always takes the fresh reading.
+    // With no body summary there is nothing to fold: the cache stays unwritten (same rule as
+    // supplyBand/provision below — an unclassifiable reading is left absent, never fabricated).
+    // EXCEPTION: once the frontier sits on the LAST body (index sorted.length - 1), it can never
+    // again change — both the mid-body walk that reaches the final body and the all-bodies clamp
+    // arm report that same index, so an index-only trigger freezes quality forever from that point
+    // on even though population (and therefore the weighted mean over that final body) keeps
+    // moving. The fresh reading is always applied while the frontier is on the last body, matching
+    // the never-assessed case above rather than adding a second, drift-prone "index changed OR
+    // quality changed" comparison.
+    const bodies = s.habitabilityBodies ?? [];
+    const freshQuality = bodies.length > 0
+      ? systemHabitabilityQuality(bodies, population)
+      : undefined;
+    const onLastBody = freshQuality !== undefined && freshQuality.frontierIndex === bodies.length - 1;
+    const habitabilityQuality = freshQuality !== undefined
+        && (onLastBody
+          || s.habitabilityQuality === undefined
+          || s.habitabilityQuality.frontierIndex !== freshQuality.frontierIndex)
+      ? freshQuality
+      : s.habitabilityQuality;
     // The memory advances only now that this cycle's unrest has already been judged against it.
     // An emptying world's Provision-1 reading is a denominator artifact, not an experience to
     // normalise toward, so the update is skipped and the stored value (post-seed, pre-floor)
@@ -157,6 +212,7 @@ export async function runPopulationProcessor(
       provision: P,
       supplyBand: rawSupply?.regime,
       criticalWeight: rawSupply?.criticalWeight,
+      habitabilityQuality,
     });
     // The scalar the economy actually applied this cycle, not a recompute: the strike params and
     // the treasury-fed maintenance malus never reach this processor, and the unrest just written
@@ -174,5 +230,6 @@ export async function runPopulationProcessor(
   if (overshootDeathBySystem.size > 0) result.overshootDeathBySystem = overshootDeathBySystem;
   if (growthBySystem.size > 0) result.growthBySystem = growthBySystem;
   if (abandonedSystems.length > 0) result.abandonedSystems = abandonedSystems;
+  if (abandonedSystemsByCause.size > 0) result.abandonedSystemsByCause = abandonedSystemsByCause;
   return result;
 }

@@ -45,9 +45,9 @@ export function makeResourceVector(partial: Partial<ResourceVector>): ResourceVe
  * whose `Record<string, number>` parameter only accepts a type with an index signature (implicit
  * for an alias, absent for an interface).
  */
-export type SlotColumns = {
-  slotGas: number; slotMinerals: number; slotOre: number; slotBiomass: number;
-  slotArable: number; slotWater: number; slotRadioactive: number;
+export type CountColumns = {
+  countGas: number; countMinerals: number; countOre: number; countBiomass: number;
+  countArable: number; countWater: number; countRadioactive: number;
 };
 
 export type QualColumns = {
@@ -60,11 +60,21 @@ export type YieldColumns = {
   yieldArable: number; yieldWater: number; yieldRadioactive: number;
 };
 
-/** Spread a vector onto the SystemBody deposit-slot columns (slot*). */
-export function slotColumns(v: ResourceVector): SlotColumns {
+/**
+ * A system's per-resource extraction-work efficiency — the deposit-count-weighted mean of the
+ * contributing bodies' `extractionModifier`, kept as its OWN aggregate never folded into
+ * `yieldMult` (see `lib/constants/bodies.ts` and `substrateAggregates`).
+ */
+export type EffColumns = {
+  effGas: number; effMinerals: number; effOre: number; effBiomass: number;
+  effArable: number; effWater: number; effRadioactive: number;
+};
+
+/** Spread a vector onto the SystemBody deposit-slot columns (count*). */
+export function countColumns(v: ResourceVector): CountColumns {
   return {
-    slotGas: v.gas, slotMinerals: v.minerals, slotOre: v.ore, slotBiomass: v.biomass,
-    slotArable: v.arable, slotWater: v.water, slotRadioactive: v.radioactive,
+    countGas: v.gas, countMinerals: v.minerals, countOre: v.ore, countBiomass: v.biomass,
+    countArable: v.arable, countWater: v.water, countRadioactive: v.radioactive,
   };
 }
 
@@ -82,6 +92,39 @@ export function yieldColumns(v: ResourceVector): YieldColumns {
     yieldGas: v.gas, yieldMinerals: v.minerals, yieldOre: v.ore, yieldBiomass: v.biomass,
     yieldArable: v.arable, yieldWater: v.water, yieldRadioactive: v.radioactive,
   };
+}
+
+/** Spread a vector onto the WorldSystem per-resource extraction-efficiency columns (eff*). */
+export function effColumns(v: ResourceVector): EffColumns {
+  return {
+    effGas: v.gas, effMinerals: v.minerals, effOre: v.ore, effBiomass: v.biomass,
+    effArable: v.arable, effWater: v.water, effRadioactive: v.radioactive,
+  };
+}
+
+/**
+ * Count-weighted mean of `valueOf(body)` over `bodies`, weighted by `countOf(body)` —
+ * Σ(count·value) / Σ count, skipping any body whose count is non-positive. Returns 1 (a neutral
+ * multiplier) when the total count is 0 — the shared "nothing here, read neutral" convention every
+ * per-resource deposit/extraction-quality reader shares (`depositGradeVector`,
+ * `extractionEfficiencyVector`). The value accessor is what lets one fold serve both: a per-body
+ * quality band keyed by resource (deposit grade) and a per-body constant keyed only by archetype
+ * (extraction efficiency) are the same shape of aggregate with different `valueOf`s.
+ */
+export function countWeightedMean<T>(
+  bodies: T[],
+  countOf: (body: T) => number,
+  valueOf: (body: T) => number,
+): number {
+  let weighted = 0;
+  let total = 0;
+  for (const b of bodies) {
+    const c = countOf(b);
+    if (c <= 0) continue;
+    weighted += c * valueOf(b);
+    total += c;
+  }
+  return total > 0 ? weighted / total : 1;
 }
 
 /** Element-wise sum of resource vectors (the system aggregate from its bodies). */
@@ -114,18 +157,19 @@ const TRACE_FRACTION = 0.05;
  * ResourceVector.
  *
  * Supported prefixes:
- *   "slot"  — reads slotGas…slotRadioactive (deposit-slot counts)
+ *   "count" — reads countGas…countRadioactive (deposit-slot counts)
  *   "qual"  — reads qualGas…qualRadioactive (quality-band values)
  *   "yield" — reads yieldGas…yieldRadioactive (yield multipliers)
+ *   "eff"   — reads effGas…effRadioactive (extraction-efficiency multipliers)
  *
- * Missing columns default to 0 for all prefixes EXCEPT "yield", where the
- * schema default is @default(1) and an absent multiplier means a neutral ×1.
+ * Missing columns default to 0 for all prefixes EXCEPT "yield" and "eff", where the schema
+ * default is @default(1) and an absent multiplier means a neutral ×1.
  */
 export function resourceVectorFromColumns(
   source: Record<string, number>,
-  prefix: "slot" | "qual" | "yield",
+  prefix: "count" | "qual" | "yield" | "eff",
 ): ResourceVector {
-  const fallback = prefix === "yield" ? 1 : 0;
+  const fallback = prefix === "yield" || prefix === "eff" ? 1 : 0;
   const v = emptyResourceVector();
   for (const type of RESOURCE_TYPES) {
     const key = `${prefix}${type.charAt(0).toUpperCase()}${type.slice(1)}`;
@@ -137,13 +181,13 @@ export function resourceVectorFromColumns(
 /**
  * Read a row's deposit-slot columns as a ResourceVector — the extractor-slot cap per resource.
  *
- * These three readers are the only supported way to get a vector off a row's columns. Writing the
+ * These four readers are the only supported way to get a vector off a row's columns. Writing the
  * column bag out by hand at the call site is how a resource type added to `RESOURCE_TYPES` reads as
  * an empty deposit (or a neutral ×1 yield) forever: the reader iterates the types, so it would pick
  * the new one up, but a hand-written bag never carries its column and nothing errors.
  */
-export function slotCapOf(row: SlotColumns): ResourceVector {
-  return resourceVectorFromColumns(row, "slot");
+export function depositCountsOf(row: CountColumns): ResourceVector {
+  return resourceVectorFromColumns(row, "count");
 }
 
 /** Read a row's quality-band columns as a ResourceVector. */
@@ -154,6 +198,11 @@ export function qualityOf(row: QualColumns): ResourceVector {
 /** Read a row's per-resource yield-multiplier columns as a ResourceVector. */
 export function yieldsOf(row: YieldColumns): ResourceVector {
   return resourceVectorFromColumns(row, "yield");
+}
+
+/** Read a row's per-resource extraction-efficiency columns as a ResourceVector. */
+export function effOf(row: EffColumns): ResourceVector {
+  return resourceVectorFromColumns(row, "eff");
 }
 
 /**

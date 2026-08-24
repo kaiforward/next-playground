@@ -39,8 +39,8 @@ import { emptyResourceVector } from "@/lib/engine/resources";
 function sysWithGoods(readings: GoodSatisfaction[]): BuildSystemState {
   return {
     systemId: "s1", factionId: "f1", control: "developed", population: 20,
-    buildings: {}, slotCap: emptyResourceVector(),
-    generalSpace: 10, habitableSpace: 10,
+    buildings: {}, depositCounts: emptyResourceVector(),
+    peopleLand: 10,
     goods: readings.map((r) => ({
       goodId: r.goodId, stock: 0, demand: r.demanded, civilianDemand: r.demanded,
       capacityProduction: 0, satisfaction: r.satisfaction,

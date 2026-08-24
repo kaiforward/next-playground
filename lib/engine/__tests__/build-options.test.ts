@@ -1,19 +1,19 @@
 import { describe, it, expect } from "vitest";
 import { computeBuildOptions } from "@/lib/engine/build-options";
-import { HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, CONSTRUCTION_CENTRE_TYPE, BUILDING_TYPES } from "@/lib/constants/industry";
+import { HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, CONSTRUCTION_CENTRE_TYPE, BUILDING_TYPES, effectiveSpaceCost } from "@/lib/constants/industry";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import { emptyResourceVector } from "@/lib/engine/resources";
 
 function sys(over: Partial<Parameters<typeof computeBuildOptions>[0]> = {}) {
   return {
-    population: 500, buildings: {}, slotCap: emptyResourceVector(),
-    generalSpace: 10, habitableSpace: 4, ...over,
+    population: 500, buildings: {}, depositCounts: emptyResourceVector(),
+    peopleLand: 4, ...over,
   };
 }
 const byType = (opts: ReturnType<typeof computeBuildOptions>, t: string) => opts.find((o) => o.buildingType === t)!;
 
 describe("computeBuildOptions", () => {
-  it("caps housing by the tighter of habitable and general space, net of committed levels", () => {
+  it("caps housing by people land (peopleLand) alone, net of committed levels", () => {
     // habitable 4 → 4 housing levels max; 2 built + 1 committed → 1 addable.
     const opts = computeBuildOptions(sys({ buildings: { [HOUSING_TYPE]: 2 } }), { [HOUSING_TYPE]: 1 });
     const h = byType(opts, HOUSING_TYPE);
@@ -22,21 +22,35 @@ describe("computeBuildOptions", () => {
     expect(h.workPerLevel).toBe(workCostPerLevel(HOUSING_TYPE));
   });
 
-  it("hard-blocks a general-space type when no footprint remains", () => {
-    const full = sys({ generalSpace: 2, buildings: { [HOUSING_TYPE]: 2 } }); // habitable 4, general full
+  it("never blocks a general-space type on land — the industry-land budget is deleted, not merely generous", () => {
+    // Zero free anything except labour: no deposit slots, people land already fully housed. A
+    // factory/academy/complex/centre bills no land at all, so it still reads a real (unbounded)
+    // maxLevels here — the old land gate is deleted, not weakened.
+    const schoolCost = effectiveSpaceCost(VOCATIONAL_SCHOOL_TYPE);
+    const starved = sys({
+      peopleLand: 4,
+      buildings: { [HOUSING_TYPE]: 4, [VOCATIONAL_SCHOOL_TYPE]: 500 / schoolCost },
+    });
+    const c = byType(computeBuildOptions(starved, {}), CONSTRUCTION_CENTRE_TYPE);
+    expect(c.maxLevels).toBeNull();
+    expect(c.blocked).toBeNull();
+  });
+
+  it("housing standing at full people-land occupancy does not block a general-space type (build rule separation)", () => {
+    const full = sys({ peopleLand: 4, buildings: { [HOUSING_TYPE]: 4 } }); // people land full
     const c = byType(computeBuildOptions(full, {}), CONSTRUCTION_CENTRE_TYPE);
-    expect(c.maxLevels).toBe(0);
-    expect(c.blocked).toBe("no_space");
+    expect(c.maxLevels).toBeNull();
+    expect(c.blocked).toBeNull();
   });
 
   it("caps an extractor by its deposit slots and reports no_deposit_slots at zero", () => {
     // Pick any tier-0 type from the catalog and grant 2 slots of its resource.
     const tier0 = Object.keys(BUILDING_TYPES).find((t) => BUILDING_TYPES[t].resource !== undefined)!;
     const resource = BUILDING_TYPES[tier0].resource!;
-    const slotCap = { ...emptyResourceVector(), [resource]: 2 };
-    const open = byType(computeBuildOptions(sys({ slotCap }), {}), tier0);
+    const depositCounts = { ...emptyResourceVector(), [resource]: 2 };
+    const open = byType(computeBuildOptions(sys({ depositCounts }), {}), tier0);
     expect(open.maxLevels).toBe(2);
-    const exhausted = byType(computeBuildOptions(sys({ slotCap, buildings: { [tier0]: 2 } }), {}), tier0);
+    const exhausted = byType(computeBuildOptions(sys({ depositCounts, buildings: { [tier0]: 2 } }), {}), tier0);
     expect(exhausted.maxLevels).toBe(0);
     expect(exhausted.blocked).toBe("no_deposit_slots");
   });

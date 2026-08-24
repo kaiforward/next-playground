@@ -442,7 +442,7 @@ export interface PopulationParams {
 
 /**
  * Population change for one tick:
- *   growth  = growthRate * pop * crowdFactor(pop, popCap, crowdBrakeEnd) * (1 - D)
+ *   growth  = growthRate * pop * crowdFactor(pop, popCap, crowdBrakeEnd) * (1 - D) * quality
  *   decline = declineRate * pop * clamp(unrest, 0, 1)
  *   death   = unrest > overshootDeathUnrestGate
  *               ? overshootDeathRate * max(0, pop - popCap) * clamp(unrest, 0, 1) : 0
@@ -454,6 +454,13 @@ export interface PopulationParams {
  * non-conserved death portion is removed here, unrest-weighted, so a violent collapse is
  * death-dominant. The conserved migration half is handled by the migration engine's explicit
  * overshoot coupling (negative headroom → repels outward migration).
+ *
+ * `quality` (the fill-best-first habitability read, `lib/engine/habitability.ts`) multiplies
+ * the GROWTH term ONLY — decline and death read raw `population`/`unrest` untouched, so a
+ * marginal-land world doesn't die faster, it merely grows slower. A world whose
+ * `quality × crowdFactor × (1 − d)` sits below `unrest` nets negative even at full satisfaction
+ * and zero crowding: hard worlds are fragile by design, and the exit is abandonment
+ * (`ABANDON_POP_FLOOR`, `lib/constants/population.ts`), not a floor inside this formula.
  */
 export function populationDelta(
   population: number,
@@ -461,10 +468,12 @@ export function populationDelta(
   d: number,
   unrest: number,
   params: PopulationParams,
+  quality: number,
 ): number {
   const satisfactionFactor = clamp(1 - d, 0, 1);
   const growth =
-    params.growthRate * population * crowdFactor(population, popCap, params.crowdBrakeEnd) * satisfactionFactor;
+    params.growthRate * population * crowdFactor(population, popCap, params.crowdBrakeEnd)
+    * satisfactionFactor * quality;
   const decline = params.declineRate * population * clamp(unrest, 0, 1);
   const death =
     unrest > params.overshootDeathUnrestGate

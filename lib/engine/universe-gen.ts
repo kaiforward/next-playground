@@ -348,7 +348,7 @@ export function generateSystems(
   const systems: GeneratedSystem[] = [];
   for (let i = 0; i < points.length; i++) {
     const substrate = generateSubstrate(rng);
-    const economyType = deriveEconomyTypeLabel(substrate.slotCap, substrate.yieldMult, substrate.population);
+    const economyType = deriveEconomyTypeLabel(substrate.depositCounts, substrate.yieldMult, substrate.population);
     const regionIndex = regionAssignments[i];
     const localIndex = regionLocalCount[regionIndex]++;
 
@@ -362,11 +362,10 @@ export function generateSystems(
       population: substrate.population,
       bodyDanger: substrate.bodyDanger,
       buildings: substrate.buildings,
-      availableSpace: substrate.availableSpace,
-      generalSpace: substrate.generalSpace,
-      habitableSpace: substrate.habitableSpace,
-      slotCap: substrate.slotCap,
+      peopleLand: substrate.peopleLand,
+      depositCounts: substrate.depositCounts,
       yieldMult: substrate.yieldMult,
+      extractionEfficiency: substrate.extractionEfficiency,
       x: points[i].x,
       y: points[i].y,
       regionIndex,
@@ -621,16 +620,15 @@ export function stampHomeworldPrefabs(
     const bodies = [homeworldGardenBody(), ...s.bodies];
     const agg = substrateAggregates(bodies);
     s.bodies = bodies;
-    s.slotCap = agg.slotCap;
-    s.generalSpace = agg.generalSpace;
-    s.habitableSpace = agg.habitableSpace;
-    s.availableSpace = agg.availableSpace;
+    s.depositCounts = agg.depositCounts;
+    s.peopleLand = agg.peopleLand;
     s.yieldMult = agg.yieldMult;
+    s.extractionEfficiency = agg.extractionEfficiency;
     s.bodyDanger = agg.bodyDanger;
     s.buildings = computeHomeworldBuildings(HOME_SYSTEM_POP);
     s.population = HOME_SYSTEM_POP;
     s.popCap = housingPopCap(s.buildings);
-    s.economyType = deriveEconomyTypeLabel(s.slotCap, s.yieldMult, s.population);
+    s.economyType = deriveEconomyTypeLabel(s.depositCounts, s.yieldMult, s.population);
   }
 }
 

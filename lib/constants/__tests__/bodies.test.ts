@@ -8,16 +8,30 @@ const ARCHETYPE_IDS = Object.keys(BODY_ARCHETYPES) as BodyArchetypeId[];
 const SUN_CLASS_IDS = Object.keys(SUN_CLASSES) as SunClass[];
 
 describe("BODY_ARCHETYPES", () => {
-  it("every archetype defines all seven resource types", () => {
+  it("every archetype's depositCounts keys are valid resource types with integer, min ≤ max ranges", () => {
     for (const id of ARCHETYPE_IDS) {
-      const keys = Object.keys(BODY_ARCHETYPES[id].resourceBase).sort();
-      expect(keys).toEqual([...RESOURCE_TYPES].sort());
+      for (const [resource, range] of Object.entries(BODY_ARCHETYPES[id].depositCounts)) {
+        expect(RESOURCE_TYPES).toContain(resource);
+        expect(range).toBeDefined();
+        if (!range) continue;
+        expect(Number.isInteger(range.min)).toBe(true);
+        expect(Number.isInteger(range.max)).toBe(true);
+        expect(range.min).toBeGreaterThanOrEqual(0);
+        expect(range.max).toBeGreaterThanOrEqual(range.min);
+      }
     }
   });
 
-  it("every archetype has a defined habitability", () => {
+  it("every archetype has a default-pop score in [0, 1] and min ≤ max people land", () => {
     for (const id of ARCHETYPE_IDS) {
-      expect(typeof BODY_ARCHETYPES[id].habitable).toBe("boolean");
+      const arch = BODY_ARCHETYPES[id];
+      expect(arch.scores.default).toBeGreaterThanOrEqual(0);
+      expect(arch.scores.default).toBeLessThanOrEqual(1);
+      expect(arch.peopleLand.min).toBeGreaterThanOrEqual(0);
+      expect(arch.peopleLand.max).toBeGreaterThanOrEqual(arch.peopleLand.min);
+      expect(arch.extractionModifier).toBeGreaterThan(0);
+      expect(arch.extractionModifier).toBeLessThanOrEqual(1);
+      expect(typeof arch.techLocked).toBe("boolean");
     }
   });
 

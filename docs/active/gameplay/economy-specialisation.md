@@ -74,9 +74,10 @@ The three-part `LabourState` is computed **once per system** and reused across a
 picks the pools a good's tier actually draws on.
 
 **Two academy buildings, one per grade** — a **vocational school** (licenses skill-1) and a **research
-institute** (licenses skill-2). Each eats general space and draws *unskilled* head count to run (adds to
-`labourDemand`), and raises its pool's ceiling. They do **not** require skilled labour to staff — otherwise
-you'd need an academy to staff an academy; instructors are abstracted into the licensing function.
+institute** (licenses skill-2). Each carries no land cost (labour and decay bind it, like every industry
+building) and draws *unskilled* head count to run (adds to `labourDemand`), and raises its pool's ceiling.
+They do **not** require skilled labour to staff — otherwise you'd need an academy to staff an academy;
+instructors are abstracted into the licensing function.
 
 **The development ladder falls out for free.** Because tier-2 goods draw skill-1 labour too, a system
 cannot run tier-2 without *both* a research institute and the vocational capacity its technician share
@@ -84,10 +85,12 @@ demands — no explicit "institute requires school" prerequisite is needed. Beco
 population on *both* academy tiers *and* the labs, so a specialised system physically can't also be broad →
 it imports the rest.
 
-**Per-good space cost.** `spaceCost` varies by good — the most-integrated tier-2 factories (shipyards,
-foundries) are large, so you physically can't fit the whole tier-2 basket on one body. This differentiates
-**general-space** footprints (the land factories + housing compete for); tier-0 extractor footprint stays
-on the deposit-slot model, capped by deposits rather than general space.
+**`spaceCost` is a vestigial per-good field** (`lib/constants/industry.ts`) — it once differentiated
+factory footprints against a shared land budget with housing; that budget (industry land) was deleted, so
+a production building's `spaceCost` today only matters as a positive/zero existence check, never a land
+bill. Housing alone still bills real land, against habitable land (see
+[Habitability & the Substrate](./habitability.md)); tier-0 extractor footprint stays on the deposit-count
+model, capped by authored deposits.
 
 ---
 
@@ -140,7 +143,7 @@ is the commitment. In `lib/constants/industry.ts`:
   (engineer-heavy shipyards, labour-heavy consumer goods).
 - `SKILL1_PER_SCHOOL`, `SKILL2_PER_INSTITUTE` — licensing per academy (large, so one academy serves several
   factories → academies stay lumpy/concentrated).
-- `SPACE_OVERRIDES` — per-good general-space footprint for the biggest tier-1/2 factories.
+- `SPACE_OVERRIDES` — per-good `spaceCost` override; vestigial (see above) — a positive/zero existence check only, not a land bill.
 - `INPUT_DEMAND_MULTIPLIER` — magnitude knob on recipe input-demand draws (neutral `1.0` until calibrated).
 
 ---
@@ -148,8 +151,8 @@ is the commitment. In `lib/constants/industry.ts`:
 ## Scope boundaries
 
 **In (S1):** per-good 3-grade labour vector; two academy building types + skill-ceiling gates threaded
-through production / forecast / decay / seed / build; per-good general-space cost; `INPUT_DEMAND_MULTIPLIER`
-knob; the `"skill"` idle reason + academies group in the Industry panel.
+through production / forecast / decay / seed / build; the vestigial per-good `spaceCost` field;
+`INPUT_DEMAND_MULTIPLIER` knob; the `"skill"` idle reason + academies group in the Industry panel.
 
 **Deferred (later stages of the track, all agency-free):**
 - **S2 — specialisation complexes** (anchor buildings: built comparative advantage + economies-of-scale).

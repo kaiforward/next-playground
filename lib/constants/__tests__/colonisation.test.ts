@@ -6,12 +6,13 @@ describe("COLONISATION constants", () => {
     expect(COLONISATION.COLONY_ESTABLISH_WORK).toBeGreaterThan(0);
   });
 
-  it("carries positive land-value weights (habitable dominates the secondary terms)", () => {
+  it("carries positive land-value weights", () => {
     expect(COLONISATION.LAND_PREMIUM).toBeGreaterThan(0);
-    expect(COLONISATION.LAND_GENERAL_WEIGHT).toBeGreaterThanOrEqual(0);
     expect(COLONISATION.LAND_DEPOSIT_WEIGHT).toBeGreaterThanOrEqual(0);
-    // Habitable land is the binding long-run constraint — it should out-weigh a unit of general space.
-    expect(COLONISATION.LAND_PREMIUM).toBeGreaterThan(COLONISATION.LAND_GENERAL_WEIGHT);
+  });
+
+  it("no longer carries a general-space weight — industry bills no land (habitability-seeding cut)", () => {
+    expect("LAND_GENERAL_WEIGHT" in COLONISATION).toBe(false);
   });
 
   it("keeps the σ-floor a valid gate fraction in [0, 1]", () => {

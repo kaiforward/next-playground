@@ -50,7 +50,15 @@ export async function runMigrationProcessor(
   // the conserved deltas — equal in magnitude to what sources gave, since allocateColonists nets
   // to zero per faction. Never broadcast, never persisted — see TickInstrumentation.
   let colonistsMoved = 0;
-  for (const d of deliveryDeltas) if (Number.isFinite(d.delta) && d.delta > 0) colonistsMoved += d.delta;
+  // Same positive (sink) side, kept per-system rather than summed — the harness's pump-watch cohort
+  // fold needs the per-system figure; a source's negative delta is deliberately excluded, matching
+  // colonistsMoved's own convention above.
+  const colonistDeliveryBySystem = new Map<string, number>();
+  for (const d of deliveryDeltas) {
+    if (!Number.isFinite(d.delta) || d.delta <= 0) continue;
+    colonistsMoved += d.delta;
+    colonistDeliveryBySystem.set(d.systemId, (colonistDeliveryBySystem.get(d.systemId) ?? 0) + d.delta);
+  }
 
   const systemIds = new Set<string>();
   for (const e of slice) { systemIds.add(e.aSystemId); systemIds.add(e.bSystemId); }
@@ -96,5 +104,8 @@ export async function runMigrationProcessor(
   const deltas: MigrationDelta[] = [];
   for (const [systemId, delta] of popDelta) if (delta !== 0) deltas.push({ systemId, delta });
   if (deltas.length > 0) await world.applyMigrationDeltas(deltas);
-  return { migrationMoved: { colonists: colonistsMoved, diffusion: diffusionMoved } };
+  return {
+    migrationMoved: { colonists: colonistsMoved, diffusion: diffusionMoved },
+    ...(colonistDeliveryBySystem.size > 0 ? { colonistDeliveryBySystem } : {}),
+  };
 }

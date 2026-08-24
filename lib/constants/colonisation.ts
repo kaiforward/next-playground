@@ -14,12 +14,46 @@ export const COLONISATION = {
    * any other build, and the colony-specific money is the charter fee and the staged materials below.
    */
   COLONY_ESTABLISH_WORK: 60,
-  /** Value of one unit of habitable land — new habitable land → future pop → future economy. */
-  LAND_PREMIUM: 3.0,
-  /** Small secondary weight on fungible general space (factories, not pop). */
-  LAND_GENERAL_WEIGHT: 0.5,
-  /** Small secondary weight on deposit richness (Σ deposit slots). */
-  LAND_DEPOSIT_WEIGHT: 4.0,
+  /**
+   * Value of one unit of habitable land — new habitable land → future pop → future economy.
+   *
+   * Re-authored for the habitability-seeding land model (`peopleLand` replacing the old
+   * `availableSpace`-partition `habitableSpace`): the same candidate systems that used to read
+   * ~171 mean `habitableSpace` (recreating the pre-rewrite `partitionBody` formula —
+   * `SPACE_PER_SIZE` 400 / `habitableFraction` / `generalWeight`, commit 9dd8fe5c^ — on today's
+   * generated bodies) now read ~558 mean `peopleLand` (measured: 1,220 natural-gen candidate
+   * systems ≥ the T4 floor, seed 42/1337/7/2026/99/555 × 600 systems).
+   * That is a 3.26× scale-up, not the ~6× a per-body (not per-candidate-system) comparison would
+   * suggest — the measured per-SYSTEM ratio is what matters here since `LAND_PREMIUM` multiplies
+   * a candidate's system-level `peopleLand`. `3.0 / 3.26 ≈ 0.92` keeps the premium sub-term
+   * (`LAND_PREMIUM · peopleLand`) at its pre-rewrite calibrated magnitude.
+   */
+  LAND_PREMIUM: 0.92,
+  /**
+   * Small secondary weight on deposit richness (Σ deposit counts).
+   *
+   * The scale-ratio-preserving derivation — old system-level deposit total (Σ `slots[r]` over
+   * every body, no tech-lock filter pre-rewrite) ~1,460 mean vs new `depositCounts` ~148 mean
+   * (`unlocked` bodies only) on the same candidates, a 0.101× ratio (~10× collapse) →
+   * `4.0 / 0.101 ≈ 39.5` — FAILS the U-leads bound (`colonisation-value.test.ts`, "U leads, L is
+   * secondary"): checked against a representative single-missing-resource deficit
+   * (`GOOD_CONSUMPTION` × 10,000-pop anchor, zero production of every good that resource gates,
+   * over the same real candidates), `radioactive` — common on dead archetypes (arid/barren/
+   * asteroid) but gating only a few low-`GOOD_CONSUMPTION` goods (radioactives, weapons,
+   * reactor_cores) — reads L·landGate/U median 1.49 at σ=0, 4.17 at σ=0.6: L dominates U for a
+   * genuinely plausible missing-resource case, not a tail. The naive count-collapse ratio was
+   * never actually validated against U at the old scale either — old `LAND_DEPOSIT_WEIGHT` (4.0)
+   * on the old ~1,460 deposit-total scale already outweighed `LAND_PREMIUM` on `habitableSpace`
+   * (~171) by ~11×, a pre-existing imbalance the rewrite would have carried forward, not fixed.
+   *
+   * Same fix applied to the (since-deleted) general-space weight: preserve the coefficient's
+   * ORIGINAL ratio to `LAND_PREMIUM` (`4.0 / 3.0 = 4/3`) instead of its absolute term magnitude:
+   * `1.333 × 0.92 ≈ 1.2`. Re-checked
+   * against that bound at this value: every resource's median stays comfortably < 1 (worst case
+   * `radioactive` at σ=0.6: median 0.44, max 0.86 across 204 candidates) — U leads with margin,
+   * not just on the pooled median.
+   */
+  LAND_DEPOSIT_WEIGHT: 1.2,
   /**
    * Share of the land value that stays live BEFORE saturation — the land-grab instinct. 0 = expand only
    * when saturated (tall/builder); →1 = grab land regardless of home state (expansionist). The primary
@@ -31,6 +65,12 @@ export const COLONISATION = {
    * source's forgone output for the part of the seed that must come from staffed (not idle) workers,
    * so founding naturally prefers a job-short source; this dial bridges that lost-production figure into
    * the value scalar. Coarse first-cut (per-doctrine later), calibrated against LAND_PREMIUM/σ.
+   *
+   * Re-checked when the land coefficients above were re-authored to the two-budget scale:
+   * unaffected. `popCost = SEED_POP_COST_WEIGHT · employedSeed · (source output / staffed heads)` reads
+   * only population and production-rate quantities (`EXPANSION.COLONY_SEED_POP`, source labour and
+   * output) — none of `peopleLand` / `depositCounts`, which is what the rewrite
+   * rescaled. Left at 1.0.
    */
   SEED_POP_COST_WEIGHT: 1.0,
   /**

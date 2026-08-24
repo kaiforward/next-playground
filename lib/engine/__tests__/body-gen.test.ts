@@ -1,21 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { mulberry32 } from "../universe-gen";
-import { generateSubstrate } from "../body-gen";
-import { SUN_CLASSES, BODY_ARCHETYPES } from "@/lib/constants/bodies";
-import { RESOURCE_TYPES, sumResourceVectors } from "../resources";
-import { housingPopCap } from "@/lib/engine/industry";
-import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
+import { generateSubstrate, substrateAggregates, type GeneratedBody } from "../body-gen";
 import {
-  HOUSING_TYPE,
-  effectiveSpaceCost,
-  PRODUCTION_BUILDING_TYPES,
-  BUILDING_TYPES,
-} from "@/lib/constants/industry";
-import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
-
-// Quality band overall range (across all bands: poor.min=0.4 … rich.max=2.5)
-const QUALITY_MIN = 0.4;
-const QUALITY_MAX = 2.5;
+  SUN_CLASSES, BODY_ARCHETYPES, HABITABILITY_THRESHOLD, HABITABLE_COUNT_LADDER,
+} from "@/lib/constants/bodies";
+import { RESOURCE_TYPES } from "../resources";
+import type { BodyArchetypeId } from "@/lib/types/game";
 
 function sample(n: number) {
   const rng = mulberry32(42);
@@ -37,43 +27,21 @@ describe("generateSubstrate", () => {
     }
   });
 
-  it("body sizes fall in the configured band", () => {
-    for (const s of sample(100)) {
-      for (const b of s.bodies) {
-        expect(b.size).toBeGreaterThanOrEqual(0.5);
-        expect(b.size).toBeLessThanOrEqual(1.5);
-      }
-    }
-  });
-
-  it("seeds population between 0 and pop cap", () => {
-    for (const s of sample(200)) {
-      expect(s.population).toBeGreaterThanOrEqual(0);
-      expect(s.population).toBeLessThanOrEqual(s.popCap);
-    }
-  });
-
-  it("systems with no habitable land seed zero population and build nothing", () => {
-    // The fill gate: habitableSpace === 0 → fill 0 → population 0 and an empty
-    // build-out (an undeveloped deposit field). Only all-gas-giant systems (the
-    // sole habitableFraction-0 archetype) reach it; they occur naturally in the
-    // barren galaxy, so a large deterministic sample reliably contains some.
-    const undeveloped = sample(1000).filter((s) => s.habitableSpace === 0);
-    expect(undeveloped.length).toBeGreaterThan(0);
-    for (const s of undeveloped) {
+  it("bare substrate: no seeded industry or population — every system starts an empty deposit field", () => {
+    for (const s of sample(50)) {
       expect(s.population).toBe(0);
-      expect(Object.values(s.buildings).some((count) => count > 0)).toBe(false);
+      expect(s.popCap).toBe(0);
+      expect(Object.keys(s.buildings)).toHaveLength(0);
     }
   });
 
-  it("bodyDanger sums the body archetype danger baselines", () => {
+  it("bodyDanger sums the body archetype danger baselines over ALL bodies, locked or not", () => {
     for (const s of sample(300)) {
       const expected = s.bodies.reduce(
         (sum, b) => sum + BODY_ARCHETYPES[b.bodyType].dangerBaseline,
         0,
       );
       expect(s.bodyDanger).toBeCloseTo(expected, 6);
-      // Only volcanic_world carries a baseline (0.05); danger-free systems are 0.
       const hasVolcanic = s.bodies.some((b) => b.bodyType === "volcanic_world");
       if (hasVolcanic) expect(s.bodyDanger).toBeGreaterThan(0);
       else expect(s.bodyDanger).toBe(0);
@@ -87,176 +55,168 @@ describe("generateSubstrate", () => {
   });
 });
 
-describe("generateSubstrate — industrial base", () => {
-  it("folds housing into popCap (popCap ≥ body baseline)", () => {
-    const sub = generateSubstrate(mulberry32(9));
-    expect(sub.popCap).toBeGreaterThanOrEqual(housingPopCap(sub.buildings) - 1e-6);
-  });
-
-  it("seeds population at or below popCap", () => {
-    const sub = generateSubstrate(mulberry32(10));
-    expect(sub.population).toBeLessThanOrEqual(sub.popCap + 1e-6);
-  });
-});
-
-describe("generateSubstrate — available-space seeder + yield (P3)", () => {
-  function sampleP3(n: number) {
-    const rng = mulberry32(123);
-    return Array.from({ length: n }, () => generateSubstrate(rng));
-  }
-
-  it("emits a yieldMult ResourceVector, every entry ≥ 0", () => {
-    for (const s of sampleP3(50)) {
-      expect(s.yieldMult).toBeDefined();
-      for (const r of RESOURCE_TYPES) {
-        expect(typeof s.yieldMult[r]).toBe("number");
-        expect(s.yieldMult[r]).toBeGreaterThanOrEqual(0);
+describe("generateSubstrate — per-body budgets", () => {
+  it("every body's peopleLand falls within its archetype's authored range", () => {
+    for (const s of sample(300)) {
+      for (const b of s.bodies) {
+        const arch = BODY_ARCHETYPES[b.bodyType];
+        expect(b.peopleLand).toBeGreaterThanOrEqual(arch.peopleLand.min);
+        expect(b.peopleLand).toBeLessThanOrEqual(arch.peopleLand.max);
       }
     }
   });
 
-  it("yieldMult[r] = 1.0 exactly where the system has no deposit slots for r", () => {
-    for (const s of sampleP3(100)) {
-      for (const r of RESOURCE_TYPES) {
-        if (s.slotCap[r] === 0) expect(s.yieldMult[r], r).toBe(1.0);
+  it("every body's deposit counts are integers within the archetype's authored range; absent ranges read count 0", () => {
+    for (const s of sample(200)) {
+      for (const b of s.bodies) {
+        const arch = BODY_ARCHETYPES[b.bodyType];
+        for (const r of RESOURCE_TYPES) {
+          const range = arch.depositCounts[r];
+          if (range === undefined) {
+            expect(b.counts[r]).toBe(0);
+            expect(b.quality[r]).toBe(0);
+            continue;
+          }
+          expect(Number.isInteger(b.counts[r])).toBe(true);
+          expect(b.counts[r]).toBeGreaterThanOrEqual(range.min);
+          expect(b.counts[r]).toBeLessThanOrEqual(range.max);
+        }
       }
     }
   });
 
-  it("full-fold: popCap equals housing contribution + POP_BASELINE_FLOOR (no body baseline)", () => {
-    for (const s of sampleP3(100)) {
-      expect(s.popCap).toBeCloseTo(
-        housingPopCap(s.buildings) + SUBSTRATE_GEN.POP_BASELINE_FLOOR,
-        4,
-      );
+  it("quality[r] > 0 only where counts[r] > 0", () => {
+    for (const s of sample(200)) {
+      for (const b of s.bodies) {
+        for (const r of RESOURCE_TYPES) {
+          if (b.counts[r] > 0) expect(b.quality[r]).toBeGreaterThan(0);
+          else expect(b.quality[r]).toBe(0);
+        }
+      }
     }
   });
 
-  it("seeds population = popCap (fully staffs the built industry)", () => {
-    const systems = sampleP3(200);
-    for (const s of systems) {
-      expect(s.population).toBeGreaterThanOrEqual(0);
-      // Population fills the labour-matched housing capacity — fully staffed at seed, not
-      // re-discounted by `fill` (which would leave every system understaffed). Population is set
-      // to popCap exactly (no independent rounding); it stays a Float that grows/declines/migrates
-      // continuously at runtime. Under integer housing levels the seed value is an integer multiple
-      // of POP_CENTRE_DENSITY, but that is the substrate's doing, not a round on population.
-      expect(s.population).toBe(s.popCap);
-    }
-  });
-
-  it("seeded build-out respects the surface caps (slots, habitable, general)", () => {
-    for (const s of sampleP3(100)) {
-      // Pop-centre space ≤ habitable.
-      const popCentreSpace = (s.buildings[HOUSING_TYPE] ?? 0) * effectiveSpaceCost(HOUSING_TYPE);
-      expect(popCentreSpace).toBeLessThanOrEqual(s.habitableSpace + 1e-6);
-      // Factory + pop-centre ≤ general.
-      let factorySpace = 0;
-      for (const goodId of PRODUCTION_BUILDING_TYPES) {
-        if (GOOD_TIER_BY_KEY[goodId] === 0) continue;
-        factorySpace += (s.buildings[goodId] ?? 0) * effectiveSpaceCost(goodId);
-      }
-      expect(factorySpace + popCentreSpace).toBeLessThanOrEqual(s.generalSpace + 1e-6);
-      // Extractor count per resource ≤ slotCap[r] (goods sharing a resource share the cap).
-      const extractorByResource: Record<string, number> = {};
-      for (const goodId of PRODUCTION_BUILDING_TYPES) {
-        if (GOOD_TIER_BY_KEY[goodId] !== 0) continue;
-        const resource = BUILDING_TYPES[goodId]?.resource;
-        if (!resource) continue;
-        extractorByResource[resource] = (extractorByResource[resource] ?? 0) + (s.buildings[goodId] ?? 0);
-      }
-      for (const r of RESOURCE_TYPES) {
-        expect(extractorByResource[r] ?? 0, r).toBeLessThanOrEqual(s.slotCap[r] + 1e-6);
+  it("body size is a display-only value in the cosmetic band, uncorrelated with any budget", () => {
+    for (const s of sample(100)) {
+      for (const b of s.bodies) {
+        expect(b.size).toBeGreaterThanOrEqual(0.5);
+        expect(b.size).toBeLessThanOrEqual(1.5);
       }
     }
   });
 });
 
-describe("generateSubstrate — new available-space aggregates (P2)", () => {
-  function sampleNew(n: number) {
-    const rng = mulberry32(99);
-    return Array.from({ length: n }, () => generateSubstrate(rng));
-  }
+describe("substrateAggregates — Proves (1): tech-locked classes contribute zero to every aggregate", () => {
+  it("a tech-locked class contributes zero counts and zero extractionEfficiency weight", () => {
+    // volcanic_world and gas_giant are the two tech-locked classes (bodies.ts).
+    const locked: GeneratedBody = {
+      bodyType: "volcanic_world",
+      size: 1,
+      peopleLand: 0,
+      counts: { gas: 5, minerals: 5, ore: 5, biomass: 0, arable: 0, water: 0, radioactive: 5 },
+      quality: { gas: 1, minerals: 1, ore: 1, biomass: 0, arable: 0, water: 0, radioactive: 1 },
+    };
+    const agg = substrateAggregates([locked]);
+    expect(agg.depositCounts.gas).toBe(0);
+    expect(agg.depositCounts.minerals).toBe(0);
+    expect(agg.depositCounts.ore).toBe(0);
+    expect(agg.depositCounts.radioactive).toBe(0);
+    // No counts reach the aggregate ⇒ the neutral default, not a weighted mean including the locked body.
+    expect(agg.extractionEfficiency.gas).toBe(1);
+    expect(agg.extractionEfficiency.radioactive).toBe(1);
+    // Body danger is unaffected by the lock — a locked volcanic world is still dangerous ground.
+    expect(agg.bodyDanger).toBeCloseTo(BODY_ARCHETYPES.volcanic_world.dangerBaseline, 10);
+  });
+});
 
-  it("every body has slots and quality as full ResourceVectors with numeric generalSpace/habitableSpace", () => {
-    for (const s of sampleNew(50)) {
-      for (const b of s.bodies) {
-        expect(b.slots).toBeDefined();
-        expect(b.quality).toBeDefined();
-        expect(typeof b.generalSpace).toBe("number");
-        expect(typeof b.habitableSpace).toBe("number");
-        // All resource types are present on the vectors
-        for (const r of RESOURCE_TYPES) {
-          expect(typeof b.slots[r]).toBe("number");
-          expect(typeof b.quality[r]).toBe("number");
-        }
+describe("substrateAggregates — Proves (2): arid/tundra dark land", () => {
+  it("arid/tundra contribute 0 to system people land while their peopleLand stays visible per-body, and their deposits count", () => {
+    const arid: GeneratedBody = {
+      bodyType: "arid_world",
+      size: 1,
+      peopleLand: 200, // authored, dark — below threshold, never reaches peopleLand
+      counts: { gas: 0, minerals: 3, ore: 3, biomass: 0, arable: 8, water: 0, radioactive: 3 },
+      quality: { gas: 0, minerals: 1, ore: 1, biomass: 0, arable: 1, water: 0, radioactive: 1 },
+    };
+    expect(BODY_ARCHETYPES.arid_world.scores.default).toBeLessThan(HABITABILITY_THRESHOLD);
+    // Per-body value stays visible — the budget was authored, never deleted.
+    expect(arid.peopleLand).toBe(200);
+
+    const agg = substrateAggregates([arid]);
+    expect(agg.peopleLand).toBe(0); // below threshold ⇒ never reaches the system aggregate
+    expect(agg.depositCounts.minerals).toBe(3);
+    expect(agg.depositCounts.arable).toBe(8);
+  });
+});
+
+describe("substrateAggregates — Proves (4): extractionEfficiency defaults to 1.0 where no counts", () => {
+  it("a resource with zero counts across every body reads extractionEfficiency 1.0 (no NaN)", () => {
+    const noWater: GeneratedBody = {
+      bodyType: "temperate_world",
+      size: 1,
+      peopleLand: 500,
+      counts: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 10, water: 0, radioactive: 0 },
+      quality: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 1, water: 0, radioactive: 0 },
+    };
+    const agg = substrateAggregates([noWater]);
+    expect(agg.extractionEfficiency.water).toBe(1);
+    expect(Number.isNaN(agg.extractionEfficiency.water)).toBe(false);
+  });
+
+  it("with counts present, extractionEfficiency is the deposit-count-weighted mean extractionModifier", () => {
+    const a: GeneratedBody = {
+      bodyType: "temperate_world", // extractionModifier 1.0
+      size: 1, peopleLand: 0,      counts: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 6, radioactive: 0 },
+      quality: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 1, radioactive: 0 },
+    };
+    const b: GeneratedBody = {
+      bodyType: "frozen_world", // extractionModifier 0.6
+      size: 1, peopleLand: 0,      counts: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 2, radioactive: 0 },
+      quality: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 1, radioactive: 0 },
+    };
+    // (6*1.0 + 2*0.6) / 8 = 0.9
+    const agg = substrateAggregates([a, b]);
+    expect(agg.extractionEfficiency.water).toBeCloseTo((6 * 1.0 + 2 * 0.6) / 8, 10);
+  });
+});
+
+describe("generateSubstrate — damping ladder: Proves (3)", () => {
+  it("with a forced all-above-threshold table, a system never carries a 4th above-threshold body, and dead classes stay rollable at every ladder step", () => {
+    const original = SUN_CLASSES.yellow.archetypeWeights;
+    const DEAD: BodyArchetypeId = "barren_rock";
+    // Every candidate weight above threshold, plus one dead anchor kept alive at low weight so the
+    // "dead classes remain rollable" half of the claim has something to observe.
+    SUN_CLASSES.yellow.archetypeWeights = {
+      temperate_world: 100, gaia_world: 100, ocean_world: 100, jungle_world: 100, boreal_world: 100,
+      [DEAD]: 1,
+    };
+    try {
+      const rng = mulberry32(555);
+      let sawDeadRolled = false;
+      let maxAboveThreshold = 0;
+      let yellowSystemsSeen = 0;
+      for (let i = 0; i < 4000; i++) {
+        const s = generateSubstrate(rng);
+        if (s.sunClass !== "yellow") continue;
+        yellowSystemsSeen++;
+        const aboveCount = s.bodies.filter(
+          (b) => BODY_ARCHETYPES[b.bodyType].scores.default >= HABITABILITY_THRESHOLD,
+        ).length;
+        maxAboveThreshold = Math.max(maxAboveThreshold, aboveCount);
+        if (s.bodies.some((b) => b.bodyType === DEAD)) sawDeadRolled = true;
       }
+      expect(yellowSystemsSeen).toBeGreaterThan(0); // non-vacuous
+      // Measured at seed 555 / 4000 draws: the forced all-above-threshold table actually reaches
+      // the index-2 ladder step (weight 0.3, never 0), so the upper bound alone can't fail if a
+      // future change collapsed index 2 to 0 and made 3-body systems impossible.
+      expect(maxAboveThreshold).toBe(3);
+      expect(sawDeadRolled).toBe(true);
+    } finally {
+      SUN_CLASSES.yellow.archetypeWeights = original;
     }
   });
 
-  it("slots[r] === 0 and quality[r] === 0 for resources absent on the archetype", () => {
-    for (const s of sampleNew(100)) {
-      for (const b of s.bodies) {
-        const arch = BODY_ARCHETYPES[b.bodyType];
-        for (const r of RESOURCE_TYPES) {
-          if (arch.resourceBase[r] === 0) {
-            expect(b.slots[r]).toBe(0);
-            expect(b.quality[r]).toBe(0);
-          }
-        }
-      }
-    }
-  });
-
-  it("quality[r] > 0 only for present resources and within the overall band range [0.4, 2.5]", () => {
-    for (const s of sampleNew(100)) {
-      for (const b of s.bodies) {
-        const arch = BODY_ARCHETYPES[b.bodyType];
-        for (const r of RESOURCE_TYPES) {
-          if (arch.resourceBase[r] > 0) {
-            expect(b.quality[r]).toBeGreaterThanOrEqual(QUALITY_MIN);
-            expect(b.quality[r]).toBeLessThanOrEqual(QUALITY_MAX);
-          } else {
-            expect(b.quality[r]).toBe(0);
-          }
-        }
-      }
-    }
-  });
-
-  it("per-system availableSpace equals SPACE_PER_SIZE × Σ body.size", () => {
-    for (const s of sampleNew(100)) {
-      const expected = SUBSTRATE_GEN.SPACE_PER_SIZE * s.bodies.reduce((sum, b) => sum + b.size, 0);
-      expect(s.availableSpace).toBeCloseTo(expected, 6);
-    }
-  });
-
-  it("per-system slotCap equals sumResourceVectors of body slots", () => {
-    for (const s of sampleNew(100)) {
-      const expected = sumResourceVectors(s.bodies.map((b) => b.slots));
-      for (const r of RESOURCE_TYPES) {
-        expect(s.slotCap[r]).toBeCloseTo(expected[r], 6);
-      }
-    }
-  });
-
-  it("per-system generalSpace and habitableSpace equal sums of per-body values", () => {
-    for (const s of sampleNew(100)) {
-      const expectedGeneral = s.bodies.reduce((sum, b) => sum + b.generalSpace, 0);
-      const expectedHabitable = s.bodies.reduce((sum, b) => sum + b.habitableSpace, 0);
-      expect(s.generalSpace).toBeCloseTo(expectedGeneral, 6);
-      expect(s.habitableSpace).toBeCloseTo(expectedHabitable, 6);
-    }
-  });
-
-  it("all per-system aggregate values are non-negative numbers", () => {
-    for (const s of sampleNew(50)) {
-      expect(s.availableSpace).toBeGreaterThanOrEqual(0);
-      expect(s.generalSpace).toBeGreaterThanOrEqual(0);
-      expect(s.habitableSpace).toBeGreaterThanOrEqual(0);
-      for (const r of RESOURCE_TYPES) {
-        expect(s.slotCap[r]).toBeGreaterThanOrEqual(0);
-      }
-    }
+  it("the ladder's terminal entry is exactly 0 — a 4th above-threshold body is impossible by table", () => {
+    expect(HABITABLE_COUNT_LADDER[3]).toBe(0);
   });
 });

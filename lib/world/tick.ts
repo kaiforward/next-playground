@@ -51,11 +51,13 @@ import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { CONSTRUCTION } from "@/lib/constants/construction";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
-import { slotCapOf, yieldsOf, RESOURCE_TYPES } from "@/lib/engine/resources";
+import { depositCountsOf, yieldsOf, effOf, RESOURCE_TYPES } from "@/lib/engine/resources";
+import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
+import { isContributingBody } from "@/lib/engine/habitability";
 import { hopRouteCost, type ColonyEstablishCandidate } from "@/lib/engine/directed-build";
 import type { ClaimCandidate } from "@/lib/engine/expansion";
 import { housingPopCap } from "@/lib/engine/industry";
-import { HOUSING_TYPE } from "@/lib/constants/industry";
+import { HOUSING_TYPE, effectiveSpaceCost } from "@/lib/constants/industry";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
 import { isEconomicallyActive } from "@/lib/engine/control";
@@ -187,6 +189,20 @@ export function toTickSystems(world: World): TickSystem[] {
     roster.idleCycles[b.buildingType] = b.idleCycles;
   }
 
+  // Per-system {score, peopleLand} breakdown for the fill-best-first quality fold
+  // (lib/engine/habitability.ts) — the population processor's only reader. Same unlocked/
+  // above-threshold filter substrateAggregates (lib/engine/body-gen.ts) uses to build the
+  // peopleLand aggregate, but here the PER-BODY rows survive instead of collapsing into a sum.
+  const habitabilityBodiesBySystem = new Map<string, { score: number; peopleLand: number }[]>();
+  for (const b of world.bodies) {
+    const arch = BODY_ARCHETYPES[b.bodyType];
+    if (!isContributingBody({ score: arch.scores.default, locked: arch.techLocked })) continue;
+    const entry = { score: arch.scores.default, peopleLand: b.peopleLand };
+    const list = habitabilityBodiesBySystem.get(b.systemId);
+    if (list) list.push(entry);
+    else habitabilityBodiesBySystem.set(b.systemId, [entry]);
+  }
+
   return world.systems.map((s) => {
     const roster = rosterBySystem.get(s.id);
     return {
@@ -231,10 +247,15 @@ export function toTickSystems(world: World): TickSystem[] {
       // lib/world/types.ts).
       buildOpportunity: s.buildOpportunity,
       colonyOpportunity: s.colonyOpportunity,
+      habitabilityBodies: habitabilityBodiesBySystem.get(s.id) ?? [],
+      // Same pass-through-uncoerced treatment as provision/supplyBand/criticalWeight above: written
+      // directly by the population processor's world adapter via the generic row-mutation path
+      // (see the field's own docstring, lib/world/types.ts).
+      habitabilityQuality: s.habitabilityQuality,
       yields: yieldsOf(s),
-      slotCap: slotCapOf(s),
-      generalSpace: s.generalSpace,
-      habitableSpace: s.habitableSpace,
+      extractionEff: effOf(s),
+      depositCounts: depositCountsOf(s),
+      peopleLand: s.peopleLand,
     };
   });
 }
@@ -292,6 +313,12 @@ function mergeSystemsIntoWorld(worldSystems: WorldSystem[], tickSystems: TickSys
     else merged.buildOpportunity = tickSystem.buildOpportunity;
     if (tickSystem.colonyOpportunity === undefined) delete merged.colonyOpportunity;
     else merged.colonyOpportunity = tickSystem.colonyOpportunity;
+    // Same delete/assign treatment, same reason: written directly onto this row by the population
+    // processor's world adapter via the generic row-mutation path (applyPopulationUpdates,
+    // lib/tick/adapters/memory/population.ts) — a true absence (never assessed) must not become a
+    // present key holding `undefined`.
+    if (tickSystem.habitabilityQuality === undefined) delete merged.habitabilityQuality;
+    else merged.habitabilityQuality = tickSystem.habitabilityQuality;
     return merged;
   });
 }
@@ -355,6 +382,7 @@ function buildLogisticsRows(
     population: s.population,
     buildings: s.buildings,
     yields: s.yields,
+    extractionEff: s.extractionEff,
     markets: marketsBySystem.get(s.id) ?? [],
   }));
 }
@@ -370,9 +398,9 @@ function buildBuildRows(
     population: s.population,
     buildings: s.buildings,
     yields: s.yields,
-    slotCap: s.slotCap,
-    generalSpace: s.generalSpace,
-    habitableSpace: s.habitableSpace,
+    extractionEff: s.extractionEff,
+    depositCounts: s.depositCounts,
+    peopleLand: s.peopleLand,
     markets: marketsBySystem.get(s.id) ?? [],
   }));
 }
@@ -663,7 +691,7 @@ export function applyColonyOpportunityUpdates(
 /** Count of resources this system has any deposit slot for — a claim/develop score input. */
 function countResourceDiversity(s: TickSystem): number {
   let n = 0;
-  for (const r of RESOURCE_TYPES) if (s.slotCap[r] > 0) n++;
+  for (const r of RESOURCE_TYPES) if (s.depositCounts[r] > 0) n++;
   return n;
 }
 
@@ -703,6 +731,7 @@ function clearPreviousLifeReadings(next: TickSystem): void {
   delete next.buildBlocked;
   delete next.buildOpportunity;
   delete next.colonyOpportunity;
+  delete next.habitabilityQuality;
 }
 
 /**
@@ -768,8 +797,8 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
 /**
  * Abandonment's death line (docs/active/gameplay/colonisation.md, "A colony is allowed to die"):
  * reset each system the
- * population processor reported (famine AND post-delta population below `ABANDON_POP_FLOOR`) back
- * to unclaimed, factionless frontier — a genuine reset, not a mothballing. Population, unrest and
+ * population processor reported (post-delta population below `ABANDON_POP_FLOOR`, famine or not)
+ * back to unclaimed, factionless frontier — a genuine reset, not a mothballing. Population, unrest and
  * collapse debt zero; the stored Provision memory, this cycle's Provisioned reading, its band and
  * its critical-good weight are all deleted (the same resettlement rule `applyDevelopments`
  * observes above — a previous life's readings must not survive into the next one); buildings and
@@ -889,6 +918,7 @@ export function addMarketsForSettledSystems(
       systemId: sys.id,
       buildings: sys.buildings,
       yields: sys.yields,
+      extractionEff: sys.extractionEff,
       population: sys.population,
       seedStock: false,
     });
@@ -1276,10 +1306,11 @@ export async function runWorldTick(
   let overshootDeathBySystem: TickInstrumentation["overshootDeathBySystem"];
   // Calibration-only: per-cycle growth-term amount, keyed by system. Same reason as above.
   let growthBySystem: TickInstrumentation["growthBySystem"];
-  // Abandonment Rule 2 (the death line): systems the population processor found in famine with
-  // post-delta population below ABANDON_POP_FLOOR this cycle. Applied just below, outside the
+  // Abandonment Rule 2 (the death line): systems the population processor found with post-delta
+  // population below ABANDON_POP_FLOOR this cycle, famine or not. Applied just below, outside the
   // gate — the tick body is the sole owner of the control-flip/reset the processor only reports.
   let abandonedSystemIds: string[] = [];
+  let abandonedSystemsByCause: TickInstrumentation["abandonedSystemsByCause"];
   // The realised per-cycle population change's opening snapshot — captured here, BEFORE the
   // population processor mutates `population`, so the write below (after migration) reads the true
   // cycle-start value rather than an already-grown/declined one. Keyed by every system in this
@@ -1311,6 +1342,7 @@ export async function runWorldTick(
     overshootDeathBySystem = popResult.overshootDeathBySystem;
     growthBySystem = popResult.growthBySystem;
     abandonedSystemIds = popResult.abandonedSystems ?? [];
+    abandonedSystemsByCause = popResult.abandonedSystemsByCause;
     processorsRun.push("population");
   }
 
@@ -1356,6 +1388,7 @@ export async function runWorldTick(
   // Calibration-only: migration's per-cycle people-moved totals (colonist delivery + edge
   // diffusion). Declared here for the same reason as buildCommitmentsByGood above.
   let migrationMoved: TickInstrumentation["migrationMoved"];
+  let colonistDeliveryBySystem: TickInstrumentation["colonistDeliveryBySystem"];
   // Calibration-only: what each founding-stock manifest cost its founder. Same reason.
   let foundingManifests: TickInstrumentation["foundingManifests"];
   // Calibration-only: what held each in-flight colony back this cycle. Same reason.
@@ -1396,6 +1429,7 @@ export async function runWorldTick(
       });
       systems = migWorld.systems;
       migrationMoved = migResult.migrationMoved;
+      colonistDeliveryBySystem = migResult.colonistDeliveryBySystem;
       processorsRun.push("migration");
     }
 
@@ -1473,6 +1507,14 @@ export async function runWorldTick(
       const controlBySystem = new Map(systems.map((s) => [s.id, s.control]));
       const tickSystemById = new Map(systems.map((s) => [s.id, s]));
 
+      // Galaxy-wide max peopleLand this tick — normalises scoreClaimCandidate's habitable term to
+      // [0,1], the same ratio placeHomeworlds takes at world-gen (lib/engine/faction-gen.ts). Floored
+      // at 1 so an all-zero galaxy never divides by zero.
+      let galaxyPeopleLandMax = 1;
+      for (const s of systems) {
+        if (s.peopleLand > galaxyPeopleLandMax) galaxyPeopleLandMax = s.peopleLand;
+      }
+
       // Reach provider: a faction's in-reach UNCLAIMED candidates (reach extends from any owned tier).
       const reachProvider = (factionId: string): ClaimCandidate[] => {
         const minHopByCandidate = new Map<string, number>();
@@ -1493,7 +1535,7 @@ export async function runWorldTick(
           if (!cand) continue;
           candidates.push({
             systemId: candidateId, minHops,
-            habitableSpace: cand.habitableSpace,
+            peopleLand: cand.peopleLand,
             resourceDiversity: countResourceDiversity(cand),
           });
         }
@@ -1525,9 +1567,8 @@ export async function runWorldTick(
           if (sourceSystemId === null) continue; // no developed seed source reachable → cannot establish
           candidates.push({
             systemId: s.id,
-            habitableSpace: s.habitableSpace,
-            generalSpace: s.generalSpace,
-            slotCap: s.slotCap,
+            peopleLand: s.peopleLand,
+            depositCounts: s.depositCounts,
             sourceSystemId,
           });
         }
@@ -1560,18 +1601,22 @@ export async function runWorldTick(
         },
         claim: {
           reachProvider, rng,
-          params: { maxClaimsPerCycle: EXPANSION.MAX_CLAIMS_PER_CYCLE, scoreFloor: EXPANSION.SCORE_FLOOR, weights: EXPANSION.SCORE_WEIGHTS },
+          params: {
+            maxClaimsPerCycle: EXPANSION.MAX_CLAIMS_PER_CYCLE,
+            scoreFloor: EXPANSION.SCORE_FLOOR,
+            weights: EXPANSION.SCORE_WEIGHTS,
+            peopleLandMax: galaxyPeopleLandMax,
+          },
         },
         develop: {
           candidateProvider: developProvider,
           params: {
             landPremium: COLONISATION.LAND_PREMIUM,
-            landGeneralWeight: COLONISATION.LAND_GENERAL_WEIGHT,
             landDepositWeight: COLONISATION.LAND_DEPOSIT_WEIGHT,
             sigmaFloor: COLONISATION.SIGMA_FLOOR,
             establishWork: COLONISATION.COLONY_ESTABLISH_WORK,
             seedPop: EXPANSION.COLONY_SEED_POP,
-            habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR,
+            habitableFloor: effectiveSpaceCost(HOUSING_TYPE),
             popCostWeight: COLONISATION.SEED_POP_COST_WEIGHT,
             minSettlerSupply: COLONISATION.MIN_SETTLER_SUPPLY,
             employedLeakFraction: MIGRATION_PARAMS.employedLeakFraction,
@@ -1883,8 +1928,9 @@ export async function runWorldTick(
     events: tickEvents,
     markets,
     instrumentation: {
-      buildCommitmentsByGood, migrationMoved, foundingManifests, foundingStalls, logisticsBudget,
-      strikeSuppressedProposals, overshootDeathBySystem, growthBySystem, teardownLevelsBySystem,
+      buildCommitmentsByGood, migrationMoved, colonistDeliveryBySystem, foundingManifests, foundingStalls,
+      logisticsBudget, strikeSuppressedProposals, overshootDeathBySystem, growthBySystem,
+      teardownLevelsBySystem, abandonedSystemsByCause,
     },
   };
 }

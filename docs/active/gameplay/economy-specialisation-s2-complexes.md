@@ -21,10 +21,10 @@ S2 gives manufacturing built comparative advantage: a **specialisation complex**
 system that grants a **fixed yield multiplier to a whole *family* of related goods**. It is the tier-0
 deposit `yieldMult`, but *built by investment choice* instead of geological.
 
-> A system may build **one** complex, of **one** of five production families. The complex has a **large,
-> fixed footprint** that eats the general space it would otherwise spend on breadth or housing, so a system
-> that commits to a family physically **can't also be broad** — it specialises and imports the rest. Nothing
-> is forbidden; the finite space does the forcing.
+> A system may build **one** complex, of **one** of five production families — an explicit cap, "one
+> industrial identity" per system, not a land-crowding effect (industry buildings carry no land cost at
+> all; see [Habitability & the Substrate](./habitability.md)). A system that commits to a family
+> specialises and imports the rest by that cap alone.
 
 Three properties make it self-limiting and agency-free:
 
@@ -148,27 +148,32 @@ one difference:
   the buff unlocks).
 
 **The valuation rule:** when the planner commits family production at a site that lacks that family's
-complex, it weighs spending the space on more raw factories vs. on (the complex + fewer, buffed factories),
-and builds the complex when the buffed option serves **more deficit per unit of space/budget**. It is
-valued against the site's **total reachable deficit across the *whole family***, not just the current good —
-because the anchor buffs the entire family. That family-aggregate is what clears the anchor's large
-footprint; a single good's marginal gain usually would not.
+complex, it weighs the construction cost of more raw factories vs. (the complex + fewer, buffed
+factories), and builds the complex when the buffed option serves **more deficit per unit of construction
+work**. It is valued against the site's **total reachable deficit across the *whole family***, not just
+the current good — because the anchor buffs the entire family. That family-aggregate is what clears the
+anchor's own construction cost; a single good's marginal gain usually would not.
 
-- **Self-limiting at scale.** With `B ≈ 1.5` and footprint `≈ 8`, the complex only amortises once the site's
-  spare family space exceeds ~3× the footprint (small deficit or little space → not worth it). So complexes
-  emerge only at real hubs, with the hard cap-1 as a backstop, not the primary limiter.
+- **Self-limiting at scale.** With `B ≈ 1.5`, the complex's own construction cost only amortises once a
+  site's served family demand is large enough to justify it (a small deficit doesn't); the planner's
+  site-ranking scores the complex's cost against the demand it would actually serve, not against a land
+  budget (`lib/engine/directed-build.ts`, the opportunity-score branch — see
+  [Habitability & the Substrate](./habitability.md)). Complexes emerge only at real hubs, with the hard
+  cap-1 as a backstop, not the primary limiter.
 - **Concentration moat (snowball).** Applied to the working copy the moment it's built, so every *subsequent*
   family-good opportunity at that site sees buffed output → higher `served ÷ route-cost` score → the greedy
   planner keeps choosing that site for family goods over greenfield rivals. This **stacks with S1's academy
   sunk-cost moat**: the site that already paid for its research institutes *and* its Heavy complex becomes
-  *the* regional heavy-industry hub and physically can't also be broad.
-- **Attract, never restrict.** No rule forbids a Heavy-anchored world from building electronics. Its buffed
-  family industry simply wins the competition for finite general space; the complex's footprint + the
-  concentrated build-out crowd out the breadth. The "can't feed itself" comes from space scarcity (already
-  modelled), routing entirely through the existing planner + physical tick — the S2 scope constraint.
+  *the* regional heavy-industry hub, and every family-good build there keeps scoring higher than a rival
+  greenfield site would.
+- **Attract, never restrict.** No rule forbids a Heavy-anchored world from building electronics — industry
+  carries no land cost, so nothing physically crowds it out. Its buffed family industry simply out-scores a
+  greenfield rival for the planner's own builds, so breadth *elsewhere* wins by construction-cost economics,
+  not by space scarcity — the S2 scope constraint routes entirely through the existing planner + physical
+  tick either way.
 - **Co-build sizing.** The complex joins the existing `academyLift` convergence loop as one more co-built
-  term consuming the same budget + general space + spare unskilled labour (it draws a modest unskilled staff,
-  like an academy). Production + academies + complex are sized together to fit all constraints.
+  term consuming spare unskilled labour (it draws a modest unskilled staff, like an academy). Production +
+  academies + complex are sized together to fit the labour and construction-pool constraints.
 
 **Self-balancing across the galaxy** needs no new state: deposits decide *which* families a system *can* root
 (Heavy needs ore/minerals, Chem needs gas, Armaments' reactor_cores needs rare radioactives…), and deposits
@@ -221,12 +226,15 @@ All magnitudes are first-cut and simulator-tunable; the real calibration is **on
 track is in**, per the coarse-health-calibration principle. In `lib/constants/industry.ts`:
 
 - `SPECIALISATION_COMPLEXES` — one entry per family: `{ family, goods, buffMult B_f, spaceCost ≈ 8, labour
-  (modest unskilled), cap = 1 }`. Five building types, ids e.g. `heavy_industry_complex`, …
+  (modest unskilled), cap = 1 }`. Five building types, ids e.g. `heavy_industry_complex`, … (`spaceCost`
+  today is a vestigial existence-check field, not a land bill — industry carries no land cost; see
+  [Habitability & the Substrate](./habitability.md)).
 - `FAMILY_BY_GOOD` / `COMPLEX_OF` — the good↔family↔complex lookup maps derived from the catalog.
 - `ANCHOR_BUFF` `B` ≈ **1.5×**, with **per-family weighting** (slightly lower on Heavy/Armaments) to level
   anchor attractiveness.
-- `ANCHOR_FOOTPRINT` ≈ **8** general-space units at `count = 1` (the largest building type — a shipyard is
-  4.0), charged proportionally to `count`.
+- `ANCHOR_FOOTPRINT` ≈ **8** at `count = 1` (the largest building type — a shipyard is 4.0), charged
+  proportionally to `count` — its role today is the construction-cost input to the planner's site-ranking
+  amortisation, not a land ceiling.
 - `ANCHOR_RATED_COVERAGE` `R` — family throughput one full complex is rated to buff; sets the decay `used`
   ratio and the planner's amortisation reference.
 - `ANCHOR_CAP` = **1** per system.

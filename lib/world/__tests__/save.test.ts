@@ -145,8 +145,81 @@ describe("serialiseWorld / deserialiseWorld", () => {
   // NOT throw: every market would silently price against nameplate capacity instead of realised
   // output. Nothing but this constant stands between the two, which is why the number is pinned
   // rather than left to drift.
-  it("is at save format version 15 (the persisted realised production rate's spelling)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(15);
+  it("is at save format version 16 (the three-budget body model + extraction-efficiency columns)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(16);
+  });
+
+  it("rejects a v15 (pre-habitability-seeding) save with the clean version error", () => {
+    // v15 systems/bodies carry the retired partition-model columns under their pre-rename names
+    // and no eff* columns at all — the version bump is what makes this fail cleanly
+    // instead of loading a stale shape the structural spot-checks below `meta` cannot see.
+    const json = JSON.stringify({ formatVersion: 15, world });
+    const result = deserialiseWorld(json);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe(`Unsupported save formatVersion (expected ${SAVE_FORMAT_VERSION})`);
+  });
+
+  it("a fresh world round-trips through serialise/deserialise with the new extraction-efficiency columns finite", () => {
+    const fresh = generateWorld({ systemCount: 60, seed: 21 });
+    const result = deserialiseWorld(serialiseWorld(fresh));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world).toStrictEqual(fresh);
+    for (const s of result.world.systems) {
+      for (const col of [
+        "effGas", "effMinerals", "effOre", "effBiomass", "effArable", "effWater", "effRadioactive",
+      ] as const) {
+        expect(Number.isFinite(s[col]), col).toBe(true);
+        expect(s[col]).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("a v16 world round-trips with no industryLand field anywhere in systems or bodies", () => {
+    // habitability-seeding's amendment (2026-08-24) deleted the industry-land budget without a
+    // version bump — the field is REMOVED from v16 rather than bumping again (one-shipped-bump
+    // rule; v16 is branch-only, never shipped). Systems and bodies never carried the field in the
+    // first place under today's generator, so this pins that absence rather than assuming it.
+    const fresh = generateWorld({ systemCount: 60, seed: 33 });
+    const result = deserialiseWorld(serialiseWorld(fresh));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    for (const s of result.world.systems) expect("industryLand" in s).toBe(false);
+    for (const b of result.world.bodies) expect("industryLand" in b).toBe(false);
+  });
+
+  it("loads cleanly with the industry-land budget deleted", () => {
+    // A save file still carrying `industryLand` from before the cut (systems AND bodies) loads —
+    // deserialiseWorld's guard checks version + meta shape only (see the module doc comment) — and
+    // the stale field is harmlessly ignored: nothing in the current World type or any reader
+    // touches it, so the world ticks and re-serialises exactly as if the field had never been
+    // there. This is the true load behaviour being asserted, not a rejection.
+    const world = generateWorld({ systemCount: 40, seed: 34 });
+    const staleShaped = {
+      formatVersion: SAVE_FORMAT_VERSION,
+      world: {
+        ...world,
+        systems: world.systems.map((s) => ({ ...s, industryLand: 999 })),
+        bodies: world.bodies.map((b) => ({ ...b, industryLand: 42 })),
+      },
+    };
+    const result = deserialiseWorld(JSON.stringify(staleShaped));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // The stale field survives the JSON round-trip (deserialiseWorld does structural spot-checks,
+    // not field stripping) but nothing in the current World type or its readers ever looks at it —
+    // a fresh re-serialise still produces a value-equal world once the stale key is stripped back
+    // off, proving it was carried inertly rather than feeding any computation.
+    result.world.systems.forEach((s: { industryLand?: number } & typeof world.systems[number]) => {
+      expect(s.industryLand).toBe(999);
+    });
+    const stripped = {
+      ...result.world,
+      systems: result.world.systems.map(({ industryLand: _dropped, ...rest }: { industryLand?: number } & typeof world.systems[number]) => rest),
+      bodies: result.world.bodies.map(({ industryLand: _dropped, ...rest }: { industryLand?: number } & typeof world.bodies[number]) => rest),
+    };
+    expect(stripped).toStrictEqual(world);
   });
 
   it("rejects a prior-version (v11) save — saves break on the shape bump", () => {
@@ -363,6 +436,25 @@ describe("serialiseWorld / deserialiseWorld", () => {
 
   it("accepts generated systems without criticalWeight (never assessed)", () => {
     expect(world.systems[0].criticalWeight).toBeUndefined();
+    expect(deserialiseWorld(serialiseWorld(world)).ok).toBe(true);
+  });
+
+  it("round-trips the optional habitabilityQuality field (the fill-best-first quality cache)", () => {
+    const marked: World = {
+      ...world,
+      systems: world.systems.map((system, index) =>
+        index === 0 ? { ...system, habitabilityQuality: { quality: 0.68, frontierIndex: 1, partial: true } } : system),
+    };
+    const result = deserialiseWorld(serialiseWorld(marked));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.systems[0].habitabilityQuality).toEqual({ quality: 0.68, frontierIndex: 1, partial: true });
+  });
+
+  it("accepts generated systems without habitabilityQuality (never assessed by the population processor)", () => {
+    // A freshly generated world has never run a population cycle — additive optional field, no
+    // version bump needed (SAVE_FORMAT_VERSION's own doc comment): absent stays absent on load.
+    expect(world.systems[0].habitabilityQuality).toBeUndefined();
     expect(deserialiseWorld(serialiseWorld(world)).ok).toBe(true);
   });
 

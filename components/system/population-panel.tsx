@@ -7,8 +7,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StabilityBadge } from "@/components/ui/stability-badge";
 import { ContributorBars } from "@/components/ui/contributor-bars";
 import { TrackMarker } from "@/components/ui/track-marker";
+import { Tooltip, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
 import { PopulationSummary } from "@/components/system/population-summary";
 import { ProvisionBlock } from "@/components/system/provision-block";
+import { HabitabilityTooltipContent } from "@/components/system/habitability-tooltip-content";
 import {
   stabilityView,
   DIRECTION_GLYPH,
@@ -17,6 +19,26 @@ import {
   type StabilityView,
 } from "@/components/system/stability-view";
 import type { SystemUnrestRead } from "@/lib/types/api";
+import type { FillOrderRow } from "@/lib/utils/substrate";
+
+/**
+ * "Habitability: 93%" plus its per-body decomposition tooltip — quality is always shown as a story
+ * about bodies, never a bare number (spec §3). The percentage is the service's `growthMultiplier`
+ * FORMATTED only; this component computes nothing (`fillOrder` is likewise assembled server-side by
+ * `habitabilityFillOrder`).
+ */
+function GrowthLine({ growthMultiplier, fillOrder }: { growthMultiplier: number; fillOrder: FillOrderRow[] }) {
+  return (
+    <Tooltip>
+      <TooltipTriggerLabel className="text-xs">
+        Habitability: <span className="font-mono text-text-secondary">{Math.round(growthMultiplier * 100)}%</span>
+      </TooltipTriggerLabel>
+      <TooltipContent className="w-64">
+        <HabitabilityTooltipContent growthMultiplier={growthMultiplier} fillOrder={fillOrder} />
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 /**
  * Which state the Population tab renders for a given population/housing/unrest reading — the pure
@@ -147,7 +169,7 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
     );
   }
 
-  const { population, popCap, unrest, striking, needs, provision, unrestBreakdown } = pop;
+  const { population, popCap, unrest, striking, needs, provision, unrestBreakdown, growthMultiplier, fillOrder } = pop;
 
   // A genuinely uninhabited system (no residents, no standing unrest) stays on the empty state.
   // A popCap <= 0 system that still has residents or unrest — collapsed housing stranding a
@@ -162,6 +184,9 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
     <div className="space-y-6">
       <Card variant="bordered" padding="md">
         <PopulationSummary population={population} popCap={popCap} />
+        <div className="mt-3 border-t border-border/60 pt-3">
+          <GrowthLine growthMultiplier={growthMultiplier} fillOrder={fillOrder} />
+        </div>
       </Card>
 
       <StabilityBlock unrest={unrest} striking={striking} unrestBreakdown={unrestBreakdown} />

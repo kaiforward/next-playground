@@ -1,10 +1,10 @@
 import { getWorld } from "@/lib/world/store";
-import { regionInfos } from "./world-index";
+import { regionInfos, bodiesBySystem } from "./world-index";
 import { ServiceError } from "./errors";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import type { UniverseData } from "@/lib/types/game";
 import type { SystemDetailData, SystemSubstrateData, SystemIndustryData, BodyView } from "@/lib/types/api";
-import { slotCapOf, qualityOf } from "@/lib/engine/resources";
+import { depositCountsOf, qualityOf, effOf } from "@/lib/engine/resources";
 import {
   capacityGoodRates,
   extractorsByResource,
@@ -14,6 +14,8 @@ import {
 import { systemPopNeeds } from "@/lib/services/pop-needs";
 import { readSystemIndustry } from "@/lib/services/system-industry-readout";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
+import { occupiedBodyIds } from "@/lib/utils/substrate";
+import { resolveEffectiveHabitabilityQuality } from "@/lib/engine/habitability";
 
 /**
  * Get all regions, star systems, and connections.
@@ -95,23 +97,45 @@ export function getSystemSubstrate(systemId: string): SystemSubstrateData {
     throw new ServiceError("System not found.", "not_found");
   }
 
-  const bodies: BodyView[] = world.bodies
-    .filter((b) => b.systemId === systemId)
-    .map((b) => ({
+  const systemBodies = bodiesBySystem().get(systemId) ?? [];
+  const occupancyBodies = systemBodies.map((b) => ({
+    id: b.id,
+    score: BODY_ARCHETYPES[b.bodyType].scores.default,
+    peopleLand: b.peopleLand,
+    locked: BODY_ARCHETYPES[b.bodyType].techLocked,
+  }));
+  // The SAME shared resolver `lib/services/system-population.ts`'s growth-multiplier read uses
+  // (`resolveEffectiveHabitabilityQuality`, lib/engine/habitability.ts) — never the raw cache
+  // alone, so a just-founded colony's first cycle (a real Habitability % already, but no
+  // `frontierIndex` cached yet) shows Occupied badges consistent with that percentage instead of
+  // an empty set.
+  const effectiveQuality = resolveEffectiveHabitabilityQuality(
+    system.habitabilityQuality, occupancyBodies, system.population,
+  );
+  // Same contributing-set filter + score-descending sort as the habitability fold (lib/engine/habitability.ts) and
+  // `habitabilityBodiesBySystem` (lib/world/tick.ts) — re-derives WHICH bodies the resolved
+  // `frontierIndex` covers, never a second occupancy opinion.
+  const occupied = occupiedBodyIds(occupancyBodies, effectiveQuality);
+
+  const bodies: BodyView[] = systemBodies.map((b) => {
+    const arch = BODY_ARCHETYPES[b.bodyType];
+    return {
       id: b.id,
       bodyType: b.bodyType,
-      archetypeName: BODY_ARCHETYPES[b.bodyType].name,
-      habitable: b.habitable,
-      size: b.size,
-      slots: slotCapOf(b),
+      archetypeName: arch.name,
+      score: arch.scores.default,
+      locked: arch.techLocked,
+      counts: depositCountsOf(b),
       quality: qualityOf(b),
-    }));
+      peopleLand: b.peopleLand,
+      occupied: occupied.has(b.id),
+    };
+  });
 
   return {
     visibility: "visible",
     sunClass: system.sunClass,
-    availableSpace: system.availableSpace,
-    habitableSpace: system.habitableSpace,
+    peopleLand: system.peopleLand,
     bodies,
   };
 }
@@ -136,7 +160,7 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
   // production/consumption profile below.
   const { buildings, yields, readout } = readSystemIndustry(system);
 
-  const slotCap = slotCapOf(system);
+  const depositCounts = depositCountsOf(system);
   const worked = extractorsByResource(buildings);
 
   // The readout's labourAllocation IS the civilian demand basis — reuse it
@@ -147,9 +171,9 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
     visibility: "visible",
     unrest: system.unrest,
     ...readout,
-    space: summariseSpace(system.availableSpace, system.generalSpace, system.habitableSpace, buildings),
-    deposits: summariseDeposits(slotCap, worked, yields),
-    goods: capacityGoodRates(buildings, system.population, yields),
+    space: summariseSpace(system.peopleLand, depositCounts, buildings),
+    deposits: summariseDeposits(depositCounts, worked, yields),
+    goods: capacityGoodRates(buildings, system.population, yields, effOf(system)),
     popNeeds,
   };
 }

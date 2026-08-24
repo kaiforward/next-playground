@@ -5,13 +5,14 @@ import type { GeneratedSystem } from "../universe-gen";
 import type { EconomyType } from "@/lib/types/game";
 
 // Minimal GeneratedSystem for placement tests — only the fields placeHomeworlds reads
-// (index, x, y, habitableSpace, bodyDanger, slotCap) matter; the rest are inert defaults.
+// (index, x, y, peopleLand, bodyDanger, depositCounts) matter; the rest are inert defaults.
 function mkSys(p: Partial<GeneratedSystem> & { index: number }): GeneratedSystem {
   return {
     name: `s${p.index}`, economyType: "extraction", sunClass: "yellow",
     bodies: [], popCap: 0, population: 0, bodyDanger: 0, buildings: {},
-    availableSpace: 0, generalSpace: 0, habitableSpace: 0,
-    slotCap: emptyResourceVector(), yieldMult: emptyResourceVector(),
+ peopleLand: 0,
+    depositCounts: emptyResourceVector(), yieldMult: emptyResourceVector(),
+    extractionEfficiency: emptyResourceVector(),
     x: 0, y: 0, regionIndex: 0, isGateway: false, description: "",
     ...p,
   };
@@ -27,18 +28,18 @@ describe("placeHomeworlds", () => {
   });
 
   it("prefers a clearly-better substrate (high habitable, diverse, low danger) over a dud", () => {
-    const slotCap = emptyResourceVector();
-    slotCap.arable = 3; slotCap.water = 2; slotCap.ore = 4; // diverse
-    const good = mkSys({ index: 0, x: 10, y: 10, habitableSpace: 100, bodyDanger: 0, slotCap });
-    const dud = mkSys({ index: 1, x: 90, y: 90, habitableSpace: 1, bodyDanger: 100, slotCap: emptyResourceVector() });
+    const depositCounts = emptyResourceVector();
+    depositCounts.arable = 3; depositCounts.water = 2; depositCounts.ore = 4; // diverse
+    const good = mkSys({ index: 0, x: 10, y: 10, peopleLand: 100, bodyDanger: 0, depositCounts });
+    const dud = mkSys({ index: 1, x: 90, y: 90, peopleLand: 1, bodyDanger: 100, depositCounts: emptyResourceVector() });
     expect(placeHomeworlds([good, dud], 1, 100)).toEqual([0]); // good dominates on habitable + diversity + low danger
   });
 
   it("spaces homeworlds apart — skips a high-scoring neighbour that is too close", () => {
     // mapSize 100 → threshold 18. A(10,10) best, B(15,10) dist 5 (< 18, too close), C(90,90) far.
-    const a = mkSys({ index: 0, x: 10, y: 10, habitableSpace: 100 });
-    const b = mkSys({ index: 1, x: 15, y: 10, habitableSpace: 90 });
-    const c = mkSys({ index: 2, x: 90, y: 90, habitableSpace: 50 });
+    const a = mkSys({ index: 0, x: 10, y: 10, peopleLand: 100 });
+    const b = mkSys({ index: 1, x: 15, y: 10, peopleLand: 90 });
+    const c = mkSys({ index: 2, x: 90, y: 90, peopleLand: 50 });
     expect(placeHomeworlds([a, b, c], 2, 100)).toEqual([0, 2]);
   });
 
@@ -49,10 +50,10 @@ describe("placeHomeworlds", () => {
     // give-up fallback. B sits ~1.4 from A: high-scoring enough to be a top-3 pick but too
     // close to be spaced, so a relaxed pick must drop it for the spaced {A,C,D}. The
     // fallback (top-3 by score) would instead keep B — which is what this asserts against.
-    const a = mkSys({ index: 0, x: 0, y: 0, habitableSpace: 100 });
-    const b = mkSys({ index: 1, x: 1, y: 1, habitableSpace: 90 });
-    const c = mkSys({ index: 2, x: 0, y: 10, habitableSpace: 50 });
-    const d = mkSys({ index: 3, x: 10, y: 0, habitableSpace: 40 });
+    const a = mkSys({ index: 0, x: 0, y: 0, peopleLand: 100 });
+    const b = mkSys({ index: 1, x: 1, y: 1, peopleLand: 90 });
+    const c = mkSys({ index: 2, x: 0, y: 10, peopleLand: 50 });
+    const d = mkSys({ index: 3, x: 10, y: 0, peopleLand: 40 });
     const hw = placeHomeworlds([a, b, c, d], 3, 100);
     expect([...hw].sort((x, y) => x - y)).toEqual([0, 2, 3]);
     expect(hw).not.toContain(1); // spacing preserved via relaxation, not the top-3-by-score fallback
@@ -63,11 +64,11 @@ describe("placeHomeworlds", () => {
     // (18 × 0.85^12 ≈ 2.56 at mapSize 100), so spacing is never satisfiable: the loop
     // exhausts every relax step and returns the top-`count`-by-substrate fallback.
     const cluster = [
-      mkSys({ index: 0, x: 10, y: 10, habitableSpace: 30 }),
-      mkSys({ index: 1, x: 12, y: 11, habitableSpace: 20 }),
-      mkSys({ index: 2, x: 11, y: 13, habitableSpace: 10 }),
+      mkSys({ index: 0, x: 10, y: 10, peopleLand: 30 }),
+      mkSys({ index: 1, x: 12, y: 11, peopleLand: 20 }),
+      mkSys({ index: 2, x: 11, y: 13, peopleLand: 10 }),
     ];
-    expect(placeHomeworlds(cluster, 3, 100)).toEqual([0, 1, 2]); // ranked by habitableSpace, spacing given up
+    expect(placeHomeworlds(cluster, 3, 100)).toEqual([0, 1, 2]); // ranked by peopleLand, spacing given up
   });
 
   it("throws when there are fewer systems than requested homeworlds", () => {
@@ -78,7 +79,7 @@ describe("placeHomeworlds", () => {
   });
 
   it("is deterministic — same input produces the same placement", () => {
-    const systems = Array.from({ length: 20 }, (_, i) => mkSys({ index: i, x: (i * 7) % 100, y: (i * 13) % 100, habitableSpace: (i * 17) % 50 }));
+    const systems = Array.from({ length: 20 }, (_, i) => mkSys({ index: i, x: (i * 7) % 100, y: (i * 13) % 100, peopleLand: (i * 17) % 50 }));
     expect(placeHomeworlds(systems, 6, 100)).toEqual(placeHomeworlds(systems, 6, 100));
   });
 });

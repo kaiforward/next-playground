@@ -41,7 +41,7 @@ function devSys(
     population?: number;
     popCap?: number;
     buildings?: Record<string, number>;
-    slotCap?: ResourceVector;
+    depositCounts?: ResourceVector;
   } = {},
 ): TickSystem {
   return {
@@ -55,8 +55,9 @@ function devSys(
     buildingIdleCycles: {},
     collapseDebt: 0,
     yields: unitResourceVector(),
-    slotCap: opts.slotCap ?? emptyResourceVector(),
-    generalSpace: 0, habitableSpace: 0,
+    extractionEff: unitResourceVector(),
+    depositCounts: opts.depositCounts ?? emptyResourceVector(),
+ peopleLand: 0,
   };
 }
 
@@ -81,14 +82,14 @@ describe("summariseColonisation — per-class build-out", () => {
         mystery: 4, // unknown key → classified into no tier/role
         food: 0,    // zero level → skipped entirely
       },
-      slotCap: makeResourceVector({ ore: 10 }),
+      depositCounts: makeResourceVector({ ore: 10 }),
     });
 
     // Stranded colony: seed population landed but nothing built, on idle deposits, popCap never raised.
     const stranded = devSys("c1", {
       population: 500, popCap: 0,
       buildings: {},
-      slotCap: makeResourceVector({ ore: 10 }),
+      depositCounts: makeResourceVector({ ore: 10 }),
     });
 
     // Housing-only colony: has homes but zero industry; no deposits.
@@ -138,14 +139,14 @@ describe("summariseColonisation — per-class build-out", () => {
     const ghostBuilt = devSys("c1", {
       population: 300,
       buildings: { ore: 0, metals: -2, [HOUSING_TYPE]: 0 },
-      slotCap: makeResourceVector({ ore: 5 }),
+      depositCounts: makeResourceVector({ ore: 5 }),
     });
     const summary = summariseColonisation([ghostBuilt], new Set(), []);
 
     expect(summary.colony.withTier0).toBe(0);
     expect(summary.colony.withHousing).toBe(0);
     expect(summary.colony.populatedButNoIndustry).toBe(1);
-    expect(summary.colony.depositsIdle).toBe(1); // slotCap > 0 but no positive tier0
+    expect(summary.colony.depositsIdle).toBe(1); // depositCounts > 0 but no positive tier0
   });
 });
 

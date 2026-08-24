@@ -27,6 +27,7 @@ import type { TrackerSections } from "@/lib/types/tracker";
 import type { MaintenanceBillLine, TreasuryBands } from "@/lib/engine/treasury";
 import type { SupplyRegime } from "@/lib/engine/population";
 import type { BuildDropReason } from "@/lib/engine/directed-build";
+import type { SystemHabitabilityQuality } from "@/lib/engine/habitability";
 
 // ── Meta ────────────────────────────────────────────────────────
 
@@ -227,23 +228,35 @@ export interface WorldSystem {
    *  on abandonment or redevelopment so a founded colony never inherits its own candidacy reading.
    *  Nothing inside the tick reads it. */
   colonyOpportunity?: { value: number; work: number };
+  /**
+   * Cached fill-best-first habitability quality (`systemHabitabilityQuality`,
+   * `lib/engine/habitability.ts`) — the people-land-weighted mean score over the prefix this
+   * system's population currently occupies, best-body-first. Written by the population
+   * processor's world adapter through the generic per-system row-mutation path (unlike
+   * `buildBlocked`/`buildOpportunity`/`colonyOpportunity` above, which bypass it). Recomputed only
+   * when the occupied prefix crosses a body boundary (`frontierIndex` changing) — population
+   * movement within the same body leaves this field's value untouched, so most systems (one
+   * contributing body) write it once and never again. Absent means the population processor has
+   * never assessed this system (a frontier/controlled system it hasn't visited, or a pre-change
+   * save); cleared — not carried forward — on abandonment or redevelopment
+   * (`applyAbandonments`/`applyDevelopments`, both `lib/world/tick.ts`) so a re-founded colony
+   * never inherits its predecessor's reading. Read by `populationDelta`'s growth term (the
+   * population processor).
+   */
+  habitabilityQuality?: SystemHabitabilityQuality;
   /** Sum of body-archetype danger baselines. */
   bodyDanger: number;
-  /** SPACE_PER_SIZE × Σ size. */
-  availableSpace: number;
-  /** Fungible (non-deposit) space. */
-  generalSpace: number;
-  /** Habitable fraction of general space — caps population centres. */
-  habitableSpace: number;
-  /** Extractor-slot caps, one per resource. */
-  slotGas: number;
-  slotMinerals: number;
-  slotOre: number;
-  slotBiomass: number;
-  slotArable: number;
-  slotWater: number;
-  slotRadioactive: number;
-  /** Effective quality multipliers, one per resource. */
+  /** The people-land budget housing bills against — Σ per-body authored peopleLand over above-threshold, unlocked bodies. */
+  peopleLand: number;
+  /** Extractor-slot caps, one per resource — Σ authored deposit counts over unlocked bodies. */
+  countGas: number;
+  countMinerals: number;
+  countOre: number;
+  countBiomass: number;
+  countArable: number;
+  countWater: number;
+  countRadioactive: number;
+  /** Effective quality multipliers, one per resource — deposit grade, a pure property of the ground. */
   yieldGas: number;
   yieldMinerals: number;
   yieldOre: number;
@@ -251,6 +264,16 @@ export interface WorldSystem {
   yieldArable: number;
   yieldWater: number;
   yieldRadioactive: number;
+  /** Effective per-resource extraction-work efficiency — deposit-count-weighted mean of the
+   *  contributing bodies' `extractionModifier` (1.0 where the system has no counts for that
+   *  resource). Kept as its OWN aggregate, never folded into yield*. */
+  effGas: number;
+  effMinerals: number;
+  effOre: number;
+  effBiomass: number;
+  effArable: number;
+  effWater: number;
+  effRadioactive: number;
 }
 
 // ── Bodies ──────────────────────────────────────────────────────
@@ -259,20 +282,18 @@ export interface WorldBody {
   id: string;
   systemId: string;
   bodyType: BodyArchetypeId;
-  habitable: boolean;
+  /** Display flavour only — carries no budget meaning. */
   size: number;
-  /** This body's general (non-deposit) space. */
-  generalSpace: number;
-  /** This body's habitable space. */
-  habitableSpace: number;
+  /** This body's authored people-land budget (dark land when below threshold or locked). */
+  peopleLand: number;
   /** Per-body slot counts, one per resource (0 = no deposit). */
-  slotGas: number;
-  slotMinerals: number;
-  slotOre: number;
-  slotBiomass: number;
-  slotArable: number;
-  slotWater: number;
-  slotRadioactive: number;
+  countGas: number;
+  countMinerals: number;
+  countOre: number;
+  countBiomass: number;
+  countArable: number;
+  countWater: number;
+  countRadioactive: number;
   /** Per-body quality multipliers, one per resource (0 = no deposit). */
   qualGas: number;
   qualMinerals: number;

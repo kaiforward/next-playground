@@ -8,6 +8,7 @@
 
 import { MIN_DEMAND } from "@/lib/constants/market-economy";
 import { GOODS } from "@/lib/constants/goods";
+import { effectiveSpaceCost, HOUSING_TYPE } from "@/lib/constants/industry";
 import { curveForRow, marketBandForRow, midPriceAt } from "@/lib/engine/market-pricing";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import { marketRowsBySystem } from "@/lib/world/tick";
@@ -236,14 +237,39 @@ const POP_BANDS: { cohort: WorldCohort; below: number }[] = [
 const COHORT_ORDER: WorldCohort[] = [
   "pop <10", "pop 10-100", "pop 100-1K", "pop >=1K",
   "survival-short", "homeworld", "colony",
+  "quality: single-body", "quality: multi-body",
 ];
+
+/** The same floor `colonyEligibility` gates founding on (`lib/services/colony-eligibility.ts`) —
+ *  one whole housing level of people land. Reused, not re-derived, so a system this module calls
+ *  colonisable and the founding path that actually decided it agree by construction. */
+const COLONISABLE_FLOOR = effectiveSpaceCost(HOUSING_TYPE);
+
+/** A system that clears the habitable floor — the same gate `colonyEligibility` founds against. A
+ *  purely industrial system (e.g. an asteroid/gas outpost with zero people land) can be `developed`
+ *  without ever clearing it: it was never a candidate for population at all, so folding it into a
+ *  habitability-scoped cohort (survival-short, quality bands) would count a world that was never
+ *  meant to feed anyone as a food-supply failure. */
+function isColonisable(s: TickSystem): boolean {
+  return s.peopleLand >= COLONISABLE_FLOOR;
+}
 
 export function cohortsForSystem(s: TickSystem, homeworldIds: Set<string>): WorldCohort[] {
   const band = POP_BANDS.find((b) => s.population < b.below)?.cohort ?? "pop >=1K";
   const cohorts: WorldCohort[] = [band, homeworldIds.has(s.id) ? "homeworld" : "colony"];
-  // No arable slot means no local food production — the physical limit that separates a
-  // deprived rock from a world the economy is failing.
-  if (s.slotCap.arable <= 0) cohorts.push("survival-short");
+  if (isColonisable(s)) {
+    // No arable slot means no local food production — the physical limit that separates a
+    // deprived rock from a world the economy is failing. Scoped to colonisable systems only: an
+    // industry-only outpost with no people land at all was never a food-supply candidate.
+    if (s.depositCounts.arable <= 0) cohorts.push("survival-short");
+    // A colonisable system always carries at least one people-land-contributing body (only
+    // threshold-clearing bodies contribute to the peopleLand aggregate the floor above tests), so
+    // this split is exhaustive over the colonisable membership — single- vs multi-people-land-body,
+    // the live audience for the fill-best-first quality fold.
+    const bodies = s.habitabilityBodies ?? [];
+    if (bodies.length === 1) cohorts.push("quality: single-body");
+    else if (bodies.length > 1) cohorts.push("quality: multi-body");
+  }
   return cohorts;
 }
 
@@ -260,6 +286,11 @@ export function cohortsForSystem(s: TickSystem, homeworldIds: Set<string>): Worl
  * convention that produces); a system missing from a non-empty map is read as starting at 0,
  * which is what lets a colony founded mid-run show up as growth rather than being excluded from
  * the sum.
+ *
+ * `colonistDeliveryBySystem` is the run-long accumulation of `TickInstrumentation.
+ * colonistDeliveryBySystem` (the caller's job — this fold only sums what it is handed) — the
+ * pump-watch's inflow side. Absent (default empty) reads every cohort's `colonistDeliveryInflow`
+ * as 0, same convention as a system missing from `startPopulationBySystem`.
  */
 export function computeWorldCohorts(
   systems: TickSystem[],
@@ -268,6 +299,7 @@ export function computeWorldCohorts(
   strikeThreshold: number,
   events: ReadonlyArray<WorldEvent> = [],
   startPopulationBySystem: ReadonlyMap<string, number> = new Map(),
+  colonistDeliveryBySystem: ReadonlyMap<string, number> = new Map(),
 ): WorldCohortEntry[] {
   const states = perSystemSupplyState(systems, markets, events);
 
@@ -275,8 +307,9 @@ export function computeWorldCohorts(
     n: number; shortfallSum: number; unrestSum: number; striking: number;
     supplied: number; strained: number; rationing: number; deprived: number; famine: number;
     provisionSum: number; worstGoodSats: number[];
-    startPopSum: number; endPopSum: number;
+    startPopSum: number; endPopSum: number; deliveryInflowSum: number;
     expectations: number[]; grievances: number[]; staleExpectationCount: number;
+    qualities: number[]; qualityUnassessedCount: number;
   }>();
 
   for (const s of systems) {
@@ -289,8 +322,9 @@ export function computeWorldCohorts(
         a = {
           n: 0, shortfallSum: 0, unrestSum: 0, striking: 0,
           supplied: 0, strained: 0, rationing: 0, deprived: 0, famine: 0,
-          provisionSum: 0, worstGoodSats: [], startPopSum: 0, endPopSum: 0,
+          provisionSum: 0, worstGoodSats: [], startPopSum: 0, endPopSum: 0, deliveryInflowSum: 0,
           expectations: [], grievances: [], staleExpectationCount: 0,
+          qualities: [], qualityUnassessedCount: 0,
         };
         acc.set(cohort, a);
       }
@@ -302,6 +336,11 @@ export function computeWorldCohorts(
       // Absent from the start snapshot ⇒ founded during the run ⇒ started at 0, not excluded.
       a.startPopSum += startPopulationBySystem.get(s.id) ?? 0;
       a.endPopSum += s.population;
+      // Absent from the accumulated delivery map ⇒ never received a delivery this run ⇒ 0, not
+      // excluded — same convention as the start-population read just above.
+      a.deliveryInflowSum += colonistDeliveryBySystem.get(s.id) ?? 0;
+      if (s.habitabilityQuality) a.qualities.push(s.habitabilityQuality.quality);
+      else a.qualityUnassessedCount++;
       if (s.unrest > strikeThreshold) a.striking += 1;
       // A stale (emptyBasket) system's stored memory is a skipped-update artifact, not a current
       // reading — excluded from the distributions and counted instead, exactly like the
@@ -353,6 +392,12 @@ export function computeWorldCohorts(
       expectationLevels: quantileLevels(a.expectations),
       grievanceLevels: quantileLevels(a.grievances),
       staleExpectationCount: a.staleExpectationCount,
+      qualityLevels: quantileLevels(a.qualities),
+      qualityUnassessedCount: a.qualityUnassessedCount,
+      colonistDeliveryInflow: a.deliveryInflowSum,
+      // Same null-vs-0 convention as netGrowthPct just above: absolute units, so it can be read
+      // directly against colonistDeliveryInflow (a percentage cannot).
+      netPopulationChange: noSnapshot ? null : a.endPopSum - a.startPopSum,
     });
   }
   return result;

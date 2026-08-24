@@ -9,7 +9,7 @@
 import type { ResourceType, QualityBandId } from "@/lib/types/game";
 import { BUILDING_TYPES } from "@/lib/constants/industry";
 import { buildingHealth } from "@/lib/engine/industry";
-import type { SystemDepositSummary, SystemIndustryReadout, SubstrateSpace, IndustryHealth, IdleReason } from "@/lib/engine/industry";
+import type { SystemDepositSummary, SystemIndustryReadout, IndustryHealth, IdleReason } from "@/lib/engine/industry";
 import { buildProblems, type ProblemItem } from "@/components/system/needs-view";
 
 /** Severity ordering for the worst-of-contributors aggregation (collapsing is worst, idle sits
@@ -105,7 +105,7 @@ export interface DepositRow {
   yieldMult: number;
   band: QualityBandId;
   /** Total deposit slots — the capacity ceiling. */
-  slotCap: number;
+  depositCounts: number;
   /** Extractor levels built on this resource's slots. */
   built: number;
   /**
@@ -176,13 +176,13 @@ export function depositRows(
     });
   }
   return deposits
-    .filter((d) => d.slotCap > 0)
+    .filter((d) => d.depositCounts > 0)
     .map((d) => {
       const agg: DepositResourceAgg = byResource.get(d.resource) ?? { built: 0, staffed: 0, output: 0, health: "stable" };
       const types = Object.keys(BUILDING_TYPES)
         .filter((t) => BUILDING_TYPES[t].resource === d.resource)
         .map((t): DepositTypeRow => byType.get(t) ?? { buildingType: t, outputGood: BUILDING_TYPES[t].outputGood, built: 0, staffed: 0, output: 0, health: "stable", staffedFraction: 0, idleReason: undefined });
-      return { resource: d.resource, yieldMult: d.yieldMult, band: d.band, slotCap: d.slotCap, ...agg, types };
+      return { resource: d.resource, yieldMult: d.yieldMult, band: d.band, depositCounts: d.depositCounts, ...agg, types };
     });
 }
 
@@ -239,35 +239,4 @@ export function depositRowProblems(
 ): ProblemItem[] {
   if (row.types.length !== 1) return [];
   return depositTypeProblems(row.types[0], popNeed, inputLabel);
-}
-
-/** The general-land partition, with the habitable subset broken out so housing headroom reads in units. */
-export interface GeneralLand {
-  /** Land under population centres (draws on the habitable subset). */
-  housing: number;
-  /** Land under factories / academies / complexes (non-housing general use). */
-  factory: number;
-  /** Free land still inside the habitable cap — housing can grow here. */
-  habitableFree: number;
-  /** Free land beyond the habitable cap — factories only. */
-  factoryFree: number;
-  /** Total general land. */
-  general: number;
-  /** Total habitable land — the population-centre ceiling. */
-  habitable: number;
-}
-
-/**
- * Split general land into housing / factory footprints + the free tail, breaking the free tail into
- * habitable-free (housing can still grow) vs factory-only-free (beyond the habitable cap). Housing +
- * factory + habitableFree + factoryFree always sum to `general`.
- */
-export function generalLand(space: SubstrateSpace): GeneralLand {
-  const housing = Math.max(0, space.habitableUsed);
-  const factory = Math.max(0, space.generalUsed - space.habitableUsed);
-  const free = Math.max(0, space.general - space.generalUsed);
-  const habitableHeadroom = Math.max(0, space.habitable - space.habitableUsed);
-  const habitableFree = Math.min(free, habitableHeadroom);
-  const factoryFree = Math.max(0, free - habitableFree);
-  return { housing, factory, habitableFree, factoryFree, general: space.general, habitable: space.habitable };
 }

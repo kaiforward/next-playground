@@ -1,16 +1,16 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { depositRows, depositRowProblems, depositTypeProblems, generalLand, idleLevelSplit, staffedLevels } from "../industry-rows";
+import { depositRows, depositRowProblems, depositTypeProblems, idleLevelSplit, staffedLevels } from "../industry-rows";
 import type { DepositTypeRow } from "../industry-rows";
 import { BUILDING_TYPES } from "@/lib/constants/industry";
-import type { SystemDepositSummary, SystemIndustryReadout, SubstrateSpace, IdleReason } from "@/lib/engine/industry";
+import type { SystemDepositSummary, SystemIndustryReadout, IdleReason } from "@/lib/engine/industry";
 
 const T = 0.75;
 /** `buildProblems`'s `inputLabel` — identity is enough for these fixtures. */
 const label = (id: string) => id;
 
-const deposit = (resource: SystemDepositSummary["resource"], slotCap: number): SystemDepositSummary => ({
+const deposit = (resource: SystemDepositSummary["resource"], depositCounts: number): SystemDepositSummary => ({
   resource,
-  slotCap,
+  depositCounts,
   worked: 0,
   yieldMult: 1,
   band: "average",
@@ -199,22 +199,6 @@ describe("staffedLevels", () => {
     // ceiling; staffedFraction × count (2) is the labour figure that belongs on screen.
     const producer: Parameters<typeof staffedLevels>[0] = { tier: 0, used: 1, staffedFraction: 1, count: 2 };
     expect(staffedLevels(producer)).toBe(2);
-  });
-});
-
-describe("generalLand", () => {
-  it("partitions general land and breaks out the habitable subset in units", () => {
-    const space: SubstrateSpace = {
-      available: 200, deposit: 80, general: 120, habitable: 70,
-      depositWorked: 40, generalUsed: 78, habitableUsed: 52,
-    };
-    const g = generalLand(space);
-    expect(g.housing).toBe(52);
-    expect(g.factory).toBe(26); // 78 − 52
-    expect(g.habitableFree).toBe(18); // headroom 70 − 52, capped by free 42
-    expect(g.factoryFree).toBe(24); // free 42 − 18
-    expect(g.habitable).toBe(70);
-    expect(g.housing + g.factory + g.habitableFree + g.factoryFree).toBeCloseTo(space.general);
   });
 });
 

@@ -42,7 +42,7 @@ import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { DEFAULT_ALERT_CATEGORIES } from "@/lib/constants/attention";
 import type { WorldSystem, World } from "@/lib/world/types";
 import { buildingsBySystem, marketsBySystem, systemNameById } from "@/lib/services/world-index";
-import { slotCapOf } from "@/lib/engine/resources";
+import { depositCountsOf } from "@/lib/engine/resources";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import {
   habitableHousingHeadroom, queuedBuildLevelsBySystem,
@@ -90,6 +90,11 @@ const SURVIVAL_STOCK_CYCLES_THRESHOLD = 3;
  * (a decline rate below roughly 1e-6 of itself per cycle) sorts as if it were non-shrinking. That is
  * judged an acceptable trade over the alternative (an unbounded two-key sort the flat `sortKey:
  * number` interface cannot express) rather than a silent bug.
+ * Abandonment Rule 2 no longer requires famine (population below the floor alone is enough), so
+ * this countdown — computed only for famine systems here — reads exactly one of the two ways a
+ * world can now reach the floor; a shrinking, well-fed world (quality-starved growth losing to
+ * unrest) counts down toward the same abandonment with no alert-side formula, since it never sets
+ * `supplyBand === "famine"` and so never reaches this branch.
  */
 const FAMINE_NON_SHRINKING_SORT_BASE = 1_000_000;
 
@@ -148,25 +153,26 @@ function buildOpportunitySortKey(goodId: string, score: number): number {
 
 /**
  * No housing headroom's queue-adjusted headroom read. `habitableHousingHeadroom`
- * (lib/engine/directed-build.ts:213) takes a `BuildSystemState`, and its `buildings` here is folded
+ * (lib/engine/directed-build.ts) takes a `BuildSystemState`, and its `buildings` here is folded
  * with `queued` — the system's open BUILD-kind project levels — before the read, the same fold the
  * planner's own `effectiveBuildSystems` applies before its housing pass
  * (lib/engine/directed-build.ts:297-333).
  *
- * The fold is monotonically DOWNWARD, never up: `habitableHousingHeadroom` only ever subtracts
- * standing housing from both the habitable and general bounds, and `generalSpaceUsed` only ever
- * adds, so folding queued levels in can only lower headroom — this read can only move a system INTO
- * this category, never out of it. Queued HOUSING itself is excluded by the caller's separate
- * conjunct before this function is even reached, so what the fold actually earns its keep on here is
- * a committed FACTORY: general space a queued production building has already claimed, which would
- * otherwise still read as free room for the housing this category cares about.
+ * `habitableHousingHeadroom` now reads the people-land bound ALONE (housing bills to people land;
+ * factories, academies and complexes bill no land at all, so nothing else can bound housing). So
+ * the only queued level that can move this read is queued HOUSING itself, and that is excluded by
+ * the caller's separate conjunct before this function is even reached: a queued factory, academy or
+ * complex bills no land, which this category never looked at. The
+ * fold is kept (rather than dropped) because it costs nothing and keeps this function agnostic to
+ * which queued type, if any, turns out to matter — but today, with the caller's housing conjunct in
+ * place, folding the queue changes nothing this function reads.
  *
  * The buildings roster is shallow-copied before the fold because the fold WRITES to it — the record
  * the world index hands back is shared with every other reader this tick (see
  * `SystemIndustryReadoutResult.buildings`, which is deliberately handed out uncopied precisely
  * because none of its readers write).
  *
- * `goods: []` and a real `slotCap` (unused by `habitableHousingHeadroom`, but not fabricated either)
+ * `goods: []` and a real `depositCounts` (unused by `habitableHousingHeadroom`, but not fabricated either)
  * fill out the rest of the interface honestly.
  */
 function hasNoHousingHeadroom(system: WorldSystem, queued: Record<string, number>): boolean {
@@ -180,9 +186,8 @@ function hasNoHousingHeadroom(system: WorldSystem, queued: Record<string, number
     control: system.control,
     population: system.population,
     buildings,
-    slotCap: slotCapOf(system),
-    generalSpace: system.generalSpace,
-    habitableSpace: system.habitableSpace,
+    depositCounts: depositCountsOf(system),
+    peopleLand: system.peopleLand,
     goods: [],
   };
   return habitableHousingHeadroom(state) < 1;

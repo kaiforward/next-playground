@@ -10,8 +10,8 @@
  * - U(c) — unblocking value: unmet demand the colony's deposits unblock, traced down each blocked
  *   good's recipe chain to the missing deposits that gate it (split fractionally across a good's
  *   gating missing deposits). Coefficient-free — already in demand-rate units.
- * - L(c) — land option value: LAND_PREMIUM·habitableSpace + small general-space + deposit-richness
- *   weights. Forward-looking; independent of any current deficit.
+ * - L(c) — land option value: LAND_PREMIUM·peopleLand + a small deposit-richness weight.
+ *   Forward-looking; independent of any current deficit.
  * - σ — faction territory saturation in [0,1]: built housing pop-cap ÷ habitable-potential pop-cap.
  */
 import type { ResourceType, ResourceVector } from "@/lib/types/game";
@@ -56,8 +56,8 @@ export const RESOURCE_CLOSURE: Readonly<Record<string, readonly ResourceType[]>>
 /** A developed system's state needed for the faction-level aggregates (σ, missing resources). */
 export interface FactionSystemState {
   buildings: Record<string, number>;
-  habitableSpace: number;
-  slotCap: ResourceVector;
+  peopleLand: number;
+  depositCounts: ResourceVector;
 }
 
 /**
@@ -67,7 +67,7 @@ export interface FactionSystemState {
 export function factionMissingResources(developed: FactionSystemState[]): Set<ResourceType> {
   const missing = new Set<ResourceType>(RESOURCE_TYPES);
   for (const s of developed) {
-    for (const r of RESOURCE_TYPES) if (s.slotCap[r] > 0) missing.delete(r);
+    for (const r of RESOURCE_TYPES) if (s.depositCounts[r] > 0) missing.delete(r);
   }
   return missing;
 }
@@ -84,7 +84,7 @@ export function factionSaturation(developed: FactionSystemState[]): number {
   for (const s of developed) {
     built += housingPopCap(s.buildings);
     if (housingCost > 0) {
-      potential += (Math.max(0, s.habitableSpace) / housingCost) * POP_CENTRE_DENSITY;
+      potential += (Math.max(0, s.peopleLand) / housingCost) * POP_CENTRE_DENSITY;
     }
   }
   if (!Number.isFinite(potential) || potential <= 0) return 1;
@@ -121,23 +121,21 @@ export function unblockedDemandByResource(
 
 /** A colony candidate's substrate — the physical inputs to its valuation. */
 export interface ColonyCandidate {
-  habitableSpace: number;
-  generalSpace: number;
-  slotCap: ResourceVector;
+  peopleLand: number;
+  depositCounts: ResourceVector;
 }
 
 /** Tunable colony-valuation coefficients (global defaults now; per-doctrine later). */
 export interface ColonyValueParams {
   landPremium: number;
-  landGeneralWeight: number;
   landDepositWeight: number;
   sigmaFloor: number;
 }
 
 /** Σ of a candidate's deposit slots across all resources — its "deposit richness". */
-function depositRichness(slotCap: ResourceVector): number {
+function depositRichness(depositCounts: ResourceVector): number {
   let total = 0;
-  for (const r of RESOURCE_TYPES) total += Math.max(0, slotCap[r]);
+  for (const r of RESOURCE_TYPES) total += Math.max(0, depositCounts[r]);
   return total;
 }
 
@@ -156,13 +154,12 @@ export function colonyValue(
   // U: unmet demand of every missing resource this candidate supplies (has any deposit slot for).
   let u = 0;
   for (const r of RESOURCE_TYPES) {
-    if (candidate.slotCap[r] > 0) u += unblockedByResource.get(r) ?? 0;
+    if (candidate.depositCounts[r] > 0) u += unblockedByResource.get(r) ?? 0;
   }
-  // L: land option value — habitable space plus small general-space and deposit-richness weights.
+  // L: land option value — habitable space plus a small deposit-richness weight.
   const l =
-    params.landPremium * Math.max(0, candidate.habitableSpace) +
-    params.landGeneralWeight * Math.max(0, candidate.generalSpace) +
-    params.landDepositWeight * depositRichness(candidate.slotCap);
+    params.landPremium * Math.max(0, candidate.peopleLand) +
+    params.landDepositWeight * depositRichness(candidate.depositCounts);
   const sigma = clamp(saturation, 0, 1);
   const landGate = params.sigmaFloor + (1 - params.sigmaFloor) * sigma;
   return u + l * landGate;

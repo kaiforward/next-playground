@@ -209,10 +209,11 @@ export const OUTPUT_PER_UNIT: Record<string, number> = scaleRecord(
   Object.fromEntries(GOOD_NAMES.map((g) => [g, OUTPUT_OVERRIDES[g] ?? GOOD_PRODUCTION[g]?.coeff ?? 1])),
 );
 
-// ── Per-good general-space footprint (coarse first-cut; tune against sim equilibrium) ──
-// Differentiates tier-1/2 factory footprints; default 1.0. Tier-0 extractor footprint stays
-// on the deposit-slot model (DEPOSIT_SLOT_FOOTPRINT), not spaceCost — extractor count is
-// capped by deposits, not general build-space.
+// ── Per-good space-cost override (coarse first-cut; tune against sim equilibrium) ──
+// Differentiates a few tier-1/2 goods' footprint value; default 1.0. Only `effectiveSpaceCost`
+// callers over HOUSING_TYPE (people land) actually size a build against this number — every other
+// building type bills no land at all (habitability-seeding deleted the industry-land budget); a
+// factory good's own spaceCost only still matters as a positive/zero existence check.
 const SPACE_OVERRIDES: Record<string, number> = {
   ship_frames: 4.0,
   reactor_cores: 3.0,

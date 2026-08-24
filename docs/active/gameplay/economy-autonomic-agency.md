@@ -252,8 +252,10 @@ growing. Three mechanisms, in causal order:
    never built for population that does not yet exist.
 
 The planner is a clean **decision → gate → pacing** pipeline. The **decision** ranks rate-deficit
-opportunities (served ÷ route cost); the **gate** sizes each to the whole-level count the site's spare
-labour and general space admit, co-building the academies/complex it needs; and **pacing** is the
+opportunities (served ÷ route cost for tier-0; construction cost per delivered unit for tier-1+, since
+industry carries no land ceiling — see [Habitability & the Substrate](./habitability.md)); the **gate**
+sizes each to the whole-level count the site's spare labour admits, co-building the academies/complex it
+needs; and **pacing** is the
 construction pool alone — the planner proposes toward the physical ceilings and holds no build budget of
 its own. Capacity grows only through **committed construction projects**, never instant accretion. The
 auto queue policy proposes whole-level projects toward these ceilings — aware of the levels already in
@@ -274,8 +276,9 @@ is free). A faction that industrialises absorbs heads into skilled jobs and its 
 erodes automatically — nobody wrote a "rich factions build slower" rule; it falls out of eligibility once
 skilled employment exists.
 
-A **Construction Centre** (`CONSTRUCTION_CENTRE_TYPE`) is a non-producing building — normal general-space
-footprint, a tier-1-factory-like labour draw (mostly unskilled + a technician draw) — that substitutes
+A **Construction Centre** (`CONSTRUCTION_CENTRE_TYPE`) is a non-producing building — sited on spare labour
+like any production building, billing no land, with a tier-1-factory-like labour draw (mostly unskilled +
+a technician draw) — that substitutes
 capital for the labour a skilled economy has absorbed: each staffed level adds
 `CONSTRUCTION.POINTS_PER_LEVEL × min(labourFulfil, skill1Fulfil)` to the faction pool per cycle, gated by
 its own staffing (an unstaffable centre sheds levels via ordinary idle-decay like any building). A centre

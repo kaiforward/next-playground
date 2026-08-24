@@ -115,7 +115,7 @@ describe("construction order services", () => {
       ...getWorld(),
       buildings: getWorld().buildings.filter((b) => !(b.systemId === h.id && b.buildingType === "ore")),
     });
-    h.slotOre = 10;
+    h.countOre = 10;
     const otherSystemId = getWorld().systems.find((s) => s.id !== h.id)!.id;
     const rivalHere: WorldBuildProject = {
       kind: "build", id: "rival-ore", origin: "auto", factionId: "rival-faction",
@@ -150,7 +150,7 @@ describe("construction order services", () => {
     // manufactured-eligibility idiom the colony test below uses): zero the homeworld's ore slots,
     // then ask for one more ore extractor level.
     const h = playerHome();
-    h.slotOre = 0;
+    h.countOre = 0;
     const r = orderBuild({ systemId: h.id, buildingType: "ore", levels: 1 });
     expect(r.ok).toBe(false);
     if (r.ok) return;
@@ -198,7 +198,9 @@ describe("construction order services", () => {
 
   it("reports the exact not-enough-space message (distinct from the deposit-slot message)", () => {
     const h = playerHome();
-    h.generalSpace = 0; // housing is not an extractor, so this blocks it on "no_space", not deposit slots
+    // Housing bills to people land alone (build rule separation), so it's peopleLand — not
+    // industryLand — that blocks it on "no_space", not deposit slots.
+    h.peopleLand = 0;
     const r = orderBuild({ systemId: h.id, buildingType: HOUSING_TYPE, levels: 1 });
     expect(r).toEqual({ ok: false, error: "Not enough space: 0 more level(s) fit here." });
   });
@@ -209,8 +211,17 @@ describe("construction order services", () => {
       ...getWorld(),
       buildings: getWorld().buildings.filter((b) => !(b.systemId === h.id && b.buildingType === "ore")),
     });
-    h.slotOre = 3;
+    h.countOre = 3;
     expect(orderBuild({ systemId: h.id, buildingType: "ore", levels: 3 }).ok).toBe(true);
+  });
+
+  it("allows ordering the schema's own max level count (100) for a tier-1+ factory — it bills no land, so there is no ceiling to hit", () => {
+    // metals is tier-1 (bills no land: buildableUnits returns Infinity). If the null-ceiling guard
+    // were dropped or inverted, a request at the schema's own maxLevels would wrongly reject on
+    // "not enough space".
+    const h = playerHome();
+    const r = orderBuild({ systemId: h.id, buildingType: "metals", levels: 100 });
+    expect(r.ok).toBe(true);
   });
 
   it("rejects builds at systems the player does not control", () => {
@@ -271,7 +282,7 @@ describe("construction order services", () => {
     fundPlayer(1_000_000); // amply solvent — this test is about the physical gates, not the price
     const nextIdBefore = getWorld().nextId;
     const r = orderColony({ systemId: target.id });
-    if (target.habitableSpace >= 1) {
+    if (target.peopleLand >= 1) {
       expect(r.ok).toBe(true);
       if (!r.ok) return;
       expect(r.data.projectId).toBe(`construction-${nextIdBefore}`);
@@ -351,7 +362,7 @@ describe("construction order services", () => {
     const second = w.systems.find((s) => s.id === secondId)!;
     second.factionId = pid;
     second.control = "controlled";
-    second.habitableSpace = 50;
+    second.peopleLand = 50;
 
     fundPlayer(Number.MAX_SAFE_INTEGER);
     const quote = colonyEligibility(getWorld(), pid, target);

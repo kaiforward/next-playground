@@ -32,7 +32,7 @@ import {
 } from "@/lib/engine/colonisation-value";
 import {
   labourDemand, housingPopCap, skill1Demand, skill2Demand, skill1Cap, skill2Cap,
-  familyAnchorBuff, familyThroughput, inputDemandFromProduction,
+  familyAnchorBuff, familyThroughput, inputDemandFromProduction, labourFulfilment,
 } from "@/lib/engine/industry";
 
 /** Market state for one good at one system — the build planner's per-good input. */
@@ -89,11 +89,10 @@ export interface BuildSystemState {
   /** Current building counts (production types + "housing"). */
   buildings: Record<string, number>;
   /** Per-resource deposit-slot cap (Σ body slots) — caps tier-0 extractor counts. */
-  slotCap: ResourceVector;
-  /** Fungible general space — tier-1+ factories + housing draw here. */
-  generalSpace: number;
-  /** Habitable subset of space — additionally caps housing. */
-  habitableSpace: number;
+  depositCounts: ResourceVector;
+  /** People land — housing's own budget. Extractors and factories never draw on this budget;
+   *  factories, academies, complexes and construction centres bill no land at all. */
+  peopleLand: number;
   goods: BuildGoodState[];
 }
 
@@ -235,18 +234,17 @@ export function fed(sys: BuildSystemState): boolean {
 }
 
 /**
- * Additional housing units a site can build before hitting its physical bounds: the
- * habitable subset of space (minus the housing already standing) and the remaining
- * general space (housing competes with factories for it), in housing units. Never
- * negative. Mirrors the seeder's habitable bound.
+ * Additional housing units a site can build before hitting its physical bounds: the people-land
+ * budget minus the housing already standing, in housing units. Never negative. Housing draws on
+ * people land ALONE — factories, academies, complexes and construction centres bill no land at all,
+ * so nothing else can bound housing.
  */
 export function habitableHousingHeadroom(sys: BuildSystemState): number {
   const cost = effectiveSpaceCost(HOUSING_TYPE);
   if (cost <= 0) return 0;
   const housing = sys.buildings[HOUSING_TYPE] ?? 0;
-  const remainingGeneral = sys.generalSpace - generalSpaceUsed(sys.buildings);
-  const remainingHabitable = sys.habitableSpace - housing * cost;
-  return Math.max(0, Math.min(remainingHabitable, remainingGeneral) / cost);
+  const remainingHabitable = sys.peopleLand - housing * cost;
+  return Math.max(0, remainingHabitable / cost);
 }
 
 /**
@@ -515,25 +513,6 @@ function assessStructuralDeficits(
   };
 }
 
-/**
- * General space consumed by current buildings: every tier-1+ factory and housing
- * occupies general space (× its footprint). Tier-0 extractors sit on deposit slots,
- * NOT general space, so they are excluded.
- */
-function generalSpaceUsed(buildings: Record<string, number>): number {
-  let used = 0;
-  for (const [type, count] of Object.entries(buildings)) {
-    if (count <= 0) continue;
-    if (type === HOUSING_TYPE) {
-      used += count * effectiveSpaceCost(type);
-      continue;
-    }
-    if (GOOD_TIER_BY_KEY[type] === 0) continue; // extractors don't use general space
-    used += count * effectiveSpaceCost(type);
-  }
-  return used;
-}
-
 /** Deposit-slot units already used for `resource` (goods sharing the resource share the cap). */
 export function extractorsOnResource(buildings: Record<string, number>, resource: string): number {
   let used = 0;
@@ -546,8 +525,9 @@ export function extractorsOnResource(buildings: Record<string, number>, resource
 
 /**
  * Additional building units of `goodId` a system can host given current builds.
- * Tier-0: remaining deposit slots for the good's resource. Tier-1+: remaining
- * general space ÷ the type's footprint. Never negative.
+ * Tier-0: remaining deposit slots for the good's resource — the only physical land cap
+ * industry building carries. Tier-1+ bills no land at all (labour, demand and decay bound
+ * it instead), so it reads unbounded here. Never negative.
  */
 export function buildableUnits(sys: BuildSystemState, goodId: string): number {
   const tier = GOOD_TIER_BY_KEY[goodId];
@@ -555,22 +535,20 @@ export function buildableUnits(sys: BuildSystemState, goodId: string): number {
   if (tier === 0) {
     const resource = BUILDING_TYPES[goodId]?.resource;
     if (!resource) return 0;
-    const cap = sys.slotCap[resource];
+    const cap = sys.depositCounts[resource];
     const remaining = cap - extractorsOnResource(sys.buildings, resource);
     return Math.max(0, remaining);
   }
-  const cost = effectiveSpaceCost(goodId);
-  if (cost <= 0) return 0;
-  const remainingGeneral = sys.generalSpace - generalSpaceUsed(sys.buildings);
-  return Math.max(0, remainingGeneral / cost);
+  return effectiveSpaceCost(goodId) > 0 ? Infinity : 0;
 }
 
 /**
  * Could this system host a unit of `goodId` AT ALL — its gross ceiling, ignoring everything already
- * built? Tier-0 needs at least one deposit slot for the good's resource; tier-1+ needs some general
- * space and a positive footprint. This is what separates the two states `buildableUnits` returns 0
- * for alike: a site whose capacity for the good is USED UP (a real, reportable obstacle) and a site
- * that never had any (a good it was never a plausible builder of — most goods at most systems).
+ * built? Tier-0 needs at least one deposit slot for the good's resource; tier-1+ needs only a
+ * positive footprint (labour/demand/decay gate it elsewhere, never land). This is what separates the
+ * two states `buildableUnits` returns 0 for alike: a site whose capacity for the good is USED UP (a
+ * real, reportable obstacle) and a site that never had any (a good it was never a plausible builder
+ * of — most goods at most systems).
  */
 function hasCapacityCeiling(sys: BuildSystemState, goodId: string): boolean {
   const tier = GOOD_TIER_BY_KEY[goodId];
@@ -578,9 +556,9 @@ function hasCapacityCeiling(sys: BuildSystemState, goodId: string): boolean {
   if (tier === 0) {
     const resource = BUILDING_TYPES[goodId]?.resource;
     if (!resource) return false;
-    return sys.slotCap[resource] > 0;
+    return sys.depositCounts[resource] > 0;
   }
-  return effectiveSpaceCost(goodId) > 0 && sys.generalSpace > 0;
+  return effectiveSpaceCost(goodId) > 0;
 }
 
 /** Additional output of `goodId` a system can host = buildable units × per-unit output. */
@@ -809,8 +787,10 @@ function planFactionBundles(
 
   // ── Pass 1: housing relief (housing follows crowding). ──
   // Wherever a fed system's occupancy has outrun its housing, build the levels that bring it
-  // back to the relief target, bounded by the habitable cap. Housing draws general space, so it
-  // runs before industry — habitable land is housing's by right; factories take what's left.
+  // back to the relief target, bounded by the habitable cap. Housing draws habitable (people)
+  // land, industry draws general space — separate budgets — but housing still runs first:
+  // habitable land is housing's by right, sized before this cycle's industry pass ever looks at
+  // what general space is left.
   for (const site of working.values()) {
     // Whole levels only, and the want already is one: plannedHousingUnits rounds up to a whole
     // level and land-clamps with a floor, so it never returns a fraction to re-round here.
@@ -916,25 +896,88 @@ function planFactionBundles(
       // higher (the snowball): buffed output means more served demand per unit of capacity.
       const perUnit = baseUnit * familyAnchorBuff(site.buildings, goodId);
 
-      // Score: allocate this site's output capacity to its reachable deficits,
-      // nearest-first, summing served ÷ route cost (capacity + proximity). Ordering only.
-      let capOutput = capUnits * perUnit;
-      let score = 0;
-      for (const r of reachable) {
-        if (capOutput <= 0) break;
-        const short = deficitMap.get(r.sysId) ?? 0;
-        if (short <= 0) continue;
-        const take = Math.min(capOutput, short);
-        score += take / r.cost;
-        capOutput -= take;
+      // ONE shared score unit for both tiers — marginal-construction-work-per-delivered-unit,
+      // exactly the tier-1+ quantity, now also underlying tier-0: this good's own build cost
+      // amortised over its (buffed) per-level output (`perUnit`, which already folds in whatever
+      // yield/efficiency scaling the existing tier-0 capacity maths defines output with), plus —
+      // only when the site carries NO specialisation complex of any family yet (COMPLEX_TYPES,
+      // ANCHOR_CAP 1 site-wide, the same gate complexLift itself uses) — the complex's build cost
+      // amortised over the full demand this opportunity would serve (`totalServed`). Tier-0 goods
+      // carry no family (`FAMILY_BY_GOOD`), so the surcharge is always 0 for them — the formula is
+      // shared regardless, so there is exactly one scale to compare, not two coincidentally
+      // similar-looking ones.
+      const buildWorkPerUnit = workCostPerLevel(goodId) / perUnit;
+
+      // Demand numerator: proximity-weighted served demand. Tier-0 keeps its real physics — the
+      // site's finite deposit-slot output capacity, allocated to reachable deficits nearest-first
+      // (the capacity cap this tier actually has and tier-1+ does not, `capUnits` there being
+      // Infinity — buildableUnits has no land ceiling left to bind it). Tier-1+ is uncapped:
+      // nothing bounds how much of the reachable shortfall a site COULD serve, so every reachable
+      // deficit counts in full (`take = short`, no capacity to exhaust).
+      let demandProximity = 0;
+      let totalServed = 0;
+      if (isTier0) {
+        let capOutput = capUnits * perUnit;
+        for (const r of reachable) {
+          if (capOutput <= 0) break;
+          const short = deficitMap.get(r.sysId) ?? 0;
+          if (short <= 0) continue;
+          const take = Math.min(capOutput, short);
+          demandProximity += take / r.cost;
+          totalServed += take;
+          capOutput -= take;
+        }
+      } else {
+        for (const r of reachable) {
+          const short = deficitMap.get(r.sysId) ?? 0;
+          if (short <= 0) continue;
+          demandProximity += short / r.cost;
+          totalServed += short;
+        }
       }
+
+      const family = FAMILY_BY_GOOD[goodId];
+      let hasComplex = false;
+      if (family) {
+        for (const t of COMPLEX_TYPES) {
+          if ((site.buildings[t] ?? 0) > 0) { hasComplex = true; break; }
+        }
+      }
+      const complexSurchargePerUnit = family && !hasComplex && totalServed > 0
+        ? workCostPerLevel(family.complexType) / totalServed
+        : 0;
+      const marginalWorkPerUnit = buildWorkPerUnit + complexSurchargePerUnit;
+
+      // Shared staffing factor: projected labour fulfilment of the marginal unit (one more level
+      // of `goodId`, on top of the site's CURRENT buildings and population — the same headcount
+      // projection `estStaffing` reads, lib/engine/build-options.ts) so an unstaffable site does
+      // not outrank a staffed hub. Headcount only (`labourFulfil`), not the skill-1/skill-2 ceiling
+      // gates: those ceilings are raised by co-built academies as part of the SAME bundle
+      // (`academyLift`/`fitFor`, below, sized off exactly this production count), so a fresh site
+      // with no academy yet would otherwise always score a skill-drawing good at 0 regardless of
+      // population — the ceiling isn't a property of the site, it's a property of the bundle this
+      // opportunity is about to build. Multiplicative: score scales directly with how much of the
+      // marginal unit's headcount draw the site's existing population actually covers. Never
+      // negative; for any site with population > 0 it is never exactly zero either, since
+      // `labourFulfilment` is a ratio of two positives — only a genuinely pop-0 site drives it to
+      // 0, which is correct: nothing there could staff the build at all. The after-pick labour gate
+      // (`fitFor`, below) is unchanged — this only affects RANKING.
+      const nextBuildings = { ...site.buildings, [goodId]: (site.buildings[goodId] ?? 0) + 1 };
+      const staffingFactor = labourFulfilment(site.population, labourDemand(nextBuildings));
+
+      // The score itself: demand served per unit of marginal construction work, scaled by
+      // staffing — the SAME unit for both tiers now, so one sort and one per-system
+      // best-opportunity comparison rank a single quantity instead of two different-scale ones.
+      const score = totalServed > 0 ? (demandProximity / marginalWorkPerUnit) * staffingFactor : 0;
       if (score <= 0) {
-        // Every entry `deficitSystemIds` contains carries a strictly positive shortfall by
-        // construction (see remainingByGood above), `perUnit` is bounded below by `baseUnit > 0` via
-        // familyAnchorBuff (never < 1), and `reachable` is non-empty here — so `score` reaching 0
-        // should not be possible given today's invariants. Guarded rather than assumed, and recorded
-        // as "no-consumer" (the closest fit of the five) rather than forcing a new reason for a state
-        // that should be unreachable.
+        // Both tiers now share the same staffing factor, so both legitimately reach 0 the same
+        // way: a population-0 site (the staffing fold above), which correctly has nothing to rank.
+        // `totalServed` reaching 0 independently of staffing should not happen given today's
+        // invariants — every entry `deficitSystemIds` contains carries a strictly positive
+        // shortfall by construction (see remainingByGood above), `perUnit` is bounded below by
+        // `baseUnit > 0` via familyAnchorBuff (never < 1), and `reachable` is non-empty here.
+        // Guarded rather than assumed either way, and recorded as "no-consumer" (the closest fit of
+        // the five) rather than forcing a new reason for what should be a rare, uninteresting state.
         recordUnrankedDrop(site.systemId, "no-consumer");
         continue;
       }
@@ -1002,9 +1045,6 @@ function planFactionBundles(
     // small colony stand up its FIRST extractor (whose jobs then pull migration) instead of deadlocking
     // on a full-staffing gate. Housing built this cycle adds no labour now — industry follows the
     // people already resident, never population that doesn't yet exist.
-    const remainingGeneral = site.generalSpace - generalSpaceUsed(site.buildings);
-    // Tier-0 extractors sit on dedicated deposit slots, not general space (mirrors generalSpaceUsed).
-    const prodSpacePerUnit = GOOD_TIER_BY_KEY[opp.goodId] === 0 ? 0 : effectiveSpaceCost(opp.goodId);
     // Full per-unit head count (unskilled + skill1 + skill2) — population staffs the WHOLE labour
     // draw of a production unit, not just its unskilled slice.
     const prodLabourPerUnit = labourTotal(BUILDING_TYPES[opp.goodId]?.labour ?? { unskilled: 0, skill1: 0, skill2: 0 });
@@ -1012,14 +1052,14 @@ function planFactionBundles(
     // Whole-level convergence: the desired production floored to whole levels (you commission whole
     // levels), then the academies and complex that GATE it rounded UP — a gate must fully exist to
     // license/anchor the production it serves (a fractional school licenses nobody). The largest
-    // whole-level count whose production + gates fit the general space and spare labour is found by
-    // binary search: the fit is monotone (more levels ⇒ more space + labour + academy/complex), so a
-    // landed level is never unstaffable or over-footprint. Recomputing the lift per candidate level
-    // mirrors the fractional planner's convergence on whole levels.
+    // whole-level count the site can STAFF is found by binary search: the fit is monotone (more
+    // levels ⇒ more labour), so a landed level is never unstaffable. Recomputing the lift per
+    // candidate level mirrors the fractional planner's convergence on whole levels.
     // Round the served RATE deficit UP to whole levels: capacity is lumpy, so meeting a flow smaller
     // than one level's output still commits one level (the design's accepted overshoot — the excess
     // fills the passive buffer). Flooring here would build NOTHING whenever a system's per-tick demand
-    // is below a single building's output, stranding every small consumer. Still capped by physical capacity.
+    // is below a single building's output, stranding every small consumer. Bounded only by demand — no
+    // land caps a factory build; `capUnits` is Infinity for every tier-1+ good.
     const maxLevels = Math.min(Math.floor(capUnits), Math.ceil(servedOutput / opp.perUnit));
     if (maxLevels < 1) {
       // Capacity is real (capUnits > 0, checked above) but too small for even one whole level.
@@ -1034,11 +1074,6 @@ function planFactionBundles(
       const institutes = a.institutes > 0 ? Math.ceil(a.institutes) : 0;
       const complexType = c.complexType;
       const complexLevels = c.count > 0 ? Math.ceil(c.count) : 0;
-      const spaceTotal =
-        levels * prodSpacePerUnit +
-        schools * effectiveSpaceCost(VOCATIONAL_SCHOOL_TYPE) +
-        institutes * effectiveSpaceCost(RESEARCH_INSTITUTE_TYPE) +
-        (complexType ? complexLevels * effectiveSpaceCost(complexType) : 0);
       const labourNeeded =
         levels * prodLabourPerUnit +
         schools * unskilledPerUnit(VOCATIONAL_SCHOOL_TYPE) +
@@ -1048,9 +1083,9 @@ function planFactionBundles(
       // population, so the lead unit is only ever fractionally idle (< 1 whole unit ⇒ decay-safe; the
       // strict `<` excludes the exact-boundary case that would leave a whole unit idle, and refuses to
       // build at all on a pop-0 world). Gating TOTAL demand — not a max(0)-floored spare — bounds the
-      // lead across opportunities so it can't stack into multi-unit under-staffing.
-      const fits = spaceTotal <= remainingGeneral &&
-        labourDemand(site.buildings) + labourNeeded < site.population + prodLabourPerUnit;
+      // lead across opportunities so it can't stack into multi-unit under-staffing. No land term: a
+      // factory, academy or complex bills no land at all.
+      const fits = labourDemand(site.buildings) + labourNeeded < site.population + prodLabourPerUnit;
       return { fits, schools, institutes, complexType, complexLevels };
     };
 
@@ -1220,9 +1255,8 @@ export function planFactionProposals(
 /** A controlled system a faction could settle: its substrate + the developed seed source (from hop data). */
 export interface ColonyEstablishCandidate {
   systemId: string;
-  habitableSpace: number;
-  generalSpace: number;
-  slotCap: ResourceVector;
+  peopleLand: number;
+  depositCounts: ResourceVector;
   /** Nearest developed same-faction system — the conserved seed source (non-null; the provider drops sourceless). */
   sourceSystemId: string;
 }
@@ -1233,7 +1267,8 @@ export interface ColonyEstablishParams extends ColonyValueParams {
   establishWork: number;
   /** Starter colony population, land-capped at proposal (EXPANSION.COLONY_SEED_POP). */
   seedPop: number;
-  /** Minimum habitable space to consider a controlled system a colony candidate (EXPANSION.DEVELOP_HABITABLE_FLOOR). */
+  /** Minimum habitable space to consider a controlled system a colony candidate — one whole housing
+   *  level of people land (`effectiveSpaceCost(HOUSING_TYPE)`). */
   habitableFloor: number;
   /** Weight on the seed-pop opportunity cost netted off colony value (COLONISATION.SEED_POP_COST_WEIGHT). */
   popCostWeight: number;
@@ -1303,7 +1338,7 @@ export function factionGoodDeficits(developed: BuildSystemState[]): GoodDeficit[
   return [...byGood].map(([goodId, rateDeficit]) => ({ goodId, rateDeficit }));
 }
 
-/** Seed + bundled-housing sizing for a colony at `habitableSpace` — the planner's whole-level rule,
+/** Seed + bundled-housing sizing for a colony at `peopleLand` — the planner's whole-level rule,
  *  shared with the player's direct-colony verb so both order identical projects. Null = the site
  *  can't hold one whole housing level (not viable).
  *
@@ -1327,17 +1362,17 @@ export function factionGoodDeficits(developed: BuildSystemState[]): GoodDeficit[
 export interface ColonySizing { seedPop: number; housingLevels: number; work: number }
 
 export function sizeColonyEstablish(
-  habitableSpace: number,
+  peopleLand: number,
   params: Pick<ColonyEstablishParams, "seedPop" | "establishWork">,
 ): ColonySizing | null {
   const housingCost = effectiveSpaceCost(HOUSING_TYPE);
-  const maxHousingLevels = housingCost > 0 ? Math.floor(Math.max(0, habitableSpace) / housingCost) : 0;
+  const maxHousingLevels = housingCost > 0 ? Math.floor(Math.max(0, peopleLand) / housingCost) : 0;
   const habitableCap = maxHousingLevels * POP_CENTRE_DENSITY;
   const seedPop = Math.min(params.seedPop, habitableCap);
   const housingLevels = Math.min(maxHousingLevels, Math.ceil(seedPop / POP_CENTRE_DENSITY));
   const work = params.establishWork + housingLevels * workCostPerLevel(HOUSING_TYPE);
   // `Number.isFinite` and not `< 1` alone: every comparison against NaN is false, so a NaN
-  // habitableSpace would slip past the viability guard and put NaN seedPop/housingLevels/work into a
+  // peopleLand would slip past the viability guard and put NaN seedPop/housingLevels/work into a
   // construction project and thence into a save, where JSON.stringify turns them into null. `work`
   // is checked on its own account rather than inferred from the other two — it also carries
   // `establishWork` straight from the caller.
@@ -1370,7 +1405,7 @@ export function assessColonyCandidates(
   if (candidates.length === 0) return [];
 
   const factionSystems: FactionSystemState[] = developed.map((s) => ({
-    buildings: s.buildings, habitableSpace: s.habitableSpace, slotCap: s.slotCap,
+    buildings: s.buildings, peopleLand: s.peopleLand, depositCounts: s.depositCounts,
   }));
   const missing = factionMissingResources(factionSystems);
   const sigma = factionSaturation(factionSystems);
@@ -1384,11 +1419,11 @@ export function assessColonyCandidates(
   const proposals: ColonyProposal[] = [];
   for (const c of candidates) {
     if (inFlight.has(c.systemId)) continue;                 // already being established
-    if (c.habitableSpace < params.habitableFloor) continue; // DEVELOP_HABITABLE_FLOOR gate stands
+    if (c.peopleLand < params.habitableFloor) continue; // below one whole housing level of land
 
     // Land-sized seed + bundled housing, on WHOLE housing levels so popCap ≥ seedPop exactly (no rounding
     // gap): seed capped to the whole-level habitable capacity; housing sized to house it, land-bounded.
-    const sizing = sizeColonyEstablish(c.habitableSpace, params);
+    const sizing = sizeColonyEstablish(c.peopleLand, params);
     if (sizing === null) continue; // no whole housing level → not viable, skip
     const { seedPop, housingLevels, work } = sizing;
 

@@ -38,8 +38,9 @@ function mkSys(p: Partial<GeneratedSystem> & { index: number }): GeneratedSystem
   return {
     name: `s${p.index}`, economyType: "extraction", sunClass: "yellow",
     bodies: [], popCap: 0, population: 0, bodyDanger: 0, buildings: {},
-    availableSpace: 0, generalSpace: 0, habitableSpace: 0,
-    slotCap: emptyResourceVector(), yieldMult: emptyResourceVector(),
+ peopleLand: 0,
+    depositCounts: emptyResourceVector(), yieldMult: emptyResourceVector(),
+    extractionEfficiency: emptyResourceVector(),
     x: 0, y: 0, regionIndex: 0, isGateway: false, description: "",
     ...p,
   };
@@ -421,7 +422,7 @@ describe("generateConnections", () => {
 // ── Emergent starting condition (home-system prefab) ────────────
 
 describe("stampHomeworldPrefabs", () => {
-  it("stamps the home-system prefab onto a garden body for each homeworld, leaves the rest bare", () => {
+  it("stamps the home-system prefab onto a temperate body for each homeworld, leaves the rest bare", () => {
     const systems = [
       mkSys({ index: 0, population: 0, buildings: {} }),
       mkSys({ index: 1, population: 0, buildings: {} }),
@@ -430,13 +431,13 @@ describe("stampHomeworldPrefabs", () => {
 
     stampHomeworldPrefabs(systems, new Set([0]));
 
-    // Homeworld: stamped with the prefab, on a prepended guaranteed garden body.
+    // Homeworld: stamped with the prefab, on a prepended guaranteed temperate body.
     expect(systems[0].buildings).toEqual(HOME_SYSTEM_PREFAB.buildings);
     expect(systems[0].population).toBe(HOME_SYSTEM_PREFAB.population);
     expect(systems[0].popCap).toBe(HOME_SYSTEM_PREFAB.population); // housing sized so popCap == residents
     expect(systems[0].bodies.length).toBe(homeworldBodiesBefore + 1);
-    expect(systems[0].bodies[0].bodyType).toBe("garden_world");
-    expect(systems[0].habitableSpace).toBeGreaterThan(0);
+    expect(systems[0].bodies[0].bodyType).toBe("temperate_world");
+    expect(systems[0].peopleLand).toBeGreaterThan(0);
     // Recomputed label: the stamped capital's population clears the developed gate, so it lands on one of
     // the population-gated developed types (never a bare deposit-driven one).
     expect(["core", "industrial", "tech"]).toContain(systems[0].economyType);

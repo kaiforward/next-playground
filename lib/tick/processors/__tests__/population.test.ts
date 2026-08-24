@@ -12,8 +12,9 @@ import type { CivilianDemandBasis } from "@/lib/engine/physical-economy";
 import type { SupplyRegime, SupplyState } from "@/lib/engine/population";
 import { updateExpectation } from "@/lib/engine/expectation";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
-import { CROWDING, EXPECTATION_PARAMS } from "@/lib/constants/population";
+import { ABANDON_POP_FLOOR, CROWDING, EXPECTATION_PARAMS } from "@/lib/constants/population";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
+import { EXPANSION } from "@/lib/constants/expansion";
 
 // Occupancy at which the growth brake reaches zero and the crowding-pressure ramp saturates
 // — one boundary these fixtures hand to the processor, which threads it to both terms.
@@ -59,7 +60,8 @@ function sys(id: string, population: number, popCap: number, unrest = 0, buildin
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed", governmentType: "federation",
     population, popCap, unrest, buildings, buildingIdleCycles: {}, collapseDebt: 0,
-    yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+    yields: unitResourceVector(), extractionEff: unitResourceVector(),
+    depositCounts: emptyResourceVector(), peopleLand: 0,
   };
 }
 function market(systemId: string, goodId: string): WorldMarket {
@@ -1214,9 +1216,10 @@ describe("population processor: growth-term instrumentation", () => {
   });
 });
 
-// ── Abandonment Rule 2 (the death line): the processor REPORTS a famine system whose post-delta
-// population has collapsed below ABANDON_POP_FLOOR — it never writes control itself, only names
-// the candidate for the tick body to reset (docs/active/gameplay/colonisation.md, abandonment). ──
+// ── Abandonment Rule 2 (the death line): the processor REPORTS any system whose post-delta
+// population has collapsed below ABANDON_POP_FLOOR, famine or not — it never writes control
+// itself, only names the candidate for the tick body to reset
+// (docs/active/gameplay/colonisation.md, abandonment). ──
 
 describe("population processor: abandonment reporting (Rule 2)", () => {
   // FROZEN_POP (growth/decline/death all zero) makes the fixture's starting population the
@@ -1260,7 +1263,11 @@ describe("population processor: abandonment reporting (Rule 2)", () => {
     expect(result.abandonedSystems).toBeUndefined();
   });
 
-  it("does not report a below-floor system that is NOT in survival shortfall (the famine conjunct)", async () => {
+  it("reports a below-floor system that is NOT in survival shortfall — the dropped famine conjunct", async () => {
+    // Abandonment Rule 2 no longer requires famine: a colony declining to empty under ordinary
+    // (non-famine) stress abandons the same as a starved one. shortfallCtx(false) marks this
+    // system NOT in survival shortfall; the frozen population sits below ABANDON_POP_FLOOR (1)
+    // regardless, and that alone is now enough.
     const world = new InMemoryPopulationWorld({ systems: [sys("a", 0.5, 1000, 0)], markets: [] });
     const result = await runPopulationProcessor(world, shortfallCtx(false), {
       unrest: { slopeBase: 1, slopeShortage: 1, decay: 0 },
@@ -1268,7 +1275,7 @@ describe("population processor: abandonment reporting (Rule 2)", () => {
       expectation: EXPECTATION_PARAMS,
       interval: 24,
     });
-    expect(result.abandonedSystems).toBeUndefined();
+    expect(result.abandonedSystems).toEqual(["a"]);
   });
 
   it("keeps the field absent entirely (not an empty array) when nothing qualifies — the sparse convention", async () => {
@@ -1308,5 +1315,361 @@ describe("population processor: abandonment reporting (Rule 2)", () => {
       interval: 24,
     });
     expect(result.abandonedSystems).toEqual(["dying"]);
+  });
+});
+
+// ── Abandonment by cause: the same Rule 2 findings above, tagged with whether famine
+// (survivalShortfall) was present at the triggering cycle — famine-collapse vs decline-to-empty.
+// Purely observational (harness instrumentation only), built from the same loop as
+// abandonedSystems, so the two can never disagree on membership. ──
+
+describe("population processor: abandonment reporting (by cause)", () => {
+  function shortfallCtx(survivalShortfall: boolean): TickContext {
+    return {
+      tick: 0,
+      results: new Map([["economy", {
+        economySignals: {
+          dissatisfactionBySystem: new Map([["a", 0.5]]),
+          supplyStateBySystem: new Map([
+            ["a", { regime: "famine", survivalShortfall, criticalWeight: 0, emptyBasket: false }],
+          ]),
+          sellingFactorBySystem: new Map(),
+          realisedProductionBySystem: new Map(),
+          productionSuppressBySystem: new Map(),
+        },
+      }]]),
+    };
+  }
+
+  it("tags a famine-present abandonment famine-collapse", async () => {
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 0.5, 1000, 0)], markets: [] });
+    const result = await runPopulationProcessor(world, shortfallCtx(true), {
+      unrest: { slopeBase: 1, slopeShortage: 1, decay: 0 },
+      population: FROZEN_POP,
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    });
+    expect(result.abandonedSystemsByCause?.get("a")).toBe("famine-collapse");
+  });
+
+  it("tags a non-famine abandonment decline-to-empty — the dropped conjunct's other path", async () => {
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 0.5, 1000, 0)], markets: [] });
+    const result = await runPopulationProcessor(world, shortfallCtx(false), {
+      unrest: { slopeBase: 1, slopeShortage: 1, decay: 0 },
+      population: FROZEN_POP,
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    });
+    expect(result.abandonedSystemsByCause?.get("a")).toBe("decline-to-empty");
+  });
+
+  it("keeps the field absent entirely when nothing qualifies — the sparse convention", async () => {
+    const world = new InMemoryPopulationWorld({
+      systems: [sys("a", 500, 1000, 0)],
+      markets: [market("a", "food")],
+    });
+    const result = await runPopulationProcessor(world, ctxWithD(new Map([["a", 0]])), PARAMS);
+    expect(result.abandonedSystemsByCause).toBeUndefined();
+    expect("abandonedSystemsByCause" in result).toBe(false);
+  });
+
+  it("sums to abandonedSystems — every reported abandonment carries exactly one cause tag, no orphans, no double count", async () => {
+    // A mixed cohort: one famine-driven collapse, one non-famine decline, one system that stays
+    // healthy — the same shape the harness's whole-run count folds over many cycles.
+    const world = new InMemoryPopulationWorld({
+      systems: [sys("dying-famine", 0.5, 1000, 0), sys("dying-decline", 0.5, 1000, 0), sys("fine", 5, 1000, 0)],
+      markets: [],
+    });
+    const ctx: TickContext = {
+      tick: 0,
+      results: new Map([["economy", {
+        economySignals: {
+          dissatisfactionBySystem: new Map([["dying-famine", 0.5], ["dying-decline", 0.5], ["fine", 0.5]]),
+          supplyStateBySystem: new Map([
+            ["dying-famine", { regime: "famine", survivalShortfall: true, criticalWeight: 0, emptyBasket: false }],
+            ["dying-decline", { regime: "deprived", survivalShortfall: false, criticalWeight: 0, emptyBasket: false }],
+            ["fine", { regime: "famine", survivalShortfall: true, criticalWeight: 0, emptyBasket: false }],
+          ]),
+          sellingFactorBySystem: new Map(),
+          realisedProductionBySystem: new Map(),
+          productionSuppressBySystem: new Map(),
+        },
+      }]]),
+    };
+    const result = await runPopulationProcessor(world, ctx, {
+      unrest: { slopeBase: 1, slopeShortage: 1, decay: 0 },
+      population: FROZEN_POP,
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    });
+    expect(result.abandonedSystems).toEqual(
+      expect.arrayContaining(["dying-famine", "dying-decline"]),
+    );
+    expect(result.abandonedSystems?.length).toBe(2);
+    // The identity Prove 4 checks: cause-tag count sums to the total abandonments this cycle
+    // found, with no member left untagged and no extra member invented.
+    expect(result.abandonedSystemsByCause?.size).toBe(result.abandonedSystems?.length);
+    for (const id of result.abandonedSystems ?? []) {
+      expect(result.abandonedSystemsByCause?.has(id)).toBe(true);
+    }
+    expect(result.abandonedSystemsByCause?.get("dying-famine")).toBe("famine-collapse");
+    expect(result.abandonedSystemsByCause?.get("dying-decline")).toBe("decline-to-empty");
+  });
+});
+
+// ── Fill-best-first habitability quality: the fold-site cache (lib/engine/habitability.ts) ──
+// The cached value only advances when the occupied prefix crosses a body boundary
+// (frontierIndex changing) — population movement within the same body must leave it untouched,
+// even though the honest fold would compute a different number for it. Observable at the cache
+// itself (the persisted system-row reading), never via a spy on internal call counts.
+
+describe("population processor: fill-best-first habitability quality", () => {
+  // Three bodies, out-of-score order on purpose (the fold sorts internally): A (score 1.0, land
+  // 100), B (score 0.6, land 50), C (score 0.3, land 50) — total 200.
+  const BODIES = [
+    { score: 0.3, peopleLand: 50 }, // C
+    { score: 1.0, peopleLand: 100 }, // A
+    { score: 0.6, peopleLand: 50 }, // B
+  ];
+
+  function sysWithBodies(population: number): TickSystem {
+    return { ...sys("h", population, 100_000, 0), habitabilityBodies: BODIES };
+  }
+
+  // FROZEN_POP: growth/decline/overshoot all zero, so a run leaves population exactly where the
+  // fixture set it — isolates the quality cache from the growth dynamics entirely.
+  const runOnce = (world: InMemoryPopulationWorld) => runPopulationProcessor(world, ctxWithD(new Map([["h", 0]])), {
+    unrest: RATES,
+    population: FROZEN_POP,
+    expectation: EXPECTATION_PARAMS,
+    interval: 24,
+  });
+
+  it("computes and caches on the FIRST cycle a never-before-assessed system is resolved", async () => {
+    // occupiedLand = 2200/20 = 110: A fully occupied (100) + 10 of B's 50 — the mid-prefix arm.
+    const world = new InMemoryPopulationWorld({ systems: [sysWithBodies(2200)], markets: [] });
+    await runOnce(world);
+    const h = world.systems.find((s) => s.id === "h")!;
+    // weighted = 1.0*100 + 0.6*10 = 106; quality = 106/110.
+    expect(h.habitabilityQuality?.quality).toBeCloseTo(106 / 110, 12);
+    expect(h.habitabilityQuality?.frontierIndex).toBe(1); // B (index 1 after sort) is marginal
+  });
+
+  it("leaves the cached quality UNCHANGED while population moves within the same marginal body", async () => {
+    const world = new InMemoryPopulationWorld({ systems: [sysWithBodies(2200)], markets: [] });
+    await runOnce(world);
+    const afterFirst = world.systems.find((s) => s.id === "h")!.habitabilityQuality;
+    if (afterFirst === undefined) throw new Error("Expected a cached reading after the first run");
+
+    // Move population to occupiedLand = 140 (still inside B: A full 100 + 40 of B's 50) —
+    // frontierIndex stays 1. The HONEST fold at this population reads a different number
+    // ((100*1.0 + 40*0.6) / 140 = 124/140 ≈ 0.8857), so a passing test here proves the cache
+    // really did skip the recompute rather than coincidentally landing on the same figure.
+    const honestAtSecondPopulation = (100 * 1.0 + 40 * 0.6) / 140;
+    expect(honestAtSecondPopulation).not.toBeCloseTo(afterFirst.quality, 6);
+
+    world.systems[0].population = 2800; // occupiedLand 140
+    await runOnce(world);
+    const afterSecond = world.systems.find((s) => s.id === "h")!.habitabilityQuality;
+    expect(afterSecond?.frontierIndex).toBe(1); // still inside B — no boundary crossed
+    expect(afterSecond?.quality).toBe(afterFirst.quality); // byte-identical: the cache never moved
+  });
+
+  it("recomputes the cached quality once the occupied prefix crosses a body boundary", async () => {
+    const world = new InMemoryPopulationWorld({ systems: [sysWithBodies(2200)], markets: [] });
+    await runOnce(world);
+    const afterFirst = world.systems.find((s) => s.id === "h")!.habitabilityQuality;
+    if (afterFirst === undefined) throw new Error("Expected a cached reading after the first run");
+
+    // Push past B entirely into C: occupiedLand = 180 (A 100 + B 50 + 30 of C's 50).
+    // frontierIndex becomes 2 (C, the sorted list's last index) — a genuine boundary crossing.
+    world.systems[0].population = 3600;
+    await runOnce(world);
+    const afterThird = world.systems.find((s) => s.id === "h")!.habitabilityQuality;
+    expect(afterThird?.frontierIndex).toBe(2);
+    expect(afterThird?.frontierIndex).not.toBe(afterFirst.frontierIndex);
+    // weighted = 1.0*100 + 0.6*50 + 0.3*30 = 139; quality = 139/180.
+    expect(afterThird?.quality).toBeCloseTo(139 / 180, 12);
+    expect(afterThird?.quality).not.toBeCloseTo(afterFirst.quality, 6);
+  });
+
+  it("computes once for the dominant single-people-land-body case: quality stays exactly the top body's score at every population level", async () => {
+    const oneBody = [{ score: 0.6, peopleLand: 50 }];
+    const world = new InMemoryPopulationWorld({
+      systems: [{ ...sys("h", 200, 100_000, 0), habitabilityBodies: oneBody }],
+      markets: [],
+    });
+    await runOnce(world);
+    const afterFirst = world.systems.find((s) => s.id === "h")!.habitabilityQuality;
+    expect(afterFirst?.quality).toBe(0.6);
+    expect(afterFirst?.frontierIndex).toBe(0);
+
+    // Grow well past the single body's land (occupiedLand 200 vs land 50 — the clamp arm) and
+    // rerun: frontierIndex is STILL 0 (the sorted list's only, and therefore last, index) both
+    // before and after, so this is the "never recomputes" path too — and correctly so, since the
+    // honest clamp-arm mean for a single body is that body's own score again.
+    world.systems[0].population = 4000;
+    await runOnce(world);
+    const afterSecond = world.systems.find((s) => s.id === "h")!.habitabilityQuality;
+    expect(afterSecond?.frontierIndex).toBe(0);
+    expect(afterSecond?.quality).toBe(0.6);
+  });
+
+  it("keeps recomputing past the terminal crossing: frontier pinned on the last body, quality keeps falling as occupancy grows", async () => {
+    // Push into C (the sorted list's last index, frontierIndex 2) without reaching the clamp arm:
+    // occupiedLand = 180 (A 100 + B 50 + 30 of C's 50), still short of totalLand 200.
+    const world = new InMemoryPopulationWorld({ systems: [sysWithBodies(3600)], markets: [] });
+    await runOnce(world);
+    const afterFirst = world.systems.find((s) => s.id === "h")!.habitabilityQuality;
+    if (afterFirst === undefined) throw new Error("Expected a cached reading after the first run");
+    expect(afterFirst.frontierIndex).toBe(2); // C, the last index — an index-only trigger can never fire again
+
+    // Grow further, still inside C (occupiedLand 195, still short of totalLand 200) — frontierIndex
+    // stays 2, so the old index-only trigger would freeze the cache here forever. The honest fold
+    // keeps sliding toward C's worse score as more of the population lands on it, so the cache must
+    // keep tracking it.
+    world.systems[0].population = 3900;
+    await runOnce(world);
+    const afterSecond = world.systems.find((s) => s.id === "h")!.habitabilityQuality;
+    expect(afterSecond?.frontierIndex).toBe(2);
+    // weighted = 1.0*100 + 0.6*50 + 0.3*45 = 143.5; quality = 143.5/195.
+    expect(afterSecond?.quality).toBeCloseTo(143.5 / 195, 12);
+    expect(afterSecond?.quality).toBeLessThan(afterFirst.quality);
+  });
+});
+
+// ── Growth coupling (Task 8): quality multiplies the growth term only. Decline/death and the
+// processor's own growth/death isolation folds must stay exact regardless of quality. ──
+
+describe("population processor: growth-quality coupling", () => {
+  const NO_RELAX = { slopeBase: 0, slopeShortage: 0, decay: 0 };
+  // A single body, land far past anything these fixtures occupy, so quality reads exactly the
+  // body's own score at every population level in this suite (frontierIndex stays 0, never the
+  // clamp arm) — isolates the coupling from the fill-best-first fold itself (Task 7's concern).
+  const bodyOfScore = (score: number) => [{ score, peopleLand: 1000 }];
+
+  function coupledSystem(quality: number): TickSystem {
+    return { ...sys("a", 1050, 1000, 0.9), habitabilityBodies: bodyOfScore(quality) };
+  }
+
+  it("scales growth by quality while decline and overshoot-death stay bit-identical — isolation folds attribute exactly", async () => {
+    // r = 1050/1000 = 1.05 (inside the brake ramp, not past it) -> crowdFactor = 20/27.
+    // unrest 0.9 is above overshootDeathUnrestGate (0.65) -> death fires; declineRate 0 removes
+    // the decline term so growth and death are the only two moving parts.
+    const params = {
+      unrest: NO_RELAX,
+      population: { growthRate: 0.1, declineRate: 0, overshootDeathRate: 0.05, ...POP_SHAPE },
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    };
+    const full = new InMemoryPopulationWorld({ systems: [coupledSystem(1)], markets: [] });
+    const half = new InMemoryPopulationWorld({ systems: [coupledSystem(0.5)], markets: [] });
+    const resultFull = await runPopulationProcessor(full, ctxWithD(new Map([["a", 0]])), params);
+    const resultHalf = await runPopulationProcessor(half, ctxWithD(new Map([["a", 0]])), params);
+
+    // growth = 0.1 * 1050 * (20/27) * 1 * quality = 2100/27 * quality.
+    const rawGrowth = 2100 / 27;
+    expect(resultFull.growthBySystem?.get("a")).toBeCloseTo(rawGrowth, 9);
+    expect(resultHalf.growthBySystem?.get("a")).toBeCloseTo(rawGrowth * 0.5, 9);
+    expect(resultHalf.growthBySystem?.get("a")).toBeCloseTo((resultFull.growthBySystem?.get("a") ?? Number.NaN) / 2, 9);
+
+    // death = 0.05 * (1050 - 1000) * 0.9 = 2.25, identical at both quality values — the death
+    // term never reads quality at all.
+    expect(resultFull.overshootDeathBySystem?.get("a")).toBeCloseTo(2.25, 9);
+    expect(resultHalf.overshootDeathBySystem?.get("a")).toBeCloseTo(2.25, 9);
+    expect(resultFull.overshootDeathBySystem?.get("a")).toBe(resultHalf.overshootDeathBySystem?.get("a"));
+  });
+
+  it("reads THIS CYCLE'S OPENING cached quality for growth, never a fresh per-cycle fold", async () => {
+    // Two bodies: A (score 1.0, land 20) fully occupied by the opening population (400/20 = 20),
+    // B (score 0.2, land 1000) picks up everything past it. The OPENING cache (quality 1.0,
+    // frontierIndex 0, seeded by a first run at population exactly 400) must drive this cycle's
+    // growth even though the post-delta population has moved deep into B — the honest fresh read
+    // at the post-delta population would be far lower.
+    const bodies = [{ score: 1.0, peopleLand: 20 }, { score: 0.2, peopleLand: 1000 }];
+    const world = new InMemoryPopulationWorld({
+      systems: [{ ...sys("a", 400, 100_000, 0), habitabilityBodies: bodies }],
+      markets: [],
+    });
+    // Seed the cache at quality 1.0 (frontierIndex 0) with a frozen run.
+    await runPopulationProcessor(world, ctxWithD(new Map([["a", 0]])), {
+      unrest: NO_RELAX, population: FROZEN_POP, expectation: EXPECTATION_PARAMS, interval: 24,
+    });
+    const seeded = world.systems.find((s) => s.id === "a")!;
+    expect(seeded.habitabilityQuality).toEqual({ quality: 1, frontierIndex: 0, partial: true });
+
+    // Now grow hard for one cycle: r stays tiny (popCap 100_000) so crowdFactor = 1 throughout.
+    const params = {
+      unrest: NO_RELAX,
+      population: { growthRate: 0.5, declineRate: 0, overshootDeathRate: 0, ...POP_SHAPE },
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    };
+    const result = await runPopulationProcessor(world, ctxWithD(new Map([["a", 0]])), params);
+    // growth = 0.5 * 400 * 1 * 1 * 1.0 (the OPENING cache) = 200 — not the honest fresh quality at
+    // the post-delta population (occupiedLand (400+200)/20 = 30, deep into B, honest quality
+    // (20*1.0 + 10*0.2)/30 = 22/30 ≈ 0.733, which would give a smaller growth figure).
+    expect(result.growthBySystem?.get("a")).toBeCloseTo(200, 9);
+  });
+
+  it("missing-cache fallback: bodies present computes a fresh quality from the OPENING population", async () => {
+    // No cache (a never-before-assessed system) but a real body list: falls back to a fresh
+    // compute at this cycle's opening population (200 -> occupiedLand 10, well inside the single
+    // body's 50 land) rather than a neutral default.
+    const bodies = [{ score: 0.4, peopleLand: 50 }];
+    const world = new InMemoryPopulationWorld({
+      systems: [{ ...sys("a", 200, 100_000, 0), habitabilityBodies: bodies }],
+      markets: [],
+    });
+    const params = {
+      unrest: NO_RELAX,
+      population: { growthRate: 0.1, declineRate: 0, overshootDeathRate: 0, ...POP_SHAPE },
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    };
+    const result = await runPopulationProcessor(world, ctxWithD(new Map([["a", 0]])), params);
+    // growth = 0.1 * 200 * 1 * 1 * 0.4 = 8 — the real body score, not a neutral 1 (which would
+    // read 20).
+    expect(result.growthBySystem?.get("a")).toBeCloseTo(8, 9);
+  });
+
+  it("missing-cache fallback: no bodies at all reads neutral quality (1) — never a silent zero", async () => {
+    // No cache, no `habitabilityBodies` either (a fixture predating Task 7, or a defensive gap):
+    // `systemHabitabilityQuality`'s own empty-list reading is 0, which would erase this system's
+    // growth entirely if trusted here. The fallback must read neutral instead.
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 200, 100_000, 0)], markets: [] });
+    const params = {
+      unrest: NO_RELAX,
+      population: { growthRate: 0.1, declineRate: 0, overshootDeathRate: 0, ...POP_SHAPE },
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    };
+    const result = await runPopulationProcessor(world, ctxWithD(new Map([["a", 0]])), params);
+    // growth = 0.1 * 200 * 1 * 1 * 1 (neutral) = 20, not 0.
+    expect(result.growthBySystem?.get("a")).toBeCloseTo(20, 9);
+  });
+
+  it("a fresh seed colony (COLONY_SEED_POP 2) survives an unlucky first cycle — the floor sits below the seed, not above it", async () => {
+    // A marginal-land world (quality 0.3) at exactly COLONY_SEED_POP, hit with high unrest and
+    // zero satisfaction on its very first cycle (no cache, no famine): net-declines, but
+    // ABANDON_POP_FLOOR (1) sits below the seed (2), so one unlucky cycle alone can't cross it.
+    const bodies = [{ score: 0.3, peopleLand: 1000 }];
+    const world = new InMemoryPopulationWorld({
+      systems: [{ ...sys("a", EXPANSION.COLONY_SEED_POP, 10, 0.9), habitabilityBodies: bodies }],
+      markets: [],
+    });
+    const params = {
+      unrest: NO_RELAX,
+      population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0, ...POP_SHAPE },
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    };
+    const result = await runPopulationProcessor(world, ctxWithD(new Map([["a", 1]])), params);
+    const a = world.systems.find((s) => s.id === "a")!;
+    // growth = 0.02*2*1*(1-1)*0.3 = 0 (d = 1 zeroes satisfaction); decline = 0.02*2*0.9 = 0.036.
+    // population after = 2 - 0.036 = 1.964 — well above ABANDON_POP_FLOOR (1).
+    expect(a.population).toBeCloseTo(EXPANSION.COLONY_SEED_POP - 0.036, 9);
+    expect(a.population).toBeGreaterThan(ABANDON_POP_FLOOR);
+    expect(result.abandonedSystems).toBeUndefined();
   });
 });

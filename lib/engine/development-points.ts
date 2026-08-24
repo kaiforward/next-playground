@@ -89,11 +89,9 @@ function finiteNonNegative(value: number): number {
 /** The static substrate `developmentPotential` scores at full build-out (see its doc comment). */
 export interface DevelopmentPotentialInput {
   /** Habitable land — housed at full occupancy for the ceiling's population term. */
-  habitableSpace: number;
-  /** Total worked-able deposit slots across all resources (Σ slot caps) — every slot worked at the ceiling. */
-  depositSlots: number;
-  /** Fungible general space — all given to staffed production at the ceiling. */
-  generalSpace: number;
+  peopleLand: number;
+  /** Total worked-able deposit counts across all resources (Σ per-resource counts) — every slot worked at the ceiling. */
+  depositCounts: number;
 }
 
 /**
@@ -104,33 +102,34 @@ export interface DevelopmentPotentialInput {
  * `habitablePotentialPop`), every deposit slot worked, all general space given to staffed production,
  * and the one allowed specialisation complex built:
  *
- *  - populationTerm: `habitablePotentialPop(habitableSpace) / POP_CENTRE_DENSITY` — the same
+ *  - populationTerm: `habitablePotentialPop(peopleLand) / POP_CENTRE_DENSITY` — the same
  *    heads-to-level-equivalent conversion `developmentPoints` uses on raw population, base heads only
  *    (no skilled uplift — the simplest defensible ceiling). Population dominates the score for most
  *    systems, so this is the primary driver; the industry term below is second-order.
- *  - industryTerm: `industryPotential(depositSlots, generalSpace)` — every deposit slot worked plus all
- *    general space as factory, in the same space units `industryPotential` already defines — valued at
- *    a single middle tier (`TIER_WEIGHT[1]`, tier-1) rather than guessing a tier-0/1/2 mix; a real
- *    system's mixed build would generally score somewhere under this uniform ceiling.
- *  - complexTerm: one `COMPLEX_POINTS` bump (the industrial pinnacle, cap 1/system), gated on having any
- *    general space to build it on — so a system with literally nothing to build on reads a true 0, not a
- *    phantom complex.
+ *  - industryTerm: `industryPotential(depositCounts)` — every deposit slot worked, in the same space
+ *    units `industryPotential` already defines — valued at a single middle tier (`TIER_WEIGHT[1]`,
+ *    tier-1) rather than guessing a tier-0/1/2 mix; a real system's mixed build would generally score
+ *    somewhere under this uniform ceiling. Factories bill no land after the habitability-seeding cut
+ *    and are not part of this ceiling — extraction is the whole industry axis.
+ *  - complexTerm: one `COMPLEX_POINTS` bump (the industrial pinnacle, cap 1/system), gated on the
+ *    system having ANY substrate to build it on (habitable land or a deposit slot) — so a system with
+ *    literally nothing to build on reads a true 0, not a phantom complex.
  *
  * Guards: pure, deterministic, always finite and ≥ 0 — degenerate/negative inputs clamp to 0 rather than
- * propagating NaN/Infinity; a system with no habitable land, no deposit slots, and no general space
- * returns exactly 0 (the consumer treats potential 0 ⇒ pct 0).
+ * propagating NaN/Infinity; a system with no habitable land and no deposit slots returns exactly 0 (the
+ * consumer treats potential 0 ⇒ pct 0).
  *
- * First-draft calibration knob (which tier values general-space production) — tune in visual smoke; only
- * the shape above (a legible ceiling a real system's developmentPoints generally sits under) is fixed.
+ * First-draft calibration knob (which tier values worked-deposit production) — tune in visual smoke;
+ * only the shape above (a legible ceiling a real system's developmentPoints generally sits under) is
+ * fixed.
  */
 export function developmentPotential(input: DevelopmentPotentialInput): number {
-  const habitableSpace = finiteNonNegative(input.habitableSpace);
-  const depositSlots = finiteNonNegative(input.depositSlots);
-  const generalSpace = finiteNonNegative(input.generalSpace);
+  const peopleLand = finiteNonNegative(input.peopleLand);
+  const depositCounts = finiteNonNegative(input.depositCounts);
 
-  const populationTerm = habitablePotentialPop(habitableSpace) / POP_CENTRE_DENSITY;
-  const industryTerm = industryPotential(depositSlots, generalSpace) * DEVELOPMENT_POINTS.TIER_WEIGHT[1];
-  const complexTerm = generalSpace > 0 ? DEVELOPMENT_POINTS.COMPLEX_POINTS : 0;
+  const populationTerm = habitablePotentialPop(peopleLand) / POP_CENTRE_DENSITY;
+  const industryTerm = industryPotential(depositCounts) * DEVELOPMENT_POINTS.TIER_WEIGHT[1];
+  const complexTerm = peopleLand > 0 || depositCounts > 0 ? DEVELOPMENT_POINTS.COMPLEX_POINTS : 0;
 
   return populationTerm + industryTerm + complexTerm;
 }

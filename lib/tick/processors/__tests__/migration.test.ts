@@ -29,7 +29,8 @@ function sys(id: string, factionId: string | null, population: number, popCap: n
     id, name: id, economyType: "extraction", regionId: "r1", factionId,
     control: factionId ? "developed" : "unclaimed", governmentType: "federation",
     population, popCap, unrest, buildings, buildingIdleCycles: {}, collapseDebt: 0,
-    yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+    yields: unitResourceVector(), extractionEff: unitResourceVector(),
+    depositCounts: emptyResourceVector(), peopleLand: 0,
   };
 }
 const conn = (a: string, b: string, fuelCost = 10): TickConnection => ({ fromSystemId: a, toSystemId: b, fuelCost });
@@ -209,5 +210,29 @@ describe("migration throughput instrumentation (migrationMoved)", () => {
     const after = world.systems.find((s) => s.id === "colony")!.population;
     expect(result.migrationMoved?.diffusion).toBe(0);
     expect(result.migrationMoved?.colonists).toBeCloseTo(after - before, 5);
+  });
+
+  it("colonistDeliveryBySystem carries the same delivery, keyed by the receiving system — the harness's pump-watch input", async () => {
+    const systems = [sys("core", "f1", 1000, 1000, 0), sys("colony", "f1", 10, 1000, 0)];
+    const world = new InMemoryMigrationWorld({ systems }, [conn("core", "colony")]);
+    const params = {
+      ...PARAMS,
+      flow: { ...PARAMS.flow, maxOutflowFraction: 0 }, // isolates delivery — diffusion contributes nothing
+      delivery: { sourceOutflowCap: 0.05, minSourcePopulation: 100 },
+    };
+    const before = world.systems.find((s) => s.id === "colony")!.population;
+    const result = await runMigrationProcessor(world, ctx(EDGE_TICK), params);
+    const after = world.systems.find((s) => s.id === "colony")!.population;
+    expect(result.colonistDeliveryBySystem?.get("colony")).toBeCloseTo(after - before, 5);
+    // The source's own row is a negative delta in the underlying deltas, deliberately excluded —
+    // only the positive (sink) side is instrumentation, matching colonistsMoved's own convention.
+    expect(result.colonistDeliveryBySystem?.has("core")).toBe(false);
+  });
+
+  it("omits colonistDeliveryBySystem entirely when nothing delivered — the sparse convention", async () => {
+    const systems = [sys("a", "f1", 500, 1000, 0)];
+    const world = new InMemoryMigrationWorld({ systems }, []);
+    const result = await runMigrationProcessor(world, ctx(EDGE_TICK), PARAMS);
+    expect(result.colonistDeliveryBySystem).toBeUndefined();
   });
 });

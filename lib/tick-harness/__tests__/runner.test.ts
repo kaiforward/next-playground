@@ -71,7 +71,10 @@ describe("runTickHarness: the role partition", () => {
 // and folded a DIFFERENT way (rank-then-take-first, against the runner's running-best loop).
 
 describe("runTickHarness: the region overview", () => {
-  const CONFIG: HarnessConfig = { systemCount: 20, seed: 7, tickCount: 1 };
+  // Seed 2 (over seed 7's archetype-table galaxy) is where the empty-region, tie-break and
+  // tie-break-direction branches below are all live at once — re-derived by search, not carried
+  // over from the old substrate model.
+  const CONFIG: HarnessConfig = { systemCount: 20, seed: 2, tickCount: 1 };
 
   /** Government types per region, in the order the runner would encounter them. */
   function govsByRegion(): Map<string, GovernmentType[]> {
@@ -315,33 +318,75 @@ describe("runTickHarness: the per-tick instrumentation", () => {
   }, 180_000);
 
   it("resolves strike suppression per eligible pair, both halves accumulated", async () => {
-    // A strike only silences a proposal once the galaxy has colonies restive enough to strike, which
-    // is downstream of the same establish duration BUSY's horizon is set by: at 60 systems / seed 7
-    // `suppressed` is still 0 at 6,000 ticks and reads 55 of 227k eligible pairs at BUSY's 10,000.
-    // Below that a dropped fold and a quiet galaxy print the same 0 and the numerator's wiring is
-    // untestable.
+    // A strike only silences a proposal once a colony's unrest crosses STRIKE_THRESHOLD (0.65,
+    // lib/constants/population.ts:79). With the industry-land budget deleted this branch, the
+    // galaxy never gets there: probe-backed peak unrest is 0.4755 at 10,000 ticks (BUSY's own
+    // horizon), falling to 0.324 by 20,000 — an accepted calm regime (Kai, 2026-08-24), not a
+    // broken wire, with a roadmap row owning re-arming strikes once adversarial mechanics ship.
+    // `suppressed` is pinned at exactly 0 here as that regime's signature: a future `suppressed >
+    // 0` means pressure has returned and that roadmap row is due. The accounting mechanism this
+    // number depends on — a live pair actually incrementing `suppressed` — is proven where it can
+    // be constructed directly, not on this dormant galaxy: lib/engine/__tests__/directed-build.test.ts
+    // "planFactionProposals: strikeSuppressedProposals — per-eligible-pair suppression count" and
+    // lib/tick/processors/__tests__/directed-build.test.ts "runDirectedBuildProcessor —
+    // strike-suppression instrumentation (strikeSuppressedProposals)" both plant
+    // `productionSuppressed: true` against live capacity and assert `suppressed` counts it.
     const results = await runBusy();
     const s = results.strikeSuppression;
 
     expect(s.eligible).toBeGreaterThan(0);
-    expect(s.suppressed).toBeGreaterThan(0);
+    expect(s.suppressed).toBe(0);
     expect(s.suppressed).toBeLessThanOrEqual(s.eligible);
+    // Not a 0/0 tautology: eligible is a real, nonzero count (asserted above), so this is 0
+    // divided by a real denominator, not two zeros agreeing vacuously.
     expect(s.ratePerEligible).toBeCloseTo(s.suppressed / s.eligible, 12);
+    expect(s.ratePerEligible).toBe(0);
   }, 120_000);
 });
 
 // ── The flow log and the haul-budget ledger ──────────────────────
 
+/**
+ * Colonisation pacing (when the first transfer lands) is a function of the archetype/sun-class
+ * tables, not a constant this suite owns — so instead of a hardcoded tick count, search forward
+ * in fixed steps for the first tickCount at which the condition holds, bounded by maxTickCount.
+ * Throws (failing the calling test with a clear message) if the bound is hit first.
+ */
+async function firstRunWhere(
+  base: { systemCount: number; seed: number },
+  isSatisfied: (results: HarnessResults) => boolean,
+  { start, step, maxTickCount }: { start: number; step: number; maxTickCount: number },
+): Promise<HarnessResults> {
+  for (let tickCount = start; tickCount <= maxTickCount; tickCount += step) {
+    const results = await runTickHarness({ ...base, tickCount });
+    if (isSatisfied(results)) return results;
+  }
+  throw new Error(
+    `condition never observed for seed=${base.seed}/systemCount=${base.systemCount} by tickCount=${maxTickCount}`,
+  );
+}
+
 describe("runTickHarness: the whole-run flow log", () => {
   it("takes each tick's flow rows once, as that tick produces them", async () => {
-    // The world prunes its own flow log to FLOW_HISTORY_TICKS every tick, which is why the run
-    // accumulates its own. 4,300 ticks at 20 systems is the window where the two can be compared:
-    // the first transfer lands at tick 4152 (nothing moves before a faction has a second developed
-    // system, and the first colony completes at 4128), which is inside the retention tail of a run
-    // ending at 4,300 — floor 4,100 — so the final world still holds every row the run ever produced
-    // and is a ground truth for the accumulator.
-    const tickCount = 4_300;
-    const results = await runTickHarness({ systemCount: 20, seed: 7, tickCount });
+    // The world prunes its own flow log to FLOW_HISTORY_TICKS (200) ticks, which is why the run
+    // accumulates its own — the two are only comparable while the run's tickCount hasn't outrun
+    // the retention window since the first transfer. Rather than hardcode that tick count (it
+    // shifts with the archetype/sun-class tables), search forward in small steps — small enough
+    // that the first hit lands well inside the 200-tick retention floor — for the first tickCount
+    // with any flow rows at all, then use that same run as ground truth for the accumulator.
+    // systemCount 60, not 20: at 20 systems this seed's minor-faction count (18) claims all but 2
+    // systems as homeworlds outright, and — under the habitability-seeding archetype tables, where
+    // colonisability is a genuine minority rather than ~97.5% of the galaxy — the two leftover
+    // systems are exactly the ones homeworld placement passed over for low habitable land, so they
+    // land uncolonisable with high (here: total) probability across seeds. No amount of searching
+    // forward in ticks recovers a transfer network that structurally has nowhere to grow into.
+    const base = { systemCount: 60, seed: 7 } as const;
+    const results = await firstRunWhere(
+      base,
+      (r) => r.finalWorld.flowEvents.length > 0,
+      { start: 1000, step: 100, maxTickCount: 20_000 },
+    );
+    const { tickCount } = results.config;
     const rows = results.finalWorld.flowEvents;
 
     expect(rows.length).toBeGreaterThan(0);
@@ -354,24 +399,36 @@ describe("runTickHarness: the whole-run flow log", () => {
       rows.reduce((sum, r) => sum + r.quantity, 0),
       9,
     );
-  }, 60_000);
+  }, 360_000); // measured 128s locally; CI runners ~2.1x slower — headroom, not a hang allowance
 
   it("starts the haul-budget ledger at the logistics warm-up tick, not before", async () => {
-    // Transfers are already happening before the warm-up tick (they start at 4152 on this fixture,
-    // LOGISTICS_WARMUP_TICKS is above that by design) — so a ledger that started early would read a
-    // spend fraction there, and one that started late would read none at the tick it is supposed to
-    // open on. Both arms are needed: either bound alone passes vacuously.
-    const base = { systemCount: 20, seed: 7 } as const;
+    // The ledger accumulates budget spend only from LOGISTICS_WARMUP_TICKS onward BY CONSTRUCTION
+    // (the runner gates it on `world.meta.currentTick >= LOGISTICS_WARMUP_TICKS`), so a run
+    // stopped one tick short of it reads a zero spend fraction regardless of how colonisation
+    // paced — as long as transfers are already flowing by then, which the flow-log test above
+    // establishes happens far earlier than LOGISTICS_WARMUP_TICKS under the current tables.
+    // systemCount 60 — see the flow-log test above for why 20 structurally cannot found a colony
+    // on this seed under the habitability-seeding tables.
+    const base = { systemCount: 60, seed: 7 } as const;
     const before = await runTickHarness({ ...base, tickCount: LOGISTICS_WARMUP_TICKS - 1 });
-    const at = await runTickHarness({ ...base, tickCount: LOGISTICS_WARMUP_TICKS });
-
     expect(before.logisticsActivity.transferCount).toBeGreaterThan(0);
     expect(before.logisticsActivity.budgetSpentFrac).toBe(0);
+
+    // The ledger opens exactly at LOGISTICS_WARMUP_TICKS but needs at least one more economy
+    // cycle to post an actual spend after it opens — search forward in cycle-length steps from
+    // the warm-up tick for the first nonzero spend fraction, instead of asserting it at the
+    // warm-up tick itself.
+    const at = await firstRunWhere(
+      base,
+      (r) => r.logisticsActivity.budgetSpentFrac > 0,
+      { start: LOGISTICS_WARMUP_TICKS, step: CYCLE_LENGTH, maxTickCount: LOGISTICS_WARMUP_TICKS + 20 * CYCLE_LENGTH },
+    );
+
     expect(at.logisticsActivity.budgetSpentFrac).toBeGreaterThan(0);
     // The flag census is a rate over developed-system markets, not a count of them: dropping the
     // predicate flags every market it looks at and pins the rate at 1.
     expect(at.logisticsActivity.fundingBoundFlagSetRate).toBeLessThan(1);
-  }, 60_000);
+  }, 180_000);
 });
 
 // ── The cycle-gated samplers ─────────────────────────────────────
@@ -398,12 +455,23 @@ describe("runTickHarness: the cycle-gated samplers", () => {
     // waiting — `sampledCount` BELOW `foundedCount` is the whole signature of the gate. A sampler
     // that fired on any other tick would have read every one of them, and read them before the
     // cycle that writes their satisfaction had ever run.
-    // 4,357 = the construction cycle at 4,344 (which founds this seed's sixth colony) plus 13 ticks,
-    // so the run stops mid-cycle: five earlier colonies have met an economy cycle and been sampled,
-    // the sixth has not. The founding ticks themselves moved with the establish duration — the first
-    // colony on this seed lands at 4,176, not at the couple-of-hundred-tick mark a faster absorption
-    // cap used to put it at.
-    const results = await runTickHarness({ systemCount: 60, seed: 7, tickCount: 4_357 });
+    // The tick a run has to stop on to land mid-cycle moves with the archetype/sun-class tables
+    // (colonisation pacing is a function of them, not a constant this suite owns — see
+    // `firstRunWhere` above), so search forward for the first tickCount where at least one colony
+    // has founded and been sampled but at least one other founded colony has not yet met its first
+    // economy cycle, rather than hardcode the boundary tick.
+    // Under the recut habitability tables the earliest two-colony window (one sampled, one still
+    // waiting) lands at tick 5,260 — the pre-5,000 prefix never satisfies the condition, so starting
+    // the search there wastes ~50 no-op harness runs and blows the timeout below. Start just ahead
+    // of that dead prefix instead of at the first colony's own opening tick (~4,128).
+    const results = await firstRunWhere(
+      { systemCount: 60, seed: 7 },
+      (r) =>
+        r.foundingStock.foundedCount > 0 &&
+        r.foundingStock.sampledCount > 0 &&
+        r.foundingStock.sampledCount < r.foundingStock.foundedCount,
+      { start: 5_000, step: 20, maxTickCount: 6_000 },
+    );
     const stock = results.foundingStock;
 
     expect(stock.foundedCount).toBeGreaterThan(0);
@@ -412,15 +480,29 @@ describe("runTickHarness: the cycle-gated samplers", () => {
     // And what it read is a colony that has lived a cycle, not one still holding its manifest.
     expect(stock.meanOpeningSatisfaction).toBeGreaterThan(0.5);
     expect(stock.openingDeprivedCount).toBeLessThan(stock.sampledCount / 2);
-  }, 60_000);
+  }, 300_000); // measured 99s locally; CI runners ~2.1x slower — headroom, not a hang allowance
 
   it("takes the demand-hunting flip as a per-cycle observation", async () => {
     // flipRate's denominator is decided readings, and a reading is taken once per economy cycle.
     // Sampled every tick instead, the same reversals divide by CYCLE_LENGTH times as many
-    // readings and the rate collapses by an order of magnitude — the bound below is what a
-    // per-tick sampler cannot clear, not a tuning value.
-    const results = await runBusy();
+    // readings and the rate would collapse by an order of magnitude — this test's whole point is
+    // that a per-tick sampler cannot land in the band asserted below, not the rate's own magnitude.
+    //
+    // Under the construction-cost site ranking (which concentrates tier-1+ production into hubs),
+    // the rate grows with horizon and asymptotes near 0.0086 — probe-backed at ECONOMY_SCALE=1:
+    // 0.00380 (12,000 ticks), 0.00618 (16,000), 0.00735 (20,000), 0.00798 (24,000), successive
+    // deltas halving per 4,000 ticks (geometric tail ≈ 0.0086). Read at a fixed 20,000 — BUSY's
+    // own horizon plus 10,000 — and pin the measured band: above 0.005 (a per-tick sampler
+    // diluted by CYCLE_LENGTH would read ~0.0003 and can never clear it — the sampling-cadence
+    // discrimination this test exists for) and below 0.012 (~1.5× the asymptote; drifting past
+    // it means demand-hunting pressure has shifted regime again and the band needs re-deriving).
+    const results = await runTickHarness({
+      systemCount: BUSY.systemCount,
+      seed: BUSY.seed,
+      tickCount: BUSY.tickCount + 10_000,
+    });
     expect(results.demandHunting.flipRate).toBeGreaterThan(0.005);
+    expect(results.demandHunting.flipRate).toBeLessThan(0.012);
   }, 180_000);
 });
 
@@ -487,12 +569,47 @@ describe("runTickHarness: episode costs, founding trajectory, the ratchet check"
 
   it("actually wires activity through — BUSY is not a run where every new section reads zero", async () => {
     // A genuinely broken wire (accumulator never fed, or the summary always empty) and a genuinely
-    // quiet galaxy both print zero — this fixture confirms BUSY is the former's counter-example, so
-    // the "well-formed, never negative" test above cannot be passing vacuously.
+    // quiet galaxy both print zero — this fixture confirms BUSY is not silently vacuous for the
+    // sections that DO fire.
+    //
+    // totalTeardownLevels is the one exception, and deliberately pinned rather than dropped: both
+    // decay channels gate on pressure this branch no longer reaches — the idle-buffer countdown
+    // peaks at 66/120 cycles at 10,000 ticks (never crosses the buffer) and the catastrophic
+    // channel needs unrest above 0.75 (lib/constants/infrastructure.ts:22) against a measured
+    // peak of 0.4755. Zero here is the calm regime's signature (accepted, Kai 2026-08-24), not a
+    // dropped fold — a future nonzero reading is teardown pressure returning, not a regression in
+    // this instrument. The counter's own wiring — that a torn-down level actually reaches
+    // `totalTeardownLevels` — is proven at unit level where it can be forced to fire:
+    // lib/tick/processors/__tests__/infrastructure-decay.test.ts "infrastructure-decay processor:
+    // teardown instrumentation" constructs both channels tearing a level down and asserts
+    // `teardownLevelsBySystem` reports the sum, and
+    // lib/tick-harness/__tests__/cohort-analysis.test.ts folds a constructed teardown map into
+    // `totalTeardownLevels` and asserts the total. Together they cover both hops of the wire this
+    // test cannot exercise on a dormant galaxy.
     const results = await runBusy();
-    expect(results.episodeCosts.totalTeardownLevels).toBeGreaterThan(0);
+    expect(results.episodeCosts.totalTeardownLevels).toBe(0);
     expect(results.foundingTrajectory.buckets[0].n).toBeGreaterThan(0); // colonies founded in-window
     expect(results.provisionRatchet.buckets.length).toBeGreaterThan(0);
+
+    // abandonmentByCause: the sum identity holds regardless of regime, and — like
+    // totalTeardownLevels above — both counts are pinned at 0 on BUSY's calm regime (measured):
+    // Rule 1 (famine-collapse) and Rule 2 without a famine conjunct (decline-to-empty) both need
+    // sustained unrest/shortfall this run's horizon never reaches. The counter's own wiring — that
+    // an abandonment actually reaches `abandonedSystemsByCause` — is proven at unit level where it
+    // can be forced to fire: lib/tick/processors/__tests__/population.test.ts "Abandonment by
+    // cause" describe block tags both a famine-present and a non-famine abandonment. A future
+    // nonzero reading here is real abandonment pressure, not a regression in this instrument.
+    const ac = results.abandonmentByCause;
+    expect(ac.total).toBe(ac.famineCollapse + ac.declineToEmpty);
+    expect(ac.famineCollapse).toBe(0);
+    expect(ac.declineToEmpty).toBe(0);
+
+    // colonistDeliveryTotals: BUSY founds colonies and runs long enough for colonist delivery to
+    // resolve, so the accumulated per-system totals (folded into each world cohort's
+    // colonistDeliveryInflow) must be genuinely nonzero here — unlike the two calm-regime channels
+    // above.
+    const totalDeliveryInflow = results.worldCohorts.reduce((sum, c) => sum + c.colonistDeliveryInflow, 0);
+    expect(totalDeliveryInflow).toBeGreaterThan(0);
   }, 180_000);
 });
 
@@ -535,8 +652,11 @@ describe("runTickHarness: founding instruments", () => {
   // it reads as a plausible number (0 stalls looks like a healthy galaxy; a concurrency mean off by
   // the cadence looks like a busier one), so each is asserted as a structural identity rather than
   // a magnitude nobody could recognise as wrong. 240 ticks is ten construction cycles on a small
-  // world — long enough that colonies are committed, staged from and held up.
-  const CONFIG: HarnessConfig = { systemCount: 20, seed: 7, tickCount: 240 };
+  // world — long enough that colonies are committed, staged from and held up. systemCount 60, not
+  // 20: at 20 this seed's minor-faction count claims all but 2 systems outright, and under the
+  // habitability-seeding tables the 2 leftover systems (passed over by homeworld placement for low
+  // habitable land) land uncolonisable — no colony_establish project is ever committed to sample.
+  const CONFIG: HarnessConfig = { systemCount: 60, seed: 7, tickCount: 240 };
 
   it("samples open colonies once per construction cycle, not once per tick", async () => {
     // The census is a per-CYCLE rate. Sampled per tick it would read the construction interval
@@ -589,9 +709,11 @@ describe("runTickHarness: logistics instruments", () => {
     // A silent wiring break reads 0.000 on every new counter — exactly the healthy-looking
     // value an ample budget produces — so the guard is a live run asserting non-zero.
     // LOGISTICS_WARMUP_TICKS + 200 (eight cycles): past the tick where ledger accumulation starts,
-    // with cycles to spare on a small world that transfers from tick 4152.
+    // with cycles to spare on a world that transfers well before then. systemCount 60, not 20 — see
+    // the flow-log test's comment for why 20 structurally cannot found a colony on this seed under
+    // the habitability-seeding tables.
     const results = await runTickHarness({
-      systemCount: 20, seed: 7, tickCount: LOGISTICS_WARMUP_TICKS + 200,
+      systemCount: 60, seed: 7, tickCount: LOGISTICS_WARMUP_TICKS + 200,
     });
     const lg = results.logisticsActivity;
     expect(lg.transferCount).toBeGreaterThan(0);
@@ -610,17 +732,19 @@ describe("runTickHarness: logistics instruments", () => {
     //
     // Faction count barely moves with galaxy size (8 majors plus a √N-interpolated dozen minors), so
     // systems-per-faction is what supplies that competition — and the systems a faction holds are
-    // almost all colonised in play, which is why the horizon matters as much as the galaxy size. At
-    // 120 systems the galaxy is fully developed (114 of 120) by ~10,000 ticks, but a donor is not yet
-    // contested: measured on this seed, the two arms are bit-identical at 6,000, 8,000 and 10,000
-    // ticks and first diverge between 10,000 and 13,000 — 18.2 units of 116,536 hauled at 13,000,
-    // 725 of 257,237 at 16,000. 13,000 is the cheapest horizon that clears the onset — the divergence
-    // is an outcome of the pin, not a coincidence, but it is a rare one and a shorter run reports the
-    // same zero a dropped wire would.
-    const config: HarnessConfig = { systemCount: 120, seed: 7, tickCount: 13_000 };
+    // almost all colonised in play, which is why both the galaxy size and the horizon matter.
+    // Since the build rule separated housing land from industry land, industry land is far freer
+    // galaxy-wide, so the 120-system/13,000-tick fixture that used to bind (18.2 of 116,536 hauled)
+    // is now bit-identical on both arms out to 16,000 ticks — donor contention needs more
+    // systems-per-faction to reappear. Measured on this seed: 120 systems stays bit-identical
+    // through 20,000 and 26,000 ticks too (diff only reappears there at 45,086 of 90.3M — too late
+    // to be the cheap fixture); 200 systems first shows a diff at 13,000 (533 of 8.6M, too close to
+    // the old dropped-wire zero to trust) and is solidly bound by 20,000 (268,365 of 38.2M hauled,
+    // 0.70% of the total — comfortably outside any float-precision coincidence).
+    const config: HarnessConfig = { systemCount: 200, seed: 7, tickCount: 20_000 };
     const live = await runTickHarness(config);
     const pinned = await runTickHarness({ ...config, drawBrakeCeiling: "anchor" });
     expect(live.logisticsActivity.transferCount).toBeGreaterThan(0);
     expect(pinned.logisticsActivity.totalQuantity).not.toBeCloseTo(live.logisticsActivity.totalQuantity, 6);
-  }, 240_000);
+  }, 420_000); // measured ~138s locally (two full harness runs); CI ~2.1x slower
 });

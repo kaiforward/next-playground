@@ -41,6 +41,8 @@ export interface HonestDemandInput {
   buildings: Record<string, number>;
   population: number;
   yields: ResourceVector;
+  /** Per-resource extraction-work efficiency, threaded alongside `yields`; absent ⇒ neutral 1.0. */
+  extractionEff?: ResourceVector;
   /** Strike × maintenance scalar the economy applied this cycle, ∈ (0,1]. */
   productionSuppress: number;
   /**
@@ -78,7 +80,8 @@ function steadyRates(input: HonestDemandInput): {
   steadyByGood: Map<string, number>;
 } {
   const suppress = gate(input.productionSuppress);
-  const rates = input.rates ?? capacityGoodRates(input.buildings, input.population, input.yields);
+  const rates = input.rates
+    ?? capacityGoodRates(input.buildings, input.population, input.yields, input.extractionEff);
   const civilianByGood = new Map<string, number>();
   const steadyByGood = new Map<string, number>();
   for (const rate of rates) {

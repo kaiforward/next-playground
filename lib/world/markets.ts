@@ -17,6 +17,10 @@ export interface SystemMarketSeed {
   systemId: string;
   buildings: Record<string, number>;
   yields: ResourceVector;
+  /** Per-resource extraction-work efficiency, threaded alongside `yields` into the seeded honest
+   *  use rate — absent (a fixture predating this field) reads neutral 1.0, matching
+   *  `useRatesByGood`'s own default. */
+  extractionEff?: ResourceVector;
   population: number;
   /**
    * `true` stocks the warehouses from the system's own production/consumption balance — world-gen's
@@ -37,6 +41,7 @@ export function createSystemMarkets(seed: SystemMarketSeed): WorldMarket[] {
     buildings: seed.buildings,
     population: seed.population,
     yields: seed.yields,
+    extractionEff: seed.extractionEff,
     productionSuppress: 1,
   });
   return Object.keys(GOODS).map((goodId) => {

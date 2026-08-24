@@ -5,13 +5,14 @@
  * systems. Zero I/O; the reach/candidate data is supplied by providers built in the tick body.
  */
 import type { RNG } from "@/lib/engine/universe-gen";
+import { RESOURCE_TYPES } from "@/lib/engine/resources";
 
 /** One in-reach unclaimed system a faction could claim, with its score inputs. */
 export interface ClaimCandidate {
   systemId: string;
   /** Fewest jumps from any of the faction's owned systems (≥ 1 — the candidate is unclaimed). */
   minHops: number;
-  habitableSpace: number;
+  peopleLand: number;
   /** Count of resources this system has any deposit slot for. */
   resourceDiversity: number;
 }
@@ -40,13 +41,34 @@ export interface ExpansionParams {
   maxClaimsPerCycle: number;
   scoreFloor: number;
   weights: ExpansionScoreWeights;
+  /** Galaxy-wide max system `peopleLand` this tick (a floor-1 ratio, never a raw 0) — normalises the
+   * habitable substrate term to [0,1], the same ratio `placeHomeworlds` (`lib/engine/faction-gen.ts`)
+   * takes against its own per-galaxy max, so a giant system's raw scale alone can never dominate the
+   * score. Threaded in from the claim-candidate assembly in `lib/world/tick.ts`. */
+  peopleLandMax: number;
 }
 
-/** Absolute claim desirability: weighted substrate × a distance discount. Comparable across factions. */
-export function scoreClaimCandidate(c: ClaimCandidate, w: ExpansionScoreWeights): number {
-  const substrate =
-    w.habitable * Math.max(0, c.habitableSpace) +
-    w.diversity * Math.max(0, c.resourceDiversity);
+function clamp01(x: number): number {
+  return Math.min(1, Math.max(0, x));
+}
+
+/**
+ * Absolute claim desirability: weighted NORMALISED substrate × a distance discount. Comparable
+ * across factions. Both substrate terms are clamped to [0,1] before weighting — `peopleLand` against
+ * `peopleLandMax` (the galaxy-wide max this tick), `resourceDiversity` against
+ * `RESOURCE_TYPES.length` — the same normalisation `placeHomeworlds` applies to its own substrate
+ * terms. Normalising (not just shrinking the weights) is what actually bounds each term: a raw-scale
+ * weight can be tuned arbitrarily small and a large-enough system still swamps it, but a term already
+ * clamped to [0,1] cannot exceed its weight no matter how big the system is.
+ */
+export function scoreClaimCandidate(
+  c: ClaimCandidate,
+  w: ExpansionScoreWeights,
+  peopleLandMax: number,
+): number {
+  const habitableTerm = clamp01(Math.max(0, c.peopleLand) / Math.max(1, peopleLandMax));
+  const diversityTerm = clamp01(Math.max(0, c.resourceDiversity) / RESOURCE_TYPES.length);
+  const substrate = w.habitable * habitableTerm + w.diversity * diversityTerm;
   const proximity = 1 / (1 + w.proximity * Math.max(0, c.minHops));
   return substrate * proximity;
 }
@@ -62,7 +84,11 @@ export function proposeFactionClaims(
   params: ExpansionParams,
 ): ClaimProposal[] {
   return candidates
-    .map((c) => ({ factionId, systemId: c.systemId, score: scoreClaimCandidate(c, params.weights) }))
+    .map((c) => ({
+      factionId,
+      systemId: c.systemId,
+      score: scoreClaimCandidate(c, params.weights, params.peopleLandMax),
+    }))
     .filter((p) => p.score >= params.scoreFloor)
     .sort((a, b) => b.score - a.score || a.systemId.localeCompare(b.systemId))
     .slice(0, Math.max(0, params.maxClaimsPerCycle));

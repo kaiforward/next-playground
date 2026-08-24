@@ -11,47 +11,36 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 ---
 
-## In progress
-
-(nothing — pull from the queue)
-
----
-
 ## Queued
 
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-1. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
-   colonisation is overwhelming — too many viable targets at once, with nothing pacing which to take.
-   Direction (Kai, 2026-08-12): cut how many systems are viable at generation so expansion starts
-   slow, and let the rest of the galaxy open up later, when terraforming and specialist-housing
-   technologies exist. Kai's read is that this slows the simulation rather than breaking it.
-   **A third lever, and the cheapest: colonisation automation defaults off**, with AI founding slowed
-   enough that a player can reasonably keep up by hand (Kai, 2026-08-12). Settled alongside the
-   attention layer, whose Tracker owns the *surface* for a forming colony; this row owns the pacing.
-   The knob already exists: `habitableFraction` is housing-per-space efficiency
-   (`habitableSpace = generalSpace × habitableFraction`), and the expensive, low-yield
-   specialist-habitation *building* was recorded as a hook at that same decision — see
-   [negative-space-economy.md](./planned/negative-space-economy.md).
-   **Honest dependency:** there is no technology or progression system in the codebase today — a grep
-   for terraforming or technology finds only event and faction flavour text. "Gated behind
-   technology" is therefore a new system, not a constant change, and the sequencing of the two is
-   itself part of the design.
-   **A second pacing lever, from the EU5 read (2026-08-12): price the charter by distance and by
-   concurrent-colony count.** EU5 scales a colonial charter's cost with population, distance and how
-   many charters you already hold, plus a monthly upkeep per active colony, and caps expeditions at
-   roughly one per two years. Ours is `max(CHARTER_FEE_MIN, CHARTER_FEE_SPEND_MULT × maintenanceBill)`
-   (`lib/constants/colonisation.ts:81-89`) — it scales with faction *size* only, so neither distance
-   nor concurrency is priced. Both are cost-shaped ways to slow expansion without making systems
-   dead, and they compose with (rather than replace) the viability cut. Overlaps the control-shaped
-   **claim pricing** item in [player-seat-roadmap.md](./planned/player-seat-roadmap.md) — settle the
-   two together, not twice.
-   *Next step:* `/measure` how many systems are viable at founding today and how fast the galaxy
-   actually colonises, before touching any constant.
-   *Don't:* buy scarcity by making systems dead. Barren-but-alive is a deliberate decision — rocky
-   barrens carry tiny artificial habitation so they read as small mining outposts, and only pure gas
-   giants are truly uninhabitable.
+1. **[M] Bodies and the mechanics above them — the per-body industry question.** Booked from the
+  habitability-seeding Gate D discussion (Kai, 2026-08-24); the generation work and the two-budget
+  space model are settled — this row is about how bodies compose with mechanics built on top.
+  Today extraction pools per-system (count-weighted yield fixed at generation) and space/occupancy
+  accounting is system-level, which reads confusingly at the edges: if a tundra world hosts the
+  system's only radioactive deposit, the extractor physically belongs there, yet its land bills
+  against the system's occupied worlds. Question: is there a performant way to know where industry
+  actually sits per body — which would also unlock per-body yield instead of the game-start pool?
+  Interacts with the tech-unlock yield-dilution input on the growth-gated-behind-technology row
+  above (a per-body model dissolves that hazard; a frozen-at-start pool sidesteps it).
+  *Next step:* /brainstorm. Queued ahead of logistics by owner decision (2026-08-24): the
+  logistics mechanics build on bodies, so this discussion lands first.
+  *Don't:* re-litigate the two-budget generation model or the deleted industry-land budget; both
+  are settled and orthogonal to where industry physically sits.
+2. **[S] Abandonment warning for non-famine decline — a let-through bug, not a feature ask.**
+  Found at the habitability-seeding uber-review (2026-08-24): Abandonment Rule 2 fires on
+  below-floor population alone, but the player-facing countdown (`lib/services/alerts.ts`, the
+  famine branch) is famine-gated — a well-fed colony declining to empty under unrest dies with
+  no warning ever raised. Direction (Kai, 2026-08-24): trigger on steep population decline
+  (the unrest-driven case) rather than adding a new alert category — one decline-rate trigger
+  plausibly covers BOTH the famine countdown and the non-famine death, collapsing the branch
+  instead of widening it.
+  *Next step:* small design pass on the decline-rate trigger (threshold, window, how the
+  existing famine countdown folds in), then implement — sized [S], its own quick PR.
+
 ---
 
 ## Unqueued
@@ -69,6 +58,56 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   *Next step:* pick the shell (Tauri vs Electron).
 
 **Economy / simulation**
+- **[L] Growth gated behind habitation/terraforming technology.** Habitability seeding shipped the
+  first half of the original two-part direction (Kai, 2026-08-12) — cutting how many systems are
+  viable at generation. This row is the second half: open the rest of the galaxy later, once
+  terraforming and specialist-housing technologies exist, so expansion paces itself through
+  progression rather than staying permanently capped by the generation cut alone.
+  **A cheap lever meanwhile: colonisation automation defaults off**, with AI founding slowed enough
+  that a player can reasonably keep up by hand (Kai, 2026-08-12).
+  **A pacing lever from the EU5 read (2026-08-12): price the charter by distance and by
+  concurrent-colony count.** EU5 scales a colonial charter's cost with population, distance and how
+  many charters you already hold, plus a monthly upkeep per active colony, and caps expeditions at
+  roughly one per two years. Ours is `max(CHARTER_FEE_MIN, CHARTER_FEE_SPEND_MULT × maintenanceBill)`
+  (`lib/constants/colonisation.ts:81-89`) — it scales with faction *size* only, so neither distance
+  nor concurrency is priced. Both are cost-shaped ways to slow expansion without making systems
+  dead, and they compose with (rather than replace) the shipped viability cut. Overlaps the
+  control-shaped **claim pricing** item in
+  [player-seat-roadmap.md](./planned/player-seat-roadmap.md) — settle the two together, not twice.
+  **Design input for the unlock mechanic (Kai, 2026-08-24):** per-resource extraction yield is
+  the deposit-count-weighted mean of `extractionModifier` over UNLOCKED bodies
+  (`lib/engine/body-gen.ts:190-198`), and live extractor output reads it at tick time — so
+  unlocking a low-modifier, deposit-heavy body would immediately reduce every existing
+  extractor's output in that system (capacity up, current production down: a felt penalty for
+  progress, worst on heavy extractors). Cannot fire today (no unlock mechanic; the pool is
+  fixed at generation). Options for the design pass: freeze efficiency per built extractor;
+  pool per body instead of per system where unlocks make the concession gameplay-visible; or
+  make unlocking an explicit player choice so the dilution trade is theirs. Interacts with the
+  per-body-industry row below (a per-body model dissolves this hazard; a frozen-at-start pool
+  sidesteps it).
+  **Honest dependency:** there is no technology or progression system in the codebase today — a grep
+  for terraforming or technology finds only event and faction flavour text. "Gated behind
+  technology" is therefore a new system, not a constant change, and the sequencing of the two is
+  itself part of the design.
+  *Next step:* `/brainstorm` the technology/terraforming system itself before any of these levers can
+  be designed against it.
+  *Don't:* re-propose barren-but-alive (tiny artificial habitation on dead worlds so they read as
+  mining outposts) as a way to open the tech-phase's dead systems early. It shipped, was measured
+  (78→140 near-empty outpost colonies by in-world year 20), and was retired by owner decision
+  2026-08-23: dead bodies carry zero habitable land and dead systems are uncolonisable until the
+  technology phase (see [habitability.md](./active/gameplay/habitability.md)).
+- **[M] Events revisit — the developed/universal split and the coverage re-base.** Deferred by
+  explicit decision at the habitability-seeding spec review (2026-08-23): "let's just leave
+  events as is and we'll revisit and do the split properly". Two halves: (1) split event types
+  into developed-only (plague, strikes-adjacent) vs universal (solar_storm, asteroid_strike —
+  physical events that hit any system); (2) the coverage cap is `totalSystems ×
+  EVENT_COVERAGE_TARGET` (`lib/constants/events.ts:89-96`) spawned galaxy-wide while effects
+  land on developed systems only — the habitability retune cuts the colonisable share ~2.5×,
+  so the felt event rate per inhabited world drops by the same factor until this row re-bases
+  the cap (accepted at that review). Folds naturally into the events re-point
+  ([grand-strategy-vision.md](./planned/grand-strategy-vision.md) §4).
+  *Next step:* design pass alongside the events re-point; measure felt events-per-developed-
+  system first.
 - **[M] Relief — a player-funded intervention buys a viable world out of the strike loop** by
   moving goods through the real logistics simulation, never by deleting unrest. Design:
   [supply-response.md](./planned/supply-response.md) "Relief" (the arc's other items all shipped).
@@ -80,6 +119,22 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   active relief order suspend the death line, or is the race accepted?
   *Don't:* let relief spend delete unrest directly, or buy haul capacity without a stated
   exception to the money-is-fuel invariant.
+- **[M] Strike and teardown pressure are calm in the harness world — re-read when adversarial
+  mechanics land.** Accepted by owner decision (2026-08-24, industry-land cut). Scope matters:
+  in the 60-system harness config (seed 7) peak unrest is 0.476 at 10K ticks (falling to 0.324
+  at 20K) against the 0.65 strike / 0.75 catastrophic-teardown thresholds, idle-teardown
+  countdowns peak 66/120 cycles, and the demand-hunting flip rate sits in a pinned band — the
+  harness characterisation tests assert that calm regime so drift back toward pressure is
+  visible. At full galaxy scale (600 systems) the mechanics stay live with a small honest
+  tail: the post-cut simulate reads 5.6% of colonies striking (a near-dead pop<10 cohort at
+  unrest 0.867) and 123 teardown levels across 37 colonies at 10K — "systems doing well
+  enough it rarely happens", not dormancy. The construction-cost site ranking already
+  restored demand-hunting pressure above its old bound.
+  *Next step:* when a mechanic that applies real pressure ships (war, events split, disasters
+  pass, monetary demand), re-read both scales and re-derive the harness bands against it.
+  *Don't:* re-tune the thresholds (0.65 / 0.75 / 120 cycles) downward to make the mechanics
+  fire harder against today's incomplete economy — they are definitions; the pressure side is
+  what's missing.
 - **[M] Necessity weighting in the build planner** — the autonomic planner ranks opportunities by
   `BuildOpportunity.score` (`lib/engine/directed-build.ts:596-597, 850-856`): units of unmet demand it
   could serve, divided by route cost. That carries no necessity at all — a hundred units of unmet food
@@ -170,6 +225,9 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   deficit anchor — cleared with #211/#212 and the `TARGET_COVER` role split: pricing keeps the floored
   `demandRate` denominator, logistics and founding read real demand. Unlocks the strata-as-private-builder
   mechanic on the social-strata row above — wealth pops hold is what a private builder spends.
+  Also carries **housing quality as a happiness/wealth investment** (Kai, 2026-08-24): better housing
+  raised through pop wealth/happiness rather than (only) direct construction — the Vic3 read, where
+  standard-of-living is consumption-driven; design it here so it composes with the monetary basket.
 - **[L] Expanded pop tiers / social strata** — today's tiering is labour-grade only. Richer strata carry
   their own baskets. Composes with adaptive expectation (per-class expectation is how Victoria 3 derives
   its reference); nothing breaks if it never lands.
@@ -342,6 +400,10 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
 - **[S] Needs-tooltip language pass** — the needs-ledger / pop-short tooltips ship with figures plus one
   placeholder sentence, pending a nested-tooltip pass. Fold the two near-duplicate bodies (`NeedTooltip` in
   `population-panel.tsx`, `PopShortTooltipBody` in `industry-panel.tsx`) into a shared shell then.
+  **Widened (2026-08-24): apply `/game-copy` to every pre-existing tooltip/label surface** — the
+  skill (three registers, additive-percentage modifiers, game vocabulary only) shipped with
+  habitability seeding and that branch's own surfaces conform; the rest of the UI has not been
+  swept. Do it while the surface count is small; every new UI task already falls under the skill.
 - **[L] Paradox-style nested/pinnable deep tooltips** — tooltips whose terms are themselves hoverable,
   pinnable for comparison, backed by a cross-linking concept glossary. Needs a design doc + collaborative
   HTML-prototype pass. Core genre UI post-pivot, not polish. The theme already reserves a copper treatment
@@ -415,6 +477,11 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   ships on the map, and designing a second flow view before this pass changes what flows is
   backwards. Its approved HTML prototype survives as an input —
   [ui-ws2-map-modes.md](./planned/ui-ws2-map-modes.md) (P2, flow-viz).
+  **Input-proximity weighting in build-planner site ranking** (Kai, 2026-08-24): tier-1+
+  site scoring currently gates on input suppliers existing (`inputsAvailable`,
+  `lib/engine/directed-build.ts`) as a yes/no; weighting by route cost to those suppliers
+  would favour integrated hubs. Deliberately left out of the post-industry-land-cut ranking
+  recut because it overlaps this pass's hub/chain design — pick it up here.
   **Carry necessity into the routing calculations too** (Kai, 2026-08-16). The same gap the build
   planner has: logistics decides what to haul from shortfall quantity and route cost, and a unit of
   unmet food ranks alongside a unit of unmet luxuries. Sibling of the necessity-weighting row under
@@ -438,6 +505,12 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   cycle 1 reverted the mutator-class exclusions in `stryker.config.mjs`, so the re-sweep will
   re-report the ~204 already-accepted noise-class survivors (`temp/fix-wave/noise-ledger.md`) —
   don't re-triage them.
+  **Widened (habitability-seeding, 2026-08-24):** two items this branch owes overnight, folded into
+  the same batch rather than a separate one — (1) a scoped `npm run mutation` sweep of this branch's
+  diff (`lib/` files touched by habitability seeding); (2) a thin-margin re-measure of the
+  cadence-invariance harness bands the branch's changes sit close to: the `build12` buildings-gate
+  fixture's 1.2× margin and `FOUNDING_TOL`'s 1.7×/1.6× margins — re-derive both now the archetype
+  tables are settled (post-Gate-A).
   *Next step:* schedule the overnight batch (`--concurrency 8`, pre-approved) for a window Kai isn't
   using the machine.
 - **[M] Sim gates beyond the four founding identities** — agreed rule: a gate fails only when the

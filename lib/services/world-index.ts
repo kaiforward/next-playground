@@ -1,5 +1,5 @@
 import { getWorld, getWorldVersion } from "@/lib/world/store";
-import type { World, WorldFlowEvent, WorldMarket } from "@/lib/world/types";
+import type { World, WorldBody, WorldFlowEvent, WorldMarket } from "@/lib/world/types";
 import type { GovernmentType, RegionInfo } from "@/lib/types/game";
 import { deriveRegionDominantFaction } from "@/lib/utils/region";
 
@@ -39,6 +39,18 @@ export const buildingsBySystem = versionCached((world) => {
     const rec = map.get(b.systemId);
     if (rec) rec[b.buildingType] = b.count;
     else map.set(b.systemId, { [b.buildingType]: b.count });
+  }
+  return map;
+});
+
+/** Body rows grouped by system id — mirrors `buildingsBySystem`, so a read service that scans
+ *  `world.bodies` per call (an O(galaxy-bodies) cost on every request) reads this instead. */
+export const bodiesBySystem = versionCached((world) => {
+  const map = new Map<string, WorldBody[]>();
+  for (const b of world.bodies) {
+    const list = map.get(b.systemId);
+    if (list) list.push(b);
+    else map.set(b.systemId, [b]);
   }
   return map;
 });

@@ -194,8 +194,10 @@ A candidate whose net value is ≤ 0 — the labour it would drain outweighs the
 
 ### U — unblocking value (demand-driven, coefficient-free)
 
-Deposits are the economy's only hard scarcity: general space is fungible, but a **missing deposit** is
-something a faction physically cannot build around. `U(c)` credits a colony for the unmet demand its deposits
+Deposits are the sharper of the economy's two hard-land scarcities: industry (factories, academies,
+complexes, construction centres) carries no land cost at all — labour and decay bind it instead —
+so a **missing deposit** is the one thing a faction physically cannot build around no matter how
+much habitable land or labour it holds. `U(c)` credits a colony for the unmet demand its deposits
 unblock, traced **down each blocked good's recipe chain** to the deposit(s) that gate it — a deposit's worth
 is mostly downstream (a lithium world matters for every good that needs lithium, not for raw lithium demand):
 
@@ -216,10 +218,12 @@ all — the keystone-deposit case colonisation exists to grab early.
 ### L and σ — land option value and territory saturation
 
 `L(c)` is the value of the land *itself* — new habitable land → future population → future labour → future
-production and demand, compounding independently of any current deficit:
+production and demand, compounding independently of any current deficit. Industry buildings bill no land of
+their own (labour, demand and decay bound them instead), so `L(c)` carries only the habitable-land premium and
+a small deposit-richness weight:
 
 ```
-L(c) = LAND_PREMIUM · habitableSpace  +  LAND_GENERAL_WEIGHT · generalSpace  +  LAND_DEPOSIT_WEIGHT · depositRichness
+L(c) = LAND_PREMIUM · peopleLand  +  LAND_DEPOSIT_WEIGHT · depositRichness
 ```
 
 How much of `L` is live is gated by **territory saturation** `σ ∈ [0,1]` — the fraction of the faction's
@@ -615,9 +619,10 @@ prefab** (`lib/engine/homeworld-prefab.ts`) and leaves every other system an emp
   the civilian tier-2 goods (electronics, machinery, luxuries); military tier-2 is deliberately imported (the
   war system's concern). It is not seeded by the fractional substrate allocator, whose scale-down and
   whole-level floor wiped small manufacturing counts and left the galaxy extraction-only.
-- **A guaranteed garden body holds it.** The prefab is stamped onto one deterministic garden world sized a
-  headroom margin above the prefab's exact footprint (habitable span, general space, and a spread of deposit
-  slots), prepended to the homeworld's procedural bodies, so nothing is ever floored or scaled down.
+- **A guaranteed temperate body holds it.** The prefab is stamped onto one deterministic temperate-class
+  world (score 1.0), authored a headroom margin above the prefab's exact footprint (habitable land and a
+  spread of deposit counts), prepended to the homeworld's procedural bodies, so nothing is ever floored or
+  scaled down.
 - **Every other system starts bare** — population 0, no buildings, `unclaimed` — an empty deposit field
   expansion colonises into via claim → establish.
 
@@ -684,7 +689,7 @@ lookup can feed them later without changing any formula.
 | Constant | Meaning | Value |
 |---|---|---|
 | `COLONY_ESTABLISH_WORK` | Base settle work, before the bundled seed housing's build cost | 60 |
-| `LAND_PREMIUM` / `LAND_GENERAL_WEIGHT` / `LAND_DEPOSIT_WEIGHT` | Land option-value weights | 3.0 / 0.5 / 4.0 |
+| `LAND_PREMIUM` / `LAND_DEPOSIT_WEIGHT` | Land option-value weights | 0.92 / 1.2 |
 | `SIGMA_FLOOR` | Share of land value live before saturation — the expansionist dial | 0.25 |
 | `SEED_POP_COST_WEIGHT` | Weight on the seed's forgone-output cost | 1.0 |
 | `MIN_SETTLER_SUPPLY` | Releasable settler flow required per hungry absorber | 5 |

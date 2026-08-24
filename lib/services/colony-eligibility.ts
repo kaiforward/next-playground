@@ -23,6 +23,7 @@ import { COLONISATION } from "@/lib/constants/colonisation";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import { effectiveSpaceCost, HOUSING_TYPE } from "@/lib/constants/industry";
 import type { ColonyBlockReason } from "@/lib/types/colonisation";
 
 /** The hop radius the tick's shared BFS uses — seed-source reach for the colony verb matches it. */
@@ -80,10 +81,12 @@ export function colonyEligibility(
   if (world.constructionProjects.some((p) => p.kind === "colony_establish" && p.systemId === system.id)) {
     return { eligible: false, reason: "already_forming" };
   }
-  if (system.habitableSpace < EXPANSION.DEVELOP_HABITABLE_FLOOR) {
+  // The floor is one whole housing level of people land — below it a colony could never be housed,
+  // so this check and `sizeColonyEstablish`'s own whole-level rounding read the same cost and agree.
+  if (system.peopleLand < effectiveSpaceCost(HOUSING_TYPE)) {
     return { eligible: false, reason: "below_habitable_floor" };
   }
-  const sizing = sizeColonyEstablish(system.habitableSpace, sizingParams());
+  const sizing = sizeColonyEstablish(system.peopleLand, sizingParams());
   if (sizing === null) {
     return { eligible: false, reason: "below_habitable_floor" };
   }

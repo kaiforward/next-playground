@@ -70,7 +70,7 @@ export function orderBuild(input: { systemId: string; buildingType: string; leve
   );
   const option = options.find((o) => o.buildingType === input.buildingType);
   if (!option) return { ok: false, error: `Unknown building type: ${input.buildingType}` };
-  if (input.levels > option.maxLevels) {
+  if (option.maxLevels !== null && input.levels > option.maxLevels) {
     return {
       ok: false,
       error: option.blocked === "no_deposit_slots"
@@ -128,7 +128,7 @@ export function orderColony(input: { systemId: string }): OrderColonyResult {
   if (!check.eligible) {
     return { ok: false, error: COLONY_BLOCK_COPY[check.reason] };
   }
-  const sizing = sizeColonyEstablish(system.habitableSpace, sizingParams());
+  const sizing = sizeColonyEstablish(system.peopleLand, sizingParams());
   if (sizing === null) return { ok: false, error: "Below the habitable floor — this world cannot hold a colony." };
 
   // The order buys its charter at the click: the same fee the eligibility quote carried, accrued

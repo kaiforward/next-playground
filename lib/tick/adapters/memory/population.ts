@@ -30,6 +30,8 @@ export class InMemoryPopulationWorld implements PopulationWorld {
       out.push({
         systemId: s.id, population: s.population, popCap: s.popCap, unrest: s.unrest,
         provisionExpectation: s.provisionExpectation,
+        habitabilityBodies: s.habitabilityBodies,
+        habitabilityQuality: s.habitabilityQuality,
       });
     }
     return Promise.resolve(out);
@@ -89,6 +91,19 @@ export class InMemoryPopulationWorld implements PopulationWorld {
       } else {
         delete next.criticalWeight;
       }
+      // `habitabilityQuality` is a MEMORY, not a snapshot — same never-write-a-lie treatment as
+      // `provisionExpectation` above: a corrupt write keeps the row's existing cached value rather
+      // than dropping straight to absent (a genuinely never-assessed system has no prior value to
+      // fall back to, so it stays absent in that one case).
+      if (u.habitabilityQuality
+          && Number.isFinite(u.habitabilityQuality.quality)
+          && Number.isFinite(u.habitabilityQuality.frontierIndex)) {
+        next.habitabilityQuality = u.habitabilityQuality;
+      } else if (s.habitabilityQuality !== undefined) {
+        next.habitabilityQuality = s.habitabilityQuality;
+      } else {
+        delete next.habitabilityQuality;
+      }
       return next;
     });
     return Promise.resolve();
@@ -101,9 +116,11 @@ export class InMemoryPopulationWorld implements PopulationWorld {
     const rowBySystem = new Map(pops.map((p) => [p.systemId, p]));
     const buildingsBySystemId = new Map<string, Record<string, number>>();
     const yieldsBySystemId = new Map<string, ResourceVector>();
+    const effBySystemId = new Map<string, ResourceVector>();
     for (const s of this.systems) {
       buildingsBySystemId.set(s.id, s.buildings);
       yieldsBySystemId.set(s.id, s.yields);
+      effBySystemId.set(s.id, s.extractionEff);
     }
     // Cache the labour snapshot and the whole-system use map per system — both scan the
     // building set once and are shared across all of that system's markets.
@@ -114,6 +131,7 @@ export class InMemoryPopulationWorld implements PopulationWorld {
       if (row == null) return m;
       const buildings = buildingsBySystemId.get(m.systemId) ?? {};
       const yields = yieldsBySystemId.get(m.systemId) ?? unitResourceVector();
+      const extractionEff = effBySystemId.get(m.systemId) ?? unitResourceVector();
       let snap = labourBySystem.get(m.systemId);
       if (snap === undefined) {
         snap = computeSystemLabourSnapshot(buildings, row.population);
@@ -125,6 +143,7 @@ export class InMemoryPopulationWorld implements PopulationWorld {
           buildings,
           population: row.population,
           yields,
+          extractionEff,
           productionSuppress: row.productionSuppress,
         });
         useBySystem.set(m.systemId, uses);
@@ -134,7 +153,7 @@ export class InMemoryPopulationWorld implements PopulationWorld {
         ...m,
         // Two figures, two jobs: the floored capacity anchor prices the good, the unfloored
         // use figure sizes its warehousing. Neither is derived from the other.
-        demandRate: totalDemandRateForGood(m.goodId, snap.basis, buildings, yields, snap.state),
+        demandRate: totalDemandRateForGood(m.goodId, snap.basis, buildings, yields, snap.state, extractionEff),
       };
       // A corrupt compute leaves the field absent — the readers' documented live-recompute path —
       // never 0 (which would make the row un-sinkable and fully drawable at once), and never the

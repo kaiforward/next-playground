@@ -8,6 +8,7 @@ import { STRIKE_PARAMS, EXPECTATION_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, CR
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
 import { crowdingPressure } from "@/lib/engine/population";
 import { stabilityLabel } from "@/lib/utils/stability";
+import { BODY_ARCHETYPES, HABITABILITY_THRESHOLD } from "@/lib/constants/bodies";
 import type { World, WorldSystem } from "@/lib/world/types";
 
 let world: World;
@@ -375,5 +376,92 @@ describe("getSystemPopulation — unrestBreakdown — entry 1, end to end", () =
     expect("goods" in breakdown.contributors).toBe(false);
     expect("settled" in breakdown).toBe(false);
     expect("trend" in breakdown).toBe(false);
+  });
+});
+
+describe("getSystemPopulation — growthMultiplier / fillOrder", () => {
+  it("fresh-computes the fold for a never-assessed system, exactly as the processor's first cycle will", () => {
+    // Fresh world-gen never writes `habitabilityQuality` — the population processor's first cycle
+    // does, and it GROWS at a fresh compute over the contributing bodies that same cycle
+    // (lib/tick/processors/population.ts). The panel mirrors all three tiers, so it can never show
+    // neutral while the tick is applying a real value. The homeworld's fresh compute is exactly 1.0
+    // (garden body score 1.0, population inside it), and the occupied prefix is marked from the
+    // same effective reading.
+    expect(system.habitabilityQuality).toBeUndefined();
+    const data = getSystemPopulation(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    expect(data.growthMultiplier).toBe(1);
+    expect(data.fillOrder.length).toBeGreaterThan(0);
+    expect(data.fillOrder[0].occupied).toBe(true);
+    expect(data.fillOrder.some((row) => row.frontier)).toBe(true);
+  });
+
+  it("shows the fresh-computed quality, not neutral, when the never-assessed system's best body scores below 1", () => {
+    // The one-cycle window after a founding: populated, bodies present, no cache yet. The tick's
+    // first fold will grow at the fresh compute — a panel reading ×1.00 here would disagree with
+    // the game. Pin a non-1 value so the fresh tier is distinguishable from the neutral fallback.
+    setWorld({
+      ...world,
+      bodies: world.bodies.map((b) =>
+        b.systemId === system.id ? { ...b, bodyType: "jungle_world" as const } : b,
+      ),
+    });
+    const data = getSystemPopulation(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    // Every contributing body scores jungle's 0.7, so the fold reads exactly 0.7 in every arm
+    // (empty prefix = top score, occupied prefix = weighted mean, overrun = all-bodies mean).
+    expect(data.growthMultiplier).toBeCloseTo(0.7, 12);
+  });
+
+  it("reads the cached quality verbatim once the fold has run, and marks the occupied prefix and its frontier", () => {
+    const bodies = world.bodies.filter((b) => b.systemId === system.id);
+    const contributing = bodies.filter((b) => {
+      const arch = BODY_ARCHETYPES[b.bodyType];
+      return !arch.techLocked && arch.scores.default >= HABITABILITY_THRESHOLD;
+    });
+    expect(contributing.length).toBeGreaterThan(0);
+
+    setWorld({
+      ...world,
+      systems: world.systems.map((s) =>
+        s.id === system.id ? { ...s, habitabilityQuality: { quality: 0.93, frontierIndex: 0, partial: true } } : s,
+      ),
+    });
+
+    const data = getSystemPopulation(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    expect(data.growthMultiplier).toBe(0.93);
+
+    // fill-best-first order: the fold sorts score-descending, so index 0 (frontierIndex) is the
+    // single best contributing body — occupied AND the frontier; every other contributing body is
+    // untouched.
+    const sortedScores = [...contributing]
+      .map((b) => BODY_ARCHETYPES[b.bodyType].scores.default)
+      .sort((a, b) => b - a);
+    expect(data.fillOrder.map((r) => r.score)).toEqual(sortedScores);
+    expect(data.fillOrder[0].occupied).toBe(true);
+    expect(data.fillOrder[0].frontier).toBe(true);
+    for (let i = 1; i < data.fillOrder.length; i++) {
+      expect(data.fillOrder[i].occupied).toBe(false);
+      expect(data.fillOrder[i].frontier).toBe(false);
+    }
+  });
+
+  it("excludes locked and below-threshold bodies from the fill order — same contributing set occupiedBodyIds uses", () => {
+    const data = getSystemPopulation(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    for (const row of data.fillOrder) {
+      expect(row.score).toBeGreaterThanOrEqual(HABITABILITY_THRESHOLD);
+    }
+    const bodyCount = world.bodies.filter((b) => b.systemId === system.id).length;
+    const contributingCount = world.bodies.filter((b) => {
+      if (b.systemId !== system.id) return false;
+      const arch = BODY_ARCHETYPES[b.bodyType];
+      return !arch.techLocked && arch.scores.default >= HABITABILITY_THRESHOLD;
+    }).length;
+    expect(data.fillOrder.length).toBe(contributingCount);
+    // Premise: the fixture actually carries at least one locked or below-threshold body, so the
+    // exclusion above is genuinely exercised rather than passing on a system with nothing to filter.
+    expect(bodyCount).toBeGreaterThan(contributingCount);
   });
 });

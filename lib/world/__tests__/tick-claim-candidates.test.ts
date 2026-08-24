@@ -18,14 +18,14 @@ const NEVER = 1_000_000;
 const CLAIMS_RESOLVE: TickCadence = { cycle: 1, construction: 1, logistics: NEVER };
 
 const SLOT_COLUMNS = [
-  "slotGas", "slotMinerals", "slotOre", "slotBiomass", "slotArable", "slotWater", "slotRadioactive",
+  "countGas", "countMinerals", "countOre", "countBiomass", "countArable", "countWater", "countRadioactive",
 ] as const;
 
 /** Deposit-slot columns, all seven at once. */
 function slots(value: number) {
   return {
-    slotGas: value, slotMinerals: value, slotOre: value, slotBiomass: value,
-    slotArable: value, slotWater: value, slotRadioactive: value,
+    countGas: value, countMinerals: value, countOre: value, countBiomass: value,
+    countArable: value, countWater: value, countRadioactive: value,
   };
 }
 
@@ -38,13 +38,13 @@ function slotsForKinds(kinds: number) {
 
 /** A rock nothing would ever want: no habitable space, no deposits — it scores below the floor. */
 function inertRock(s: WorldSystem): WorldSystem {
-  return { ...s, habitableSpace: 0, generalSpace: 0, ...slots(0) };
+  return { ...s, peopleLand: 0, ...slots(0) };
 }
 
 interface CandidateSpec {
   /** Jumps from the faction's homeworld; relay systems are inserted to make up the distance. */
   hops: number;
-  habitableSpace: number;
+  peopleLand: number;
   /** How many of the seven deposit types this system has any slot for. */
   resourceKinds: number;
 }
@@ -87,8 +87,7 @@ function claimWorld(specs: CandidateSpec[]): { world: World; candidateIds: strin
     }
     overrides.set(candidate.id, {
       ...candidate,
-      habitableSpace: spec.habitableSpace,
-      generalSpace: spec.habitableSpace,
+      peopleLand: spec.peopleLand,
       ...slotsForKinds(spec.resourceKinds),
     });
     touched.add(candidate.id);
@@ -144,9 +143,9 @@ function twoOwnerWorld(farHops: number, farOwnerFirst: boolean) {
   const overrides = new Map<string, WorldSystem>([
     [far.id, { ...far, factionId: faction.id }],
     // Prize: substrate 31 → 20.7 measured at one jump, 12.4 measured at `farHops`.
-    [prize.id, { ...prize, habitableSpace: 10, generalSpace: 10, ...slotsForKinds(7) }],
+    [prize.id, { ...prize, peopleLand: 10, ...slotsForKinds(7) }],
     // Rival: substrate 25 → 16.7 at one jump. Between the prize's two readings.
-    [rival.id, { ...rival, habitableSpace: 25, generalSpace: 25, ...slotsForKinds(0) }],
+    [rival.id, { ...rival, peopleLand: 25, ...slotsForKinds(0) }],
     ...relays.map((r): [string, WorldSystem] => [r.id, inertRock(r)]),
   ]);
 
@@ -188,8 +187,8 @@ describe("runWorldTick — the claim candidates a faction is offered", () => {
     // each has, and the poorer one holds the lower id, so it wins any tie. Flatten, invert or ignore
     // the diversity count and the claim lands on the poor rock.
     const { world, candidateIds } = claimWorld([
-      { hops: 1, habitableSpace: 10, resourceKinds: 1 },
-      { hops: 1, habitableSpace: 10, resourceKinds: 7 },
+      { hops: 1, peopleLand: 10, resourceKinds: 1 },
+      { hops: 1, peopleLand: 10, resourceKinds: 7 },
     ]);
     const [poor, rich] = candidateIds;
     expect(poor.localeCompare(rich)).toBeLessThan(0); // premise: a tie would go to the poor rock
@@ -202,8 +201,8 @@ describe("runWorldTick — the claim candidates a faction is offered", () => {
     // keeping it unclaimed is the reach bound — and the near one sits exactly ON the bound, so a
     // bound applied one jump short leaves the faction with nothing to claim at all.
     const { world, candidateIds } = claimWorld([
-      { hops: EXPANSION.REACH_JUMPS, habitableSpace: 10, resourceKinds: 3 },
-      { hops: EXPANSION.REACH_JUMPS + 1, habitableSpace: 500, resourceKinds: 7 },
+      { hops: EXPANSION.REACH_JUMPS, peopleLand: 10, resourceKinds: 3 },
+      { hops: EXPANSION.REACH_JUMPS + 1, peopleLand: 500, resourceKinds: 7 },
     ]);
     const [atLimit, beyondLimit] = candidateIds;
 

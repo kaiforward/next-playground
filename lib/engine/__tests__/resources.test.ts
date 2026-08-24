@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   emptyResourceVector, makeResourceVector,
   sumResourceVector, sumResourceVectors, resourceVectorFromColumns, prepareResourceBars,
-  slotColumns, qualColumns, yieldColumns, unitResourceVector,
-  slotCapOf, qualityOf, yieldsOf, RESOURCE_TYPES,
+  countColumns, qualColumns, yieldColumns, effColumns, unitResourceVector,
+  depositCountsOf, qualityOf, yieldsOf, effOf, RESOURCE_TYPES,
 } from "../resources";
 import type { ResourceType, ResourceVector } from "@/lib/types/game";
 
@@ -89,7 +89,7 @@ describe("sumResourceVector", () => {
 
 describe("resourceVectorFromColumns", () => {
   it("defaults missing columns to zero", () => {
-    expect(resourceVectorFromColumns({ slotGas: 7 }, "slot")).toEqual(
+    expect(resourceVectorFromColumns({ countGas: 7 }, "count")).toEqual(
       makeResourceVector({ gas: 7 }),
     );
   });
@@ -150,18 +150,18 @@ describe("prepareResourceBars", () => {
   });
 });
 
-describe("slotColumns", () => {
+describe("countColumns", () => {
   it("maps a vector to the slot* columns", () => {
-    const cols = slotColumns(makeResourceVector({ gas: 3, ore: 5, radioactive: 1 }));
+    const cols = countColumns(makeResourceVector({ gas: 3, ore: 5, radioactive: 1 }));
     expect(cols).toEqual({
-      slotGas: 3, slotMinerals: 0, slotOre: 5, slotBiomass: 0,
-      slotArable: 0, slotWater: 0, slotRadioactive: 1,
+      countGas: 3, countMinerals: 0, countOre: 5, countBiomass: 0,
+      countArable: 0, countWater: 0, countRadioactive: 1,
     });
   });
 
-  it("round-trips with resourceVectorFromColumns (slot prefix)", () => {
+  it("round-trips with resourceVectorFromColumns (count prefix)", () => {
     const v = makeResourceVector({ gas: 2, minerals: 4, water: 6 });
-    expect(resourceVectorFromColumns(slotColumns(v), "slot")).toEqual(v);
+    expect(resourceVectorFromColumns(countColumns(v), "count")).toEqual(v);
   });
 });
 
@@ -195,14 +195,34 @@ describe("yieldColumns", () => {
   });
 });
 
+describe("effColumns", () => {
+  it("maps a vector to the eff* columns", () => {
+    const cols = effColumns(makeResourceVector({ gas: 1.5, minerals: 0.8 }));
+    expect(cols).toEqual({
+      effGas: 1.5, effMinerals: 0.8, effOre: 0, effBiomass: 0,
+      effArable: 0, effWater: 0, effRadioactive: 0,
+    });
+  });
+
+  it("round-trips with resourceVectorFromColumns (eff prefix)", () => {
+    const v = makeResourceVector({ gas: 1.2, arable: 0.9, water: 1.5 });
+    expect(resourceVectorFromColumns(effColumns(v), "eff")).toEqual(v);
+  });
+});
+
 describe("resourceVectorFromColumns — new prefixes and yield default", () => {
   it("yield prefix: missing columns default to 1", () => {
     const v = resourceVectorFromColumns({}, "yield");
     for (const t of ALL) expect(v[t]).toBe(1);
   });
 
-  it("slot prefix: missing columns default to 0", () => {
-    const v = resourceVectorFromColumns({}, "slot");
+  it("eff prefix: missing columns default to 1 — a 0 default would silently zero every extractor's output", () => {
+    const v = resourceVectorFromColumns({}, "eff");
+    for (const t of ALL) expect(v[t]).toBe(1);
+  });
+
+  it("count prefix: missing columns default to 0", () => {
+    const v = resourceVectorFromColumns({}, "count");
     for (const t of ALL) expect(v[t]).toBe(0);
   });
 
@@ -239,8 +259,8 @@ describe("resource column coverage", () => {
     return v;
   };
 
-  it("slotColumns emits exactly one column per resource type", () => {
-    expect(Object.keys(slotColumns(emptyResourceVector())).sort()).toEqual(columnKeys("slot"));
+  it("countColumns emits exactly one column per resource type", () => {
+    expect(Object.keys(countColumns(emptyResourceVector())).sort()).toEqual(columnKeys("count"));
   });
 
   it("qualColumns emits exactly one column per resource type", () => {
@@ -251,9 +271,13 @@ describe("resource column coverage", () => {
     expect(Object.keys(yieldColumns(emptyResourceVector())).sort()).toEqual(columnKeys("yield"));
   });
 
-  it("slotCapOf reads back every resource type's own value", () => {
+  it("effColumns emits exactly one column per resource type", () => {
+    expect(Object.keys(effColumns(emptyResourceVector())).sort()).toEqual(columnKeys("eff"));
+  });
+
+  it("depositCountsOf reads back every resource type's own value", () => {
     const v = distinct();
-    expect(slotCapOf(slotColumns(v))).toEqual(v);
+    expect(depositCountsOf(countColumns(v))).toEqual(v);
   });
 
   it("qualityOf reads back every resource type's own value", () => {
@@ -264,5 +288,10 @@ describe("resource column coverage", () => {
   it("yieldsOf reads back every resource type's own value", () => {
     const v = distinct();
     expect(yieldsOf(yieldColumns(v))).toEqual(v);
+  });
+
+  it("effOf reads back every resource type's own value", () => {
+    const v = distinct();
+    expect(effOf(effColumns(v))).toEqual(v);
   });
 });
