@@ -10,6 +10,7 @@ import { generateWorld } from "@/lib/world/gen";
 import { toTickSystems } from "@/lib/world/tick";
 import type { GovernmentType } from "@/lib/types/game";
 import type { FoundedColonyRecord, FoundingStagingTotals } from "../build-analysis";
+import { BUSY, firstRunWhere } from "./runner-fixtures";
 
 /** Small and short: this suite is about the role pin's wiring, not about economy behaviour. */
 const CONFIG: HarnessConfig = { systemCount: 20, seed: 7, tickCount: 60 };
@@ -258,19 +259,11 @@ describe("runTickHarness: the tick-0 readings", () => {
 // every other figure in the report stays healthy.
 
 /**
- * Big enough that colonies are founded, migration resolves and goods move. The tick count is set by
- * the establish duration, which is denominated in construction cycles and therefore cadence-invariant:
- * the absorption cap funds 0.4 work per cycle, so a 68-work establish takes ~170 cycles and the first
- * colony on this seed lands at tick 4176 — before which the galaxy has no same-faction developed pair
- * at all, so migration, directed logistics and every counter downstream of them read a flat zero. The
- * horizon is then set by the slowest of the counters read below: the demand-hunting flip rate, which
- * clears its bound from ~7,000 ticks on (measured 0.0090 here, against a bound of 0.005). ~18s.
- */
-const BUSY: HarnessConfig = { systemCount: 60, seed: 7, tickCount: 10_000 };
-
-/**
  * One shared BUSY run. `runTickHarness` is deterministic and every test below only reads its result,
- * so re-running it per test would spend ~18s a time to reproduce the same object.
+ * so re-running it per test would spend ~18s a time to reproduce the same object. This memo is only
+ * visible within this file/worker — every test elsewhere that needs a BUSY-shaped run either reads
+ * this file's `busyRun` indirectly (it can't — cross-file memoisation does not exist under Vitest's
+ * per-file worker model) or pays for its own independent run.
  */
 let busyRun: Promise<HarnessResults> | null = null;
 function runBusy(): Promise<HarnessResults> {
@@ -344,27 +337,7 @@ describe("runTickHarness: the per-tick instrumentation", () => {
   }, 120_000);
 });
 
-// ── The flow log and the haul-budget ledger ──────────────────────
-
-/**
- * Colonisation pacing (when the first transfer lands) is a function of the archetype/sun-class
- * tables, not a constant this suite owns — so instead of a hardcoded tick count, search forward
- * in fixed steps for the first tickCount at which the condition holds, bounded by maxTickCount.
- * Throws (failing the calling test with a clear message) if the bound is hit first.
- */
-async function firstRunWhere(
-  base: { systemCount: number; seed: number },
-  isSatisfied: (results: HarnessResults) => boolean,
-  { start, step, maxTickCount }: { start: number; step: number; maxTickCount: number },
-): Promise<HarnessResults> {
-  for (let tickCount = start; tickCount <= maxTickCount; tickCount += step) {
-    const results = await runTickHarness({ ...base, tickCount });
-    if (isSatisfied(results)) return results;
-  }
-  throw new Error(
-    `condition never observed for seed=${base.seed}/systemCount=${base.systemCount} by tickCount=${maxTickCount}`,
-  );
-}
+// ── The whole-run flow log and haul-budget ledger ─────────────────
 
 describe("runTickHarness: the whole-run flow log", () => {
   it("takes each tick's flow rows once, as that tick produces them", async () => {
@@ -428,81 +401,6 @@ describe("runTickHarness: the whole-run flow log", () => {
     // The flag census is a rate over developed-system markets, not a count of them: dropping the
     // predicate flags every market it looks at and pins the rate at 1.
     expect(at.logisticsActivity.fundingBoundFlagSetRate).toBeLessThan(1);
-  }, 180_000);
-});
-
-// ── The cycle-gated samplers ─────────────────────────────────────
-
-describe("runTickHarness: the cycle-gated samplers", () => {
-  it("counts only the colonies founded in play, never the ones world-gen shipped developed", async () => {
-    const results = await runBusy();
-    const start = generateWorld({ systemCount: BUSY.systemCount, seed: BUSY.seed });
-    const developedAtStart = toTickSystems(start).filter((s) => s.control === "developed").length;
-    const developedAtEnd = toTickSystems(results.finalWorld)
-      .filter((s) => s.control === "developed").length;
-
-    expect(developedAtStart).toBeGreaterThan(0);
-    expect(results.foundingStock.foundedCount).toBeGreaterThan(0);
-    // Control only ever moves toward `developed`, so the colonies founded in play are exactly
-    // the difference — a start set drawn from the wrong systems breaks the identity in both
-    // directions (too wide a set founds nothing; too narrow a one founds the galaxy).
-    expect(results.foundingStock.foundedCount).toBe(developedAtEnd - developedAtStart);
-  }, 180_000);
-
-  it("holds each colony's opening reading until its first economy cycle", async () => {
-    // Colonies land on the construction cadence and are read on the economy one, so a run that
-    // stops part-way through a cycle leaves the colonies founded since the last boundary still
-    // waiting — `sampledCount` BELOW `foundedCount` is the whole signature of the gate. A sampler
-    // that fired on any other tick would have read every one of them, and read them before the
-    // cycle that writes their satisfaction had ever run.
-    // The tick a run has to stop on to land mid-cycle moves with the archetype/sun-class tables
-    // (colonisation pacing is a function of them, not a constant this suite owns — see
-    // `firstRunWhere` above), so search forward for the first tickCount where at least one colony
-    // has founded and been sampled but at least one other founded colony has not yet met its first
-    // economy cycle, rather than hardcode the boundary tick.
-    // Under the recut habitability tables the earliest two-colony window (one sampled, one still
-    // waiting) lands at tick 5,260 — the pre-5,000 prefix never satisfies the condition, so starting
-    // the search there wastes ~50 no-op harness runs and blows the timeout below. Start just ahead
-    // of that dead prefix instead of at the first colony's own opening tick (~4,128).
-    const results = await firstRunWhere(
-      { systemCount: 60, seed: 7 },
-      (r) =>
-        r.foundingStock.foundedCount > 0 &&
-        r.foundingStock.sampledCount > 0 &&
-        r.foundingStock.sampledCount < r.foundingStock.foundedCount,
-      { start: 5_000, step: 20, maxTickCount: 6_000 },
-    );
-    const stock = results.foundingStock;
-
-    expect(stock.foundedCount).toBeGreaterThan(0);
-    expect(stock.sampledCount).toBeGreaterThan(0);
-    expect(stock.sampledCount).toBeLessThan(stock.foundedCount);
-    // And what it read is a colony that has lived a cycle, not one still holding its manifest.
-    expect(stock.meanOpeningSatisfaction).toBeGreaterThan(0.5);
-    expect(stock.openingDeprivedCount).toBeLessThan(stock.sampledCount / 2);
-  }, 300_000); // measured 99s locally; CI runners ~2.1x slower — headroom, not a hang allowance
-
-  it("takes the demand-hunting flip as a per-cycle observation", async () => {
-    // flipRate's denominator is decided readings, and a reading is taken once per economy cycle.
-    // Sampled every tick instead, the same reversals divide by CYCLE_LENGTH times as many
-    // readings and the rate would collapse by an order of magnitude — this test's whole point is
-    // that a per-tick sampler cannot land in the band asserted below, not the rate's own magnitude.
-    //
-    // Under the construction-cost site ranking (which concentrates tier-1+ production into hubs),
-    // the rate grows with horizon and asymptotes near 0.0086 — probe-backed at ECONOMY_SCALE=1:
-    // 0.00380 (12,000 ticks), 0.00618 (16,000), 0.00735 (20,000), 0.00798 (24,000), successive
-    // deltas halving per 4,000 ticks (geometric tail ≈ 0.0086). Read at a fixed 20,000 — BUSY's
-    // own horizon plus 10,000 — and pin the measured band: above 0.005 (a per-tick sampler
-    // diluted by CYCLE_LENGTH would read ~0.0003 and can never clear it — the sampling-cadence
-    // discrimination this test exists for) and below 0.012 (~1.5× the asymptote; drifting past
-    // it means demand-hunting pressure has shifted regime again and the band needs re-deriving).
-    const results = await runTickHarness({
-      systemCount: BUSY.systemCount,
-      seed: BUSY.seed,
-      tickCount: BUSY.tickCount + 10_000,
-    });
-    expect(results.demandHunting.flipRate).toBeGreaterThan(0.005);
-    expect(results.demandHunting.flipRate).toBeLessThan(0.012);
   }, 180_000);
 });
 
@@ -647,104 +545,19 @@ describe("foldFoundingTick", () => {
   });
 });
 
-describe("runTickHarness: founding instruments", () => {
-  // Every figure below is the harness's own wiring, not the economy's behaviour: a break in any of
-  // it reads as a plausible number (0 stalls looks like a healthy galaxy; a concurrency mean off by
-  // the cadence looks like a busier one), so each is asserted as a structural identity rather than
-  // a magnitude nobody could recognise as wrong. 240 ticks is ten construction cycles on a small
-  // world — long enough that colonies are committed, staged from and held up. systemCount 60, not
-  // 20: at 20 this seed's minor-faction count claims all but 2 systems outright, and under the
-  // habitability-seeding tables the 2 leftover systems (passed over by homeworld placement for low
-  // habitable land) land uncolonisable — no colony_establish project is ever committed to sample.
-  const CONFIG: HarnessConfig = { systemCount: 60, seed: 7, tickCount: 240 };
+describe("runTickHarness: the cycle-gated samplers", () => {
+  it("counts only the colonies founded in play, never the ones world-gen shipped developed", async () => {
+    const results = await runBusy();
+    const start = generateWorld({ systemCount: BUSY.systemCount, seed: BUSY.seed });
+    const developedAtStart = toTickSystems(start).filter((s) => s.control === "developed").length;
+    const developedAtEnd = toTickSystems(results.finalWorld)
+      .filter((s) => s.control === "developed").length;
 
-  it("samples open colonies once per construction cycle, not once per tick", async () => {
-    // The census is a per-CYCLE rate. Sampled per tick it would read the construction interval
-    // times too high, and the settler gate's invariance — whose whole evidence is a concurrent
-    // count — would be measured against a figure that moved with the cadence knob.
-    const results = await runTickHarness(CONFIG);
-    const inFlight = results.foundingLifecycle.inFlight;
-
-    expect(inFlight.sampledCycles).toBe(Math.floor(CONFIG.tickCount / CONSTRUCTION_INTERVAL));
-    expect(inFlight.max).toBeGreaterThan(0);
-    expect(inFlight.maxTick).not.toBeNull();
-    expect((inFlight.maxTick ?? 1) % CONSTRUCTION_INTERVAL).toBe(0); // taken on a cycle boundary
-    expect(inFlight.meanPerCycle).toBeGreaterThan(0);
-    expect(inFlight.meanPerCycle).toBeLessThanOrEqual(inFlight.max);
-  }, 60_000);
-
-  it("wires the founding stall board, its gate split and its event context end to end", async () => {
-    const results = await runTickHarness(CONFIG);
-    const stalls = results.foundingLifecycle.stalls;
-
-    expect(stalls.observed).toBeGreaterThan(0);
-    // One record per priced colony per CONSTRUCTION cycle — never one per tick, and never one for
-    // something that is not a stall record at all.
-    expect(stalls.observed).toBeLessThan(CONFIG.tickCount);
-    expect(stalls.charter + stalls.funds + stalls.pool + stalls.unGated).toBe(stalls.observed);
-    // The event board is read at the tick the shortfall happened: a founder sparing less under an
-    // active event is a shortfall the design accepts, and by run end that event is long gone.
-    expect(stalls.materialsShort).toBeGreaterThan(0);
-    // Deliberate behaviour anchor, not a structural identity: it needs an event to land on a
-    // founder system inside this run (it does, on this seed), and it is what fails if the event
-    // board stops being read at the shortfall's own tick. If seed or event tuning flips it,
-    // re-anchor the fixture — do not delete the attribution check.
-    expect(stalls.materialsShortUnderEvent).toBeGreaterThan(0);
-    expect(stalls.materialsShortUnderEvent).toBeLessThanOrEqual(stalls.materialsShort);
-  }, 60_000);
-
-  it("collects the founder cohort from the manifests actually staged, and settles cleanly", async () => {
-    const results = await runTickHarness(CONFIG);
-    // A source that can spare nothing stages nothing and is no founder however many colonies name
-    // it — so a non-empty cohort is evidence the manifest stream was read, not merely that colonies
-    // were committed.
-    expect(results.founderCohort.founder.systemCount).toBeGreaterThan(0);
-    // Every faction-cycle folded into the money bars is a real settlement, not a seeded placeholder.
-    expect(results.foundingEra.invalidRows).toBe(0);
-  }, 60_000);
-});
-
-describe("runTickHarness: logistics instruments", () => {
-  it("wires the budget ledger and flow counters end to end", async () => {
-    // A silent wiring break reads 0.000 on every new counter — exactly the healthy-looking
-    // value an ample budget produces — so the guard is a live run asserting non-zero.
-    // LOGISTICS_WARMUP_TICKS + 200 (eight cycles): past the tick where ledger accumulation starts,
-    // with cycles to spare on a world that transfers well before then. systemCount 60, not 20 — see
-    // the flow-log test's comment for why 20 structurally cannot found a colony on this seed under
-    // the habitability-seeding tables.
-    const results = await runTickHarness({
-      systemCount: 60, seed: 7, tickCount: LOGISTICS_WARMUP_TICKS + 200,
-    });
-    const lg = results.logisticsActivity;
-    expect(lg.transferCount).toBeGreaterThan(0);
-    expect(lg.budgetSpentFrac).toBeGreaterThan(0);
-    expect(lg.flowRowsPerCycle).toBeGreaterThanOrEqual(1);
-  }, 60_000);
-
-  it("wires the third-arm drawBrakeCeiling pin through to a measurable divergence", async () => {
-    // A silently dropped wire is invisible on every OTHER counter — both arms would just run the
-    // live game twice and agree everywhere — so the guard has to be a same-seed A/B. The pin
-    // reaches only the draw figure, whose one reader is the matcher's severity weight, and
-    // severity does nothing but ORDER the deficit queue. Donor pools are held per good, and the
-    // haul budget goes barely 0.2% spent at this scale, so reordering two deficits of DIFFERENT
-    // goods changes nothing at all: the divergence needs two systems of the same faction short of
-    // the SAME good in one cycle, competing for one donor's drawable.
-    //
-    // Faction count barely moves with galaxy size (8 majors plus a √N-interpolated dozen minors), so
-    // systems-per-faction is what supplies that competition — and the systems a faction holds are
-    // almost all colonised in play, which is why both the galaxy size and the horizon matter.
-    // Since the build rule separated housing land from industry land, industry land is far freer
-    // galaxy-wide, so the 120-system/13,000-tick fixture that used to bind (18.2 of 116,536 hauled)
-    // is now bit-identical on both arms out to 16,000 ticks — donor contention needs more
-    // systems-per-faction to reappear. Measured on this seed: 120 systems stays bit-identical
-    // through 20,000 and 26,000 ticks too (diff only reappears there at 45,086 of 90.3M — too late
-    // to be the cheap fixture); 200 systems first shows a diff at 13,000 (533 of 8.6M, too close to
-    // the old dropped-wire zero to trust) and is solidly bound by 20,000 (268,365 of 38.2M hauled,
-    // 0.70% of the total — comfortably outside any float-precision coincidence).
-    const config: HarnessConfig = { systemCount: 200, seed: 7, tickCount: 20_000 };
-    const live = await runTickHarness(config);
-    const pinned = await runTickHarness({ ...config, drawBrakeCeiling: "anchor" });
-    expect(live.logisticsActivity.transferCount).toBeGreaterThan(0);
-    expect(pinned.logisticsActivity.totalQuantity).not.toBeCloseTo(live.logisticsActivity.totalQuantity, 6);
-  }, 420_000); // measured ~138s locally (two full harness runs); CI ~2.1x slower
+    expect(developedAtStart).toBeGreaterThan(0);
+    expect(results.foundingStock.foundedCount).toBeGreaterThan(0);
+    // Control only ever moves toward `developed`, so the colonies founded in play are exactly
+    // the difference — a start set drawn from the wrong systems breaks the identity in both
+    // directions (too wide a set founds nothing; too narrow a one founds the galaxy).
+    expect(results.foundingStock.foundedCount).toBe(developedAtEnd - developedAtStart);
+  }, 180_000);
 });

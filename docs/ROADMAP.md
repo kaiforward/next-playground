@@ -553,7 +553,7 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   (`reports/stryker-incremental.json`, machine-local) makes re-runs minutes, not hours.
   *Next step:* chip file-by-file, worst first, same kill-or-accept discipline as the PR gate.
 - **[S] Harden the runner integration suite's thin anchors** — found while re-deriving the
-  drawBrakeCeiling divergence fixture. The gate-split identity test (`runner.test.ts:152`,
+  drawBrakeCeiling divergence fixture. The gate-split identity test (`runner-founding.test.ts:101`,
   `charter + funds + pool + unGated === observed`) passes vacuously: the 20/7/240 fixture never
   exercises three of the four buckets (all zeros), so a broken classification still satisfies the
   identity — same hollowing-out class as the divergence failure, but silent. Three sibling
