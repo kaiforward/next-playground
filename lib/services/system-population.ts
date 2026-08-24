@@ -9,6 +9,9 @@ import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { unrestContributors, unrestTrend } from "@/lib/engine/unrest-readout";
 import { crowdingPressure, type SupplyState } from "@/lib/engine/population";
+import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
+import { contributingBodiesSorted, habitabilityFillOrder } from "@/lib/utils/substrate";
+import { systemHabitabilityQuality } from "@/lib/engine/habitability";
 import type { SystemPopulationData, SystemUnrestRead } from "@/lib/types/api";
 import type { World, WorldSystem } from "@/lib/world/types";
 
@@ -109,6 +112,29 @@ export function getSystemPopulation(systemId: string): SystemPopulationData {
   const needs = systemPopNeeds(systemId, basis);
   const provision = resolveProvisionRead(system);
 
+  // The SAME three-tier resolution the population processor's `growthQuality` uses
+  // (`lib/tick/processors/population.ts`): the cached fold if present; else a fresh compute over
+  // the contributing bodies (a just-founded colony's first cycle — the tick grows at this value
+  // and caches it that same cycle, so the panel must not show neutral while it does); neutral only
+  // when no contributing body exists at all. The one effective reading drives BOTH the multiplier
+  // and the fill-order occupancy marks, so the line and its tooltip can never disagree.
+  const bodySummaries = world.bodies
+    .filter((b) => b.systemId === systemId)
+    .map((b) => {
+      const arch = BODY_ARCHETYPES[b.bodyType];
+      return { className: arch.name, score: arch.scores.default, peopleLand: b.peopleLand, locked: arch.techLocked };
+    });
+  const contributing = contributingBodiesSorted(bodySummaries);
+  const effectiveQuality = system.habitabilityQuality
+    ?? (contributing.length > 0
+      ? systemHabitabilityQuality(
+          contributing.map(({ score, peopleLand }) => ({ score, peopleLand })),
+          system.population,
+        )
+      : undefined);
+  const growthMultiplier = effectiveQuality?.quality ?? 1;
+  const fillOrder = habitabilityFillOrder(bodySummaries, effectiveQuality);
+
   return {
     visibility: "visible",
     population: system.population,
@@ -122,5 +148,7 @@ export function getSystemPopulation(systemId: string): SystemPopulationData {
     // feeds the goods contributor the client is shown instead.
     provision: toProvisionRead(provision),
     unrestBreakdown: resolveUnrestBreakdown(system, world, provision),
+    growthMultiplier,
+    fillOrder,
   };
 }

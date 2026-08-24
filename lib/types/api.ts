@@ -1,6 +1,7 @@
 import type { StarSystemInfo, SunClass, GoodTier, BodyArchetypeId, ResourceVector } from "./game";
 import type { SubstrateGoodRate, ConsumptionBreakdown } from "@/lib/engine/physical-economy";
 import type { SupplyRegime } from "@/lib/engine/population";
+import type { FillOrderRow } from "@/lib/utils/substrate";
 
 export interface TradeFlowEdgeInfo {
   /** Net source system for the dominant good (where particles spawn). */
@@ -204,6 +205,16 @@ export type SystemPopulationData =
       provision: SystemProvisionRead;
       /** The unrest floor's contributor breakdown and trend — see `SystemUnrestRead`. */
       unrestBreakdown: SystemUnrestRead;
+      /** The cached fill-best-first habitability quality (`lib/engine/habitability.ts`) as it
+       *  multiplies the growth term (`populationDelta`'s `quality` parameter) — 1 (neutral) for a
+       *  system whose fold has never run, matching the population processor's own fallback
+       *  (`lib/tick/processors/population.ts`'s `growthQuality`). Never recomputed here — the
+       *  read-side and the tick must show the SAME number. */
+      growthMultiplier: number;
+      /** Every people-land-contributing body in fill-best-first order, decomposing
+       *  `growthMultiplier` into the bodies it comes from (spec §3: quality is always a story about
+       *  bodies, never a bare number) — see `habitabilityFillOrder`. */
+      fillOrder: FillOrderRow[];
     }
   | { visibility: "unknown" };
 

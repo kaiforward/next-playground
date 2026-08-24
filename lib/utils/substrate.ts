@@ -55,6 +55,18 @@ export interface OccupancyBody {
 }
 
 /**
+ * The ONE place the fold's contributing-body predicate (unlocked, score ≥
+ * `HABITABILITY_THRESHOLD`) and its score-descending sort live — `lib/world/tick.ts`'s
+ * `habitabilityBodiesBySystem` and `lib/engine/body-gen.ts`'s generation-time aggregate restate the
+ * predicate independently (different per-call shapes, generation vs. read-side), but every read-side
+ * consumer of the cached fold's ORDER (`occupiedBodyIds`, `habitabilityFillOrder`) derives from this
+ * shared helper rather than adding a fourth restatement.
+ */
+export function contributingBodiesSorted<T extends { score: number; locked: boolean }>(bodies: T[]): T[] {
+  return bodies.filter((b) => !b.locked && b.score >= HABITABILITY_THRESHOLD).sort((a, b) => b.score - a.score);
+}
+
+/**
  * Which people-land-contributing bodies sit inside a system's current fill-best-first occupied
  * prefix — the astrography-panel counterpart of `systemHabitabilityQuality`'s per-body fold,
  * re-deriving occupancy from the SAME cached `frontierIndex` rather than re-running the fold (the
@@ -73,9 +85,50 @@ export function occupiedBodyIds(
   habitabilityQuality: { quality: number; frontierIndex: number } | undefined,
 ): Set<string> {
   if (!habitabilityQuality) return new Set();
-  const contributing = bodies
-    .filter((b) => !b.locked && b.score >= HABITABILITY_THRESHOLD)
-    .sort((a, b) => b.score - a.score);
+  const contributing = contributingBodiesSorted(bodies);
   return new Set(contributing.slice(0, habitabilityQuality.frontierIndex + 1).map((b) => b.id));
+}
+
+/** One people-land-contributing body's static identity for the fill-order decomposition —
+ *  `habitabilityFillOrder`'s only per-body input. */
+export interface FillOrderBody {
+  className: string;
+  score: number;
+  peopleLand: number;
+  locked: boolean;
+}
+
+/** One row of the Population tab's growth-multiplier decomposition — a fill-order-sorted body plus
+ *  whether it sits inside the occupied prefix and whether it IS the marginal (partially-filled)
+ *  body the fold names `frontierIndex`. */
+export interface FillOrderRow {
+  className: string;
+  score: number;
+  peopleLand: number;
+  occupied: boolean;
+  frontier: boolean;
+}
+
+/**
+ * The Population tab's per-body growth-quality story (spec §3: quality is always a story about
+ * bodies, never a bare number) — every people-land-contributing body in fill-best-first (score-
+ * descending) order, marking which sit inside the occupied prefix and which one is the marginal
+ * body the cached fold's `frontierIndex` names. Same contributing-body source `occupiedBodyIds`
+ * reads, so the two can never disagree about which bodies are occupied. An unassessed system
+ * (`habitabilityQuality` undefined) marks nothing occupied and nothing as frontier, mirroring
+ * `occupiedBodyIds`'s own "no occupancy story yet" reasoning.
+ */
+export function habitabilityFillOrder(
+  bodies: FillOrderBody[],
+  habitabilityQuality: { quality: number; frontierIndex: number } | undefined,
+): FillOrderRow[] {
+  const contributing = contributingBodiesSorted(bodies);
+  return contributing.map((b, i) => ({
+    className: b.className,
+    score: b.score,
+    peopleLand: b.peopleLand,
+    occupied: habitabilityQuality !== undefined && i <= habitabilityQuality.frontierIndex,
+    frontier: habitabilityQuality !== undefined && i === habitabilityQuality.frontierIndex,
+  }));
 }
 
