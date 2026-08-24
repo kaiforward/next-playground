@@ -8,7 +8,6 @@ import {
   type DevelopmentRefs,
 } from "@/lib/engine/development";
 import { HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, POP_CENTRE_DENSITY, effectiveSpaceCost } from "@/lib/constants/industry";
-import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 
 /**
  * Fixture: a system's development inputs. Defaults are a barren, empty frontier
@@ -43,8 +42,11 @@ describe("industryPotential — the staffed-industry footprint a system could ev
     expect(industryPotential(0, 0)).toBe(0);
   });
 
-  it("is every deposit slot worked plus all general space as factory", () => {
-    expect(industryPotential(10, 5)).toBeCloseTo(10 * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT + 5, 6);
+  it("is every deposit slot worked plus the (compile-preserving, always-0-fed) industryLand term", () => {
+    // The habitability-seeding amendment deleted DEPOSIT_SLOT_FOOTPRINT and the industry-land
+    // budget it converted (Task 15) — industryPotential is a straight sum pending Task 16's
+    // worked-levels-÷-authored-counts re-derivation (see development.ts's doc comments).
+    expect(industryPotential(10, 5)).toBeCloseTo(10 + 5, 6);
   });
 
   it("rises with both deposit slots and general space", () => {
@@ -134,11 +136,13 @@ describe("systemDevelopment", () => {
     expect(heavy).toBeGreaterThan(light);
   });
 
-  it("counts non-extractor industry-land buildings (the factory term), staffed not just built", () => {
-    // Extractors sit on deposit slots; factories, academies and complexes sit on industry land and feed
-    // development through the `factory` = industryLandUsed term (housing is excluded outright, never
-    // netted out). A vocational school is such an industry-land building (no deposit `resource`), so it
-    // exercises that term with no extractor present. Barren land isolates industry as the whole reading.
+  it("does not (yet) count non-extractor buildings — a compile-preserving deviation pending Task 16", () => {
+    // Habitability-seeding (Task 15) deleted the industry-land budget entirely, so factories,
+    // academies and complexes bill no land and are NOT counted in staffedIndustry at all — the old
+    // `factory` = industryLandUsed term is gone outright, not merely relaxed. A vocational school
+    // (no deposit `resource`, so never an extractor) is a pure factory-term case: today it reads
+    // the SAME zero built or not. Task 16 re-derives the industry axis as worked levels ÷ authored
+    // deposit counts; this pin is the honest current behaviour, not the target one.
     const barren = { peopleLand: 0 };
     const empty = systemDevelopment(devInput({ ...barren, population: 1000, buildings: {} }), REFS);
     const built = systemDevelopment(
@@ -146,14 +150,7 @@ describe("systemDevelopment", () => {
       REFS,
     );
     expect(empty).toBe(0);
-    expect(built).toBeGreaterThan(0);
-
-    // ...and it counts what is STAFFED: the same buildings understaffed read lower.
-    const idle = systemDevelopment(
-      devInput({ ...barren, population: 5, buildings: { [VOCATIONAL_SCHOOL_TYPE]: 6 } }),
-      REFS,
-    );
-    expect(built).toBeGreaterThan(idle);
+    expect(built).toBe(0);
   });
 
   it("counts industry by what is STAFFED, not what is built (barren isolates it)", () => {
@@ -173,13 +170,9 @@ describe("systemDevelopment", () => {
     expect(withHousing).toBe(withoutHousing);
   });
 
-  // Proves (5): the factory term is unchanged by deleting the manual housingSpace net-out — a
-  // contradiction check. The OLD formula computed factory = max(0, generalSpaceUsed(buildings) −
-  // housingSpace), where generalSpaceUsed included housing; that is the algebraic identity
-  // (industryLandUsed + housingSpace) − housingSpace = industryLandUsed. On a MIXED build
-  // (extractor + factory + housing together, not just housing alone), the barren-isolated
-  // (industry-only) development reading must be identical whether or not housing is in the mix.
-  it("factory term on a MIXED build (extractor + factory + housing) matches the old subtract-housingSpace formula", () => {
+  // Housing is still excluded from staffedIndustry (unchanged): adding it to a mixed build must not
+  // move the reading, whether or not the (now zero-contributing) factory term is also present.
+  it("housing never moves the industry reading on a MIXED build (extractor + factory + housing)", () => {
     const factoryOnly = { ore: 4, [VOCATIONAL_SCHOOL_TYPE]: 3 };
     const mixedWithHousing = { ...factoryOnly, housing: 7 };
     const barren = { peopleLand: 0, population: 1000 };
@@ -220,16 +213,20 @@ describe("systemDevelopment", () => {
   });
 });
 
-// DEPOSIT_SLOT_FOOTPRINT is calibrated against the count scale (~5-45 per resource per body,
-// system-level sums median ~102) so it stays commensurable with industry land (system-level sums
-// median ~436). Proves below pin the recalibrated coefficient's behaviour under realistic magnitudes.
-describe("recalibrated DEPOSIT_SLOT_FOOTPRINT — count/land commensurability", () => {
-  it("Prove 1: the industry-only arm stays finite in [0,1) for a zero-people-land system under real-scale refs", () => {
-    // Realistic galaxy-scale refs (census order of magnitude: industryLand ~40-300/body,
-    // depositCounts system sums ~30-190) — not the small fixed REFS the other tests use.
+// DEPOSIT_SLOT_FOOTPRINT is deleted (habitability-seeding amendment, Task 15) along with the
+// industry-land budget it converted — `industryPotential` is a straight sum pending Task 16's
+// worked-levels-÷-authored-counts re-derivation of the whole industry axis (development.ts's doc
+// comments). The proves below keep pinning the structural guarantees (finite, no NaN, no crash on
+// an empty galaxy) that survive the coefficient's deletion; the old coefficient-specific "Prove 2"
+// (extractor-heavy vs factory-heavy commensurability at 4.5) has no coefficient left to be about
+// and is Task 16's to re-author against whatever the new axis turns out to need.
+describe("industryPotential — structural guarantees that survive DEPOSIT_SLOT_FOOTPRINT's deletion", () => {
+  it("the industry-only arm stays finite in [0,1) for a zero-people-land system under real-scale refs", () => {
+    // Realistic galaxy-scale refs (census order of magnitude: depositCounts system sums ~30-190) —
+    // not the small fixed REFS the other tests use.
     const realisticRefs: DevelopmentRefs = {
       popRef: 34_500,
-      industryRef: industryPotential(320, 1100), // ≈ a natural system's converted footprint
+      industryRef: industryPotential(320, 1100),
     };
     const dev = systemDevelopment(
       devInput({ buildings: { ore: 12, minerals: 8 }, population: 400, peopleLand: 0 }),
@@ -240,22 +237,7 @@ describe("recalibrated DEPOSIT_SLOT_FOOTPRINT — count/land commensurability", 
     expect(dev).toBeLessThan(1);
   });
 
-  it("Prove 2: an extractor-heavy and a factory-heavy system of equal converted footprint read comparable industryPotential", () => {
-    // Deliberately hardcodes the authored coefficient (4.5, not read from SUBSTRATE_GEN) so this test
-    // pins the CURRENT calibration: it must fail if the coefficient is dropped (reverted to 1.0), left
-    // vestigial (multiplied by nothing), or a second, disagreeing constant is used for one arm only.
-    const AUTHORED_FOOTPRINT = 4.5;
-    const extractorHeavy = { depositCounts: 100, industryLand: 50 }; // 100×4.5 + 50 = 500
-    const factoryHeavy = { depositCounts: 20, industryLand: 410 }; // 20×4.5 + 410 = 500
-    expect(extractorHeavy.depositCounts * AUTHORED_FOOTPRINT + extractorHeavy.industryLand).toBeCloseTo(500, 6);
-    expect(factoryHeavy.depositCounts * AUTHORED_FOOTPRINT + factoryHeavy.industryLand).toBeCloseTo(500, 6);
-    expect(industryPotential(extractorHeavy.depositCounts, extractorHeavy.industryLand)).toBeCloseTo(
-      industryPotential(factoryHeavy.depositCounts, factoryHeavy.industryLand),
-      6,
-    );
-  });
-
-  it("Prove 4: empty-galaxy refs still read zero without NaN under the recalibrated coefficient", () => {
+  it("empty-galaxy refs still read zero without NaN", () => {
     const emptyRefs = developmentRefs([]);
     expect(emptyRefs).toEqual({ popRef: 0, industryRef: 0 });
     expect(industryPotential(0, 0)).toBe(0);

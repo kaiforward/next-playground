@@ -38,7 +38,7 @@ function slotsForKinds(kinds: number) {
 
 /** A rock nothing would ever want: no habitable space, no deposits — it scores below the floor. */
 function inertRock(s: WorldSystem): WorldSystem {
-  return { ...s, peopleLand: 0, industryLand: 0, ...slots(0) };
+  return { ...s, peopleLand: 0, ...slots(0) };
 }
 
 interface CandidateSpec {
@@ -88,7 +88,6 @@ function claimWorld(specs: CandidateSpec[]): { world: World; candidateIds: strin
     overrides.set(candidate.id, {
       ...candidate,
       peopleLand: spec.peopleLand,
-      industryLand: spec.peopleLand,
       ...slotsForKinds(spec.resourceKinds),
     });
     touched.add(candidate.id);
@@ -144,9 +143,9 @@ function twoOwnerWorld(farHops: number, farOwnerFirst: boolean) {
   const overrides = new Map<string, WorldSystem>([
     [far.id, { ...far, factionId: faction.id }],
     // Prize: substrate 31 → 20.7 measured at one jump, 12.4 measured at `farHops`.
-    [prize.id, { ...prize, peopleLand: 10, industryLand: 10, ...slotsForKinds(7) }],
+    [prize.id, { ...prize, peopleLand: 10, ...slotsForKinds(7) }],
     // Rival: substrate 25 → 16.7 at one jump. Between the prize's two readings.
-    [rival.id, { ...rival, peopleLand: 25, industryLand: 25, ...slotsForKinds(0) }],
+    [rival.id, { ...rival, peopleLand: 25, ...slotsForKinds(0) }],
     ...relays.map((r): [string, WorldSystem] => [r.id, inertRock(r)]),
   ]);
 

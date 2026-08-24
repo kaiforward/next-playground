@@ -91,17 +91,4 @@ describe("homeworldGardenBody", () => {
     expect(homeworldGardenBody().peopleLand).toBeGreaterThanOrEqual(housing * effectiveSpaceCost(HOUSING_TYPE));
   });
 
-  it("guarantees enough industry land for every factory and academy (housing bills people land, not this)", () => {
-    // Extractors sit on deposit counts (asserted above); housing bills people land (asserted above);
-    // every other built type (factories, academies) draws industry land only, under the build-rule
-    // separation the three-budget model authors. The garden must fit their whole footprint so nothing
-    // is floored.
-    let industryFootprint = 0;
-    for (const [type, count] of Object.entries(HOME_SYSTEM_PREFAB.buildings)) {
-      if (GOOD_TIER_BY_KEY[type] === 0 && GOOD_PRODUCTION[type]?.resource) continue; // extractor → counts
-      if (type === HOUSING_TYPE) continue; // housing → people land
-      industryFootprint += count * effectiveSpaceCost(type);
-    }
-    expect(homeworldGardenBody().industryLand).toBeGreaterThanOrEqual(industryFootprint);
-  });
 });

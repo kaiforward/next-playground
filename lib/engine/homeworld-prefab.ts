@@ -135,30 +135,27 @@ const GARDEN_DISPLAY_SIZE = 1.0;
 
 /**
  * The guaranteed garden world a faction capital sits on: one deterministic body authoring people
- * land, industry land and a spread of deposit counts all sized `GARDEN_MARGIN`× the prefab's exact
- * footprint, so the whole prefab (housing + factories + extractors) always fits with headroom — no
- * flooring, ever. Prepended to the homeworld's procedural bodies (which stay as varied scenery +
- * extra deposits). Temperate class, score 1.0 — authored directly, never back-solved from buildings.
+ * land and a spread of deposit counts all sized `GARDEN_MARGIN`× the prefab's exact footprint, so
+ * the whole prefab (housing + extractors) always fits with headroom — no flooring, ever. Factories
+ * and academies bill no land, so only housing and extractors size this body. Prepended to the
+ * homeworld's procedural bodies (which stay as varied scenery + extra deposits). Temperate class,
+ * score 1.0 — authored directly, never back-solved from buildings.
  */
 export function homeworldGardenBody(): GeneratedBody {
   const b = computeHomeworldBuildings(HOME_SYSTEM_POP);
   const counts = emptyResourceVector();
   let housingPeopleLand = 0;
-  let factoryIndustryLand = 0;
   for (const [type, count] of Object.entries(b)) {
     if (GOOD_TIER_BY_KEY[type] === 0) {
       const r = GOOD_PRODUCTION[type]?.resource; // tier-0 extractors sit on deposit counts for their resource
       if (r) counts[r] += count;
     } else if (type === HOUSING_TYPE) {
       housingPeopleLand += count * effectiveSpaceCost(HOUSING_TYPE); // housing draws people land only
-    } else {
-      factoryIndustryLand += count * effectiveSpaceCost(type); // factories + academies draw industry land only
     }
   }
   for (const r of RESOURCE_TYPES) counts[r] = Math.ceil(counts[r] * GARDEN_MARGIN);
 
   const peopleLand = housingPeopleLand * GARDEN_MARGIN;
-  const industryLand = factoryIndustryLand * GARDEN_MARGIN;
   const quality = emptyResourceVector();
   for (const r of RESOURCE_TYPES) if (counts[r] > 0) quality[r] = GARDEN_QUALITY;
 
@@ -166,7 +163,6 @@ export function homeworldGardenBody(): GeneratedBody {
     bodyType: "temperate_world",
     size: GARDEN_DISPLAY_SIZE,
     peopleLand,
-    industryLand,
     counts,
     quality,
   };

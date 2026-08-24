@@ -40,7 +40,7 @@ function sysWithGoods(readings: GoodSatisfaction[]): BuildSystemState {
   return {
     systemId: "s1", factionId: "f1", control: "developed", population: 20,
     buildings: {}, depositCounts: emptyResourceVector(),
-    industryLand: 10, peopleLand: 10,
+    peopleLand: 10,
     goods: readings.map((r) => ({
       goodId: r.goodId, stock: 0, demand: r.demanded, civilianDemand: r.demanded,
       capacityProduction: 0, satisfaction: r.satisfaction,

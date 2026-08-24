@@ -187,7 +187,6 @@ function hasNoHousingHeadroom(system: WorldSystem, queued: Record<string, number
     population: system.population,
     buildings,
     depositCounts: depositCountsOf(system),
-    industryLand: system.industryLand,
     peopleLand: system.peopleLand,
     goods: [],
   };

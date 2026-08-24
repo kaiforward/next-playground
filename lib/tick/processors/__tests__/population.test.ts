@@ -61,7 +61,7 @@ function sys(id: string, population: number, popCap: number, unrest = 0, buildin
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed", governmentType: "federation",
     population, popCap, unrest, buildings, buildingIdleCycles: {}, collapseDebt: 0,
     yields: unitResourceVector(), extractionEff: unitResourceVector(),
-    depositCounts: emptyResourceVector(), industryLand: 0, peopleLand: 0,
+    depositCounts: emptyResourceVector(), peopleLand: 0,
   };
 }
 function market(systemId: string, goodId: string): WorldMarket {

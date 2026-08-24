@@ -321,23 +321,6 @@ export function perGradeStaffing(
   return rows;
 }
 
-/**
- * Industry-land footprint of the built base — tier-1+ factories, academies, complexes and
- * construction centres. Excludes tier-0 extractors (they sit on dedicated deposit slots, not
- * industry land) AND housing (it bills to people land, a separate, disjoint budget that never
- * competes with industry for the same space — the build rule's separation).
- */
-export function industryLandUsed(buildings: Record<string, number>): number {
-  let used = 0;
-  for (const [type, count] of Object.entries(buildings)) {
-    if (count <= 0) continue;
-    if (type === HOUSING_TYPE) continue; // housing bills to people land, not industry land
-    if (BUILDING_TYPES[type]?.resource) continue; // tier-0 extractor → deposit land
-    used += count * effectiveSpaceCost(type);
-  }
-  return used;
-}
-
 /** popCap contribution from housing: count × popProvided. */
 export function housingPopCap(buildings: Record<string, number>): number {
   const count = buildings[HOUSING_TYPE] ?? 0;
@@ -995,31 +978,26 @@ export interface SpaceBudget {
 }
 
 /**
- * A system's three independent land/deposit budgets and how much of each is built out — people
- * land (billed by housing alone), industry land (billed by factories/academies/complexes/
- * construction centres, never housing or extractors) and deposit slots (billed by extractor
- * levels, one slot each). The three are disjoint: none is derived from another, and nothing here
+ * A system's two independent land/deposit budgets and how much of each is built out — people
+ * land (billed by housing alone) and deposit slots (billed by extractor levels, one slot each).
+ * Factories, academies, complexes and construction centres bill neither: labour, demand and decay
+ * bound them instead. The two are disjoint: neither is derived from the other, and nothing here
  * partitions a shared "available" total the way the old general/habitable subset once did.
  */
 export interface SubstrateSpace {
   /** People land: total budget and housing's built-in use of it. */
   people: SpaceBudget;
-  /** Industry land: total budget and factories/academies/complexes/centres' built-in use of it. */
-  industry: SpaceBudget;
   /** Deposit slots (all resources): total authored count and levels currently worked by extractors. */
   deposit: SpaceBudget;
 }
 
 /**
- * Summarise a system's three land/deposit budgets. `peopleLand` and `industryLand` are the
- * system's authored aggregates; `depositCounts` is its per-resource authored slot cap
- * (summed here into one total). Housing bills only `people`; factories, academies, complexes
- * and construction centres bill only `industry` (via `industryLandUsed`); extractors bill only
- * `deposit`, one worked level per slot.
+ * Summarise a system's two land/deposit budgets. `peopleLand` is the system's authored aggregate;
+ * `depositCounts` is its per-resource authored slot cap (summed here into one total). Housing
+ * bills only `people`; extractors bill only `deposit`, one worked level per slot.
  */
 export function summariseSpace(
   peopleLand: number,
-  industryLand: number,
   depositCounts: ResourceVector,
   buildings: Record<string, number>,
 ): SubstrateSpace {
@@ -1034,7 +1012,6 @@ export function summariseSpace(
   }
   return {
     people: { used: peopleUsed, total: peopleLand },
-    industry: { used: industryLandUsed(buildings), total: industryLand },
     deposit: { used: depositUsed, total: depositTotal },
   };
 }

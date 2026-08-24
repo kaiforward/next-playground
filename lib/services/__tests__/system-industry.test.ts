@@ -29,10 +29,9 @@ describe("getSystemIndustry", () => {
     expect(data.visibility).toBe("visible");
     if (data.visibility !== "visible") throw new Error("expected visible");
 
-    // Three independent budgets mirror the world columns' totals.
+    // Two independent budgets mirror the world columns' totals.
     expect(data.space.people.total).toBe(system.peopleLand);
-    expect(data.space.industry.total).toBe(system.industryLand);
-    for (const budget of [data.space.people, data.space.industry, data.space.deposit]) {
+    for (const budget of [data.space.people, data.space.deposit]) {
       expect(Number.isFinite(budget.used)).toBe(true);
       expect(budget.used).toBeGreaterThanOrEqual(0);
       expect(Number.isFinite(budget.total)).toBe(true);

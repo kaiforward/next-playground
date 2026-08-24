@@ -97,6 +97,19 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   active relief order suspend the death line, or is the race accepted?
   *Don't:* let relief spend delete unrest directly, or buy haul capacity without a stated
   exception to the money-is-fuel invariant.
+- **[M] Strike and teardown pressure are dormant — re-couple when adversarial mechanics land.**
+  Accepted by owner decision (2026-08-24, industry-land cut): with industry unconstrained by
+  land, measured peak unrest galaxy-wide is 0.476 at 10K ticks (falling to 0.324 at 20K)
+  against the 0.65 strike threshold and 0.75 catastrophic-teardown threshold, and idle-teardown
+  countdowns peak at 66/120 cycles — strikes and both teardown channels never fire, read as
+  "systems doing well enough it never happens", not a bug. The demand-hunting flip rate
+  asymptotes at ~0.0045 (under the old 0.005 harness bound) for the same reason. Harness tests
+  pin the calm regime as characterisation so a drift back up is visible.
+  *Next step:* when a mechanic that applies real pressure ships (war, events split, disasters
+  pass, monetary demand), re-read these ceilings and re-arm the dormant thresholds against it.
+  *Don't:* re-tune the thresholds (0.65 / 0.75 / 120 cycles) downward to make the mechanics
+  fire against today's incomplete economy — they are definitions; the pressure side is what's
+  missing.
 - **[M] Necessity weighting in the build planner** — the autonomic planner ranks opportunities by
   `BuildOpportunity.score` (`lib/engine/directed-build.ts:596-597, 850-856`): units of unmet demand it
   could serve, divided by route cost. That carries no necessity at all — a hundred units of unmet food

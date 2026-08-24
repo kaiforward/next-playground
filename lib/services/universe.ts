@@ -122,7 +122,9 @@ export function getSystemSubstrate(systemId: string): SystemSubstrateData {
       counts: depositCountsOf(b),
       quality: qualityOf(b),
       peopleLand: b.peopleLand,
-      industryLand: b.industryLand,
+      // WorldBody no longer carries industryLand (habitability-seeding cut it) — compile-preserving
+      // 0 until Task 17 removes the field from BodyView itself and the astrography UI that reads it.
+      industryLand: 0,
       extractionModifier: arch.extractionModifier,
       occupied: occupied.has(b.id),
     };
@@ -167,7 +169,7 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
     visibility: "visible",
     unrest: system.unrest,
     ...readout,
-    space: summariseSpace(system.peopleLand, system.industryLand, depositCounts, buildings),
+    space: summariseSpace(system.peopleLand, depositCounts, buildings),
     deposits: summariseDeposits(depositCounts, worked, yields),
     goods: capacityGoodRates(buildings, system.population, yields, effOf(system)),
     popNeeds,

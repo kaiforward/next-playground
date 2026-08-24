@@ -22,15 +22,13 @@ describe("BODY_ARCHETYPES", () => {
     }
   });
 
-  it("every archetype has a default-pop score in [0, 1] and min ≤ max people/industry land", () => {
+  it("every archetype has a default-pop score in [0, 1] and min ≤ max people land", () => {
     for (const id of ARCHETYPE_IDS) {
       const arch = BODY_ARCHETYPES[id];
       expect(arch.scores.default).toBeGreaterThanOrEqual(0);
       expect(arch.scores.default).toBeLessThanOrEqual(1);
       expect(arch.peopleLand.min).toBeGreaterThanOrEqual(0);
       expect(arch.peopleLand.max).toBeGreaterThanOrEqual(arch.peopleLand.min);
-      expect(arch.industryLand.min).toBeGreaterThanOrEqual(0);
-      expect(arch.industryLand.max).toBeGreaterThanOrEqual(arch.industryLand.min);
       expect(arch.extractionModifier).toBeGreaterThan(0);
       expect(arch.extractionModifier).toBeLessThanOrEqual(1);
       expect(typeof arch.techLocked).toBe("boolean");

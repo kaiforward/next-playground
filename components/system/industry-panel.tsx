@@ -877,7 +877,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
   const optionByType = useMemo(() => new Map(buildOptions.map((o) => [o.buildingType, o])), [buildOptions]);
   const currentTypes = useMemo(() => new Set(buildings.map((b) => b.buildingType)), [buildings]);
   const dialogOptions = useMemo(
-    () => buildOptions.filter((o) => !currentTypes.has(o.buildingType) && o.maxLevels > 0),
+    () => buildOptions.filter((o) => !currentTypes.has(o.buildingType) && (o.maxLevels === null || o.maxLevels > 0)),
     [buildOptions, currentTypes],
   );
   const ghostRows = useMemo(

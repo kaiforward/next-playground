@@ -68,7 +68,6 @@ function makeTickSystem(id: string, factionId: string | null): TickSystem {
     yields: emptyResourceVector(),
     extractionEff: unitResourceVector(),
     depositCounts: emptyResourceVector(),
-    industryLand: 100,
     peopleLand: 50,
   };
 }

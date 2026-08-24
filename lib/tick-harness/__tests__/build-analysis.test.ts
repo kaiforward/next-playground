@@ -57,7 +57,7 @@ function devSys(
     yields: unitResourceVector(),
     extractionEff: unitResourceVector(),
     depositCounts: opts.depositCounts ?? emptyResourceVector(),
-    industryLand: 0, peopleLand: 0,
+ peopleLand: 0,
   };
 }
 

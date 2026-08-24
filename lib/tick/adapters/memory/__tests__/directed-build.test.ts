@@ -8,7 +8,7 @@ function row(systemId: string, factionId: string | null): SystemBuildRow {
   return {
     systemId, factionId, control: "unclaimed", population: 100, buildings: {},
     yields: emptyResourceVector(), depositCounts: emptyResourceVector(),
-    industryLand: 0, peopleLand: 0, markets: [],
+ peopleLand: 0, markets: [],
   };
 }
 

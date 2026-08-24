@@ -7,7 +7,7 @@ import { emptyResourceVector } from "@/lib/engine/resources";
 function sys(over: Partial<Parameters<typeof computeBuildOptions>[0]> = {}) {
   return {
     population: 500, buildings: {}, depositCounts: emptyResourceVector(),
-    industryLand: 10, peopleLand: 4, ...over,
+    peopleLand: 4, ...over,
   };
 }
 const byType = (opts: ReturnType<typeof computeBuildOptions>, t: string) => opts.find((o) => o.buildingType === t)!;
@@ -22,20 +22,24 @@ describe("computeBuildOptions", () => {
     expect(h.workPerLevel).toBe(workCostPerLevel(HOUSING_TYPE));
   });
 
-  it("hard-blocks a general-space type when no industry-land footprint remains", () => {
-    // Housing bills people land alone (build rule separation) — standing housing never eats
-    // industry land, so exhaust industry land directly with a non-housing build instead.
+  it("never blocks a general-space type on land — the industry-land budget is deleted, not merely generous", () => {
+    // Zero free anything except labour: no deposit slots, people land already fully housed. A
+    // factory/academy/complex/centre bills no land at all, so it still reads a real (unbounded)
+    // maxLevels here — the old land gate is deleted, not weakened.
     const schoolCost = effectiveSpaceCost(VOCATIONAL_SCHOOL_TYPE);
-    const full = sys({ industryLand: 2, buildings: { [VOCATIONAL_SCHOOL_TYPE]: Math.ceil(2 / schoolCost) } });
-    const c = byType(computeBuildOptions(full, {}), CONSTRUCTION_CENTRE_TYPE);
-    expect(c.maxLevels).toBe(0);
-    expect(c.blocked).toBe("no_space");
+    const starved = sys({
+      peopleLand: 4,
+      buildings: { [HOUSING_TYPE]: 4, [VOCATIONAL_SCHOOL_TYPE]: 500 / schoolCost },
+    });
+    const c = byType(computeBuildOptions(starved, {}), CONSTRUCTION_CENTRE_TYPE);
+    expect(c.maxLevels).toBeNull();
+    expect(c.blocked).toBeNull();
   });
 
   it("housing standing at full people-land occupancy does not block a general-space type (build rule separation)", () => {
-    const full = sys({ industryLand: 10, peopleLand: 4, buildings: { [HOUSING_TYPE]: 4 } }); // people land full
+    const full = sys({ peopleLand: 4, buildings: { [HOUSING_TYPE]: 4 } }); // people land full
     const c = byType(computeBuildOptions(full, {}), CONSTRUCTION_CENTRE_TYPE);
-    expect(c.maxLevels).toBeGreaterThan(0);
+    expect(c.maxLevels).toBeNull();
     expect(c.blocked).toBeNull();
   });
 

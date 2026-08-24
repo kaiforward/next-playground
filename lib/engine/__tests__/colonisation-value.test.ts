@@ -245,7 +245,9 @@ describe("colonyValue: U leads, L is secondary (real coefficients, real candidat
       if (s.peopleLand < floor) continue;
       const depositCounts = emptyResourceVector();
       for (const r of RESOURCE_TYPES) depositCounts[r] = s[countColumn[r]];
-      candidates.push({ peopleLand: s.peopleLand, industryLand: s.industryLand, depositCounts });
+      // WorldSystem no longer carries industryLand (habitability-seeding cut it, Task 15) — compile-
+      // preserving 0 until Task 16 deletes the LAND_GENERAL_WEIGHT term this candidate set feeds.
+      candidates.push({ peopleLand: s.peopleLand, industryLand: 0, depositCounts });
     }
   }
   it("has a non-trivial representative candidate set (sanity, not the claim)", () => {

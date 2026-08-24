@@ -1,6 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import {
   developmentPoints,
   developmentPotential,
@@ -8,8 +6,6 @@ import {
   type DevelopmentPointsInput,
   type DevelopmentPotentialInput,
 } from "@/lib/engine/development-points";
-import { systemDevelopment, industryPotential, type DevelopmentInput } from "@/lib/engine/development";
-import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 
 /**
  * Fixture: a system's development-points inputs. Defaults are empty (no pop, no buildings) so each
@@ -195,52 +191,10 @@ describe("developmentPotential — full-build-out dev-points ceiling", () => {
   });
 });
 
-// Prove 3: developmentPotential (this file) and systemDevelopment (development.ts) share the
-// ONE deposit→land coefficient (SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT) — no second, disagreeing constant.
-describe("Prove 3 — one shared deposit→land coefficient, no second constant", () => {
-  it("grep-level: development-points.ts never reads SUBSTRATE_GEN/DEPOSIT_SLOT_FOOTPRINT directly — it only reaches the coefficient via industryPotential", () => {
-    // If a second coefficient were ever inlined here (bypassing industryPotential), it could disagree
-    // with development.ts's without any test in THIS file catching it algebraically — a source check
-    // is the only thing that rules it out structurally.
-    const here = fileURLToPath(import.meta.url);
-    const srcPath = here.replace(/__tests__[\\/]development-points\.test\.ts$/, "development-points.ts");
-    const src = readFileSync(srcPath, "utf8");
-    expect(src.includes("SUBSTRATE_GEN")).toBe(false);
-    expect(src.includes("DEPOSIT_SLOT_FOOTPRINT")).toBe(false);
-  });
-
-  it("numeric contradiction: mutating SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT once moves BOTH developmentPotential's industry term and systemDevelopment's extraction term in lockstep", () => {
-    const original = SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT;
-    try {
-      const depositCounts = 20;
-      const industryLand = 10;
-      const peopleLand = 0;
-
-      const potentialBefore = developmentPotential({ peopleLand, depositCounts, industryLand });
-      const devInput: DevelopmentInput = {
-        buildings: { ore: depositCounts }, // built extractor levels = the same deposit count, fully worked
-        population: 100_000, // ample labour: staffing saturates to 1
-        peopleLand,
-      };
-      const refs = { popRef: 1, industryRef: industryPotential(depositCounts, industryLand) * 10 }; // generous, unsaturated
-      const devBefore = systemDevelopment(devInput, refs);
-
-      // Mutate the ONE shared coefficient (double it) — both readings must move, and by the same
-      // algebraic relationship, or they are not actually sharing it.
-      Object.assign(SUBSTRATE_GEN, { DEPOSIT_SLOT_FOOTPRINT: original * 2 });
-      const potentialAfter = developmentPotential({ peopleLand, depositCounts, industryLand });
-      const devAfter = systemDevelopment(devInput, refs);
-
-      expect(potentialAfter).not.toBeCloseTo(potentialBefore, 6);
-      expect(devAfter).not.toBeCloseTo(devBefore, 6);
-
-      // Both deltas trace back to the same doubled deposit contribution (depositCounts × Δcoefficient),
-      // scaled only by each formula's own OWN fixed multiplier (TIER_WEIGHT[1] vs staffing) — not by two
-      // independently-tunable coefficients.
-      const expectedPotentialDelta = depositCounts * original * DEVELOPMENT_POINTS.TIER_WEIGHT[1];
-      expect(potentialAfter - potentialBefore).toBeCloseTo(expectedPotentialDelta, 6);
-    } finally {
-      Object.assign(SUBSTRATE_GEN, { DEPOSIT_SLOT_FOOTPRINT: original });
-    }
-  });
-});
+// The habitability-seeding amendment (2026-08-24) deleted SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT and
+// the industry-land budget it converted (Task 15) — this file's old "Prove 3" (one shared
+// deposit→land coefficient) no longer has a coefficient to be about. `industryPotential` and
+// `systemDevelopment`'s industry term are left as a compile-preserving 0-contribution stub (see
+// lib/engine/development.ts's doc comments) pending Task 16's worked-levels-÷-authored-counts
+// re-derivation of the whole industry axis, which owns re-proving whatever this axis's new shared
+// coefficient (if any) turns out to be.

@@ -9,7 +9,7 @@ function sys(id: string, buildings: Record<string, number>, idle: Record<string,
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed",
     governmentType: "federation", population: 100, popCap: 200,
     unrest: 0.3, buildings, buildingIdleCycles: idle, collapseDebt: debt, yields: unitResourceVector(),
-    extractionEff: unitResourceVector(), depositCounts: emptyResourceVector(), industryLand: 0, peopleLand: 0,
+    extractionEff: unitResourceVector(), depositCounts: emptyResourceVector(), peopleLand: 0,
   };
 }
 

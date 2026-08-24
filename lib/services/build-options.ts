@@ -84,7 +84,7 @@ export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData 
   const openIndices: number[] = [];
   const hypotheticals: WorldConstructionProject[] = [];
   options.forEach((o, i) => {
-    if (o.maxLevels <= 0) return;
+    if (o.maxLevels !== null && o.maxLevels <= 0) return;
     openIndices.push(i);
     hypotheticals.push({
       kind: "build", id: `eta-probe-${i}`, factionId, systemId: system.id, origin: "player",

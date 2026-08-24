@@ -916,13 +916,14 @@ function expectDemandedSatisfaction(world: World, systemId: string, expected: nu
 }
 
 /**
- * Whole housing levels the fixture system could still build — the land clamp on relief sizing.
- * Mirrors `habitableHousingHeadroom` for a site whose only general-space user is its own housing.
+ * Whole housing levels the fixture system could still build — the people-land clamp on relief
+ * sizing. Mirrors `habitableHousingHeadroom`: housing bills people land alone, never industry land
+ * (deleted entirely — habitability-seeding, Task 15).
  */
 function fixtureLandHeadroom(system: WorldSystem): number {
   const cost = effectiveSpaceCost(HOUSING_TYPE);
   const used = FIXTURE_HOUSING_LEVELS * cost;
-  return Math.floor(Math.min(system.peopleLand - used, system.industryLand - used) / cost);
+  return Math.floor((system.peopleLand - used) / cost);
 }
 
 /**

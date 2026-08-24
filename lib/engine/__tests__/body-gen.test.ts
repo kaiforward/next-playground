@@ -56,14 +56,12 @@ describe("generateSubstrate", () => {
 });
 
 describe("generateSubstrate — per-body budgets", () => {
-  it("every body's peopleLand/industryLand fall within its archetype's authored range", () => {
+  it("every body's peopleLand falls within its archetype's authored range", () => {
     for (const s of sample(300)) {
       for (const b of s.bodies) {
         const arch = BODY_ARCHETYPES[b.bodyType];
         expect(b.peopleLand).toBeGreaterThanOrEqual(arch.peopleLand.min);
         expect(b.peopleLand).toBeLessThanOrEqual(arch.peopleLand.max);
-        expect(b.industryLand).toBeGreaterThanOrEqual(arch.industryLand.min);
-        expect(b.industryLand).toBeLessThanOrEqual(arch.industryLand.max);
       }
     }
   });
@@ -109,18 +107,16 @@ describe("generateSubstrate — per-body budgets", () => {
 });
 
 describe("substrateAggregates — Proves (1): tech-locked classes contribute zero to every aggregate", () => {
-  it("a tech-locked class contributes zero counts, zero extractionEfficiency weight and zero industry land", () => {
+  it("a tech-locked class contributes zero counts and zero extractionEfficiency weight", () => {
     // volcanic_world and gas_giant are the two tech-locked classes (bodies.ts).
     const locked: GeneratedBody = {
       bodyType: "volcanic_world",
       size: 1,
       peopleLand: 0,
-      industryLand: 999, // would inflate industryLand if the lock were not respected
       counts: { gas: 5, minerals: 5, ore: 5, biomass: 0, arable: 0, water: 0, radioactive: 5 },
       quality: { gas: 1, minerals: 1, ore: 1, biomass: 0, arable: 0, water: 0, radioactive: 1 },
     };
     const agg = substrateAggregates([locked]);
-    expect(agg.industryLand).toBe(0);
     expect(agg.depositCounts.gas).toBe(0);
     expect(agg.depositCounts.minerals).toBe(0);
     expect(agg.depositCounts.ore).toBe(0);
@@ -139,7 +135,6 @@ describe("substrateAggregates — Proves (2): arid/tundra dark land", () => {
       bodyType: "arid_world",
       size: 1,
       peopleLand: 200, // authored, dark — below threshold, never reaches peopleLand
-      industryLand: 100,
       counts: { gas: 0, minerals: 3, ore: 3, biomass: 0, arable: 8, water: 0, radioactive: 3 },
       quality: { gas: 0, minerals: 1, ore: 1, biomass: 0, arable: 1, water: 0, radioactive: 1 },
     };
@@ -149,7 +144,6 @@ describe("substrateAggregates — Proves (2): arid/tundra dark land", () => {
 
     const agg = substrateAggregates([arid]);
     expect(agg.peopleLand).toBe(0); // below threshold ⇒ never reaches the system aggregate
-    expect(agg.industryLand).toBe(100); // industry land is unconditional on score
     expect(agg.depositCounts.minerals).toBe(3);
     expect(agg.depositCounts.arable).toBe(8);
   });
@@ -161,7 +155,6 @@ describe("substrateAggregates — Proves (4): extractionEfficiency defaults to 1
       bodyType: "temperate_world",
       size: 1,
       peopleLand: 500,
-      industryLand: 200,
       counts: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 10, water: 0, radioactive: 0 },
       quality: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 1, water: 0, radioactive: 0 },
     };
@@ -173,14 +166,12 @@ describe("substrateAggregates — Proves (4): extractionEfficiency defaults to 1
   it("with counts present, extractionEfficiency is the deposit-count-weighted mean extractionModifier", () => {
     const a: GeneratedBody = {
       bodyType: "temperate_world", // extractionModifier 1.0
-      size: 1, peopleLand: 0, industryLand: 0,
-      counts: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 6, radioactive: 0 },
+      size: 1, peopleLand: 0,      counts: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 6, radioactive: 0 },
       quality: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 1, radioactive: 0 },
     };
     const b: GeneratedBody = {
       bodyType: "frozen_world", // extractionModifier 0.6
-      size: 1, peopleLand: 0, industryLand: 0,
-      counts: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 2, radioactive: 0 },
+      size: 1, peopleLand: 0,      counts: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 2, radioactive: 0 },
       quality: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 1, radioactive: 0 },
     };
     // (6*1.0 + 2*0.6) / 8 = 0.9

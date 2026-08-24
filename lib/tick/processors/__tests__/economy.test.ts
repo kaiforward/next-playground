@@ -96,7 +96,6 @@ function makeProducerSystem(id: string, unrest: number): TickSystem {
     yields: unitResourceVector(),
     extractionEff: unitResourceVector(),
     depositCounts: emptyResourceVector(),
-    industryLand: 0,
     peopleLand: 0,
   };
 }
@@ -119,7 +118,6 @@ function makeConsumerSystem(id: string, unrest: number): TickSystem {
     yields: unitResourceVector(),
     extractionEff: unitResourceVector(),
     depositCounts: emptyResourceVector(),
-    industryLand: 0,
     peopleLand: 0,
   };
 }
@@ -548,7 +546,6 @@ describe("economy processor: supply-chain input-gating", () => {
         yields: unitResourceVector(),
         extractionEff: unitResourceVector(),
         depositCounts: emptyResourceVector(),
-        industryLand: 0,
         peopleLand: 0,
       };
     }

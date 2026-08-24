@@ -79,7 +79,7 @@ export function BuildDialog({
   const levels = watch("levels");
   const option = useMemo(() => options.find((o) => o.buildingType === chosenType), [options, chosenType]);
 
-  const overCeiling = option !== undefined && levels > option.maxLevels;
+  const overCeiling = option !== undefined && option.maxLevels !== null && levels > option.maxLevels;
   const invalidLevels = !Number.isInteger(levels) || levels < 1;
   const staffingShort = option !== undefined && option.estStaffing < 1;
   const totalWork = option !== undefined ? option.workPerLevel * Math.max(1, levels) : 0;
@@ -115,12 +115,12 @@ export function BuildDialog({
               id="build-dialog-levels"
               label="Levels"
               min={1}
-              max={option?.maxLevels ?? 1}
+              max={option?.maxLevels ?? undefined}
               error={errors.levels?.message}
               {...register("levels", { valueAsNumber: true })}
             />
           </div>
-          {overCeiling && option && (
+          {overCeiling && option && option.maxLevels !== null && (
             <InlineAlert variant="error" className="mt-3">
               {option.blocked === "no_deposit_slots"
                 ? "No free deposit slots for that building here."
@@ -142,7 +142,7 @@ export function BuildDialog({
             <>
               <ReadoutRow
                 label="Max levels"
-                value={String(option.maxLevels)}
+                value={option.maxLevels === null ? "No ceiling" : String(option.maxLevels)}
                 tone={overCeiling ? "bad" : "ok"}
               />
               <ReadoutRow label="Labour added" value={labourAddedText(option.labourAdded, levels)} />

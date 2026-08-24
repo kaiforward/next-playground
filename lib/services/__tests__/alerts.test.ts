@@ -501,7 +501,6 @@ describe("getAlertData", () => {
             developedPatch(pid, {
               population: 61,
               popCap: 60,
-              industryLand: 10,
               peopleLand: 5,
             }),
           ],
@@ -551,7 +550,6 @@ describe("getAlertData", () => {
             developedPatch(pid, {
               population: 61,
               popCap: 60,
-              industryLand: 100,
               peopleLand: 5,
             }),
           ],
@@ -603,7 +601,6 @@ describe("getAlertData", () => {
             developedPatch(pid, {
               population: 50,
               popCap: 100, // NOT overcrowded
-              industryLand: 100,
               peopleLand: 5,
             }),
           ],
@@ -633,8 +630,8 @@ describe("getAlertData", () => {
           // Both: 5 landed housing levels on peopleLand 5 exhaust headroom outright
           // (min(5 − 5, 100 − 5) = 0), so both satisfy the category's third conjunct with no queue
           // fold needed, and neither has a housing level standing in its queue.
-          [milder, developedPatch(pid, { population: 61, popCap: 60, industryLand: 100, peopleLand: 5 })],
-          [worse, developedPatch(pid, { population: 100, popCap: 60, industryLand: 100, peopleLand: 5 })],
+          [milder, developedPatch(pid, { population: 61, popCap: 60, peopleLand: 5 })],
+          [worse, developedPatch(pid, { population: 100, popCap: 60, peopleLand: 5 })],
         ]),
       );
       setWorld(
@@ -1551,7 +1548,7 @@ describe("getAlertData", () => {
       const devRefs: DevelopmentRefs = { popRef: 150, industryRef: 12 };
       const builder = (): BuildSystemState => ({
         systemId: "B", factionId: "f1", population: 100_000, control: "developed", buildings: {},
-        depositCounts, industryLand: 50, peopleLand: 0, goods: [],
+        depositCounts, peopleLand: 0, goods: [],
       });
       const survivalGood = SURVIVAL_GOODS[0];
       const survivalOnlyGoods: BuildGoodState[] = [
@@ -1562,7 +1559,7 @@ describe("getAlertData", () => {
       ];
       const sinkWith = (goods: BuildGoodState[]): BuildSystemState => ({
         systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
-        depositCounts: emptyResourceVector(), industryLand: 0, peopleLand: 0, goods,
+        depositCounts: emptyResourceVector(), peopleLand: 0, goods,
       });
 
       // Sanity, measured not assumed: ore's own opportunity genuinely outscores the survival good's

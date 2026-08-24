@@ -37,7 +37,6 @@ function makeSystem(id: string, population: number): TickSystem {
     yields: unitResourceVector(),
     extractionEff: unitResourceVector(),
     depositCounts: emptyResourceVector(),
-    industryLand: 100,
     peopleLand: 100,
   };
 }

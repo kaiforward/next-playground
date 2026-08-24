@@ -68,7 +68,10 @@ export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
     return developmentRefs(
       this.systems.map((s) => ({
         peopleLand: s.peopleLand,
-        industryLand: s.industryLand,
+        // industryLand no longer exists on the world model (habitability-seeding cut it) — compile-
+        // preserving 0 until Task 16 re-derives the industry axis and drops this field from
+        // DevelopmentRefSystem itself.
+        industryLand: 0,
         depositCounts: sumResourceVector(s.depositCounts),
       })),
     );

@@ -70,7 +70,7 @@ export function orderBuild(input: { systemId: string; buildingType: string; leve
   );
   const option = options.find((o) => o.buildingType === input.buildingType);
   if (!option) return { ok: false, error: `Unknown building type: ${input.buildingType}` };
-  if (input.levels > option.maxLevels) {
+  if (option.maxLevels !== null && input.levels > option.maxLevels) {
     return {
       ok: false,
       error: option.blocked === "no_deposit_slots"

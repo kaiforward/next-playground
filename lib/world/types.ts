@@ -245,8 +245,6 @@ export interface WorldSystem {
   habitabilityQuality?: { quality: number; frontierIndex: number };
   /** Sum of body-archetype danger baselines. */
   bodyDanger: number;
-  /** Fungible (non-deposit) space — Σ industry land over unlocked bodies. */
-  industryLand: number;
   /** Habitable fraction of general space — Σ people land over above-threshold, unlocked bodies. */
   peopleLand: number;
   /** Extractor-slot caps, one per resource — Σ authored deposit counts over unlocked bodies. */
@@ -285,8 +283,6 @@ export interface WorldBody {
   bodyType: BodyArchetypeId;
   /** Display flavour only — carries no budget meaning. */
   size: number;
-  /** This body's authored industry-land budget. */
-  industryLand: number;
   /** This body's authored people-land budget (dark land when below threshold or locked). */
   peopleLand: number;
   /** Per-body slot counts, one per resource (0 = no deposit). */

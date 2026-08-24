@@ -17,7 +17,9 @@ export function developmentPointsAndPotential(
   const depositCounts = depositCountsOf(system);
   const potential = developmentPotential({
     peopleLand: system.peopleLand,
-    industryLand: system.industryLand,
+    // industryLand no longer exists on WorldSystem (habitability-seeding cut it) — compile-preserving
+    // 0 until Task 16 re-derives the industry axis and drops the field from developmentPotential's input.
+    industryLand: 0,
     depositCounts: sumResourceVector(depositCounts),
   });
   return { points, potential };

@@ -32,7 +32,7 @@ import {
 } from "@/lib/engine/colonisation-value";
 import {
   labourDemand, housingPopCap, skill1Demand, skill2Demand, skill1Cap, skill2Cap,
-  familyAnchorBuff, familyThroughput, inputDemandFromProduction, industryLandUsed,
+  familyAnchorBuff, familyThroughput, inputDemandFromProduction,
 } from "@/lib/engine/industry";
 
 /** Market state for one good at one system — the build planner's per-good input. */
@@ -90,11 +90,8 @@ export interface BuildSystemState {
   buildings: Record<string, number>;
   /** Per-resource deposit-slot cap (Σ body slots) — caps tier-0 extractor counts. */
   depositCounts: ResourceVector;
-  /** Industry land — tier-1+ factories, academies, complexes and construction centres draw here.
-   *  Disjoint from `peopleLand`: housing never draws on this budget. */
-  industryLand: number;
-  /** People land — housing's own budget, independent of industry land. Extractors and factories
-   *  never draw on this budget. */
+  /** People land — housing's own budget. Extractors and factories never draw on this budget;
+   *  factories, academies, complexes and construction centres bill no land at all. */
   peopleLand: number;
   goods: BuildGoodState[];
 }
@@ -528,8 +525,9 @@ export function extractorsOnResource(buildings: Record<string, number>, resource
 
 /**
  * Additional building units of `goodId` a system can host given current builds.
- * Tier-0: remaining deposit slots for the good's resource. Tier-1+: remaining
- * general space ÷ the type's footprint. Never negative.
+ * Tier-0: remaining deposit slots for the good's resource — the only physical land cap
+ * industry building carries. Tier-1+ bills no land at all (labour, demand and decay bound
+ * it instead), so it reads unbounded here. Never negative.
  */
 export function buildableUnits(sys: BuildSystemState, goodId: string): number {
   const tier = GOOD_TIER_BY_KEY[goodId];
@@ -541,18 +539,16 @@ export function buildableUnits(sys: BuildSystemState, goodId: string): number {
     const remaining = cap - extractorsOnResource(sys.buildings, resource);
     return Math.max(0, remaining);
   }
-  const cost = effectiveSpaceCost(goodId);
-  if (cost <= 0) return 0;
-  const remainingIndustry = sys.industryLand - industryLandUsed(sys.buildings);
-  return Math.max(0, remainingIndustry / cost);
+  return effectiveSpaceCost(goodId) > 0 ? Infinity : 0;
 }
 
 /**
  * Could this system host a unit of `goodId` AT ALL — its gross ceiling, ignoring everything already
- * built? Tier-0 needs at least one deposit slot for the good's resource; tier-1+ needs some general
- * space and a positive footprint. This is what separates the two states `buildableUnits` returns 0
- * for alike: a site whose capacity for the good is USED UP (a real, reportable obstacle) and a site
- * that never had any (a good it was never a plausible builder of — most goods at most systems).
+ * built? Tier-0 needs at least one deposit slot for the good's resource; tier-1+ needs only a
+ * positive footprint (labour/demand/decay gate it elsewhere, never land). This is what separates the
+ * two states `buildableUnits` returns 0 for alike: a site whose capacity for the good is USED UP (a
+ * real, reportable obstacle) and a site that never had any (a good it was never a plausible builder
+ * of — most goods at most systems).
  */
 function hasCapacityCeiling(sys: BuildSystemState, goodId: string): boolean {
   const tier = GOOD_TIER_BY_KEY[goodId];
@@ -562,7 +558,7 @@ function hasCapacityCeiling(sys: BuildSystemState, goodId: string): boolean {
     if (!resource) return false;
     return sys.depositCounts[resource] > 0;
   }
-  return effectiveSpaceCost(goodId) > 0 && sys.industryLand > 0;
+  return effectiveSpaceCost(goodId) > 0;
 }
 
 /** Additional output of `goodId` a system can host = buildable units × per-unit output. */
@@ -984,10 +980,6 @@ function planFactionBundles(
     // small colony stand up its FIRST extractor (whose jobs then pull migration) instead of deadlocking
     // on a full-staffing gate. Housing built this cycle adds no labour now — industry follows the
     // people already resident, never population that doesn't yet exist.
-    const remainingGeneral = site.industryLand - industryLandUsed(site.buildings);
-    // Tier-0 extractors sit on dedicated deposit slots, not industry land (mirrors industryLandUsed);
-    // housing sits on its own people-land budget, also excluded here.
-    const prodSpacePerUnit = GOOD_TIER_BY_KEY[opp.goodId] === 0 ? 0 : effectiveSpaceCost(opp.goodId);
     // Full per-unit head count (unskilled + skill1 + skill2) — population staffs the WHOLE labour
     // draw of a production unit, not just its unskilled slice.
     const prodLabourPerUnit = labourTotal(BUILDING_TYPES[opp.goodId]?.labour ?? { unskilled: 0, skill1: 0, skill2: 0 });
@@ -995,14 +987,14 @@ function planFactionBundles(
     // Whole-level convergence: the desired production floored to whole levels (you commission whole
     // levels), then the academies and complex that GATE it rounded UP — a gate must fully exist to
     // license/anchor the production it serves (a fractional school licenses nobody). The largest
-    // whole-level count whose production + gates fit the general space and spare labour is found by
-    // binary search: the fit is monotone (more levels ⇒ more space + labour + academy/complex), so a
-    // landed level is never unstaffable or over-footprint. Recomputing the lift per candidate level
-    // mirrors the fractional planner's convergence on whole levels.
+    // whole-level count the site can STAFF is found by binary search: the fit is monotone (more
+    // levels ⇒ more labour), so a landed level is never unstaffable. Recomputing the lift per
+    // candidate level mirrors the fractional planner's convergence on whole levels.
     // Round the served RATE deficit UP to whole levels: capacity is lumpy, so meeting a flow smaller
     // than one level's output still commits one level (the design's accepted overshoot — the excess
     // fills the passive buffer). Flooring here would build NOTHING whenever a system's per-tick demand
-    // is below a single building's output, stranding every small consumer. Still capped by physical capacity.
+    // is below a single building's output, stranding every small consumer. Bounded only by demand — no
+    // land caps a factory build; `capUnits` is Infinity for every tier-1+ good.
     const maxLevels = Math.min(Math.floor(capUnits), Math.ceil(servedOutput / opp.perUnit));
     if (maxLevels < 1) {
       // Capacity is real (capUnits > 0, checked above) but too small for even one whole level.
@@ -1017,11 +1009,6 @@ function planFactionBundles(
       const institutes = a.institutes > 0 ? Math.ceil(a.institutes) : 0;
       const complexType = c.complexType;
       const complexLevels = c.count > 0 ? Math.ceil(c.count) : 0;
-      const spaceTotal =
-        levels * prodSpacePerUnit +
-        schools * effectiveSpaceCost(VOCATIONAL_SCHOOL_TYPE) +
-        institutes * effectiveSpaceCost(RESEARCH_INSTITUTE_TYPE) +
-        (complexType ? complexLevels * effectiveSpaceCost(complexType) : 0);
       const labourNeeded =
         levels * prodLabourPerUnit +
         schools * unskilledPerUnit(VOCATIONAL_SCHOOL_TYPE) +
@@ -1031,9 +1018,9 @@ function planFactionBundles(
       // population, so the lead unit is only ever fractionally idle (< 1 whole unit ⇒ decay-safe; the
       // strict `<` excludes the exact-boundary case that would leave a whole unit idle, and refuses to
       // build at all on a pop-0 world). Gating TOTAL demand — not a max(0)-floored spare — bounds the
-      // lead across opportunities so it can't stack into multi-unit under-staffing.
-      const fits = spaceTotal <= remainingGeneral &&
-        labourDemand(site.buildings) + labourNeeded < site.population + prodLabourPerUnit;
+      // lead across opportunities so it can't stack into multi-unit under-staffing. No land term: a
+      // factory, academy or complex bills no land at all.
+      const fits = labourDemand(site.buildings) + labourNeeded < site.population + prodLabourPerUnit;
       return { fits, schools, institutes, complexType, complexLevels };
     };
 

@@ -268,15 +268,20 @@ export interface GeneralLand {
  * budget's own free remainder, and a combined total. Housing + factory + habitableFree +
  * factoryFree always sum to `general` (people.total + industry.total) — an identity, not a
  * partition, since people and industry land never compete for the same units.
+ *
+ * Compile-preserving deviation: `SubstrateSpace` no longer carries an `industry` budget
+ * (habitability-seeding deleted the industry-land budget everywhere, Task 15) — factory/
+ * factoryFree read a fixed 0 until Task 17 deletes this type and function along with the
+ * industry-land UI vocabulary they exist to feed.
  */
 export function generalLand(space: SubstrateSpace): GeneralLand {
   const housing = Math.max(0, space.people.used);
-  const factory = Math.max(0, space.industry.used);
+  const factory = 0;
   const habitableFree = Math.max(0, space.people.total - space.people.used);
-  const factoryFree = Math.max(0, space.industry.total - space.industry.used);
+  const factoryFree = 0;
   return {
     housing, factory, habitableFree, factoryFree,
-    general: space.people.total + space.industry.total,
+    general: space.people.total,
     habitable: space.people.total,
   };
 }

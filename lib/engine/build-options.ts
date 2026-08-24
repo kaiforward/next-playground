@@ -14,14 +14,13 @@ import {
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import { extractorsOnResource } from "@/lib/engine/directed-build";
-import { industryLandUsed, labourParts, labourStateFromParts } from "@/lib/engine/industry";
+import { labourParts, labourStateFromParts } from "@/lib/engine/industry";
 import { depositCountsOf } from "@/lib/engine/resources";
 
 export interface BuildOptionSystem {
   population: number;
   buildings: Record<string, number>;
   depositCounts: ResourceVector;
-  industryLand: number;
   peopleLand: number;
 }
 
@@ -39,7 +38,6 @@ export function buildSiteFromSystem(
     population: system.population,
     buildings,
     depositCounts: depositCountsOf(system),
-    industryLand: system.industryLand,
     peopleLand: system.peopleLand,
   };
 }
@@ -48,8 +46,12 @@ export type BuildOptionBlockReason = "no_space" | "no_deposit_slots";
 
 export interface BuildOption {
   buildingType: string;
-  /** Whole levels physically addable now, net of built + committed (in-flight) levels. */
-  maxLevels: number;
+  /**
+   * Whole levels physically addable now, net of built + committed (in-flight) levels. `null` means
+   * no physical ceiling on this type (labour, demand and decay bound it instead); `0` means
+   * hard-blocked. Never `Infinity` — the state frame must stay JSON-serialisable.
+   */
+  maxLevels: number | null;
   /** Non-null = hard-blocked (maxLevels 0). */
   blocked: BuildOptionBlockReason | null;
   workPerLevel: number;
@@ -74,32 +76,29 @@ export function computeBuildOptions(
   committed: Record<string, number>,
 ): BuildOption[] {
   const effective = effectiveCounts(sys.buildings, committed);
-  const remainingIndustry = sys.industryLand - industryLandUsed(effective);
 
   return Object.keys(BUILDING_TYPES).map((buildingType) => {
     const def = BUILDING_TYPES[buildingType];
     const labour = def.labour ?? { unskilled: 0, skill1: 0, skill2: 0 };
     const isExtractor = GOOD_TIER_BY_KEY[buildingType] === 0 && def.resource !== undefined;
 
-    let maxLevels: number;
+    let maxLevels: number | null;
     let blocked: BuildOptionBlockReason | null = null;
     if (isExtractor && def.resource !== undefined) {
       const remaining = sys.depositCounts[def.resource] - extractorsOnResource(effective, def.resource);
       maxLevels = Math.max(0, Math.floor(remaining));
       if (maxLevels === 0) blocked = "no_deposit_slots";
-    } else {
+    } else if (buildingType === HOUSING_TYPE) {
+      // Housing bills to people land ALONE — its own budget, never shared with industry.
       const cost = effectiveSpaceCost(buildingType);
-      // Housing bills to people land ALONE; every other type bills to industry land alone — the
-      // two budgets are disjoint and never bound each other (the build rule's separation).
-      let space: number;
-      if (buildingType === HOUSING_TYPE) {
-        const housingUsed = (effective[HOUSING_TYPE] ?? 0) * cost;
-        space = sys.peopleLand - housingUsed;
-      } else {
-        space = remainingIndustry;
-      }
+      const housingUsed = (effective[HOUSING_TYPE] ?? 0) * cost;
+      const space = sys.peopleLand - housingUsed;
       maxLevels = cost > 0 ? Math.max(0, Math.floor(space / cost)) : 0;
       if (maxLevels === 0) blocked = "no_space";
+    } else {
+      // Every other type (factories, academies, complexes, construction centres) bills no land at
+      // all — labour, demand and decay bound it instead, never a hard physical ceiling here.
+      maxLevels = null;
     }
 
     // Staffing estimate for the level being considered: the system once the queue + this level land.

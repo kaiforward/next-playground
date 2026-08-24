@@ -57,7 +57,6 @@ function makeSystem(
     yields: unitResourceVector(),
     extractionEff: unitResourceVector(),
     depositCounts: emptyResourceVector(),
-    industryLand: 0,
     peopleLand: 0,
   };
 }

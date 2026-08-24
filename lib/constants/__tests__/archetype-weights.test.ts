@@ -58,12 +58,12 @@ describe("BODY_ARCHETYPES — habitability-seeding budgets", () => {
     }
   });
 
-  it("every authored count range (people land, industry land, deposit counts) is an integer with min <= max", () => {
+  it("every authored count range (people land, deposit counts) is an integer with min <= max", () => {
     // Vacuity guard: fails outright if the table is empty or a range family is unauthored.
     expect(ARCHETYPE_IDS.length).toBeGreaterThan(0);
     for (const id of ARCHETYPE_IDS) {
       const a = BODY_ARCHETYPES[id];
-      for (const range of [a.peopleLand, a.industryLand, ...Object.values(a.depositCounts)]) {
+      for (const range of [a.peopleLand, ...Object.values(a.depositCounts)]) {
         expect(Number.isInteger(range.min)).toBe(true);
         expect(Number.isInteger(range.max)).toBe(true);
         expect(range.min).toBeLessThanOrEqual(range.max);

@@ -30,7 +30,7 @@ function sys(id: string, factionId: string | null, population: number, popCap: n
     control: factionId ? "developed" : "unclaimed", governmentType: "federation",
     population, popCap, unrest, buildings, buildingIdleCycles: {}, collapseDebt: 0,
     yields: unitResourceVector(), extractionEff: unitResourceVector(),
-    depositCounts: emptyResourceVector(), industryLand: 0, peopleLand: 0,
+    depositCounts: emptyResourceVector(), peopleLand: 0,
   };
 }
 const conn = (a: string, b: string, fuelCost = 10): TickConnection => ({ fromSystemId: a, toSystemId: b, fuelCost });

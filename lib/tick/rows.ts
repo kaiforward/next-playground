@@ -108,9 +108,8 @@ export interface TickSystem {
   extractionEff: ResourceVector;
   /** Body-derived deposit-slot capacity per resource — caps tier-0 extractor builds. */
   depositCounts: ResourceVector;
-  /** Body-derived fungible build space — tier-1+ factories + housing draw here. */
-  industryLand: number;
-  /** Habitable subset of build space — additionally caps housing. */
+  /** Body-derived habitable land — caps housing. Factories, academies, complexes and construction
+   *  centres bill no land at all. */
   peopleLand: number;
 }
 

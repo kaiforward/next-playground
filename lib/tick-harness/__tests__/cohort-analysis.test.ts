@@ -70,7 +70,7 @@ function sys(id: string, over: Partial<TickSystem> = {}): TickSystem {
     yields: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
     extractionEff: { gas: 1, minerals: 1, ore: 1, biomass: 1, arable: 1, water: 1, radioactive: 1 },
     depositCounts: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
-    industryLand: 100, peopleLand: 50,
+ peopleLand: 50,
     ...over,
   };
 }

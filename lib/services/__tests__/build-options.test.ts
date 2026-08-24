@@ -107,7 +107,8 @@ describe("getSystemBuildOptions", () => {
 
     const baseline = getSystemBuildOptions(home.id);
     if (baseline.mode !== "build") throw new Error("expected build mode");
-    const oreBefore = baseline.options.find((o) => o.buildingType === "ore")!.maxLevels;
+    // Ore is a deposit-bound (extractor) type — always a real ceiling, never the unbounded null.
+    const oreBefore = baseline.options.find((o) => o.buildingType === "ore")!.maxLevels!;
 
     const projects: WorldConstructionProject[] = [
       // Counts: kind "build" at home — twice, to prove accumulation.
@@ -131,7 +132,7 @@ describe("getSystemBuildOptions", () => {
 
     const after = getSystemBuildOptions(home.id);
     if (after.mode !== "build") throw new Error("expected build mode");
-    const oreAfter = after.options.find((o) => o.buildingType === "ore")!.maxLevels;
+    const oreAfter = after.options.find((o) => o.buildingType === "ore")!.maxLevels!;
     // Exactly 3 + 2 + 4 = 9 levels netted off — not the other system's 100, not the housing 50, and
     // not the arithmetic negated (which would ADD headroom instead of consuming it).
     expect(oreBefore - oreAfter).toBe(9);
@@ -154,7 +155,8 @@ describe("getSystemBuildOptions", () => {
     });
     const withHousing = getSystemBuildOptions(home.id);
     if (withHousing.mode !== "build") throw new Error("expected build mode");
-    const maxWithHousing = withHousing.options.find((o) => o.buildingType === HOUSING_TYPE)!.maxLevels;
+    // Housing bills to people land alone — always a real ceiling, never the unbounded null.
+    const maxWithHousing = withHousing.options.find((o) => o.buildingType === HOUSING_TYPE)!.maxLevels!;
 
     setWorld({
       ...getWorld(),
@@ -162,7 +164,7 @@ describe("getSystemBuildOptions", () => {
     });
     const withoutHousing = getSystemBuildOptions(home.id);
     if (withoutHousing.mode !== "build") throw new Error("expected build mode");
-    const maxWithoutHousing = withoutHousing.options.find((o) => o.buildingType === HOUSING_TYPE)!.maxLevels;
+    const maxWithoutHousing = withoutHousing.options.find((o) => o.buildingType === HOUSING_TYPE)!.maxLevels!;
 
     // Removing 20 already-built housing levels must free up room, not read as no change (which is
     // what a hardcoded `{}` substituted for the real buildings map would produce either way).

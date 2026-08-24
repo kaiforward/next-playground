@@ -362,7 +362,6 @@ export function generateSystems(
       population: substrate.population,
       bodyDanger: substrate.bodyDanger,
       buildings: substrate.buildings,
-      industryLand: substrate.industryLand,
       peopleLand: substrate.peopleLand,
       depositCounts: substrate.depositCounts,
       yieldMult: substrate.yieldMult,
@@ -622,7 +621,6 @@ export function stampHomeworldPrefabs(
     const agg = substrateAggregates(bodies);
     s.bodies = bodies;
     s.depositCounts = agg.depositCounts;
-    s.industryLand = agg.industryLand;
     s.peopleLand = agg.peopleLand;
     s.yieldMult = agg.yieldMult;
     s.extractionEfficiency = agg.extractionEfficiency;

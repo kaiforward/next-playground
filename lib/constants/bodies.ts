@@ -6,9 +6,10 @@ import { RESOURCE_TYPES } from "@/lib/engine/resources";
 export { RESOURCE_TYPES };
 
 // ── Body archetypes ───────────────────────────────────────────────
-// Each body is a climate class on a freezing→volcanic spectrum. Every row authors three
-// independent budgets — people land, industry land, per-resource deposit counts — plus a
-// habitability score, an extraction work modifier and a tech lock.
+// Each body is a climate class on a freezing→volcanic spectrum. Every row authors two
+// independent budgets — people land, per-resource deposit counts — plus a habitability
+// score, an extraction work modifier and a tech lock. Industry buildings bill no land:
+// labour, demand and decay bound them.
 
 /** An authored [min, max] range, drawn uniform-in-range at generation. */
 export interface CountRange {
@@ -25,8 +26,6 @@ export interface BodyArchetype {
   scores: { default: number };
   /** People-land range — authored on every class that could ever host people (dark below threshold). */
   peopleLand: CountRange;
-  /** Industry-land range — generous by default; a cramped archetype is a deliberate authoring choice. */
-  industryLand: CountRange;
   /**
    * Per-resource authored extractor counts (integer [min, max] per resource). The typical band
    * is derived from demand at the 10,000-pop anchor: Σ GOOD_CONSUMPTION/OUTPUT_PER_UNIT × pop
@@ -48,7 +47,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     id: "temperate_world", name: "Temperate World",
     scores: { default: 1.0 },
     peopleLand: { min: 450, max: 550 },
-    industryLand: { min: 180, max: 300 },
     depositCounts: {
       minerals: { min: 1, max: 4 }, ore: { min: 1, max: 4 },
       biomass: { min: 3, max: 12 }, arable: { min: 18, max: 40 }, water: { min: 13, max: 29 },
@@ -59,7 +57,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     id: "gaia_world", name: "Gaia World",
     scores: { default: 1.0 },
     peopleLand: { min: 700, max: 1000 },
-    industryLand: { min: 200, max: 300 },
     depositCounts: {
       arable: { min: 6, max: 14 }, water: { min: 7, max: 16 }, biomass: { min: 2, max: 6 },
     },
@@ -69,7 +66,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     id: "jungle_world", name: "Jungle World",
     scores: { default: 0.7 },
     peopleLand: { min: 400, max: 550 },
-    industryLand: { min: 140, max: 240 },
     depositCounts: {
       ore: { min: 1, max: 4 }, biomass: { min: 5, max: 18 },
       arable: { min: 12, max: 26 }, water: { min: 13, max: 29 },
@@ -80,7 +76,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     id: "ocean_world", name: "Ocean World",
     scores: { default: 0.65 },
     peopleLand: { min: 350, max: 500 },
-    industryLand: { min: 120, max: 220 },
     depositCounts: {
       biomass: { min: 3, max: 12 }, arable: { min: 6, max: 14 }, water: { min: 20, max: 45 },
     },
@@ -90,7 +85,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     id: "boreal_world", name: "Boreal World",
     scores: { default: 0.6 },
     peopleLand: { min: 300, max: 450 },
-    industryLand: { min: 100, max: 200 },
     depositCounts: {
       biomass: { min: 3, max: 12 }, water: { min: 13, max: 29 },
       arable: { min: 12, max: 26 }, ore: { min: 1, max: 4 },
@@ -102,7 +96,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     // Below HABITABILITY_THRESHOLD: hot-preference / terraforming territory — dark land until unlocked.
     scores: { default: 0.35 },
     peopleLand: { min: 150, max: 250 },
-    industryLand: { min: 80, max: 180 },
     depositCounts: {
       minerals: { min: 2, max: 7 }, ore: { min: 2, max: 7 },
       arable: { min: 6, max: 14 }, radioactive: { min: 2, max: 7 },
@@ -114,7 +107,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     // Below HABITABILITY_THRESHOLD: cold-preference / terraforming territory — dark land until unlocked.
     scores: { default: 0.3 },
     peopleLand: { min: 100, max: 200 },
-    industryLand: { min: 60, max: 150 },
     depositCounts: {
       water: { min: 13, max: 29 }, biomass: { min: 2, max: 6 }, arable: { min: 6, max: 14 },
     },
@@ -124,7 +116,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     id: "frozen_world", name: "Frozen World",
     scores: { default: 0.1 },
     peopleLand: { min: 0, max: 0 },
-    industryLand: { min: 60, max: 150 },
     depositCounts: {
       gas: { min: 2, max: 6 }, ore: { min: 1, max: 4 }, water: { min: 20, max: 45 },
     },
@@ -134,7 +125,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     id: "volcanic_world", name: "Volcanic World",
     scores: { default: 0.05 },
     peopleLand: { min: 0, max: 0 },
-    industryLand: { min: 80, max: 180 },
     depositCounts: {
       gas: { min: 2, max: 6 }, minerals: { min: 2, max: 7 },
       ore: { min: 3, max: 10 }, radioactive: { min: 4, max: 13 },
@@ -146,7 +136,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     id: "barren_rock", name: "Barren Rock",
     scores: { default: 0.05 },
     peopleLand: { min: 0, max: 0 },
-    industryLand: { min: 60, max: 150 },
     depositCounts: {
       minerals: { min: 2, max: 7 }, ore: { min: 2, max: 7 }, radioactive: { min: 2, max: 7 },
     },
@@ -158,7 +147,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     id: "asteroid_belt", name: "Asteroid Belt",
     scores: { default: 0.02 },
     peopleLand: { min: 0, max: 0 },
-    industryLand: { min: 40, max: 120 },
     depositCounts: {
       minerals: { min: 3, max: 10 }, ore: { min: 3, max: 10 }, radioactive: { min: 2, max: 7 },
     },
@@ -170,7 +158,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     id: "gas_giant", name: "Gas Giant",
     scores: { default: 0 },
     peopleLand: { min: 0, max: 0 },
-    industryLand: { min: 40, max: 100 },
     depositCounts: {
       gas: { min: 5, max: 17 }, water: { min: 7, max: 16 },
     },

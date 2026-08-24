@@ -254,7 +254,6 @@ export function toTickSystems(world: World): TickSystem[] {
       yields: yieldsOf(s),
       extractionEff: effOf(s),
       depositCounts: depositCountsOf(s),
-      industryLand: s.industryLand,
       peopleLand: s.peopleLand,
     };
   });
@@ -400,7 +399,6 @@ function buildBuildRows(
     yields: s.yields,
     extractionEff: s.extractionEff,
     depositCounts: s.depositCounts,
-    industryLand: s.industryLand,
     peopleLand: s.peopleLand,
     markets: marketsBySystem.get(s.id) ?? [],
   }));
@@ -1568,7 +1566,10 @@ export async function runWorldTick(
           candidates.push({
             systemId: s.id,
             peopleLand: s.peopleLand,
-            industryLand: s.industryLand,
+            // industryLand no longer exists on the world model (habitability-seeding cut it) — the
+            // colonisation-value L(c) term it fed is still authored for it (LAND_GENERAL_WEIGHT), so
+            // this stays a compile-preserving 0 until that term is deleted with the axis (Task 16).
+            industryLand: 0,
             depositCounts: s.depositCounts,
             sourceSystemId,
           });

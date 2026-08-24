@@ -279,7 +279,6 @@ function toBuildState(row: SystemBuildRow): BuildSystemState {
     population: row.population,
     buildings: row.buildings,
     depositCounts: row.depositCounts,
-    industryLand: row.industryLand,
     peopleLand: row.peopleLand,
     goods: toGoodMarketStates(row),
   };

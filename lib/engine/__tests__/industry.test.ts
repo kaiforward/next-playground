@@ -12,7 +12,6 @@ import {
   extractorsByResource,
   summariseDeposits,
   summariseSpace,
-  industryLandUsed,
   industryHealth,
   buildingHealth,
   computeLabourState,
@@ -277,22 +276,6 @@ describe("inputDemandFromProduction", () => {
 
   it("returns 0 for a good nothing consumes as an input", () => {
     expect(inputDemandFromProduction("luxuries", new Map([["metals", 4]]))).toBe(0);
-  });
-});
-
-describe("industryLandUsed", () => {
-  it("sums factory footprint; excludes tier-0 extractors (deposit land) and housing (people land)", () => {
-    // ore is a tier-0 extractor (sits on a deposit slot); housing sits on the people-land budget;
-    // only metals sits on industry land.
-    expect(industryLandUsed({ ore: 4, metals: 2, [HOUSING_TYPE]: 5 }))
-      .toBeCloseTo(2 * DEFAULT_SPACE_COST, 6);
-  });
-  it("ignores non-positive counts", () => {
-    expect(industryLandUsed({ metals: -3, fuel: 2 })).toBeCloseTo(2 * DEFAULT_SPACE_COST, 6);
-  });
-  it("reads identically whether or not housing is built — housing never touches industry land (Proves 3/4)", () => {
-    expect(industryLandUsed({ metals: 3 }))
-      .toBeCloseTo(industryLandUsed({ metals: 3, [HOUSING_TYPE]: 500 }), 6);
   });
 });
 
@@ -868,26 +851,19 @@ describe("extractorsByResource", () => {
 });
 
 describe("summariseSpace", () => {
-  it("computes three independent used/total pairs: people (housing), industry (factories), deposit (extractor levels)", () => {
-    // peopleLand 10, industryLand 40, deposit counts ore 20 + gas 5 = 25 total.
-    // ore×4 extractors work deposit slots; metals×2 sits on industry land; housing×5 sits on people land.
+  it("computes two independent used/total pairs: people (housing), deposit (extractor levels)", () => {
+    // peopleLand 10, deposit counts ore 20 + gas 5 = 25 total.
+    // ore×4 extractors work deposit slots; metals (a factory, no land at all) is ignored entirely;
+    // housing×5 sits on people land.
     const counts = makeResourceVector({ ore: 20, gas: 5 });
-    const space = summariseSpace(10, 40, counts, { ore: 4, metals: 2, [HOUSING_TYPE]: 5 });
+    const space = summariseSpace(10, counts, { ore: 4, metals: 2, [HOUSING_TYPE]: 5 });
     expect(space.people).toEqual({ used: 5 * DEFAULT_SPACE_COST, total: 10 });
-    expect(space.industry).toEqual({ used: 2 * DEFAULT_SPACE_COST, total: 40 });
     expect(space.deposit).toEqual({ used: 4, total: 25 });
   });
-  it("reads zero used across all three budgets when nothing is built", () => {
-    const space = summariseSpace(10, 40, emptyResourceVector(), {});
+  it("reads zero used across both budgets when nothing is built", () => {
+    const space = summariseSpace(10, emptyResourceVector(), {});
     expect(space.people.used).toBe(0);
-    expect(space.industry.used).toBe(0);
     expect(space.deposit.used).toBe(0);
-  });
-  it("a housing-full system reads full industry-land headroom untouched (Proves 1/3: disjoint budgets)", () => {
-    // People land exhausted by housing; industry land carries no buildings at all.
-    const space = summariseSpace(5, 100, emptyResourceVector(), { [HOUSING_TYPE]: 5 });
-    expect(space.people.used).toBeCloseTo(space.people.total, 6);
-    expect(space.industry.used).toBe(0);
   });
 });
 

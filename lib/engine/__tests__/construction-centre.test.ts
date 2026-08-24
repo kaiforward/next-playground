@@ -8,10 +8,10 @@ import { emptyResourceVector } from "@/lib/engine/resources";
 
 const PARAMS = { pointsPerLevel: 5, paybackHorizon: 12, backlogWindow: 6 };
 
-function system(systemId: string, population: number, industryLand = 50): BuildSystemState {
+function system(systemId: string, population: number): BuildSystemState {
   return {
     systemId, factionId: "f1", control: "developed", population,
-    buildings: {}, depositCounts: emptyResourceVector(), industryLand, peopleLand: 10, goods: [],
+    buildings: {}, depositCounts: emptyResourceVector(), peopleLand: 10, goods: [],
   };
 }
 
@@ -60,28 +60,24 @@ describe("planCentreProposal", () => {
   });
 
   it("sites at the developed system with the most spare labour, tie-broken by systemId", () => {
-    // Tier-0 items (deposit slots, not general space) so committed space stays 0 everywhere —
-    // isolates the spare-labour and systemId comparisons from the space term.
+    // A centre bills no land at all — siting is spare labour desc, then systemId asc, with no
+    // space term to isolate: the old committedSpace reservation machinery is deleted, not merely
+    // relaxed.
     const ordered = [proposal("s1", 100, 50, "ore"), proposal("s1", 100, 50, "ore")];
     // s2 has more spare labour (no buildings anywhere → spare = population).
     const p = planCentreProposal("f1", ordered, [], [system("s1", 100), system("s2", 300)], 1, PARAMS);
     expect(p?.systemId).toBe("s2");
-    // Exact tie on spare labour and space → lowest systemId.
+    // Exact tie on spare labour → lowest systemId.
     const tied = planCentreProposal("f1", ordered, [], [system("s2", 300), system("s1", 300)], 1, PARAMS);
     expect(tied?.systemId).toBe("s1");
   });
 
-  it("sites at the developed system with more remaining space when spare labour ties", () => {
-    // Tier-0 proposal (zero committed space) so the space term isn't contaminated by the queue.
-    const ordered = [proposal("s1", 100, 50, "ore")];
-    // Equal population, no buildings → spare labour ties; s2 has more remaining general space.
-    const p = planCentreProposal("f1", ordered, [], [system("s1", 300, 40), system("s2", 300, 60)], 1, PARAMS);
-    expect(p?.systemId).toBe("s2");
-  });
-
-  it("returns null when no developed system has general space for the centre", () => {
-    const ordered = [proposal("s1", 100, 50), proposal("s1", 100, 50)];
-    expect(planCentreProposal("f1", ordered, [], [system("s1", 500, 0.5)], 1, PARAMS)).toBeNull();
+  it("still sites a centre when every candidate system has zero free anything but labour", () => {
+    // Proves (1) applied to the siting step: no land gate remains, so a centre still finds a home
+    // purely on spare labour even though every system's people-land budget is starved.
+    const ordered = [proposal("s1", 100, 50)];
+    const p = planCentreProposal("f1", ordered, [], [system("s1", 300), system("s2", 300)], 1, PARAMS);
+    expect(p).not.toBeNull();
   });
 
   it("ignores zero-value (housing) proposals when picking the frontier ROI", () => {

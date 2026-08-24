@@ -152,13 +152,11 @@ function validateAggregateConsistency(systems: GeneratedSystem[]): string[] {
     const unlocked = sys.bodies.filter(isUnlocked);
     const habitable = unlocked.filter(isAboveThreshold);
     const expectedPeopleLand = habitable.reduce((sum, b) => sum + b.peopleLand, 0);
-    const expectedIndustryLand = unlocked.reduce((sum, b) => sum + b.industryLand, 0);
     if (Math.abs(expectedPeopleLand - sys.peopleLand) > EPS) {
       errors.push(`${sys.name}: peopleLand aggregate ${sys.peopleLand.toFixed(3)} != Σ above-threshold unlocked bodies ${expectedPeopleLand.toFixed(3)}`);
     }
-    if (Math.abs(expectedIndustryLand - sys.industryLand) > EPS) {
-      errors.push(`${sys.name}: industryLand aggregate ${sys.industryLand.toFixed(3)} != Σ unlocked bodies ${expectedIndustryLand.toFixed(3)}`);
-    }
+    // industryLand aggregate check deleted with the budget itself (habitability-seeding, Task 15).
+    // Task 18 re-states this instrument's identities over the two remaining budgets (people, deposit).
     for (const r of RESOURCE_TYPES) {
       const expectedCount = unlocked.reduce((sum, b) => sum + b.counts[r], 0);
       if (Math.abs(expectedCount - sys.depositCounts[r]) > EPS) {

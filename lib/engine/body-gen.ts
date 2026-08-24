@@ -1,7 +1,7 @@
 /**
  * Substrate generation — pure, zero DB dependency,
  * deterministic given a seeded RNG. Rolls a system's sun class, body set — each body authoring
- * its own people-land / industry-land / deposit-count budgets directly — and population.
+ * its own people-land / deposit-count budgets directly — and population.
  */
 import type {
   BodyArchetypeId, ResourceVector, SunClass,
@@ -27,8 +27,6 @@ export interface GeneratedBody {
   /** Authored people-land budget — contributes to the system aggregate only when this body's
    *  default-pop score clears HABITABILITY_THRESHOLD and the class is unlocked (dark land otherwise). */
   peopleLand: number;
-  /** Authored industry-land budget — every unlocked class contributes, dead bodies included. */
-  industryLand: number;
   /** Authored per-resource deposit counts (integers). */
   counts: ResourceVector;
   /** Quality-band multiplier per resource (0 for absent resources). */
@@ -44,8 +42,6 @@ export interface GeneratedSubstrate {
   bodyDanger: number;
   /** Seeded industrial base — buildingType → count. */
   buildings: Record<string, number>;
-  /** Sum of per-body industry land over unlocked bodies. */
-  industryLand: number;
   /** Sum of per-body people land over above-threshold, unlocked bodies. */
   peopleLand: number;
   /** Σ body deposit counts — total extractor capacity per resource across the system, over unlocked bodies. */
@@ -110,7 +106,6 @@ function rollBody(rng: RNG, archId: BodyArchetypeId): GeneratedBody {
   const arch = BODY_ARCHETYPES[archId];
   const size = DISPLAY_SIZE_MIN + rng() * (DISPLAY_SIZE_MAX - DISPLAY_SIZE_MIN);
   const peopleLand = arch.peopleLand.min + rng() * (arch.peopleLand.max - arch.peopleLand.min);
-  const industryLand = arch.industryLand.min + rng() * (arch.industryLand.max - arch.industryLand.min);
 
   const counts = emptyResourceVector();
   const quality = emptyResourceVector();
@@ -121,7 +116,7 @@ function rollBody(rng: RNG, archId: BodyArchetypeId): GeneratedBody {
     quality[r] = rollQualityBand(rng).multiplier;
   }
 
-  return { bodyType: archId, size, peopleLand, industryLand, counts, quality };
+  return { bodyType: archId, size, peopleLand, counts, quality };
 }
 
 export function generateSubstrate(rng: RNG): GeneratedSubstrate {
@@ -156,13 +151,12 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
 /**
  * All per-system aggregates derived purely from a body list — the single source both bare-substrate
  * generation and the homeworld-prefab stamp use, so a homeworld's aggregates can never drift from a
- * regular system's. Tech-locked classes contribute NO counts, NO extractionEfficiency weight and NO
- * industry land; below-threshold (or locked) classes contribute no people land — their authored
- * peopleLand stays visible per-body (dark land) but never reaches the system aggregate. Body danger
- * sums over ALL bodies regardless of lock — a locked volcanic world is still dangerous ground.
+ * regular system's. Tech-locked classes contribute NO counts and NO extractionEfficiency weight;
+ * below-threshold (or locked) classes contribute no people land — their authored peopleLand stays
+ * visible per-body (dark land) but never reaches the system aggregate. Body danger sums over ALL
+ * bodies regardless of lock — a locked volcanic world is still dangerous ground.
  */
 export function substrateAggregates(bodies: GeneratedBody[]): {
-  industryLand: number;
   peopleLand: number;
   depositCounts: ResourceVector;
   yieldMult: ResourceVector;
@@ -175,13 +169,11 @@ export function substrateAggregates(bodies: GeneratedBody[]): {
   );
 
   const peopleLand = aboveThreshold.reduce((s, b) => s + b.peopleLand, 0);
-  const industryLand = unlocked.reduce((s, b) => s + b.industryLand, 0);
   const depositCounts = sumResourceVectors(unlocked.map((b) => b.counts));
   const yieldMult = depositGradeVector(unlocked);
   const extractionEfficiency = extractionEfficiencyVector(unlocked);
 
   return {
-    industryLand,
     peopleLand,
     depositCounts,
     yieldMult,

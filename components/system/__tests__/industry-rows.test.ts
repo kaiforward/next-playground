@@ -203,19 +203,22 @@ describe("staffedLevels", () => {
 });
 
 describe("generalLand", () => {
-  it("combines the two disjoint budgets (people/industry) into one display readout", () => {
+  // The industry-land budget is deleted (habitability-seeding amendment, Task 15): `SubstrateSpace`
+  // no longer carries an `industry` budget, so `generalLand` is a compile-preserving stub reading
+  // factory/factoryFree as a fixed 0 until Task 17 deletes this type and function outright along
+  // with the industry-land UI vocabulary they exist to feed.
+  it("reads the people-land budget through unchanged, and the deleted industry budget as 0", () => {
     const space: SubstrateSpace = {
       people: { used: 52, total: 70 },
-      industry: { used: 26, total: 120 },
       deposit: { used: 40, total: 80 },
     };
     const g = generalLand(space);
     expect(g.housing).toBe(52);
-    expect(g.factory).toBe(26);
+    expect(g.factory).toBe(0);
     expect(g.habitableFree).toBe(18); // people 70 − 52
-    expect(g.factoryFree).toBe(94); // industry 120 − 26
+    expect(g.factoryFree).toBe(0);
     expect(g.habitable).toBe(70);
-    expect(g.general).toBe(190); // 70 + 120, combined display total
+    expect(g.general).toBe(70);
     expect(g.housing + g.factory + g.habitableFree + g.factoryFree).toBeCloseTo(g.general);
   });
 });

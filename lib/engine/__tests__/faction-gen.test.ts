@@ -10,7 +10,7 @@ function mkSys(p: Partial<GeneratedSystem> & { index: number }): GeneratedSystem
   return {
     name: `s${p.index}`, economyType: "extraction", sunClass: "yellow",
     bodies: [], popCap: 0, population: 0, bodyDanger: 0, buildings: {},
-    industryLand: 0, peopleLand: 0,
+ peopleLand: 0,
     depositCounts: emptyResourceVector(), yieldMult: emptyResourceVector(),
     extractionEfficiency: emptyResourceVector(),
     x: 0, y: 0, regionIndex: 0, isGateway: false, description: "",

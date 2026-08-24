@@ -29,8 +29,7 @@
  */
 import { DEVELOPMENT } from "@/lib/constants/development";
 import { HOUSING_TYPE, POP_CENTRE_DENSITY, effectiveSpaceCost, BUILDING_TYPES } from "@/lib/constants/industry";
-import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
-import { industryLandUsed, labourDemand, labourFulfilment } from "@/lib/engine/industry";
+import { labourDemand, labourFulfilment } from "@/lib/engine/industry";
 
 /** The built + physical inputs `systemDevelopment` reads (a structural subset of a build/world system). */
 export interface DevelopmentInput {
@@ -55,11 +54,18 @@ export interface DevelopmentRefs {
   industryRef: number;
 }
 
-/** The static substrate a system contributes to the universe-wide reference maxima. */
+/**
+ * The static substrate a system contributes to the universe-wide reference maxima.
+ *
+ * `industryLand` is a compile-preserving deviation: the habitability-seeding amendment deleted the
+ * industry-land budget everywhere (Task 15), leaving this axis reading 0 from every caller until
+ * Task 16 re-derives the industry term as worked levels ÷ authored deposit counts and drops the
+ * field from this interface entirely.
+ */
 export interface DevelopmentRefSystem {
   /** Habitable land — drives the system's pop potential. */
   peopleLand: number;
-  /** Fungible general space — factory land (and, netted, housing land). */
+  /** Deviation placeholder — always 0 pending Task 16 (see interface doc comment). */
   industryLand: number;
   /** Total worked-able deposit counts across all resources (Σ per-resource counts). */
   depositCounts: number;
@@ -82,12 +88,16 @@ export function habitablePotentialPop(peopleLand: number): number {
 }
 
 /**
- * The staffed-industry footprint a system could ever host — every deposit slot worked plus all general
- * space given to factories, in the same space units `systemDevelopment` measures `staffedIndustry` in.
- * The absolute industry ceiling the universe-wide `industryRef` is a max over.
+ * The staffed-industry footprint a system could ever host — every deposit slot worked, in the same
+ * units `systemDevelopment` measures `staffedIndustry` in. The absolute industry ceiling the
+ * universe-wide `industryRef` is a max over.
+ *
+ * `industryLand` is a compile-preserving deviation (always 0 — see `DevelopmentRefSystem`'s doc
+ * comment): factories bill no land after the habitability-seeding cut, so this term drops out until
+ * Task 16 re-derives the axis as worked levels ÷ authored deposit counts.
  */
 export function industryPotential(depositCounts: number, industryLand: number): number {
-  return Math.max(0, depositCounts) * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT + Math.max(0, industryLand);
+  return Math.max(0, depositCounts) + Math.max(0, industryLand);
 }
 
 /**
@@ -123,15 +133,14 @@ function extractorLevels(buildings: Record<string, number>): number {
 export function systemDevelopment(input: DevelopmentInput, refs: DevelopmentRefs): number {
   const { buildings, population, peopleLand } = input;
 
-  // Staffed industry (absolute): extraction sits on deposit slots, factories/academies/complexes on
-  // industry land; both converted to commensurate space units. Housing never enters this term —
-  // `industryLandUsed` excludes it outright (it bills to the disjoint people-land budget instead
-  // of needing a manual net-out here). The whole built base is discounted by headcount staffing —
-  // idle-because-understaffed capacity is not counted as development (used, not built).
-  const extraction = extractorLevels(buildings) * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT;
-  const factory = industryLandUsed(buildings);
+  // Staffed industry (absolute): extraction sits on worked deposit slots. Factories/academies/
+  // complexes bill no land after the habitability-seeding cut and are not yet counted here — a
+  // compile-preserving deviation pending Task 16's worked-levels-÷-authored-counts re-derivation
+  // (see `DevelopmentRefSystem`'s doc comment). The whole built base is discounted by headcount
+  // staffing — idle-because-understaffed capacity is not counted as development (used, not built).
+  const extraction = extractorLevels(buildings);
   const staffing = labourFulfilment(population, labourDemand(buildings));
-  const staffedIndustry = (extraction + factory) * staffing;
+  const staffedIndustry = extraction * staffing;
   const indTerm = softSaturate(staffedIndustry, refs.industryRef);
 
   // Barren: no habitable land ⇒ no population possible ⇒ industry is the whole reading.
