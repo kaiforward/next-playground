@@ -102,6 +102,32 @@ prototype pass approved before implementation (AGENTS.md, UI/dataviz). Not part 
 premises above; it consumes the same derived per-body reads (worked deposits, occupancy) the
 mechanical change creates.
 
+## Measurement plan — per-claim falsifiers (committed before the instrument runs)
+
+Instrument: one scratch script (`temp/body-prefix-diag.ts`, gitignored) driving the real
+`runWorldTick` on `generateWorld({ systemCount: 600, seed: 42 })` — the same cohort the
+industry-land measurement used — snapshotting at t=0 / t=1,000 / t=10,000 and accumulating
+per-cycle extractor-count decreases across the run.
+
+1. **Eff is generation-frozen:** falsified if any developed system's `extractionEff` vector
+   differs between t=0 and t=10,000. If falsified, the "fixed pool" framing is wrong and the
+   dilution hazard needs re-derivation before any design.
+2. **Prefix–pool difference is material:** the terminal falsifier below (share <~2% AND median
+   magnitude <~2% at 10K, re-read at 1K) kills shipping the mechanical switch now.
+3. **Prefix mapping is total:** falsified if any developed (system, resource) pair reads
+   extractor count > aggregate deposit count at either horizon — the model would need an
+   overflow rule before spec.
+4. **Downward recompute fires in practice:** falsified if zero tier-0 extractor levels are shed
+   across the whole 10,000-tick run. If falsified, the decrease trigger still gets built (decay
+   is shipped behaviour) but is proven by fixture, not sim.
+
+Validation of the instrument: claim 3's cap check doubles as it — `computeBuildOptions` enforces
+the same inequality independently (`lib/engine/build-options.ts:88`), so a violation reads as
+"instrument miscounts extractors" before "game breaks its own cap". The body-side deposit sum is
+cross-checked against the system aggregate (`depositCountsOf(system)` must equal the per-body
+sum over unlocked bodies) — two independently-written paths (`lib/world/gen.ts:141` columns vs
+`world.bodies` rows) that must agree.
+
 ## Terminal falsifier
 
 **The direction dies if the prefix is indistinguishable from the pool where it matters:** measured
