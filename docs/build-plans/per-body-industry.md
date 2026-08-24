@@ -524,6 +524,145 @@ Terminal falsifier — committed at `00385c33`, moved unedited:
 Per-claim falsifiers — committed at `17334243`, moved unedited: see the Measurement plan section
 above (claims 1-4). Outcomes recorded in `## Evidence`: all four CONFIRMED.
 
+## Build plan
+
+One branch (`feat/per-body-industry`), one PR. Gates are check-in pauses, not PRs.
+
+### Resolution — every measure, resolved before the tasks
+
+| Measure (spec prose) | State | Producer |
+|---|---|---|
+| ground value (qual × extractionModifier per slot) | new | Task 1 (`lib/engine/worked-deposits.ts`); inputs exist: `qualityOf` (`lib/engine/resources.ts:194-196`), `BODY_ARCHETYPES[bodyType].extractionModifier` (`lib/constants/bodies.ts:37-38`) |
+| slot order (ground value desc, tie = `world.bodies` position) | new | Task 1 |
+| worked prefix length n (per resource, shared across goods) | exists | `extractorsOnResource` (`lib/engine/directed-build.ts:517-524`), verified this session |
+| realised multiplier (worked-prefix mean of ground values) | new | Task 1 fold |
+| decomposed columns (eff = worked mean modifier; yield = realised ÷ effMean) | new | Task 1 fold outputs; written through existing column writers (`lib/world/gen.ts:141-143` count/yield/eff columns) and readers (`effOf`/`yieldsOf`, `lib/engine/resources.ts:199-206`) |
+| potential vectors (all-unlocked-bodies pools, label + events input) | exists → renamed | `substrateAggregates` returns (`lib/engine/body-gen.ts:159-183`); Task 2 renames to `potential*` |
+| marginal slot ((n+1)th in order) | new | Task 1 |
+| per-body worked/total | new | Task 1 |
+| build-landing mutation site | exists | `applyBuildingIncreases` (`lib/world/tick.ts:554-574`), read this session |
+| decay-shed mutation site | exists | the decay application region (`lib/world/tick.ts:1279-1300`, `teardownLevelsBySystem` already instrumented there) |
+| tick→world column persistence | new (seam) | Task 3 extends `mergeSystemsIntoWorld` (`lib/world/tick.ts:268-323`, read this session — carries no yield/eff today) |
+| load-time recompute hook | new (seam) | Task 4, in `deserialiseWorld`'s ok arm (`lib/world/save.ts:67-92`; sole parse→install seam, `lib/services/game.ts:82-88`) |
+| n=0 best-slot read / neutral-1.0-only-when-no-deposits | new | Task 1 fold rule |
+| deposit-row display figures (marginal headline, worked average secondary) | exists → extended | `summariseDeposits` (`lib/engine/industry.ts:940-972`, read this session — already carries worked counts + band; gains the marginal) |
+| tier-0 shed count (gate read) | exists | `teardownLevelsBySystem` instrumentation (`lib/world/tick.ts:1279,1300,1933`) |
+| tier-0 idle levels (gate read) | new | Task 6 harness read (per-building `idleCycles` exists, `lib/world/types.ts:315-316`; no harness roll-up today) |
+| exposed harness bands | exists | `lib/tick-harness/__tests__/runner-founding.test.ts:39-40, 62-63, 104-110` (spec, review-verified) |
+
+Nothing unresolvable.
+
+### Gate 0 — pre-change baseline (before any task)
+
+Arms: nothing — runs on the branch point, before Task 1 lands.
+Reads: `npm run simulate` both horizons on main's code; output saved to `temp/` (gitignored) and
+its tier-0 rows quoted in the PR as the comparison base (spec, hazard row 6).
+Merge condition: baseline exists before mechanics change; without it Gate A cannot read.
+
+### Task 1 — the worked-deposits engine module
+
+Files: `lib/engine/worked-deposits.ts` (new), `lib/engine/__tests__/worked-deposits.test.ts` (new)
+Interface: structural input type `SlottedBody { bodyType: BodyArchetypeId; counts: ResourceVector; quality: ResourceVector }` (the `GradedBody` pattern, `lib/engine/deposit-grade.ts`); `depositSlotOrder(bodies: SlottedBody[], r: ResourceType): DepositSlot[]` with `DepositSlot { bodyIndex: number; groundValue: number; modifier: number; quality: number }`, ordered per spec (ground value desc, tie = input order, locked classes excluded); `workedYieldFold(slots: DepositSlot[], n: number): { eff: number; yieldMult: number; realised: number }` implementing the spec's fold, n=0 best-slot rule, n≥slots clamp, and the exact decomposition (eff × yieldMult ≡ realised); `workedYieldVectors(bodies: SlottedBody[], buildings: Record<string, number>): { eff: ResourceVector; yieldMult: ResourceVector }` (n via `extractorsOnResource`); `marginalSlot(slots: DepositSlot[], n: number): DepositSlot | null`; `workedByBody(bodies: SlottedBody[], buildings: Record<string, number>): per-bodyIndex, per-resource { worked, total }`.
+Proves: two slots of equal ground value on different bodies keep input body order; n=0 with deposits reads the best slot on all three outputs while a no-deposit resource reads 1.0; n past the slot total clamps at the all-slots mean; on a fixture where quality and modifier anti-correlate, eff × yieldMult equals the mean of ground values exactly (the product-of-means value would differ — the test must distinguish them); inserting a high-value slot at fixed n never lowers `realised` (the unlock guarantee, exercised at front-insertion, mid-insertion and back-insertion); empty body list returns neutral vectors, not NaN.
+Consumes: nothing.
+
+### Task 2 — generation switch and the potential/worked separation
+
+Files: `lib/engine/body-gen.ts`, `lib/engine/universe-gen.ts`, `lib/engine/economy-type.ts` (docstring), `lib/world/gen.ts`, plus the fixture callers the rename touches (`lib/engine/__tests__/universe-gen.test.ts`, `faction-gen.test.ts`, `body-gen.test.ts`)
+Interface: `substrateAggregates` returns rename `yieldMult` → `potentialYieldMult`, `extractionEfficiency` → `potentialExtractionEfficiency` (meanings unchanged — all-unlocked pools); `deriveEconomyTypeLabel` keeps consuming the potential vector at `universe-gen.ts:351` and `:631`; the `WorldSystem` yield*/eff* columns are written from `workedYieldVectors` — for bare systems (no buildings) and for the homeworld prefab **after** `s.buildings` is stamped (today's `:625` before `:628` ordering is the bug the spec names); `economy-type.ts:3`'s "display-only" line corrected to name event targeting.
+Proves: a homeworld's columns fold against its stamped buildings, not against zero; a bare system's columns read its best slot per resource; on a fixture where worked and potential vectors differ, the economy-type label matches the potential computation (wiring it to worked must fail the test); a tech-locked body contributes to neither potential nor worked; the generation-time market seed (`lib/world/gen.ts:189` region) carries the worked columns.
+Consumes: Task 1.
+
+### Task 3 — the tick write path
+
+Files: `lib/world/tick.ts`, `lib/tick/rows.ts` (if the row type needs a mutability note), `lib/world/__tests__/` sibling of the merge tests
+Interface: at the two mutation sites — `applyBuildingIncreases` (`tick.ts:554-574`) and the decay application region (`tick.ts:1279-1300`) — a refold of the affected system's `yields`/`extractionEff` row fields, inputs read from `world.bodies` at the site (never joined in `toTickSystems`); `mergeSystemsIntoWorld` (`tick.ts:268-323`) gains the yield/eff column writes following the existing merged-field pattern.
+Proves: a landed tier-0 build whose count crosses a body boundary changes the merged world's columns that same tick (the silent-no-op failure — asserted after the merge, not on the row); a decay shed does the same downward; a housing-only build changes neither column; a tick with no tier-0 count change leaves every system's columns byte-identical (no churn from re-folding equal values); a system untouched by builds keeps reference equality through the merge where the current merge grants it.
+Consumes: Tasks 1, 2.
+
+### Task 4 — the load hook
+
+Files: `lib/world/save.ts`, `lib/world/__tests__/save.test.ts` (or sibling)
+Interface: `rebuildWorkedYieldColumns(world: World): World` (pure, exported) applied in `deserialiseWorld`'s ok arm before return; `SAVE_FORMAT_VERSION` unchanged, with the spec's stated reason in the code comment at the version constant.
+Proves: a serialised world whose columns hold deliberately-wrong pooled values reads worked-fold values after `deserialiseWorld`; a current-version save round-trips (no version rejection); a world with a body-less system loads without NaN; the hook is in `deserialiseWorld` itself, so a load through the file backend and one through IndexedDB take the same path (asserted structurally: `loadGame` has no second transform).
+Consumes: Tasks 1, 2.
+
+### Gate A — mechanics complete
+
+Arms: Tasks 1-4.
+Reads: `npm run simulate`, both horizons, against Gate 0's baseline — conservation identities hold
+(a failed identity blocks, per AGENTS.md); tier-0 output/cover cohorted producer/consumer ×
+homeworld/colony; founding cadence and treasury balances (the proportional-income expectation);
+no NaN/runaway/pinning.
+Merge condition: identities green; movement explainable as the measured buff within cohorts;
+owner reads the comparison before UI work proceeds.
+
+### Task 5 — services and UI: the marginal-yield display
+
+Files: `lib/engine/industry.ts` (`summariseDeposits` + `SystemDepositSummary`), `lib/services/universe.ts`, `lib/services/system-industry-readout.ts` (if the readout carries deposit rows), `components/system/industry-panel.tsx`, `components/system/body-card.tsx`, matching `.test.tsx`/`.test.ts` files
+Interface: `SystemDepositSummary` gains `marginal: { groundValue: number } | null` (null = fully worked) and its `yieldMult` field's meaning becomes the worked average (value changes, shape kept); the deposit row headline renders the marginal figure, worked average secondary ("working X of Y slots · avg Z%"); `body-card.tsx` renders per-deposit worked/total from `workedByBody`. All strings through `/game-copy`.
+Reuse: the existing deposit-table row markup in `industry-panel.tsx` (`:203, :488` region — extended, not replaced); `summariseDeposits`' existing band/`bandForMultiplier` colouring (`lib/engine/industry.ts:940-972`, props read this session); the plain tooltip primitive for the decomposition hover; existing body-card deposit list. New: nothing — every surface is an extension of an existing component.
+Proves: at n=0 the headline equals the best slot's value; on a fixture whose best body fills, the marginal steps down to the next body's ground value; the secondary figure equals the column value the tick uses; a resource with no deposits renders no row; a fully-worked resource renders the marginal as absent, not 100%; component tests assert text and roles, never classes.
+Consumes: Tasks 1, 2 (columns), 3 (live values).
+
+### Task 6 — harness read for idle tier-0 levels
+
+Files: `lib/tick-harness/build-analysis.ts` (or the sibling module the roll-up fits), its test
+Interface: the harness report gains a tier-0 idle-levels figure (count of whole idle extractor levels, from the per-building `idleCycles` state) alongside the existing teardown read, cohorted like its siblings.
+Proves: a fixture with a deliberately idle extractor level reports it; a fully-utilised world reports zero (and the zero is validated against the independent `teardownLevelsBySystem` signal staying zero); the metric appears in the printed report (not just the returned object).
+Consumes: Task 3 (the behaviour it watches).
+
+### Gate B — final
+
+Arms: Tasks 5, 6.
+Reads: full `npx vitest run`; `npm run build`; the three exposed bands
+(`runner-founding.test.ts:39-40, :62-63, :104-110`) re-derived with inline reasoning — never
+widened to accommodate; `npm run duplication` on the diff; red-proof record for every task's
+Proves list; doc fold done (below).
+Merge condition: all green; PR quotes Gate 0 vs Gate A simulate comparison, both horizons; the
+bands' new values justified in the diff.
+
+### Verification
+
+The feature is proven in the galaxy by Gate A's baseline comparison: tier-0 output rises within
+cohorts consistent with the measured buff (median +29.4% on affected pairs at 10K), identities
+hold, and the two second-order reads (idle tier-0 levels via Task 6, shed counts via the existing
+instrumentation) stay in the coarse health bar. Both horizons, always cohorted. Build gate:
+`npm run build` (tsc + vite). The marginal-display maths lives in node-tested helpers (Task 1/5),
+per the component-test rule.
+
+### Doc fold (on the branch, before final review)
+
+- `docs/active/gameplay/habitability.md` — "Extraction pooling" section rewritten to the
+  worked-prefix model (pooling language dies); the `[PENDING: technology]` line inherits the
+  monotone-unlock statement; the planner site-ranking section gains the yield-blind sign-flip
+  note.
+- `docs/SPEC.md` — the Substrate bullet's "per-system extraction-efficiency pool fixed at
+  generation" and the Substrate→Economy interaction line updated to worked-prefix.
+- `docs/ROADMAP.md` — delete queue row 1; add the visual-system-view follow-on row (see Not
+  covered); the staged-battle hypothesis moves to
+  `docs/planned/grand-strategy-vision.md`'s war section (booked in `## Idea`).
+- This working file is deleted when the feature ships, after the fold above.
+
+### Not covered
+
+- **Planner yield-aware sizing** — booked: the planner-necessity roadmap row (amended this
+  session, commit `a73d89ac`).
+- **The technology/terraforming unlock mechanic** — booked: the growth-gated-behind-technology
+  roadmap row; this feature only makes unlocking safe (`[PENDING: technology]` stands).
+- **The 2D/3D visual system view** — booked at the doc fold: a new roadmap row added on this
+  branch (UI follow-on; browser-prototype-first per AGENTS.md; consumes Task 1's `workedByBody`
+  read).
+- **Per-extractor placement or any per-body tick state** — dropped: owner decision (2026-08-24),
+  the derived model is the design.
+- **Retuning any constant against the output buff** — dropped: calibration stays at the coarse
+  health bar until the mechanism set stabilises (AGENTS.md).
+
+### Net-new UI
+
+None. Both surfaces (deposit table rows, body cards) are extensions of existing components;
+Task 5's Reuse field names them. Stated empty deliberately so review can check the claim.
+
 ## Terminal falsifier
 
 **The direction dies if the prefix is indistinguishable from the pool where it matters:** measured
