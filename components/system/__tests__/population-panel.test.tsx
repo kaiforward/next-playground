@@ -4,9 +4,9 @@ import { PopulationPanel } from "@/components/system/population-panel";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { SystemPopulationData, SystemUnrestRead } from "@/lib/types/api";
 
-// The Population tab's growth line ("Growth ×0.93 — habitability") is a straight FORMAT of the
-// service's `growthMultiplier` — this component computes nothing, so a bad service value (NaN,
-// non-1.0) must be visible in the DOM text exactly as the service handed it over.
+// The Population tab's growth line ("Habitability: 93%") is a straight FORMAT of the service's
+// `growthMultiplier` — this component computes nothing, so a bad service value (NaN, non-1.0) must
+// be visible in the DOM text exactly as the service handed it over.
 
 let popValue: SystemPopulationData = { visibility: "unknown" };
 vi.mock("@/lib/hooks/use-system-population", () => ({
@@ -50,22 +50,22 @@ describe("PopulationPanel — the growth line", () => {
   it("renders the service's growthMultiplier, format-only — a NaN service value is visible in DOM text", () => {
     popValue = populated({ growthMultiplier: NaN });
     const { container } = renderPanel();
-    expect(container.textContent).toContain("×NaN");
+    expect(container.textContent).toContain("NaN%");
   });
 
-  it("renders the exact service multiplier, unmodified", () => {
+  it("renders the exact service multiplier as a percentage, unmodified", () => {
     popValue = populated({ growthMultiplier: 0.93 });
     renderPanel();
-    expect(screen.getByRole("button", { name: /habitability/ })).toHaveTextContent("×0.93");
+    expect(screen.getByRole("button", { name: /Habitability/ })).toHaveTextContent("93%");
   });
 
-  it("a single-body quality-1.0 world still renders the line at ×1.00 — the common case is not hidden", () => {
+  it("a single-body quality-1.0 world still renders the line at 100% — the common case is not hidden", () => {
     popValue = populated({
       growthMultiplier: 1,
       fillOrder: [{ className: "Temperate World", score: 1.0, peopleLand: 480, occupied: true, frontier: true }],
     });
     renderPanel();
-    expect(screen.getByRole("button", { name: /habitability/ })).toHaveTextContent("×1.00");
+    expect(screen.getByRole("button", { name: /Habitability/ })).toHaveTextContent("100%");
   });
 
   it("an uninhabited system renders no growth line", () => {

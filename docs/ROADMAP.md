@@ -378,6 +378,10 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
 - **[S] Needs-tooltip language pass** — the needs-ledger / pop-short tooltips ship with figures plus one
   placeholder sentence, pending a nested-tooltip pass. Fold the two near-duplicate bodies (`NeedTooltip` in
   `population-panel.tsx`, `PopShortTooltipBody` in `industry-panel.tsx`) into a shared shell then.
+  **Widened (2026-08-24): apply `/game-copy` to every pre-existing tooltip/label surface** — the
+  skill (three registers, additive-percentage modifiers, game vocabulary only) shipped with
+  habitability seeding and that branch's own surfaces conform; the rest of the UI has not been
+  swept. Do it while the surface count is small; every new UI task already falls under the skill.
 - **[L] Paradox-style nested/pinnable deep tooltips** — tooltips whose terms are themselves hoverable,
   pinnable for comparison, backed by a cross-linking concept glossary. Needs a design doc + collaborative
   HTML-prototype pass. Core genre UI post-pivot, not polish. The theme already reserves a copper treatment

@@ -1,6 +1,7 @@
 "use client";
 
 import { useSystemSubstrate } from "@/lib/hooks/use-system-substrate";
+import { useSystemPopulation } from "@/lib/hooks/use-system-population";
 import { Card } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -12,6 +13,12 @@ import { SUN_CLASSES } from "@/lib/constants/bodies";
 /** Moved from `app/(game)/@panel/system/[systemId]/astrography/page.tsx`. */
 export function SystemAstrography({ systemId }: { systemId: string }) {
   const substrate = useSystemSubstrate(systemId);
+  // Same service-resolved reading the Population tab's growth line uses (`growthMultiplier`,
+  // `lib/services/system-population.ts`) — reused here, never recomputed, so the two tabs can't
+  // disagree about the system's habitability. Omitted (not "N/A", never a fabricated 100%) whenever
+  // the population read itself is unknown — a surveyed-but-unassessed system has no habitability
+  // story yet.
+  const pop = useSystemPopulation(systemId);
 
   if (substrate.visibility === "unknown") {
     return (
@@ -20,6 +27,7 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
   }
 
   const { sunClass, peopleLand, bodies } = substrate;
+  const habitabilityPct = pop.visibility === "visible" ? Math.round(pop.growthMultiplier * 100) : undefined;
 
   return (
     <div className="space-y-6">
@@ -36,11 +44,16 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
             <span className="font-mono text-sm text-text-primary">{bodies.length}</span>
           </StatRow>
           {/* Absolute habitable surface across all bodies — never a percent (the percent-of-available
-              reading died with `availableSpace`; a zero-people-land system reads a bare "0", not a
+              reading died with `availableSpace`; a zero-habitable-land system reads a bare "0", not a
               share of anything). */}
-          <StatRow label="People land">
+          <StatRow label="Habitable land">
             <span className="font-mono text-sm text-text-primary">{peopleLand.toFixed(0)}</span>
           </StatRow>
+          {habitabilityPct !== undefined && (
+            <StatRow label="Habitability">
+              <span className="font-mono text-sm text-text-primary">{habitabilityPct}%</span>
+            </StatRow>
+          )}
         </StatList>
       </Card>
 

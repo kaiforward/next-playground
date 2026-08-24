@@ -22,19 +22,19 @@ import type { SystemUnrestRead } from "@/lib/types/api";
 import type { FillOrderRow } from "@/lib/utils/substrate";
 
 /**
- * "Growth ×0.93 — habitability" plus its per-body decomposition tooltip — quality is always shown
- * as a story about bodies, never a bare number (spec §3). The multiplier is the service's
- * `growthMultiplier` FORMATTED only; this component computes nothing (`fillOrder` is likewise
- * assembled server-side by `habitabilityFillOrder`).
+ * "Habitability: 93%" plus its per-body decomposition tooltip — quality is always shown as a story
+ * about bodies, never a bare number (spec §3). The percentage is the service's `growthMultiplier`
+ * FORMATTED only; this component computes nothing (`fillOrder` is likewise assembled server-side by
+ * `habitabilityFillOrder`).
  */
 function GrowthLine({ growthMultiplier, fillOrder }: { growthMultiplier: number; fillOrder: FillOrderRow[] }) {
   return (
     <Tooltip>
       <TooltipTriggerLabel className="text-xs">
-        Growth <span className="font-mono text-text-secondary">×{growthMultiplier.toFixed(2)}</span> — habitability
+        Habitability: <span className="font-mono text-text-secondary">{Math.round(growthMultiplier * 100)}%</span>
       </TooltipTriggerLabel>
       <TooltipContent className="w-64">
-        <HabitabilityTooltipContent fillOrder={fillOrder} />
+        <HabitabilityTooltipContent growthMultiplier={growthMultiplier} fillOrder={fillOrder} />
       </TooltipContent>
     </Tooltip>
   );

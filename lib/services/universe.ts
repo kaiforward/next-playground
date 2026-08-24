@@ -118,7 +118,6 @@ export function getSystemSubstrate(systemId: string): SystemSubstrateData {
       archetypeName: arch.name,
       score: arch.scores.default,
       locked: arch.techLocked,
-      size: b.size,
       counts: depositCountsOf(b),
       quality: qualityOf(b),
       peopleLand: b.peopleLand,

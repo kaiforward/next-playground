@@ -79,7 +79,6 @@ const VISIBLE_SUBSTRATE: SystemSubstrateData = {
       archetypeName: "Barren Rock",
       score: 0,
       locked: false,
-      size: 1,
       counts: ZERO_RESOURCES,
       quality: ZERO_RESOURCES,
       peopleLand: 0,

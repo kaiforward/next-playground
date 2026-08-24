@@ -267,7 +267,6 @@ export interface BodyView {
   score: number;
   /** True when this body's archetype is tech-locked (contributes no land or counts yet). */
   locked: boolean;
-  size: number;
   /** Per-resource deposit slot counts on this body (0 = no deposit). */
   counts: ResourceVector;
   /** Per-resource intrinsic quality multiplier on this body (0 = no deposit). */

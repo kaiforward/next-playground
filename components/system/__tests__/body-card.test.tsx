@@ -18,7 +18,6 @@ function body(overrides: Partial<BodyView> = {}): BodyView {
     archetypeName: "Temperate World",
     score: 1.0,
     locked: false,
-    size: 1.2,
     counts: emptyResourceVector(),
     quality: emptyResourceVector(),
     peopleLand: 480,
@@ -36,12 +35,20 @@ function renderCard(b: BodyView) {
   );
 }
 
-describe("BodyCard — score band, lock state, occupancy marking, and the extraction contribution weight", () => {
-  it("a locked body states its lock in accessible text and shows a score band, never the retired Habitable badge", () => {
+describe("BodyCard — score band, lock state, occupancy marking, and the deposit yield stat", () => {
+  it("a locked body states its lock in accessible text, below the header row, and shows a score band, never the retired Habitable badge", () => {
     renderCard(body({ bodyType: "volcanic_world", archetypeName: "Volcanic World", score: 0.05, locked: true }));
-    expect(screen.getByText("Locked — awaiting technology")).toBeInTheDocument();
+    const lockedBadge = screen.getByText("Locked — awaiting technology");
+    expect(lockedBadge).toBeInTheDocument();
     expect(screen.getByText("Poor")).toBeInTheDocument(); // 0.05 bands as poor
     expect(screen.queryByText("Habitable")).not.toBeInTheDocument();
+
+    // The lock badge sits on its own row below the header, not sharing the header's flex row with
+    // the archetype name — the layout defect this replaces pushed the modifier text offscreen.
+    const heading = screen.getByRole("heading", { name: "Volcanic World" });
+    const headerRow = heading.parentElement;
+    expect(headerRow).not.toBeNull();
+    expect(headerRow).not.toContainElement(lockedBadge);
   });
 
   it("an unlocked above-threshold body shows its score band without a lock marker", () => {
@@ -50,10 +57,12 @@ describe("BodyCard — score band, lock state, occupancy marking, and the extrac
     expect(screen.queryByText("Locked — awaiting technology")).not.toBeInTheDocument();
   });
 
-  it("renders the contribution-weight wording for the extraction modifier on the trigger's accessible name", () => {
+  it("renders the deposit-yield stat as a percentage on the trigger's accessible name", () => {
     renderCard(body({ extractionModifier: 0.85 }));
-    expect(screen.getByRole("button", { name: /contribution weight/ })).toBeInTheDocument();
-    expect(screen.getByText("×0.85")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Deposit yield/ })).toBeInTheDocument();
+    expect(screen.getByText("85%")).toBeInTheDocument();
+    expect(screen.queryByText(/contribution weight/)).not.toBeInTheDocument();
+    expect(screen.queryByText("×0.85")).not.toBeInTheDocument();
   });
 
   it("marks only the occupied body — a marking on every body would fail this", () => {
@@ -66,10 +75,15 @@ describe("BodyCard — score band, lock state, occupancy marking, and the extrac
     expect(screen.getAllByText("Occupied")).toHaveLength(1);
   });
 
-  it("a zero-people-land body shows an absolute 0, never NaN or a percent", () => {
+  it("a zero-habitable-land body shows an absolute 0, never NaN or a percent", () => {
     const { container } = renderCard(body({ peopleLand: 0 }));
-    expect(container.textContent).toContain("People land 0");
+    expect(container.textContent).toContain("Habitable land 0");
+    expect(container.textContent).not.toContain("People land");
     expect(container.innerHTML).not.toContain("NaN");
-    expect(container.textContent).not.toContain("%");
+  });
+
+  it("never renders a bare 'size N.NN' line — capacity reads through habitable-land and deposit numbers instead", () => {
+    const { container } = renderCard(body());
+    expect(container.textContent).not.toContain("Size");
   });
 });

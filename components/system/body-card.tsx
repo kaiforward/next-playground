@@ -27,32 +27,30 @@ export function BodyCard({ body }: { body: BodyView }) {
         </h4>
         <span className="flex shrink-0 items-center gap-1.5">
           {body.occupied && <Badge color="green">Occupied</Badge>}
-          {body.locked && (
-            <Badge color="slate" variant="outline">
-              Locked — awaiting technology
-            </Badge>
-          )}
           <span className="inline-flex items-center gap-1 text-xs">
             <span aria-hidden className={`inline-block h-1.5 w-1.5 shrink-0 ${QUALITY_BAND_DOT[band]}`} />
             <span className={QUALITY_BAND_TEXT[band]}>{QUALITY_BAND_LABEL[band]}</span>
           </span>
         </span>
       </div>
+      {body.locked && (
+        <div className="mb-2">
+          <Badge color="slate" variant="outline">
+            Locked — awaiting technology
+          </Badge>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-tertiary">
         <span>
-          Size <span className="font-mono text-text-secondary">{body.size.toFixed(2)}</span>
-        </span>
-        <span>
-          People land <span className="font-mono text-text-secondary">{body.peopleLand.toFixed(0)}</span>
+          Habitable land <span className="font-mono text-text-secondary">{body.peopleLand.toFixed(0)}</span>
         </span>
         <Tooltip>
           <TooltipTriggerLabel className="text-xs">
-            Extraction <span className="font-mono text-text-secondary">×{body.extractionModifier.toFixed(2)}</span>{" "}
-            contribution weight
+            Deposit yield: <span className="font-mono text-text-secondary">{Math.round(body.extractionModifier * 100)}%</span>
           </TooltipTriggerLabel>
-          <TooltipContent className="w-56">
-            Weights this body&rsquo;s share of the system&rsquo;s shared effective yield — extractors are a
-            per-system pool, never placed on one body alone.
+          <TooltipContent className="w-56 text-xs">
+            This body&rsquo;s share of the system&rsquo;s shared deposit yield — extractors work as one
+            per-system pool, never a single body alone.
           </TooltipContent>
         </Tooltip>
       </div>

@@ -110,7 +110,6 @@ describe("getSystemSubstrate", () => {
     expect(bodyView.archetypeName).toBe(BODY_ARCHETYPES[body.bodyType].name);
     expect(bodyView.score).toBe(BODY_ARCHETYPES[body.bodyType].scores.default);
     expect(bodyView.locked).toBe(BODY_ARCHETYPES[body.bodyType].techLocked);
-    expect(bodyView.size).toBe(body.size);
 
     const expectedSlots: ResourceVector = {
       gas: body.countGas,
