@@ -121,7 +121,6 @@ export function getSystemSubstrate(systemId: string): SystemSubstrateData {
       counts: depositCountsOf(b),
       quality: qualityOf(b),
       peopleLand: b.peopleLand,
-      extractionModifier: arch.extractionModifier,
       occupied: occupied.has(b.id),
     };
   });

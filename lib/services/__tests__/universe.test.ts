@@ -132,7 +132,6 @@ describe("getSystemSubstrate", () => {
     expect(bodyView.counts).toEqual(expectedSlots);
     expect(bodyView.quality).toEqual(expectedQuality);
     expect(bodyView.peopleLand).toBe(body.peopleLand);
-    expect(bodyView.extractionModifier).toBe(BODY_ARCHETYPES[body.bodyType].extractionModifier);
   });
 
   it("marks occupied bodies from the cached fill-best-first fold, not every people-land body", () => {

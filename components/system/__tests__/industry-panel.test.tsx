@@ -98,6 +98,14 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
     expect(container.textContent).toContain(`${formatMagnitude(7)} free`);
   });
 
+  it("shows the deposit's yield as a whole percentage, never the raw multiplier — extraction pools per-system, so this is the system-level read", () => {
+    industryValue.current = READOUT;
+    renderPanel();
+
+    expect(screen.getByText("Yield: 100%")).toBeInTheDocument();
+    expect(screen.queryByText("×1.00")).not.toBeInTheDocument();
+  });
+
   it("never renders the retired industry-land vocabulary — no 'Industry land', 'General land', 'habitableFree' or 'factoryFree' anywhere in the DOM", () => {
     industryValue.current = READOUT;
     const { container } = renderPanel();

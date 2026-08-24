@@ -36,6 +36,15 @@ The attention layer — how the player finds what to do — is two surfaces, bot
    (`habitableSpace = generalSpace × habitableFraction`), and the expensive, low-yield
    specialist-habitation *building* was recorded as a hook at that same decision — see
    [negative-space-economy.md](./planned/negative-space-economy.md).
+   **Design input for the unlock mechanic (Kai, 2026-08-24):** per-resource extraction yield is
+   the deposit-count-weighted mean of `extractionModifier` over UNLOCKED bodies
+   (`lib/engine/body-gen.ts:190-198`), and live extractor output reads it at tick time — so
+   unlocking a low-modifier, deposit-heavy body would immediately reduce every existing
+   extractor's output in that system (capacity up, current production down: a felt penalty for
+   progress, worst on heavy extractors). Cannot fire today (no unlock mechanic; the pool is
+   fixed at generation). Options for the design pass: freeze efficiency per built extractor;
+   pool per body instead of per system where unlocks make the concession gameplay-visible; or
+   make unlocking an explicit player choice so the dilution trade is theirs.
    **Honest dependency:** there is no technology or progression system in the codebase today — a grep
    for terraforming or technology finds only event and faction flavour text. "Gated behind
    technology" is therefore a new system, not a constant change, and the sequencing of the two is

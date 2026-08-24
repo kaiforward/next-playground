@@ -1,20 +1,21 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
 import { bodyDepositFeatures, habitabilityScoreBand } from "@/lib/utils/substrate";
 import { QUALITY_BAND_DOT, QUALITY_BAND_TEXT, QUALITY_BAND_LABEL } from "@/lib/constants/ui";
 import type { BodyView } from "@/lib/types/api";
 
 /**
- * One physical body in a system's substrate — the people-land budget and extraction contribution
- * weight plus the deposits it hosts. The left-accent stripe and an
- * "Occupied" badge mark a body inside the system's current fill-best-first occupied prefix (the
- * cached habitability quality fold, read straight off `body.occupied` — this component computes nothing).
- * That replaces the retired per-body `habitable: boolean` and its "Habitable" badge: habitability
- * is now a score BAND (dot + label, the same vocabulary the deposit list already uses), shown for
- * every body including a locked one — a lock states itself in its own badge, never by hiding the
- * band. Locked bodies still show their authored budgets/deposits: they're dark (present but
- * non-functional) until a future technology unlocks them, not absent.
+ * One physical body in a system's substrate — the people-land budget plus the deposits it hosts.
+ * The left-accent stripe and an "Occupied" badge mark a body inside the system's current
+ * fill-best-first occupied prefix (the cached habitability quality fold, read straight off
+ * `body.occupied` — this component computes nothing). That replaces the retired per-body
+ * `habitable: boolean` and its "Habitable" badge: habitability is now a score BAND (dot + label,
+ * the same vocabulary the deposit list already uses), shown for every body including a locked
+ * one — a lock states itself in its own badge, never by hiding the band. Locked bodies still show
+ * their authored budgets/deposits: they're dark (present but non-functional) until a future
+ * technology unlocks them, not absent. Extraction pooling (a body's contribution to the system's
+ * shared deposit yield) is a performance concession, not a mechanic a body owns — it is never
+ * shown here; see the deposit table's per-resource yield tag for the system-level read.
  */
 export function BodyCard({ body }: { body: BodyView }) {
   const features = bodyDepositFeatures(body.counts, body.quality);
@@ -44,15 +45,6 @@ export function BodyCard({ body }: { body: BodyView }) {
         <span>
           Habitable land <span className="font-mono text-text-secondary">{body.peopleLand.toFixed(0)}</span>
         </span>
-        <Tooltip>
-          <TooltipTriggerLabel className="text-xs">
-            Deposit yield: <span className="font-mono text-text-secondary">{Math.round(body.extractionModifier * 100)}%</span>
-          </TooltipTriggerLabel>
-          <TooltipContent className="w-56 text-xs">
-            This body&rsquo;s share of the system&rsquo;s shared deposit yield — extractors work as one
-            per-system pool, never a single body alone.
-          </TooltipContent>
-        </Tooltip>
       </div>
       {features.length > 0 && (
         <ul className="mt-2 space-y-1">

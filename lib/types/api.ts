@@ -274,10 +274,6 @@ export interface BodyView {
   /** This body's authored people-land budget — dark (present but non-functional) when locked or
    *  below `HABITABILITY_THRESHOLD`. */
   peopleLand: number;
-  /** Extraction work modifier in (0,1]. Extractors are a per-system pool with no body attribution,
-   *  so this is presented as a contribution WEIGHT to the system's shared effective yield, never
-   *  the yield of an extractor placed on this body specifically (spec §1). */
-  extractionModifier: number;
   /** True when this body sits inside the system's current fill-best-first occupied prefix (the
    *  cached habitability quality fold, derived by the service via `occupiedBodyIds` — the component computes
    *  nothing). False for an unassessed system as well as for a body past the frontier. */

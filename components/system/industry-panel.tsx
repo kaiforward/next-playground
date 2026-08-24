@@ -146,9 +146,24 @@ function PoolHead({ title, sub, right }: { title: string; sub?: string; right: R
   );
 }
 
-/** Gold-when-rich yield tag — reused by deposit name + tooltip. */
+/**
+ * Gold-when-rich yield tag — the system-level read of extraction output, since extractors work a
+ * shared per-system pool with no single body's yield to show (`docs/active/design-system` copy
+ * register: a plain percentage of normal, never a raw multiplier). A resource's yield can run
+ * above or below 100% (poor deposits as low as 40%, rich ones above 200%), so the number carries
+ * no sign — just the whole percentage.
+ */
 function YieldTag({ mult, band }: { mult: number; band: DepositRow["band"] }) {
-  return <span className={`font-mono text-[9.5px] ${QUALITY_BAND_TEXT[band]}`}>×{mult.toFixed(2)}</span>;
+  return (
+    <Tooltip>
+      <TooltipTriggerLabel className={`font-mono text-[9.5px] ${QUALITY_BAND_TEXT[band]}`}>
+        Yield: {Math.round(mult * 100)}%
+      </TooltipTriggerLabel>
+      <TooltipContent className="w-56 text-xs">
+        A system&rsquo;s mines and wells work its deposits together.
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 /**
@@ -185,7 +200,7 @@ function DepositTooltipBody({ row, contributors }: { row: DepositRow; contributo
     <div className="space-y-1">
       <p className="font-display text-[12px] font-semibold capitalize text-text-primary">{row.resource}</p>
       <p className="font-mono text-[10px] text-text-tertiary">
-        yield ×{row.yieldMult.toFixed(2)} · {QUALITY_BAND_LABEL[row.band]} · {row.built}/{row.depositCounts} slots built · {row.staffed.toFixed(1)} staffed
+        Yield: {Math.round(row.yieldMult * 100)}% · {QUALITY_BAND_LABEL[row.band]} · {row.built}/{row.depositCounts} slots built · {row.staffed.toFixed(1)} staffed
       </p>
       {contributors.length > 0 && (
         <div className="space-y-0.5 border-t border-border/60 pt-1.5">

@@ -82,7 +82,6 @@ const VISIBLE_SUBSTRATE: SystemSubstrateData = {
       counts: ZERO_RESOURCES,
       quality: ZERO_RESOURCES,
       peopleLand: 0,
-      extractionModifier: 0.7,
       occupied: false,
     },
   ],

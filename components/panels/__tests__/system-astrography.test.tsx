@@ -44,7 +44,7 @@ describe("SystemAstrography — the system-level habitable-land header, absolute
           id: "b1", bodyType: "temperate_world", archetypeName: "Temperate World",
           score: 1.0, locked: false,
           counts: emptyResourceVector(), quality: emptyResourceVector(),
-          peopleLand: 500, extractionModifier: 1.0, occupied: true,
+          peopleLand: 500, occupied: true,
         },
       ],
     };

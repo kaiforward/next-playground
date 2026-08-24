@@ -5,11 +5,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { emptyResourceVector } from "@/lib/engine/resources";
 import type { BodyView } from "@/lib/types/api";
 
-// Every case renders inside the app's own `TooltipProvider` — the extraction-weight readout is a
-// Tooltip trigger, and Radix's `Tooltip.Root` throws without a provider above it (the real app
-// mounts one in client/main.tsx). The contribution-weight wording lives directly on the trigger's
-// own visible text (not behind a hover-only tooltip body), so it is readable via the trigger's
-// accessible name without simulating a hover/focus interaction.
+// Every case renders inside the app's own `TooltipProvider` — Radix's `Tooltip.Root` throws
+// without a provider above it (the real app mounts one in client/main.tsx), and other tooltips on
+// the card (e.g. a future addition) would need it even though the retired deposit-yield tooltip
+// no longer does.
 
 function body(overrides: Partial<BodyView> = {}): BodyView {
   return {
@@ -21,7 +20,6 @@ function body(overrides: Partial<BodyView> = {}): BodyView {
     counts: emptyResourceVector(),
     quality: emptyResourceVector(),
     peopleLand: 480,
-    extractionModifier: 1.0,
     occupied: false,
     ...overrides,
   };
@@ -35,7 +33,7 @@ function renderCard(b: BodyView) {
   );
 }
 
-describe("BodyCard — score band, lock state, occupancy marking, and the deposit yield stat", () => {
+describe("BodyCard — score band, lock state, occupancy marking", () => {
   it("a locked body states its lock in accessible text, below the header row, and shows a score band, never the retired Habitable badge", () => {
     renderCard(body({ bodyType: "volcanic_world", archetypeName: "Volcanic World", score: 0.05, locked: true }));
     const lockedBadge = screen.getByText("Locked — awaiting technology");
@@ -57,12 +55,11 @@ describe("BodyCard — score band, lock state, occupancy marking, and the deposi
     expect(screen.queryByText("Locked — awaiting technology")).not.toBeInTheDocument();
   });
 
-  it("renders the deposit-yield stat as a percentage on the trigger's accessible name", () => {
-    renderCard(body({ extractionModifier: 0.85 }));
-    expect(screen.getByRole("button", { name: /Deposit yield/ })).toBeInTheDocument();
-    expect(screen.getByText("85%")).toBeInTheDocument();
+  it("never renders a per-body deposit yield stat — extraction pooling is a system-level story, never a body-owned one", () => {
+    renderCard(body());
+    expect(screen.queryByText(/Deposit yield/)).not.toBeInTheDocument();
     expect(screen.queryByText(/contribution weight/)).not.toBeInTheDocument();
-    expect(screen.queryByText("×0.85")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument(); // the retired stat was the card's only Tooltip trigger
   });
 
   it("marks only the occupied body — a marking on every body would fail this", () => {

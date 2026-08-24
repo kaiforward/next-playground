@@ -34,11 +34,13 @@ only if needed — one sentence of mechanics in plain words. Verbs allowed. Slig
 allowed at the end, never at the start.
 
 - Example: *"Not every world welcomes settlers. Habitability measures how well a system's
-  land supports ordinary life — settlers fill the best ground first, so growth slows as a
+  land supports ordinary life. Settlers fill the best ground first, so growth slows as a
   system fills toward its poorer land. Shown as a percentage of normal population growth."*
 - Keyword definitions are glossary entries: written once, reused everywhere the term is
   hoverable. If a definition exists, link it; never write a second definition of the same
   term. (The roadmap's game-term glossary is this register's home.)
+- A keyword sentence doesn't take a dash-appended clause — if it needs a dash, it's two
+  thoughts and one gets cut. (Contrast the stat register above, where a dashed aside is fine.)
 
 **3. Flavor register** — events, narrative, era text. The only place for extravagant
 language, and it earns it: specific, in-world, no mechanics vocabulary at all. A mechanic
@@ -75,7 +77,7 @@ are not shown.
 
 | Was (code-speak) | Is (register) |
 |---|---|
-| `Extraction ×0.85 contribution weight` | `Deposit yield: 85%` (stat) |
+| `Extraction ×0.85 contribution weight` | `Yield: 85%` (stat, system-level — extraction pools per-system, so this never shows per body) |
 | `Growth ×0.85 — habitability` | `Habitability: 85%`, tooltip line `Population growth: −15%` (stat) |
 | `size 1.20` | *(deleted — the land and deposit numbers already say it)* |
 | "the quality fold's frontier index" | *(keyword register, no internals)* "settlers fill the best ground first…" |
