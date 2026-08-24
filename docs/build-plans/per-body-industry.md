@@ -128,6 +128,80 @@ cross-checked against the system aggregate (`depositCountsOf(system)` must equal
 sum over unlocked bodies) — two independently-written paths (`lib/world/gen.ts:141` columns vs
 `world.bodies` rows) that must agree.
 
+## Evidence
+
+```
+Meaning:    Extraction is massively under-built against deposits everywhere, so the pooled yield
+            model and the worked-prefix model disagree on most worked resources — and the prefix
+            reads HIGHER, because built extractors would be credited the best bodies instead of
+            the all-bodies average. The pool is confirmed generation-frozen, the extractor cap
+            holds, and decay decreases are real but rare.
+Claim:      (2, terminal) A non-negligible share of developed (system, resource) pairs with built
+            extractors read a different yield under worked-prefix vs pooled mean.
+Number:     76.9% of pairs differ at 10K (392/510; median +10.69%, p90 +26.38%, max +50.56%);
+            91.4% at 1K (128/140; median +12.54%). 100% of pairs are partially worked at both
+            horizons. Claim 1: 0/600 systems' extractionEff drifted from generation at either
+            horizon. Claim 3: 0 cap violations. Claim 4: 2 tier-0 extractor levels shed over 10K.
+Horizon:    both — t=1,000 (pre-founding: 20 developed = homeworlds only) and t=10,000
+            (founding era: 164 developed).
+Cohort:     developed systems, split seeded-homeworld vs colony (homeworld 91.4% differing at
+            both horizons; colony 71.4% at 10K). Seed 42, 600 systems, real runWorldTick.
+Licenses:   Ships the mechanical switch — the terminal falsifier (<2% share AND <2% magnitude)
+            is decisively cleared, on the colony cohort too, so this is not a homeworld artifact.
+            Also licenses: the prefix map is total (cap holds), and recompute-on-unlock needs no
+            tick-time writer today (eff frozen). It does NOT license: any equilibrium claim
+            (t=10K is founding era ~year 7); treating the +10-13% median yield rise as free —
+            switching models is a broad tier-0 OUTPUT BUFF whose galaxy effect must be read at
+            the feature's own simulate gate; or relying on the sim to exercise downward recompute
+            (2 shed events in 10K ticks — the decrease path gets a fixture test, not sim proof).
+Falsifier
+outcome:    CONFIRMED, all four claims. Instrument validated: per-body deposit sums matched the
+            system columns 0-mismatch, and the recomputed pool matched stored effOf() 0-mismatch,
+            at both horizons.
+```
+
+Raw output (temp/body-prefix-diag.ts, verbatim):
+
+```
+=== t=1000 (seed 42, 600 systems) ===
+developed systems: 20  (homeworld cohort: seeded-developed at t=0)
+instrument validation: bodySum-vs-column mismatches=0  pool-vs-storedEff mismatches=0
+claim 3: extractor-count > deposit-count violations = 0
+(system,resource) pairs with built extractors: 140
+  partially worked (n < deposits): 140 (100.0%)
+  hosting bodies with >1 distinct modifier: 128 (91.4%)
+claim 2: pairs where prefix != pool: 128 (91.4%)
+  [homeworld] pairs=140 differing=128 (91.4%)
+  [colony] pairs=0 differing=0 (n/a%)
+  relDiff among differing: median=12.54%  p90=22.64%  max=33.63%
+    system-438 water: built=19/152 over 5 bodies  pool=0.748 prefix=1.000 (+33.6%)
+    system-177 radioactive: built=7/33 over 6 bodies  pool=0.767 prefix=1.000 (+30.4%)
+    system-235 water: built=18/120 over 4 bodies  pool=0.777 prefix=1.000 (+28.8%)
+    system-598 water: built=21/90 over 3 bodies  pool=0.778 prefix=1.000 (+28.5%)
+    system-104 radioactive: built=8/21 over 4 bodies  pool=0.781 prefix=1.000 (+28.0%)
+claim 4 (cumulative to t=1000): tier-0 extractor levels shed=0 across 0 (tick,system,type) decreases
+claim 1 (t=1000): systems whose extractionEff differs from generation = 0 of 600
+
+=== t=10000 (seed 42, 600 systems) ===
+developed systems: 164  (homeworld cohort: seeded-developed at t=0)
+instrument validation: bodySum-vs-column mismatches=0  pool-vs-storedEff mismatches=0
+claim 3: extractor-count > deposit-count violations = 0
+(system,resource) pairs with built extractors: 510
+  partially worked (n < deposits): 510 (100.0%)
+  hosting bodies with >1 distinct modifier: 392 (76.9%)
+claim 2: pairs where prefix != pool: 392 (76.9%)
+  [homeworld] pairs=140 differing=128 (91.4%)
+  [colony] pairs=370 differing=264 (71.4%)
+  relDiff among differing: median=10.69%  p90=26.38%  max=50.56%
+    system-587 water: built=1/81 over 3 bodies  pool=0.664 prefix=1.000 (+50.6%)
+    system-373 ore: built=1/21 over 5 bodies  pool=0.676 prefix=1.000 (+47.9%)
+    system-495 water: built=1/137 over 4 bodies  pool=0.682 prefix=1.000 (+46.7%)
+    system-124 ore: built=1/24 over 5 bodies  pool=0.687 prefix=1.000 (+45.5%)
+    system-621 water: built=1/56 over 2 bodies  pool=0.693 prefix=1.000 (+44.3%)
+claim 4 (cumulative to t=10000): tier-0 extractor levels shed=2 across 2 (tick,system,type) decreases
+claim 1 (t=10000): systems whose extractionEff differs from generation = 0 of 600
+```
+
 ## Terminal falsifier
 
 **The direction dies if the prefix is indistinguishable from the pool where it matters:** measured
