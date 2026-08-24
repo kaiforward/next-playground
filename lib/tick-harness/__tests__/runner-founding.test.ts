@@ -38,7 +38,7 @@ describe("runTickHarness: the cycle-gated samplers", () => {
     // And what it read is a colony that has lived a cycle, not one still holding its manifest.
     expect(stock.meanOpeningSatisfaction).toBeGreaterThan(0.5);
     expect(stock.openingDeprivedCount).toBeLessThan(stock.sampledCount / 2);
-  }, 300_000); // measured 99s locally; CI runners ~2.1x slower — headroom, not a hang allowance
+  }, 600_000); // measured 99s locally alone; on CI the three runner-*.test.ts files run CONCURRENTLY on 4 vCPUs, so contention roughly doubles the serial ~2.1x CI factor — headroom, not a hang allowance
 
   it("takes the demand-hunting flip as a per-cycle observation", async () => {
     // flipRate's denominator is decided readings, and a reading is taken once per economy cycle.

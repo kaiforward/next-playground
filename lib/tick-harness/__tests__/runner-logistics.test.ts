@@ -45,5 +45,5 @@ describe("runTickHarness: logistics instruments", () => {
     const pinned = await runTickHarness({ ...config, drawBrakeCeiling: "anchor" });
     expect(live.logisticsActivity.transferCount).toBeGreaterThan(0);
     expect(pinned.logisticsActivity.totalQuantity).not.toBeCloseTo(live.logisticsActivity.totalQuantity, 6);
-  }, 420_000); // measured ~138s locally (two full harness runs); CI ~2.1x slower
+  }, 600_000); // measured ~138s locally alone (two full harness runs); on CI the three runner files contend on 4 vCPUs — headroom covers serial CI factor plus contention
 });

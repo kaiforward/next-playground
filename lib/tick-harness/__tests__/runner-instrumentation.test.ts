@@ -372,7 +372,7 @@ describe("runTickHarness: the whole-run flow log", () => {
       rows.reduce((sum, r) => sum + r.quantity, 0),
       9,
     );
-  }, 360_000); // measured 128s locally; CI runners ~2.1x slower — headroom, not a hang allowance
+  }, 600_000); // measured 128s locally alone; on CI the three runner-*.test.ts files run CONCURRENTLY on 4 vCPUs, so contention roughly doubles the serial ~2.1x CI factor — headroom, not a hang allowance
 
   it("starts the haul-budget ledger at the logistics warm-up tick, not before", async () => {
     // The ledger accumulates budget spend only from LOGISTICS_WARMUP_TICKS onward BY CONSTRUCTION
