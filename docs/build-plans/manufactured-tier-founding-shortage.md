@@ -125,3 +125,36 @@ path in a founding-era galaxy — e.g. how `inputsAvailable` treats a deficit-ev
 and any design pass should first take the missing read (BuildDropReport "no-input-supplier"
 share over a 16K run).
 
+## Round 2 — the roadmap row's two pre-design reads (2026-08-25)
+
+The necessity-weighting planner row commits two reads before its single design pass (weighting +
+derived demand together). Planner runs happen on construction boundary ticks (`tick %
+CONSTRUCTION_INTERVAL(24) === 0`), all factions at once; "one planner run" = one
+`planFactionBundles` invocation for one faction. Survival goods are water and food only
+(`SURVIVAL_GOODS`, `lib/constants/physical-economy.ts:153`) — both tier-0, so survival
+opportunities never touch the input gate.
+
+**Claim 3 — survival/non-survival competition is common inside one planner run.** In
+founding-era planner runs a material share of runs score BOTH bands, and within those runs the
+ranking interleaves (at least one non-survival opportunity out-scores at least one survival
+opportunity) — so a necessity weight would actually reorder builds. (Kai's prior: often.)
+
+> Falsifier: if at both the 10K-era and 16K-era boundary windows fewer than 10% of planner runs
+> with any scored opportunity score both bands, OR fewer than 10% of those both-band runs show
+> any interleaving (every survival opportunity already out-ranks every non-survival one), the
+> weighting has nothing to act on and the weighting half of the row goes back to brainstorm.
+
+**Claim 4 — the input gate is the deadlock's dominant drop, on colonies.** At colony sites in
+the founding era, `inputsAvailable` is where tier-1+ proposals die: a large share of tier-1+
+site×good candidacies that clear the capacity check fail the input gate, and "no-input-supplier"
+is the largest single reason among raw tier-1+ drops there.
+
+> Falsifier: if at the 16K-era boundary window under 25% of colony-site tier-1+ candidacies
+> reaching the input gate fail it, or "no-input-supplier" is not the largest raw tier-1+ drop
+> reason at colony sites, the deadlock framing is false and the derived-demand direction goes
+> back to brainstorm.
+
+Horizons: boundary-tick windows ending at 1K (pre-founding — homeworlds only), 10K and 16K,
+one 16K run (seed 42, 600 systems, defaults). Cohort: homeworld (`faction.homeworldId`) vs
+colony, within developed systems (the planner only visits those).
+

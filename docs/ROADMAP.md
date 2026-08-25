@@ -16,14 +16,56 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-1. **[M] Visual system view — bodies as a spatial layout inside the system detail panel.** A simple
+1. **[M] Necessity weighting in the build planner** — the autonomic planner ranks opportunities by
+  `BuildOpportunity.score` (`lib/engine/directed-build.ts:596-597, 850-856`): units of unmet demand it
+  could serve, divided by route cost. That carries no necessity at all — a hundred units of unmet food
+  and a hundred of unmet luxuries score identically, and nothing in the planner consults
+  `SURVIVAL_GOODS`. **The alert bar shipped the fix on the read side only**, banding survival-serving
+  builds above the rest on its Build opportunity chip, which exists only while build automation is
+  off. So the player gets survival-first advice by hand and the planner does not follow it when
+  automated — same data, two answers depending on a switch. This row closes that.
+  Two things already established, so nobody re-derives them: `score` **is** demand-gated (`take` is
+  bounded by the real shortfall), so the planner is not necessity-blind in effect — a food shortage
+  raises food builds on its own, and what is missing is the *tiebreak* when several goods are short at
+  once. And the unit bias that skews the ranking toward bulk goods is **13×** (`ship_frames` 0.6 →
+  `gas` 8.0 across all 26 goods), not the "orders of magnitude" an earlier finding claimed.
+  **Also fold in: tier-0 yield-awareness.** Tier-0 opportunity scoring is yield-blind — nothing in
+  `lib/engine/directed-build.ts` reads `extractionEff` or `yields`. The marginal slot's ground
+  value (quality × extraction modifier of the next unworked deposit in the system's slot order) is
+  a cheap lookup (`marginalSlot`, `lib/engine/worked-deposits.ts`) that should scale a tier-0
+  opportunity's projected output in the score, so a shortfall served from poor ground ranks below
+  the same shortfall served from good ground.
+  **Second planner defect, measured 2026-08-25 (evidence with committed falsifiers:
+  [manufactured-tier-founding-shortage](./build-plans/manufactured-tier-founding-shortage.md)): the
+  founding-era manufactured-tier collapse is a proposal deadlock, not starvation or construction
+  scarcity.** Homeworld factories run ~90% of capacity fully staffed and un-gated while galaxy cover
+  reads 0.00; the construction pool sits near idle and funding is never short; the block is
+  `inputsAvailable` (`lib/engine/directed-build.ts:881, :599-613`) — a factory is only proposed where
+  every recipe input already has a local producer or reachable *surplus* donor, and in a deficit-
+  everywhere founding galaxy almost no site qualifies, so the shortage self-perpetuates. Direction
+  (Kai, 2026-08-25): extend unmet tier-1/2 demand down the recipe chain as derived demand on the
+  unsatisfied inputs, so supplying lower tiers gains the ROI that eventually unblocks the chain
+  bottom-up (ore surplus → metals → components → electronics). Two design constraints already known:
+  the binary gate sits *before* ranking, so derived demand alone may not unblock a good whose own
+  inputs are deficit-bound; and demand from factories that don't exist yet must die cleanly once the
+  chain is built.
+  *Next step:* `/measure` two reads — how often survival and non-survival opportunities actually
+  compete inside one planner run (the weighting's value depends entirely on that rate, Kai's prior:
+  often), and the BuildDropReport "no-input-supplier" share over a 16K run (the deadlock's actual
+  drop rate) — both horizons, cohorted by developed systems. Then one design pass covering weighting
+  + derived demand together: they touch the same score.
+  *Don't:* copy the alert bar's band across without a sim reading. That band is a presentation
+  ordering with no simulation consequence; this one changes what every faction builds at every horizon.
+  And don't ship derived demand without a decay/dissolution rule for it — permanent phantom demand is
+  permanent over-building pressure.
+2. **[M] Visual system view — bodies as a spatial layout inside the system detail panel.** A simple
   2D/3D view alongside (not replacing) the body cards, so a system's bodies read as a place instead
   of a list — popovers on each body surface its score, lock state, occupancy and worked/total
   deposits. Consumes the engine's `workedByBody` read (`lib/engine/worked-deposits.ts`), which
   already returns per-body, per-resource worked/total slot counts. UI-heavy: gets the
   browser-viewable HTML prototype pass approved before implementation (AGENTS.md, UI/dataviz).
   *Next step:* prototype pass.
-2. **[S] Abandonment warning for non-famine decline — a let-through bug, not a feature ask.**
+3. **[S] Abandonment warning for non-famine decline — a let-through bug, not a feature ask.**
   Found at the habitability-seeding uber-review (2026-08-24): Abandonment Rule 2 fires on
   below-floor population alone, but the player-facing countdown (`lib/services/alerts.ts`, the
   famine branch) is famine-gated — a well-fed colony declining to empty under unrest dies with
@@ -123,48 +165,6 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   *Don't:* re-tune the thresholds (0.65 / 0.75 / 120 cycles) downward to make the mechanics
   fire harder against today's incomplete economy — they are definitions; the pressure side is
   what's missing.
-- **[M] Necessity weighting in the build planner** — the autonomic planner ranks opportunities by
-  `BuildOpportunity.score` (`lib/engine/directed-build.ts:596-597, 850-856`): units of unmet demand it
-  could serve, divided by route cost. That carries no necessity at all — a hundred units of unmet food
-  and a hundred of unmet luxuries score identically, and nothing in the planner consults
-  `SURVIVAL_GOODS`. **The alert bar shipped the fix on the read side only**, banding survival-serving
-  builds above the rest on its Build opportunity chip, which exists only while build automation is
-  off. So the player gets survival-first advice by hand and the planner does not follow it when
-  automated — same data, two answers depending on a switch. This row closes that.
-  Two things already established, so nobody re-derives them: `score` **is** demand-gated (`take` is
-  bounded by the real shortfall), so the planner is not necessity-blind in effect — a food shortage
-  raises food builds on its own, and what is missing is the *tiebreak* when several goods are short at
-  once. And the unit bias that skews the ranking toward bulk goods is **13×** (`ship_frames` 0.6 →
-  `gas` 8.0 across all 26 goods), not the "orders of magnitude" an earlier finding claimed.
-  **Also fold in: tier-0 yield-awareness.** Tier-0 opportunity scoring is yield-blind — nothing in
-  `lib/engine/directed-build.ts` reads `extractionEff` or `yields`. The marginal slot's ground
-  value (quality × extraction modifier of the next unworked deposit in the system's slot order) is
-  a cheap lookup (`marginalSlot`, `lib/engine/worked-deposits.ts`) that should scale a tier-0
-  opportunity's projected output in the score, so a shortfall served from poor ground ranks below
-  the same shortfall served from good ground.
-  **Second planner defect, measured 2026-08-25 (evidence with committed falsifiers:
-  [manufactured-tier-founding-shortage](./build-plans/manufactured-tier-founding-shortage.md)): the
-  founding-era manufactured-tier collapse is a proposal deadlock, not starvation or construction
-  scarcity.** Homeworld factories run ~90% of capacity fully staffed and un-gated while galaxy cover
-  reads 0.00; the construction pool sits near idle and funding is never short; the block is
-  `inputsAvailable` (`lib/engine/directed-build.ts:881, :599-613`) — a factory is only proposed where
-  every recipe input already has a local producer or reachable *surplus* donor, and in a deficit-
-  everywhere founding galaxy almost no site qualifies, so the shortage self-perpetuates. Direction
-  (Kai, 2026-08-25): extend unmet tier-1/2 demand down the recipe chain as derived demand on the
-  unsatisfied inputs, so supplying lower tiers gains the ROI that eventually unblocks the chain
-  bottom-up (ore surplus → metals → components → electronics). Two design constraints already known:
-  the binary gate sits *before* ranking, so derived demand alone may not unblock a good whose own
-  inputs are deficit-bound; and demand from factories that don't exist yet must die cleanly once the
-  chain is built.
-  *Next step:* `/measure` two reads — how often survival and non-survival opportunities actually
-  compete inside one planner run (the weighting's value depends entirely on that rate, Kai's prior:
-  often), and the BuildDropReport "no-input-supplier" share over a 16K run (the deadlock's actual
-  drop rate) — both horizons, cohorted by developed systems. Then one design pass covering weighting
-  + derived demand together: they touch the same score.
-  *Don't:* copy the alert bar's band across without a sim reading. That band is a presentation
-  ordering with no simulation consequence; this one changes what every faction builds at every horizon.
-  And don't ship derived demand without a decay/dissolution rule for it — permanent phantom demand is
-  permanent over-building pressure.
 - **[L] Physical warehouse model — storage as a real, brake-relevant limit.** Today's storage
   constants (`EXTRACTOR/PRODUCTION_STORAGE_PER_UNIT`, `POP_CENTRE_STORAGE`) only deepen `maxStock`;
   they are authored per *producing* building while the brake knee is 40 cycles of *system-wide*
