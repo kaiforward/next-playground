@@ -16,45 +16,18 @@
 import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
 import { runWorldTick, toTickSystems, refoldWorkedYields, slottedBodiesBySystem } from "../tick";
-import { workedYieldVectors, type SlottedBody } from "@/lib/engine/worked-deposits";
-import {
-  countColumns, depositCountsOf, effColumns, effOf, makeResourceVector, qualColumns, qualityOf,
-  yieldColumns, yieldsOf,
-} from "@/lib/engine/resources";
+import { workedYieldVectors } from "@/lib/engine/worked-deposits";
+import { countColumns, effColumns, effOf, makeResourceVector, yieldColumns, yieldsOf } from "@/lib/engine/resources";
+import { RICH_TYPE, POOR_TYPE, craftedBodies, craftedSlots } from "./worked-yield-fixture";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import type { TickCadence } from "@/lib/constants/tick-cadence";
-import type { World, WorldBody, WorldBuildProject, WorldSystem } from "../types";
+import type { World, WorldBuildProject, WorldSystem } from "../types";
 
 /** Every stage resolves on every tick, so one `runWorldTick` call is one full cycle. */
 const EVERY_TICK: TickCadence = { cycle: 1, construction: 1, logistics: 1 };
 
 const ORE = "ore";
-/** extractionModifier 1.0 — the rich body's class. */
-const RICH_TYPE = "temperate_world";
-/** extractionModifier 0.6 — the poor body's class. */
-const POOR_TYPE = "frozen_world";
-
-function craftedBodies(systemId: string): WorldBody[] {
-  return [
-    {
-      id: `${systemId}-rich`, systemId, bodyType: RICH_TYPE, size: 1, peopleLand: 5_000,
-      ...countColumns(makeResourceVector({ ore: 1 })),
-      ...qualColumns(makeResourceVector({ ore: 2 })),
-    },
-    {
-      id: `${systemId}-poor`, systemId, bodyType: POOR_TYPE, size: 1, peopleLand: 0,
-      ...countColumns(makeResourceVector({ ore: 9 })),
-      ...qualColumns(makeResourceVector({ ore: 0.5 })),
-    },
-  ];
-}
-
-function craftedSlots(systemId: string): SlottedBody[] {
-  return craftedBodies(systemId).map((b) => ({
-    bodyType: b.bodyType, counts: depositCountsOf(b), quality: qualityOf(b),
-  }));
-}
 
 /**
  * Replace `systemId`'s bodies and building roster, and stamp its yield/eff columns with the fold

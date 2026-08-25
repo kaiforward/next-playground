@@ -4,7 +4,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateWorld } from "../gen";
 import { serialiseWorld, deserialiseWorld, sanitiseSaveName, SAVE_FORMAT_VERSION } from "../save";
-import type { World, WorldBody } from "../types";
+import type { World } from "../types";
 import { runWorldTick } from "../tick";
 import { setWorld, clearWorld } from "../store";
 import { getTrackerData } from "@/lib/services/tracker";
@@ -14,11 +14,9 @@ import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import { provision } from "@/lib/engine/population";
 import { EXPECTATION_PARAMS } from "@/lib/constants/population";
-import {
-  countColumns, depositCountsOf, effColumns, makeResourceVector, qualColumns, qualityOf,
-  yieldColumns,
-} from "@/lib/engine/resources";
-import { workedYieldVectors, type SlottedBody } from "@/lib/engine/worked-deposits";
+import { effColumns, makeResourceVector, yieldColumns } from "@/lib/engine/resources";
+import { workedYieldVectors } from "@/lib/engine/worked-deposits";
+import { craftedBodies, craftedSlots } from "./worked-yield-fixture";
 
 const RESOURCE_YIELD_COLUMNS = [
   "yieldGas", "yieldMinerals", "yieldOre", "yieldBiomass", "yieldArable", "yieldWater", "yieldRadioactive",
@@ -705,36 +703,6 @@ describe("save compatibility — provisionExpectation seeds from Provision, not 
 });
 
 describe("rebuildWorkedYieldColumns — the worked-prefix load hook (Task 4)", () => {
-  /**
-   * A two-body fixture straddling a boundary, mirroring
-   * `lib/world/__tests__/worked-yield-write-path.test.ts`'s craftedBodies: a rich body
-   * (extractionModifier 1.0) whose single ore slot beats a poor body's (extractionModifier 0.6)
-   * nine, so folding n=1 reads a value the all-bodies pooled mean could never produce.
-   */
-  const RICH_TYPE = "temperate_world";
-  const POOR_TYPE = "frozen_world";
-
-  function craftedBodies(systemId: string): WorldBody[] {
-    return [
-      {
-        id: `${systemId}-rich`, systemId, bodyType: RICH_TYPE, size: 1, peopleLand: 5_000,
-        ...countColumns(makeResourceVector({ ore: 1 })),
-        ...qualColumns(makeResourceVector({ ore: 2 })),
-      },
-      {
-        id: `${systemId}-poor`, systemId, bodyType: POOR_TYPE, size: 1, peopleLand: 0,
-        ...countColumns(makeResourceVector({ ore: 9 })),
-        ...qualColumns(makeResourceVector({ ore: 0.5 })),
-      },
-    ];
-  }
-
-  function craftedSlots(systemId: string): SlottedBody[] {
-    return craftedBodies(systemId).map((b) => ({
-      bodyType: b.bodyType, counts: depositCountsOf(b), quality: qualityOf(b),
-    }));
-  }
-
   it("a save whose columns hold deliberately-wrong pooled values reads worked-fold values after deserialiseWorld", () => {
     const base = generateWorld({ systemCount: 40, seed: 55 });
     const systemId = base.factions[0].homeworldId;
