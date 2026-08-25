@@ -10,19 +10,29 @@ export interface DepositFeature {
   band: QualityBandId;
   /** Generated display name, e.g. "Rich ore body". */
   name: string;
+  /** Slots of this deposit inside the system's current worked prefix — the physical occupancy of
+   *  THIS body's own ground, never a yield percentage (that stays system-level, see body-card.tsx). */
+  worked: number;
+  /** Total slots authored on this body — same figure as `slots[resource]`, carried per-feature so
+   *  the render site never re-indexes the vector. */
+  total: number;
 }
 
 /**
  * The deposits physically present on one body, as named features ordered
  * richest-first. This is the static intrinsic grade ("what is in the ground") —
- * distinct from the industry panel's worked-slot / effective-yield view. A
- * resource with no slots on the body is absent.
+ * distinct from the industry panel's system-level effective-yield view. A
+ * resource with no slots on the body is absent. `worked` is per-body slot occupancy
+ * (`workedByBody`, `lib/engine/worked-deposits.ts`) — a physical fact about this body,
+ * not the system's blended yield.
  */
-export function bodyDepositFeatures(slots: ResourceVector, quality: ResourceVector): DepositFeature[] {
+export function bodyDepositFeatures(
+  slots: ResourceVector, quality: ResourceVector, worked: ResourceVector,
+): DepositFeature[] {
   return RESOURCE_TYPES.filter((r) => slots[r] > 0)
     .map((r) => {
       const band = bandForMultiplier(quality[r]);
-      return { resource: r, band, name: depositDisplayName(r, band) };
+      return { resource: r, band, name: depositDisplayName(r, band), worked: worked[r], total: slots[r] };
     })
     .sort((a, b) => quality[b.resource] - quality[a.resource]);
 }

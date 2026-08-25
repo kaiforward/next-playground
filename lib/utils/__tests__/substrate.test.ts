@@ -4,17 +4,22 @@ import { makeResourceVector, emptyResourceVector } from "@/lib/engine/resources"
 import { HABITABILITY_THRESHOLD } from "@/lib/constants/bodies";
 
 describe("bodyDepositFeatures", () => {
-  it("lists present deposits as named features, richest grade first", () => {
+  it("lists present deposits as named features, richest grade first, carrying worked/total", () => {
     const slots = makeResourceVector({ ore: 8, gas: 2 });
     const quality = makeResourceVector({ ore: 1.6, gas: 0.5 }); // ore "good", gas "poor"
-    const features = bodyDepositFeatures(slots, quality);
+    const worked = makeResourceVector({ ore: 5, gas: 0 });
+    const features = bodyDepositFeatures(slots, quality, worked);
     expect(features.map((f) => f.resource)).toEqual(["ore", "gas"]); // higher quality first
     expect(features[0].band).toBe("good"); // 1.6 ≤ 1.8
     expect(features[0].name).toMatch(/ore/i);
+    expect(features[0].worked).toBe(5);
+    expect(features[0].total).toBe(8);
     expect(features[1].band).toBe("poor"); // 0.5 ≤ 0.7
+    expect(features[1].worked).toBe(0);
+    expect(features[1].total).toBe(2);
   });
   it("excludes resources with no deposit", () => {
-    expect(bodyDepositFeatures(emptyResourceVector(), emptyResourceVector())).toEqual([]);
+    expect(bodyDepositFeatures(emptyResourceVector(), emptyResourceVector(), emptyResourceVector())).toEqual([]);
   });
 });
 

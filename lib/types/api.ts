@@ -276,6 +276,10 @@ export interface BodyView {
   counts: ResourceVector;
   /** Per-resource intrinsic quality multiplier on this body (0 = no deposit). */
   quality: ResourceVector;
+  /** Per-resource deposit slots on this body inside the system's current worked prefix
+   *  (`workedByBody`, `lib/engine/worked-deposits.ts`) — this body's own physical occupancy, never
+   *  the system's blended yield. 0 where `counts[r]` is 0. */
+  workedCounts: ResourceVector;
   /** This body's authored people-land budget — dark (present but non-functional) when locked or
    *  below `HABITABILITY_THRESHOLD`. */
   peopleLand: number;

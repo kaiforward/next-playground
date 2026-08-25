@@ -46,6 +46,7 @@ import { brakeKnee, productionCeiling } from "@/lib/engine/tick";
 import { USED_SLACK, VACANCY_SLACK } from "@/lib/constants/infrastructure";
 import { RESOURCE_TYPES, emptyResourceVector, unitResourceVector } from "@/lib/engine/resources";
 import { bandForMultiplier } from "@/lib/engine/substrate-space";
+import { depositSlotOrder, marginalSlot, type SlottedBody } from "@/lib/engine/worked-deposits";
 
 /** Σ count × labourTotal across types that demand labour (production + academies). Housing demands none. */
 export function labourDemand(buildings: Record<string, number>): number {
@@ -943,31 +944,44 @@ export interface SystemDepositSummary {
   depositCounts: number;
   /** Slots worked by seeded extractors. */
   worked: number;
-  /** Effective yield multiplier the worked slots deliver. 1.0 when none worked. */
+  /** Worked-prefix mean yield multiplier — the number production actually uses. 1.0 when none worked. */
   yieldMult: number;
-  /** Quality band of the effective yield — drives the row's colour/label. */
+  /**
+   * The ground value the NEXT extractor built on this resource would realise — the `(n+1)`th slot
+   * in the fill order (`marginalSlot`, `lib/engine/worked-deposits.ts`). `null` once every slot is
+   * already worked, INCLUDING when the resource has no deposits — a fully-worked resource has no
+   * next slot to promise, not a 100% one.
+   */
+  marginal: { groundValue: number } | null;
+  /** Quality band of the worked-prefix yield — drives the row's colour/label. */
   band: QualityBandId;
 }
 
 /**
  * One fill row per resource that has any deposit slots, richest cap first.
- * The extraction view: worked vs available slots and the effective yield the
- * worked slots deliver. (Intrinsic deposit grade — the static "what is in the
- * ground" — is surfaced as per-body flavour on the astrography panel, not here.)
+ * The extraction view: worked vs available slots, the worked-prefix yield the
+ * worked slots deliver, and the marginal slot the next extractor would work. (Intrinsic deposit
+ * grade — the static "what is in the ground" — is surfaced as per-body flavour on the astrography
+ * panel, not here.)
  */
 export function summariseDeposits(
   depositCounts: ResourceVector,
   worked: ResourceVector,
   yields: ResourceVector,
+  bodies: SlottedBody[],
 ): SystemDepositSummary[] {
   return RESOURCE_TYPES.filter((r) => depositCounts[r] > 0)
-    .map((r) => ({
-      resource: r,
-      depositCounts: depositCounts[r],
-      worked: worked[r],
-      yieldMult: yields[r],
-      band: bandForMultiplier(yields[r]),
-    }))
+    .map((r) => {
+      const marginal = marginalSlot(depositSlotOrder(bodies, r), worked[r]);
+      return {
+        resource: r,
+        depositCounts: depositCounts[r],
+        worked: worked[r],
+        yieldMult: yields[r],
+        marginal: marginal ? { groundValue: marginal.groundValue } : null,
+        band: bandForMultiplier(yields[r]),
+      };
+    })
     .sort((a, b) => b.depositCounts - a.depositCounts);
 }
 

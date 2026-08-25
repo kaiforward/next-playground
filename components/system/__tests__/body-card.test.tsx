@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { BodyCard } from "@/components/system/body-card";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { emptyResourceVector } from "@/lib/engine/resources";
+import { emptyResourceVector, makeResourceVector } from "@/lib/engine/resources";
 import type { BodyView } from "@/lib/types/api";
 
 // Every case renders inside the app's own `TooltipProvider` — Radix's `Tooltip.Root` throws
@@ -19,6 +19,7 @@ function body(overrides: Partial<BodyView> = {}): BodyView {
     locked: false,
     counts: emptyResourceVector(),
     quality: emptyResourceVector(),
+    workedCounts: emptyResourceVector(),
     peopleLand: 480,
     occupied: false,
     ...overrides,
@@ -82,5 +83,14 @@ describe("BodyCard — score band, lock state, occupancy marking", () => {
   it("never renders a bare 'size N.NN' line — capacity reads through habitable-land and deposit numbers instead", () => {
     const { container } = renderCard(body());
     expect(container.textContent).not.toContain("Size");
+  });
+
+  it("shows this body's own worked/total slot count per deposit — a physical fact about the body, never a yield percentage", () => {
+    renderCard(body({
+      counts: makeResourceVector({ ore: 3 }),
+      quality: makeResourceVector({ ore: 0.9 }),
+      workedCounts: makeResourceVector({ ore: 2 }),
+    }));
+    expect(screen.getByText("2/3 worked")).toBeInTheDocument();
   });
 });

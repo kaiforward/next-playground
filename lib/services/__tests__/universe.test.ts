@@ -1,13 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld } from "@/lib/world/store";
-import { getUniverse, getSystemDetail, getSystemSubstrate } from "@/lib/services/universe";
+import { getUniverse, getSystemDetail, getSystemSubstrate, getSystemIndustry } from "@/lib/services/universe";
 import { getSystemPopulation } from "@/lib/services/system-population";
 import { ServiceError } from "@/lib/services/errors";
 import { regionInfos } from "@/lib/services/world-index";
 import { BODY_ARCHETYPES, HABITABILITY_THRESHOLD } from "@/lib/constants/bodies";
 import type { World } from "@/lib/world/types";
 import type { ResourceVector } from "@/lib/types/game";
+import { RESOURCE_TYPES } from "@/lib/engine/resources";
 
 let world: World;
 
@@ -133,6 +134,28 @@ describe("getSystemSubstrate", () => {
     expect(bodyView.counts).toEqual(expectedSlots);
     expect(bodyView.quality).toEqual(expectedQuality);
     expect(bodyView.peopleLand).toBe(body.peopleLand);
+
+    // workedCounts is per-resource slot occupancy on THIS body — never more than the body's own
+    // slot count, for every resource.
+    for (const r of RESOURCE_TYPES) {
+      expect(bodyView.workedCounts[r]).toBeGreaterThanOrEqual(0);
+      expect(bodyView.workedCounts[r]).toBeLessThanOrEqual(bodyView.counts[r]);
+    }
+  });
+
+  it("sums per-body workedCounts to the same worked-slot figure getSystemIndustry's deposit summary reads — one worked-prefix fold, not two", () => {
+    const system = [...world.systems].sort((a, b) => b.population - a.population)[0];
+    expect(system.population).toBeGreaterThan(0);
+
+    const substrate = getSystemSubstrate(system.id);
+    if (substrate.visibility !== "visible") throw new Error("expected visible");
+    const industry = getSystemIndustry(system.id);
+    if (industry.visibility !== "visible") throw new Error("expected visible");
+
+    for (const d of industry.deposits) {
+      const summedWorked = substrate.bodies.reduce((sum, b) => sum + b.workedCounts[d.resource], 0);
+      expect(summedWorked).toBe(d.worked);
+    }
   });
 
   it("marks occupied bodies from the cached fill-best-first fold, not every people-land body", () => {

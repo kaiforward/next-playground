@@ -46,7 +46,7 @@ const READOUT: SystemIndustryData = {
     people: { used: 100, total: 300 },
     deposit: { used: 3, total: 10 },
   },
-  deposits: [{ resource: "arable", depositCounts: 10, worked: 3, yieldMult: 1, band: "average" }],
+  deposits: [{ resource: "arable", depositCounts: 10, worked: 3, yieldMult: 1, marginal: { groundValue: 1.2 }, band: "average" }],
   goods: [],
   popNeeds: [],
   labourFulfilment: 1,
@@ -98,12 +98,29 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
     expect(container.textContent).toContain(`${formatMagnitude(7)} free`);
   });
 
-  it("shows the deposit's yield as a whole percentage, never the raw multiplier — extraction pools per-system, so this is the system-level read", () => {
+  it("headlines the marginal (next-slot) yield as a whole percentage, with the worked average as a secondary line — never the raw multiplier", () => {
     industryValue.current = READOUT;
     renderPanel();
 
-    expect(screen.getByText("Yield: 100%")).toBeInTheDocument();
-    expect(screen.queryByText("×1.00")).not.toBeInTheDocument();
+    expect(screen.getByText("Next: 120%")).toBeInTheDocument();
+    expect(screen.getByText("working 3 of 10 slots · avg 100%")).toBeInTheDocument();
+    expect(screen.queryByText("×1.20")).not.toBeInTheDocument();
+  });
+
+  it("a fully-worked resource (marginal null) renders 'Fully worked' as the headline, never a 100% stand-in", () => {
+    // The "food" extractor in READOUT.buildings has count 3, so depositCounts:3/worked:3 (via
+    // depositRows' own built/depositCounts join) genuinely reads as fully worked, not a fixture
+    // whose summary and buildings roster disagree.
+    industryValue.current = {
+      ...READOUT,
+      deposits: [{ resource: "arable", depositCounts: 3, worked: 3, yieldMult: 1.4, marginal: null, band: "good" }],
+    };
+    renderPanel();
+
+    expect(screen.getByText("Fully worked")).toBeInTheDocument();
+    expect(screen.getByText("working 3 of 3 slots · avg 140%")).toBeInTheDocument();
+    // No "Next: N%" headline anywhere — a fully-worked resource must not fall back to a percentage.
+    expect(screen.queryByText(/^Next:/)).not.toBeInTheDocument();
   });
 
   it("never renders the retired industry-land vocabulary — no 'Industry land', 'General land', 'habitableFree' or 'factoryFree' anywhere in the DOM", () => {

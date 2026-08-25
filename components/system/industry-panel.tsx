@@ -147,20 +147,32 @@ function PoolHead({ title, sub, right }: { title: string; sub?: string; right: R
 }
 
 /**
- * Gold-when-rich yield tag — the system-level read of extraction output, since extractors work a
- * shared per-system pool with no single body's yield to show (`docs/active/design-system` copy
- * register: a plain percentage of normal, never a raw multiplier). A resource's yield can run
- * above or below 100% (poor deposits as low as 40%, rich ones above 200%), so the number carries
- * no sign — just the whole percentage.
+ * The deposit row's yield read, gold-when-rich (`docs/active/design-system` copy register: a plain
+ * percentage of normal, never a raw multiplier). The HEADLINE is the marginal yield — what the next
+ * extractor built here would realise, the same figure a prospecting read shows before anything is
+ * built (owner decision, Kai 2026-08-25: a stepping-down "next" reads as expectation-setting, where
+ * a sliding-down average would read as decay). `avg` — the worked-prefix mean, the number
+ * production actually uses — is the secondary read beside it. A resource with every slot already
+ * worked has no next slot to promise: the headline reads "Fully worked" rather than defaulting to
+ * 100%, which would misreport an absent figure as a real one.
  */
-function YieldTag({ mult, band }: { mult: number; band: DepositRow["band"] }) {
+function YieldTag({
+  marginal, avg, band, built, depositCounts,
+}: { marginal: DepositRow["marginal"]; avg: number; band: DepositRow["band"]; built: number; depositCounts: number }) {
+  const avgPct = Math.round(avg * 100);
+  const headline = marginal ? `Next: ${Math.round(marginal.groundValue * 100)}%` : "Fully worked";
   return (
     <Tooltip>
-      <TooltipTriggerLabel className={`font-mono text-[9.5px] ${QUALITY_BAND_TEXT[band]}`}>
-        Yield: {Math.round(mult * 100)}%
+      <TooltipTriggerLabel className="block text-right">
+        <span className={`block font-mono text-[9.5px] ${QUALITY_BAND_TEXT[band]}`}>{headline}</span>
+        <span className="block font-mono text-[8.5px] text-text-tertiary">
+          working {Math.round(built)} of {Math.round(depositCounts)} slots · avg {avgPct}%
+        </span>
       </TooltipTriggerLabel>
-      <TooltipContent className="w-56 text-xs">
-        A system&rsquo;s mines and wells work its deposits together.
+      <TooltipContent className="w-64 text-xs">
+        {marginal
+          ? `The next extractor built here works this system's best free ground. Production runs on the worked average, ${avgPct}%.`
+          : `Every deposit slot for this resource is already worked. Production runs on the worked average, ${avgPct}%.`}
       </TooltipContent>
     </Tooltip>
   );
@@ -196,11 +208,12 @@ function Th({ children, right = false }: { children: React.ReactNode; right?: bo
 
 /** Deposit tooltip: resource · yield band · built/slots · staffed · the goods extracted from it. */
 function DepositTooltipBody({ row, contributors }: { row: DepositRow; contributors: BuildingEntry[] }) {
+  const nextText = row.marginal ? `Next ${Math.round(row.marginal.groundValue * 100)}%` : "Fully worked";
   return (
     <div className="space-y-1">
       <p className="font-display text-[12px] font-semibold capitalize text-text-primary">{row.resource}</p>
       <p className="font-mono text-[10px] text-text-tertiary">
-        Yield: {Math.round(row.yieldMult * 100)}% · {QUALITY_BAND_LABEL[row.band]} · {row.built}/{row.depositCounts} slots built · {row.staffed.toFixed(1)} staffed
+        {nextText} · avg {Math.round(row.yieldMult * 100)}% · {QUALITY_BAND_LABEL[row.band]} · {row.built}/{row.depositCounts} slots built · {row.staffed.toFixed(1)} staffed
       </p>
       {contributors.length > 0 && (
         <div className="space-y-0.5 border-t border-border/60 pt-1.5">
@@ -485,7 +498,9 @@ function DepositTable({
                 </td>
                 <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary"><Staffed staffed={row.staffed} total={row.built} health={row.health} /></td>
                 <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary">{Math.round(row.built)}/{Math.round(row.depositCounts)}</td>
-                <td className="px-1.5 py-1 align-top text-right"><YieldTag mult={row.yieldMult} band={row.band} /></td>
+                <td className="px-1.5 py-1 align-top text-right">
+                  <YieldTag marginal={row.marginal} avg={row.yieldMult} band={row.band} built={row.built} depositCounts={row.depositCounts} />
+                </td>
                 <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-primary">{row.output > 0 ? formatUnitsShort(row.output) : "—"}</td>
                 {canOrder && (
                   <td className="px-1.5 py-1 align-top text-right">

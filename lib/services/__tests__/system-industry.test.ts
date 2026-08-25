@@ -40,13 +40,22 @@ describe("getSystemIndustry", () => {
       expect(Number.isFinite(budget.total)).toBe(true);
     }
 
-    // Deposits: one row per resource with slots, worked within cap, valid band.
+    // Deposits: one row per resource with slots, worked within cap, valid band, and a marginal
+    // that is present exactly when there is a next slot to promise — never a null on a partially
+    // worked resource, never a value once every slot is worked.
     for (const d of data.deposits) {
       expect(d.depositCounts).toBeGreaterThan(0);
       expect(d.worked).toBeGreaterThanOrEqual(0);
       expect(d.worked).toBeLessThanOrEqual(d.depositCounts);
       expect(Number.isFinite(d.yieldMult)).toBe(true);
       expect(VALID_BANDS).toContain(d.band);
+      if (d.worked < d.depositCounts) {
+        expect(d.marginal).not.toBeNull();
+        expect(Number.isFinite(d.marginal?.groundValue)).toBe(true);
+        expect(d.marginal?.groundValue).toBeGreaterThan(0);
+      } else {
+        expect(d.marginal).toBeNull();
+      }
     }
 
     // Readout core: building roster present, labour ratio bounded, supply chain present.

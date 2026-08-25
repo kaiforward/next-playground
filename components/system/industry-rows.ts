@@ -102,7 +102,11 @@ export interface DepositTypeRow {
 
 export interface DepositRow {
   resource: ResourceType;
+  /** Worked-prefix mean yield — the number production actually uses (the secondary read). */
   yieldMult: number;
+  /** The ground value the NEXT extractor built here would realise — the row's headline. `null`
+   *  once every slot is worked (see `SystemDepositSummary`). */
+  marginal: { groundValue: number } | null;
   band: QualityBandId;
   /** Total deposit slots — the capacity ceiling. */
   depositCounts: number;
@@ -182,7 +186,7 @@ export function depositRows(
       const types = Object.keys(BUILDING_TYPES)
         .filter((t) => BUILDING_TYPES[t].resource === d.resource)
         .map((t): DepositTypeRow => byType.get(t) ?? { buildingType: t, outputGood: BUILDING_TYPES[t].outputGood, built: 0, staffed: 0, output: 0, health: "stable", staffedFraction: 0, idleReason: undefined });
-      return { resource: d.resource, yieldMult: d.yieldMult, band: d.band, depositCounts: d.depositCounts, ...agg, types };
+      return { resource: d.resource, yieldMult: d.yieldMult, marginal: d.marginal, band: d.band, depositCounts: d.depositCounts, ...agg, types };
     });
 }
 
