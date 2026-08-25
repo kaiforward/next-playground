@@ -142,11 +142,29 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   a cheap lookup (`marginalSlot`, `lib/engine/worked-deposits.ts`) that should scale a tier-0
   opportunity's projected output in the score, so a shortfall served from poor ground ranks below
   the same shortfall served from good ground.
-  *Next step:* `/measure` how often survival and non-survival opportunities actually compete inside one
-  planner run, both horizons, cohorted by developed systems — the weighting's value depends entirely on
-  that rate, and Kai's prior is that it is often.
+  **Second planner defect, measured 2026-08-25 (evidence with committed falsifiers:
+  [manufactured-tier-founding-shortage](./build-plans/manufactured-tier-founding-shortage.md)): the
+  founding-era manufactured-tier collapse is a proposal deadlock, not starvation or construction
+  scarcity.** Homeworld factories run ~90% of capacity fully staffed and un-gated while galaxy cover
+  reads 0.00; the construction pool sits near idle and funding is never short; the block is
+  `inputsAvailable` (`lib/engine/directed-build.ts:881, :599-613`) — a factory is only proposed where
+  every recipe input already has a local producer or reachable *surplus* donor, and in a deficit-
+  everywhere founding galaxy almost no site qualifies, so the shortage self-perpetuates. Direction
+  (Kai, 2026-08-25): extend unmet tier-1/2 demand down the recipe chain as derived demand on the
+  unsatisfied inputs, so supplying lower tiers gains the ROI that eventually unblocks the chain
+  bottom-up (ore surplus → metals → components → electronics). Two design constraints already known:
+  the binary gate sits *before* ranking, so derived demand alone may not unblock a good whose own
+  inputs are deficit-bound; and demand from factories that don't exist yet must die cleanly once the
+  chain is built.
+  *Next step:* `/measure` two reads — how often survival and non-survival opportunities actually
+  compete inside one planner run (the weighting's value depends entirely on that rate, Kai's prior:
+  often), and the BuildDropReport "no-input-supplier" share over a 16K run (the deadlock's actual
+  drop rate) — both horizons, cohorted by developed systems. Then one design pass covering weighting
+  + derived demand together: they touch the same score.
   *Don't:* copy the alert bar's band across without a sim reading. That band is a presentation
   ordering with no simulation consequence; this one changes what every faction builds at every horizon.
+  And don't ship derived demand without a decay/dissolution rule for it — permanent phantom demand is
+  permanent over-building pressure.
 - **[L] Physical warehouse model — storage as a real, brake-relevant limit.** Today's storage
   constants (`EXTRACTOR/PRODUCTION_STORAGE_PER_UNIT`, `POP_CENTRE_STORAGE`) only deepen `maxStock`;
   they are authored per *producing* building while the brake knee is 40 cycles of *system-wide*
