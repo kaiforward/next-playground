@@ -591,10 +591,27 @@ export function speculativeFloorExtra(
 }
 
 /**
- * A tier-1+ site is build-eligible this cycle only when every recipe input is either produced
- * locally or held as a surplus at a system REACHABLE FROM THE SITE. The factory's inputs arrive
+ * One recipe input is MISSING at a site unless it is either produced locally (a local building of
+ * `input`) or held as a surplus at a system REACHABLE FROM THE SITE. The factory's inputs arrive
  * via logistics, which is route-cost bounded, so a surplus that merely exists somewhere in the
  * faction is not enough — it must be deliverable to this site (routeCost(source, site) non-null).
+ * Shared by `inputsAvailable` (the tier-1+ proposal gate) and the derived-demand spill, so the two
+ * can never disagree on the same input at the same site.
+ */
+function inputMissingAt(
+  input: string,
+  site: BuildSystemState,
+  surplusSystemsByGood: Map<string, string[]>,
+  routeCost: RouteCost,
+): boolean {
+  if ((site.buildings[input] ?? 0) > 0) return false;
+  const sources = surplusSystemsByGood.get(input);
+  return !(sources !== undefined && sources.some((su) => routeCost(su, site.systemId) !== null));
+}
+
+/**
+ * A tier-1+ site is build-eligible this cycle only when every recipe input is either produced
+ * locally or held as a surplus at a system REACHABLE FROM THE SITE (`inputMissingAt`, negated).
  */
 function inputsAvailable(
   goodId: string,
@@ -605,11 +622,7 @@ function inputsAvailable(
   // Callers gate on !isTier0, and every tier-1+ good carries a GOOD_RECIPES entry — a missing
   // recipe here is a catalog defect and should throw, not read as "no input constraint".
   const recipe = GOOD_RECIPES[goodId];
-  return Object.keys(recipe).every((input) => {
-    if ((site.buildings[input] ?? 0) > 0) return true;
-    const sources = surplusSystemsByGood.get(input);
-    return sources !== undefined && sources.some((su) => routeCost(su, site.systemId) !== null);
-  });
+  return Object.keys(recipe).every((input) => !inputMissingAt(input, site, surplusSystemsByGood, routeCost));
 }
 
 /** One candidate build action: site S can produce `goodId` to serve nearby structural deficits. */
@@ -817,6 +830,25 @@ function planFactionBundles(
     remainingByGood.set(d.goodId, m);
   }
 
+  // Surplus-holding systems per good — the input-supply side of the tier-1+ gate. A factory's
+  // recipe inputs arrive via route-cost-bounded logistics, so the gate checks for a surplus
+  // reachable FROM each candidate site (see inputsAvailable), not merely one somewhere in the
+  // faction. Built from the untouched `systems` market state, ahead of the speculative-floor loop
+  // below (which only ever writes `remainingByGood`, never a system's goods) — so no floor write
+  // can feed this map.
+  const surplusSystemsByGood = new Map<string, string[]>();
+  for (const s of systems) {
+    for (const g of s.goods) {
+      const donorReserve = g.donorReserve
+        ?? DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * Math.max(0, g.demand);
+      if (surplusDrawable(g.stock, donorReserve, g.demand, g.production ?? 0, g.productionSuppressed) > 0) {
+        const list = surplusSystemsByGood.get(g.goodId) ?? [];
+        list.push(s.systemId);
+        surplusSystemsByGood.set(g.goodId, list);
+      }
+    }
+  }
+
   // Speculative local-basics floor (§3.2): an undeveloped system stands up a bounded floor of its own
   // tier-0 extraction of un-repurposable basics it imports, scaled by (1 − development). Added onto the
   // remaining shortfall so the same opportunity machinery builds and ROI-ranks it (self-supply wins on
@@ -834,22 +866,6 @@ function planFactionBundles(
   }
 
   if (remainingByGood.size === 0) return { bundles, blocked: [], topOpportunities: [] };
-
-  // Surplus-holding systems per good — the input-supply side of the tier-1+ gate. A factory's
-  // recipe inputs arrive via route-cost-bounded logistics, so the gate checks for a surplus
-  // reachable FROM each candidate site (see inputsAvailable), not merely one somewhere in the faction.
-  const surplusSystemsByGood = new Map<string, string[]>();
-  for (const s of systems) {
-    for (const g of s.goods) {
-      const donorReserve = g.donorReserve
-        ?? DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * Math.max(0, g.demand);
-      if (surplusDrawable(g.stock, donorReserve, g.demand, g.production ?? 0, g.productionSuppressed) > 0) {
-        const list = surplusSystemsByGood.get(g.goodId) ?? [];
-        list.push(s.systemId);
-        surplusSystemsByGood.set(g.goodId, list);
-      }
-    }
-  }
 
   // Precompute every candidate (site, good) opportunity once — the reachable deficit
   // list depends only on static route costs, so building it here (not per-build) keeps

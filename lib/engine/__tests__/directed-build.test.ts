@@ -539,6 +539,62 @@ describe("planFactionBuilds — tier-1+ input reachability", () => {
   });
 });
 
+describe("directed-build — inputMissingAt (the shared per-input missingness predicate)", () => {
+  // Same shape as the "tier-1+ input reachability" scenario() above, but with its own hops map so
+  // the surplus donor's distance from the builder can be placed on either side of MAX_HOPS.
+  function scenario(): { deficit: BuildSystemState; builder: BuildSystemState; oreSurplus: BuildSystemState } {
+    const depositCounts = emptyResourceVector();
+    for (const k of RESOURCE_TYPES) depositCounts[k] = 10;
+    return {
+      deficit: {
+        systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
+        depositCounts: emptyResourceVector(), peopleLand: 0,
+        goods: [{ goodId: "metals", stock: 1, demand: 5, capacityProduction: 0 }],
+      },
+      builder: {
+        systemId: "B", factionId: "f1", population: 200, control: "developed", buildings: {},
+        depositCounts, peopleLand: 0, goods: [],
+      },
+      oreSurplus: {
+        systemId: "S", factionId: "f1", population: 100, control: "unclaimed", buildings: {},
+        depositCounts: emptyResourceVector(), peopleLand: 0,
+        goods: [{ goodId: "ore", stock: 100, demand: 0.5, production: 30, capacityProduction: 30 }],
+      },
+    };
+  }
+
+  it("reads not-missing from local production alone, with no surplus donor anywhere", () => {
+    // No S system at all — the only possible source of "not missing" is B's own ore building.
+    const { deficit, builder } = scenario();
+    builder.buildings = { ore: 5 };
+    expect(countFor(planFactionBuilds([deficit, builder], () => 1, DEV_REFS), "B", "metals")).toBeGreaterThan(0);
+  });
+
+  it("reads missing when the only surplus donor sits beyond MAX_HOPS from the site", () => {
+    const { deficit, builder, oreSurplus } = scenario();
+    // B can reach the metals deficit A directly (1 hop), but the ore donor S sits MAX_HOPS+1 hops
+    // from B — beyond the route-cost bound the factory's input delivery is subject to.
+    const hops = new Map([
+      ["B", new Map([["A", 1]])],
+      ["S", new Map([["B", DIRECTED_BUILD.MAX_HOPS + 1]])],
+    ]);
+    const rc = hopRouteCost(hops, DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
+    expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], rc, DEV_REFS), "B", "metals")).toBe(0);
+  });
+
+  it("reads not-missing when the same surplus donor sits within MAX_HOPS from the site", () => {
+    const { deficit, builder, oreSurplus } = scenario();
+    // Same fixture, donor now at MAX_HOPS exactly (inclusive boundary) — the one variable
+    // (distance) that flips the earlier test's verdict, isolating the maxHops term itself.
+    const hops = new Map([
+      ["B", new Map([["A", 1]])],
+      ["S", new Map([["B", DIRECTED_BUILD.MAX_HOPS]])],
+    ]);
+    const rc = hopRouteCost(hops, DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
+    expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], rc, DEV_REFS), "B", "metals")).toBeGreaterThan(0);
+  });
+});
+
 describe("planFactionBuilds — relief housing", () => {
   it("does not build housing at a starved system", () => {
     const starved: BuildSystemState = {
