@@ -59,14 +59,29 @@ The attention layer — how the player finds what to do — is two surfaces, bot
   ordering with no simulation consequence; this one changes what every faction builds at every horizon.
   And don't ship derived demand without a decay/dissolution rule for it — permanent phantom demand is
   permanent over-building pressure.
-2. **[M] Visual system view — bodies as a spatial layout inside the system detail panel.** A simple
+2. **[S] Per-level project landing — a multi-level build lands level-by-level, never all-at-once.**
+  A planner bundle expands into ONE project row per building type
+  (`lib/tick/processors/directed-build.ts:560-568`): 22 housing levels is a single project with
+  `workTotal = 22 × per-level work`, and `fundCycle` lands it only when the whole total completes
+  (`lib/engine/construction.ts:116`) — a colony waits years for housing whose first levels should
+  arrive in months. Player orders take the same path. Direction (Kai, 2026-08-25): the levels are
+  individual projects that happened to be queued together — land `floor(workDone / perLevelWork)`
+  levels as work accrues. Decay already sheds whole levels, so partial landing is shape-safe.
+  Touches the progress/ETA read surfaces (ghost rows, `computeFactionConstruction`), whose
+  bar/ETA semantics assume all-at-once landing. Interacts with the necessity row only through
+  timing — housing → population → labour arrives earlier (no-labour is the second colony binder,
+  26.9%), and a released factory starts producing at level 1 — so it is its own quick PR, not
+  part of that design pass.
+  *Next step:* implement — landing rule in `fundCycle` + the read surfaces; red-proofed test that
+  a 2-level project lands its first level at half work.
+3. **[M] Visual system view — bodies as a spatial layout inside the system detail panel.** A simple
   2D/3D view alongside (not replacing) the body cards, so a system's bodies read as a place instead
   of a list — popovers on each body surface its score, lock state, occupancy and worked/total
   deposits. Consumes the engine's `workedByBody` read (`lib/engine/worked-deposits.ts`), which
   already returns per-body, per-resource worked/total slot counts. UI-heavy: gets the
   browser-viewable HTML prototype pass approved before implementation (AGENTS.md, UI/dataviz).
   *Next step:* prototype pass.
-3. **[S] Abandonment warning for non-famine decline — a let-through bug, not a feature ask.**
+4. **[S] Abandonment warning for non-famine decline — a let-through bug, not a feature ask.**
   Found at the habitability-seeding uber-review (2026-08-24): Abandonment Rule 2 fires on
   below-floor population alone, but the player-facing countdown (`lib/services/alerts.ts`, the
   famine branch) is famine-gated — a well-fed colony declining to empty under unrest dies with
