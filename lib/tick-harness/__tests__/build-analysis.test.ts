@@ -27,7 +27,9 @@ import type { TickSystem } from "@/lib/tick/rows";
 import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
 import type { ResourceVector } from "@/lib/types/game";
 
-const ORE_LABOUR = labourTotal(BUILDING_TYPES.ore!.labour!);
+const oreDef = BUILDING_TYPES.ore;
+if (!oreDef?.labour) throw new Error("expected BUILDING_TYPES.ore.labour");
+const ORE_LABOUR = labourTotal(oreDef.labour);
 
 /**
  * Characterization tests for the colonisation / build-loop health summary. This is the

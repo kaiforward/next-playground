@@ -38,8 +38,10 @@ export async function runInfrastructureDecayProcessor(
   const idleUpdates: IdleCyclesUpdate[] = [];
   const debtUpdates: CollapseDebtUpdate[] = [];
   const popCapUpdates: PopCapUpdate[] = [];
-  // Calibration-only: per-system whole levels torn down this cycle — the harness's
-  // episode-cost instrument reads. Absent system ⇒ 0 levels lost. `computeSystemDecay` only ever
+  // Per-system whole levels torn down this cycle — read by the harness's episode-cost instrument
+  // (calibration) and by the tick body's worked-yield refold (`refoldWorkedYields`,
+  // `lib/world/tick.ts`), which folds every system whose keys appear here. Absent system ⇒ 0 levels
+  // lost. `computeSystemDecay` only ever
   // writes a strictly-lower count into `newCounts` (both the idle-buffer channel and the
   // unrest-collapse channel), so the pre/post difference here is exactly what left this cycle,
   // combining both channels without needing to re-derive which one fired.

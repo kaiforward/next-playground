@@ -7,6 +7,23 @@ import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import { yieldsOf, effOf, depositCountsOf, qualityOf } from "@/lib/engine/resources";
 import { workedYieldVectors, type SlottedBody } from "@/lib/engine/worked-deposits";
 import { toTickSystems } from "../tick";
+import type { World, WorldFaction, WorldSystem } from "../types";
+
+/**
+ * The Marshalate-homeworld arrangement shared by the market-seeding and worked-columns
+ * describe blocks below — same `generateWorld` call, same player/home lookup, so the two
+ * suites read the exact same generated world rather than two independently-seeded ones.
+ */
+function marshalateWorld(): { world: World; player: WorldFaction; home: WorldSystem } {
+  const world = generateWorld({
+    systemCount: 60,
+    seed: 8,
+    playerFaction: { name: "Marshalate", governmentType: "militarist", doctrine: "hegemonic" },
+  });
+  const player = world.factions.find((faction) => faction.name === "Marshalate")!;
+  const home = world.systems.find((system) => system.id === player.homeworldId)!;
+  return { world, player, home };
+}
 
 describe("generateWorld", () => {
   const world = generateWorld({ systemCount: 120, seed: 42 });
@@ -192,13 +209,7 @@ describe("generateWorld", () => {
 
 describe("generateWorld: market seeding", () => {
   it("seeds owned markets from the shared civilian basket and unowned tick rows as frontier", () => {
-    const world = generateWorld({
-      systemCount: 60,
-      seed: 8,
-      playerFaction: { name: "Marshalate", governmentType: "militarist", doctrine: "hegemonic" },
-    });
-    const player = world.factions.find((faction) => faction.name === "Marshalate")!;
-    const home = world.systems.find((system) => system.id === player.homeworldId)!;
+    const { world, home } = marshalateWorld();
     const buildings: Record<string, number> = {};
     for (const building of world.buildings) {
       if (building.systemId === home.id) buildings[building.buildingType] = building.count;
@@ -216,13 +227,7 @@ describe("generateWorld: market seeding", () => {
 
 describe("generateWorld: worked (not potential) columns", () => {
   it("the generation-time market seed carries the worked columns", () => {
-    const world = generateWorld({
-      systemCount: 60,
-      seed: 8,
-      playerFaction: { name: "Marshalate", governmentType: "militarist", doctrine: "hegemonic" },
-    });
-    const player = world.factions.find((faction) => faction.name === "Marshalate")!;
-    const home = world.systems.find((system) => system.id === player.homeworldId)!;
+    const { world, home } = marshalateWorld();
 
     const bodies: SlottedBody[] = world.bodies
       .filter((b) => b.systemId === home.id)

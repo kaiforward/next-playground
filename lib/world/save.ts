@@ -25,8 +25,7 @@
  */
 
 import type { World, WorldSystem } from "./types";
-import { slottedBodiesBySystem } from "./tick";
-import { workedYieldVectors } from "@/lib/engine/worked-deposits";
+import { slottedBodiesBySystem, workedYieldVectors } from "@/lib/engine/worked-deposits";
 import { effColumns, yieldColumns } from "@/lib/engine/resources";
 
 // v16 does NOT bump for the worked-prefix extraction switch: the stored yield*/eff* columns are
@@ -134,7 +133,12 @@ export function rebuildWorkedYieldColumns(world: World): World {
 
 /**
  * Spot-check every save's world must pass: an object with a `meta` object
- * whose `currentTick`/`seed`/`mapSize`/`systemCount` are numeric. `mapSize`
+ * whose `currentTick`/`seed`/`mapSize`/`systemCount` are numeric, plus
+ * `systems`/`bodies`/`buildings` each present as an array. The three arrays are
+ * checked because `rebuildWorkedYieldColumns` (below, in this same `ok` arm)
+ * dereferences `world.bodies`/`world.buildings`/`world.systems` unconditionally —
+ * without this guard a save missing one of them would throw out of
+ * `deserialiseWorld` instead of failing cleanly with `{ ok: false }`. `mapSize`
  * and `systemCount` are checked because the client tile geometry divides by
  * `mapSize` — a save missing it would silently produce NaN tile bounds
  * downstream. Not exhaustive — see the module doc comment. A user-defined
@@ -148,14 +152,23 @@ function isWorldShaped(value: unknown): value is World {
     return false;
   }
   const meta = value.meta;
+  if (
+    !(
+      "currentTick" in meta &&
+      typeof meta.currentTick === "number" &&
+      "seed" in meta &&
+      typeof meta.seed === "number" &&
+      "mapSize" in meta &&
+      typeof meta.mapSize === "number" &&
+      "systemCount" in meta &&
+      typeof meta.systemCount === "number"
+    )
+  ) {
+    return false;
+  }
   return (
-    "currentTick" in meta &&
-    typeof meta.currentTick === "number" &&
-    "seed" in meta &&
-    typeof meta.seed === "number" &&
-    "mapSize" in meta &&
-    typeof meta.mapSize === "number" &&
-    "systemCount" in meta &&
-    typeof meta.systemCount === "number"
+    "systems" in value && Array.isArray(value.systems) &&
+    "bodies" in value && Array.isArray(value.bodies) &&
+    "buildings" in value && Array.isArray(value.buildings)
   );
 }

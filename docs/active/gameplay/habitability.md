@@ -19,9 +19,11 @@ Habitable worlds are rare and big, and a world's nature means something. Each bo
 class on a freezing→volcanic spectrum, and each class carries a **habitability score** against the
 default population's preference. Only bodies whose score clears a threshold contribute **habitable
 land** — the budget housing draws on. Every body, habitable or not, carries a handful of **authored
-deposit counts** per resource it hosts. A colonised system works the deposits on all its bodies;
-population fills its best land first, so a colony's growth rate is a direct read of how good its
-occupied land actually is. Systems that decline to empty end, famine or not.
+deposit counts** per resource it hosts. A colonised system works its best deposits first — built
+extractor levels are deemed to work the highest-value slots across a resource's hosting bodies, so
+yield is the worked-prefix mean of the ground those extractors actually sit on, never diluted by
+unworked ground — and population fills its best land first, so a colony's growth rate is a direct
+read of how good its occupied land actually is. Systems that decline to empty end, famine or not.
 
 Industry buildings — factories, academies, complexes and construction centres — **bill no land
 at all**; labour, demand and decay bound them instead (see "Why industry bills no land" below).
@@ -107,10 +109,14 @@ premise ("extractor count is deposit-capped") is true for the first time.
 ### Deposit quality
 
 Each authored deposit count carries its own **quality band** (poor / average / good / rich), rolled
-independently per resource per body (`rollQualityBand`, `lib/engine/substrate-space.ts`) and folded
-into `yieldMult` — the pure ground-grade multiplier a resource's worked extractors read
-(`depositGradeVector`, `lib/engine/deposit-grade.ts`). A deposit's display name is generated from its
-band + resource (e.g. "rich ore deposit", "marginal water-ice seam") rather than drawn from a
+independently per resource per body (`rollQualityBand`, `lib/engine/substrate-space.ts`). A band
+feeds the **grade term of a slot's ground value** (`quality × archetype extractionModifier`,
+`lib/engine/worked-deposits.ts`) — the figure a worked extractor on that specific deposit actually
+realises (see "Extraction and the worked prefix" below). `depositGradeVector` still exists, but now
+produces the separate all-bodies POTENTIAL pool consumed only by the economy-type label
+(`lib/engine/body-gen.ts`'s `substrateAggregates`) — a static "what's in the ground galaxy-wide"
+figure, never the worked-prefix number production reads. A deposit's display name is generated from
+its band + resource (e.g. "rich ore deposit", "marginal water-ice seam") rather than drawn from a
 curated proper-noun catalog, so every band × resource pair reads naturally without hand-authoring
 one. Quality bands are unchanged by the habitability retune — only how much of each resource a body
 carries (an authored integer count, not a slot cap derived from body size) changed.
@@ -137,16 +143,17 @@ alone, and `yieldMult` is derived so the product of the two equals the worked-pr
 values exactly (`lib/engine/worked-deposits.ts`). At `n = 0` with deposits present, both columns
 read the single best slot in the order — the yield the first extractor would get — rather than a
 mean; neutral 1.0 keeps its own separate meaning, "no deposits of this resource at all". The columns
-are a derived cache, not a fixed pool: generation writes them, a build landing or a decay shed
-refolds the affected (system, resource) pair at the mutation site, and load rebuilds every system's
-columns before the first tick runs — so a save from before this model reads correctly the moment it
-loads.
+are a derived cache, not a fixed pool: generation writes them, a build landing, a decay shed or an
+abandonment wipe refolds the affected (system, resource) pair at the mutation site, and load
+rebuilds every system's columns before the first tick runs — so a save from before this model reads
+correctly the moment it loads.
 
-**Surfaces:** an Industry deposit-table row's headline is the yield the *next* extractor would get —
-the marginal slot in the order, the same read that governs the `n = 0` case above — with the worked
-average, the number production actually uses, secondary ("working 4 of 9 slots · avg 120%").
-Astrography body cards show worked/total slots per deposit, so the per-body story in the panel now
-matches the number the tick uses.
+**Surfaces:** an Industry deposit-table row shows one figure — the worked-prefix mean ground value
+(`yields × extractionEff`) as a percentage of normal, band-coloured. The row's tooltip is the
+explanation surface: the same combined figure, then which bodies are actually contributing worked
+ground and at what value each, then what the next extractor built here would realise (or that
+nothing is left to build on). Astrography body cards show worked/total slots per deposit, so the
+per-body story in the panel matches the number the tick uses.
 
 Tech-locked classes contribute zero slots to every resource, and there is no unlock mechanic
 shipped yet — `[PENDING: technology]`. **Unlocking is monotone non-decreasing on realised yield:**

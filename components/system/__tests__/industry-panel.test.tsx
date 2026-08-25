@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { IndustryPanel } from "@/components/system/industry-panel";
+import { IndustryPanel, YieldTooltipBody } from "@/components/system/industry-panel";
+import { depositRows } from "@/components/system/industry-rows";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { formatMagnitude } from "@/lib/utils/format";
 import type { SystemIndustryData, SystemBuildOptionsData, SystemConstructionData } from "@/lib/types/api";
@@ -46,7 +47,18 @@ const READOUT: SystemIndustryData = {
     people: { used: 100, total: 300 },
     deposit: { used: 3, total: 10 },
   },
-  deposits: [{ resource: "arable", depositCounts: 10, worked: 3, yieldMult: 1, marginal: { groundValue: 1.2 }, band: "average" }],
+  // yieldMult 1.15 (→ "115%") is deliberately distinct from every other percentage this fixture
+  // renders elsewhere on the panel (labour fulfilment reads 100%) so the cell assertion below can't
+  // collide with an unrelated figure.
+  deposits: [{
+    resource: "arable",
+    depositCounts: 10,
+    worked: 3,
+    yieldMult: 1.15,
+    marginal: { groundValue: 1.2, bodyType: "temperate_world" },
+    workedByBody: [{ bodyType: "arid_world", worked: 3, groundValue: 1 }],
+    band: "average",
+  }],
   goods: [],
   popNeeds: [],
   labourFulfilment: 1,
@@ -98,29 +110,58 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
     expect(container.textContent).toContain(`${formatMagnitude(7)} free`);
   });
 
-  it("headlines the marginal (next-slot) yield as a whole percentage, with the worked average as a secondary line — never the raw multiplier", () => {
+  it("the deposit-row yield cell shows the worked average alone — a bare percentage, no marginal headline or slot-count line", () => {
     industryValue.current = READOUT;
     renderPanel();
 
-    expect(screen.getByText("Next: 120%")).toBeInTheDocument();
-    expect(screen.getByText("working 3 of 10 slots · avg 100%")).toBeInTheDocument();
-    expect(screen.queryByText("×1.20")).not.toBeInTheDocument();
+    expect(screen.getByText("115%")).toBeInTheDocument();
+    // The marginal/next-slot figure and the working-X-of-Y-slots line both moved into the
+    // tooltip (see YieldTooltipBody below) — the cell itself must not carry either.
+    expect(screen.queryByText(/^Next:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/working \d+ of \d+ slots/)).not.toBeInTheDocument();
+    expect(screen.queryByText("×1.15")).not.toBeInTheDocument();
   });
 
-  it("a fully-worked resource (marginal null) renders 'Fully worked' as the headline, never a 100% stand-in", () => {
-    // The "food" extractor in READOUT.buildings has count 3, so depositCounts:3/worked:3 (via
-    // depositRows' own built/depositCounts join) genuinely reads as fully worked, not a fixture
-    // whose summary and buildings roster disagree.
-    industryValue.current = {
-      ...READOUT,
-      deposits: [{ resource: "arable", depositCounts: 3, worked: 3, yieldMult: 1.4, marginal: null, band: "good" }],
-    };
-    renderPanel();
+  it("YieldTooltipBody — combined figure, one line per contributing body, and the next slot", () => {
+    // Real production join (depositRows) rather than a hand-typed DepositRow, so the fixture can't
+    // drift from the shape the panel actually builds. Rendered directly rather than via a hovered
+    // Tooltip trigger — Radix never mounts its portal content without an open interaction jsdom
+    // can't reliably drive (same convention as habitability-tooltip-content.test.tsx).
+    const [row] = depositRows(
+      [{
+        resource: "arable",
+        depositCounts: 10,
+        worked: 3,
+        yieldMult: 1,
+        marginal: { groundValue: 1.2, bodyType: "temperate_world" },
+        workedByBody: [{ bodyType: "arid_world", worked: 3, groundValue: 1 }],
+        band: "average",
+      }],
+      [],
+      0,
+      0.75,
+    );
+    const { container } = render(<YieldTooltipBody row={row} />);
 
-    expect(screen.getByText("Fully worked")).toBeInTheDocument();
-    expect(screen.getByText("working 3 of 3 slots · avg 140%")).toBeInTheDocument();
-    // No "Next: N%" headline anywhere — a fully-worked resource must not fall back to a percentage.
-    expect(screen.queryByText(/^Next:/)).not.toBeInTheDocument();
+    expect(container.textContent).toContain("Combined yield: 100%");
+    expect(container.textContent).toContain("Arid World");
+    expect(container.textContent).toContain("3 slots");
+    expect(container.textContent).toContain("100%");
+    expect(container.textContent).toContain("Next slot: 120% on Temperate World");
+  });
+
+  it("YieldTooltipBody reads 'All deposit slots worked' instead of a next-slot line once nothing is left to build on", () => {
+    const [row] = depositRows(
+      [{ resource: "arable", depositCounts: 3, worked: 3, yieldMult: 1.4, marginal: null, workedByBody: [{ bodyType: "gaia_world", worked: 3, groundValue: 1.4 }], band: "good" }],
+      [],
+      0,
+      0.75,
+    );
+    const { container } = render(<YieldTooltipBody row={row} />);
+
+    expect(container.textContent).toContain("Combined yield: 140%");
+    expect(container.textContent).toContain("All deposit slots worked");
+    expect(container.textContent).not.toContain("Next slot:");
   });
 
   it("never renders the retired industry-land vocabulary — no 'Industry land', 'General land', 'habitableFree' or 'factoryFree' anywhere in the DOM", () => {

@@ -166,15 +166,29 @@ describe("workedYieldVectors", () => {
     }
   });
 
-  it("derives n from extractorsOnResource over the buildings bag", () => {
+  it("derives n from extractorsOnResource over the buildings bag — two different counts read two different folds", () => {
+    // One slot per body (not three identical ones) — a fixture where every slot in the prefix
+    // shares one body's ground value can't tell n=1 from n=2 or n=3 apart (they'd all read the
+    // same number), so the count genuinely has to move the fold for this test to discriminate a
+    // wrong-n implementation from a right one.
     const bodies: SlottedBody[] = [
-      body(TEMPERATE, { ore: 3 }, { ore: 0.9 }),
-      body(BARREN, { ore: 3 }, { ore: 0.2 }),
+      body(TEMPERATE, { ore: 1 }, { ore: 0.9 }), // ground 0.9 (modifier 1.0) — the best slot
+      body(BARREN, { ore: 1 }, { ore: 0.5 }), // ground 0.35 (modifier 0.7) — strictly poorer
     ];
-    // "ore" is the real tier-0 building keyed on the ore resource; count 1 -> n=1 -> best slot only.
-    const { eff, yieldMult } = workedYieldVectors(bodies, { ore: 1 });
-    expect(eff.ore).toBeCloseTo(1.0, 10);
-    expect(eff.ore * yieldMult.ore).toBeCloseTo(0.9, 10);
+    // "ore" is the real tier-0 building keyed on the ore resource.
+    const n1 = workedYieldVectors(bodies, { ore: 1 });
+    const n2 = workedYieldVectors(bodies, { ore: 2 });
+
+    // n=1: the single best slot, exactly.
+    expect(n1.eff.ore).toBeCloseTo(1.0, 10);
+    expect(n1.eff.ore * n1.yieldMult.ore).toBeCloseTo(0.9, 10);
+
+    // n=2: both slots fold in — a genuinely different mean (not a coincidental match with n=1),
+    // pinned to the exact expected value.
+    expect(n2.eff.ore).toBeCloseTo((1.0 + 0.7) / 2, 10);
+    expect(n2.eff.ore * n2.yieldMult.ore).toBeCloseTo((0.9 + 0.35) / 2, 10);
+    expect(n1.eff.ore).not.toBeCloseTo(n2.eff.ore, 6);
+    expect(n1.yieldMult.ore).not.toBeCloseTo(n2.yieldMult.ore, 6);
   });
 });
 

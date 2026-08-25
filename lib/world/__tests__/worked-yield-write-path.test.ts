@@ -1,7 +1,7 @@
 /**
  * The tick's worked-deposit write path: a tier-0 extractor count change (a landed build, a decay
- * shed) refolds the affected system's worked-prefix yield/eff vectors, and those vectors survive
- * the tick→world merge onto the `yield*`/`eff*` columns.
+ * shed, or an abandonment wipe) refolds the affected system's worked-prefix yield/eff vectors, and
+ * those vectors survive the tick→world merge onto the `yield*`/`eff*` columns.
  *
  * The failure these guard is the silent no-op named in the spec: a refold that never reaches the
  * merged world leaves production reading generation-frozen columns while every row-level assertion
@@ -15,14 +15,18 @@
  */
 import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
-import { runWorldTick, toTickSystems, refoldWorkedYields, slottedBodiesBySystem } from "../tick";
-import { workedYieldVectors } from "@/lib/engine/worked-deposits";
+import { runWorldTick, toTickSystems, refoldWorkedYields } from "../tick";
+import { rebuildWorkedYieldColumns } from "../save";
+import { workedYieldVectors, slottedBodiesBySystem, type SlottedBody } from "@/lib/engine/worked-deposits";
 import { countColumns, effColumns, effOf, makeResourceVector, yieldColumns, yieldsOf } from "@/lib/engine/resources";
 import { RICH_TYPE, POOR_TYPE, craftedBodies, craftedSlots } from "./worked-yield-fixture";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import type { TickCadence } from "@/lib/constants/tick-cadence";
 import type { World, WorldBuildProject, WorldSystem } from "../types";
+
+/** A construction cadence far outside any test horizon — directed-build never resolves. */
+const NEVER = 1_000_000;
 
 /** Every stage resolves on every tick, so one `runWorldTick` call is one full cycle. */
 const EVERY_TICK: TickCadence = { cycle: 1, construction: 1, logistics: 1 };
@@ -188,6 +192,49 @@ describe("worked-deposit refold — the tick write path", () => {
     expect(yieldsOf(row)).toEqual(stale); // the stamped disagreement survived untouched
   });
 
+  it("an abandonment wipe folds the MERGED world's columns to the n=0 best-slot reading — the same reading the load hook would independently compute", async () => {
+    // Same death-march technique tick.test.ts's own abandonment fixture uses (total famine, no
+    // rescue path, unrest driven to the ceiling) — driven here on the two-body rich/poor fixture so
+    // the post-abandonment fold is exact-checkable, not just "moved".
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const faction = autonomousFaction(base);
+    const systemId = faction.homeworldId;
+    const crafted = craftWorld(base, systemId, { [ORE]: 2, [HOUSING_TYPE]: 40 }, {
+      unrest: 0.9, population: 1.02, popCap: 20,
+    });
+    let world: World = {
+      ...crafted,
+      constructionProjects: [],
+      // Cut every rescue path so decline runs uncontested: no logistics haul in or out, and the
+      // system's own market emptied so the famine gate is total.
+      connections: crafted.connections.filter((c) => c.fromId !== systemId && c.toId !== systemId),
+      markets: crafted.markets.map((m) => (m.systemId === systemId ? { ...m, stock: 0 } : m)),
+    };
+
+    const KILL_CADENCE: TickCadence = { cycle: 1, logistics: 1, construction: NEVER };
+    let abandoned = false;
+    for (let i = 0; i < 3000 && !abandoned; i++) {
+      world = (await runWorldTick(world, { cadence: KILL_CADENCE })).world;
+      abandoned = systemRow(world, systemId).control !== "developed";
+    }
+    expect(abandoned).toBe(true); // non-vacuous: the fixture actually reaches the death line
+    expect(oreCount(world, systemId)).toBe(0); // premise: the wipe really did clear the extractor
+
+    const row = systemRow(world, systemId);
+    // n = 0 on every resource: the wipe cleared `buildings` to `{}`.
+    const expected = workedYieldVectors(craftedSlots(systemId), {});
+    expect(effOf(row).ore).toBe(expected.eff.ore);
+    expect(yieldsOf(row).ore).toBe(expected.yieldMult.ore);
+
+    // And it agrees with the load hook's independent computation over the same (post-abandonment)
+    // world — the tick's refold and the load hook are two call sites of the same fold, and must
+    // never disagree on a wiped system.
+    const rebuilt = rebuildWorkedYieldColumns(world);
+    const rebuiltRow = systemRow(rebuilt, systemId);
+    expect(effOf(row).ore).toBe(effOf(rebuiltRow).ore);
+    expect(yieldsOf(row).ore).toBe(yieldsOf(rebuiltRow).ore);
+  }, 30_000);
+
   it("a tick with no tier-0 count change leaves EVERY system's yield/eff columns byte-identical", async () => {
     const base = generateWorld({ systemCount: 60, seed: 7 });
     const { world: after } = await runWorldTick(base);
@@ -212,16 +259,32 @@ describe("worked-deposit refold — the tick write path", () => {
     const refolded = refoldWorkedYields(rows, new Set([systemId]), bodies);
     for (const [i, row] of rows.entries()) {
       // The candidate's own fold matches the columns it already carries (craftWorld stamped them),
-      // so even IT keeps its identity — the refold writes only where a value actually moved.
+      // so even IT keeps its identity — the refold writes only where a value actually moved. This
+      // covers every system, in or out of the one-element candidate set — a system outside it never
+      // reaches the fold at all (see `refoldWorkedYields`'s own candidate-set guard), so its identity
+      // is `.map`'s pass-through, not a coincidence.
       expect(refolded[i]).toBe(row);
     }
+    // The merge-level claim (no churn reaches the merged world on a no-op tick) has its own test
+    // above ("a tick with no tier-0 count change leaves EVERY system's yield/eff columns
+    // byte-identical") — this test stays scoped to `refoldWorkedYields` itself.
+  });
 
-    // A system untouched by the refold reaches the merged world byte-identical. (The merge itself
-    // rebuilds every row it has a tick row for — reference equality is not on offer there, only
-    // value identity, which is what "no churn" means at the world level.)
-    const other = base.systems.find((s) => s.id !== systemId);
-    expect(other).toBeDefined();
-    if (!other) return;
-    expect(yieldsOf(other)).toEqual(yieldsOf(systemRow(world, other.id)));
+  it("a candidate with no entry in the bodies map keeps its identity — the body-less guard, distinct from a system outside the candidate set", () => {
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const faction = autonomousFaction(base);
+    const systemId = faction.homeworldId;
+    const world = craftWorld(base, systemId, { [ORE]: 2, [HOUSING_TYPE]: 40 });
+    const rows = toTickSystems(world);
+    // An empty bodies map: `systemId` IS in the candidate set below, but has no entry here — the
+    // guard this test targets (`bodies === undefined`) is a different code path from the
+    // candidate-set membership check the sibling test above exercises.
+    const emptyBodies = new Map<string, SlottedBody[]>();
+
+    const refolded = refoldWorkedYields(rows, new Set([systemId]), emptyBodies);
+    const target = rows.find((r) => r.id === systemId);
+    const targetIndex = rows.findIndex((r) => r.id === systemId);
+    expect(target).toBeDefined();
+    expect(refolded[targetIndex]).toBe(target);
   });
 });

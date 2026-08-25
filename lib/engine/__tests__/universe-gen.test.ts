@@ -451,7 +451,7 @@ describe("stampHomeworldPrefabs", () => {
   });
 });
 
-// ── Generation switch: potential/worked separation (Task 2) ─────
+// ── Generation switch: potential/worked separation ─────
 
 describe("generation switch — potential/worked separation", () => {
   it("a homeworld's columns fold against its stamped buildings, not against zero", () => {

@@ -764,9 +764,9 @@ export interface TierZeroIdleStats {
 }
 
 /**
- * Tier-0 (extractor) idle levels, homeworld vs colony — one of the feature's two second-order
- * health reads for the per-body-industry worked-prefix switch (build-plan Task 6). The directed
- * build planner sizes tier-0 commitments assuming a 1.0 multiplier (`directed-build.ts`), which
+ * Tier-0 (extractor) idle levels, homeworld vs colony — a second-order health read for the
+ * worked-prefix extraction fold. The directed build planner sizes tier-0 commitments assuming a
+ * 1.0 multiplier (`directed-build.ts`), which
  * the worked-prefix fold can now exceed, so a commitment can over-serve its deficit and leave the
  * marginal level idle — this is the gate read that catches it.
  *

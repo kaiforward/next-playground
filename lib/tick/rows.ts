@@ -108,10 +108,10 @@ export interface TickSystem {
    * (`lib/engine/worked-deposits.ts`). Feeds tier-0 production.
    *
    * A CACHE of (this system's bodies × its tier-0 extractor counts), not immutable substrate: the
-   * `toTickSystems` join reads it off the world columns, and the tick's two count-change sites
-   * (a landed build, a decay shed) rewrite this row's pair via `refoldWorkedYields`
-   * (`lib/world/tick.ts`) before the merge writes both back to the columns. Every other stage
-   * reads it and never writes it.
+   * `toTickSystems` join reads it off the world columns, and the tick's three count-change sites
+   * (a landed build, a decay shed, an abandonment wipe) rewrite this row's pair via
+   * `refoldWorkedYields` (`lib/world/tick.ts`) before the merge writes both back to the columns.
+   * Every other stage reads it and never writes it.
    */
   yields: ResourceVector;
   /** Per-resource extraction-work efficiency — the WORKED-PREFIX mean of the contributing bodies'

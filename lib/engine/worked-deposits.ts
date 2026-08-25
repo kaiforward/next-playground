@@ -34,6 +34,23 @@ export function toSlottedBody(b: WorldBody): SlottedBody {
   return { bodyType: b.bodyType, counts: depositCountsOf(b), quality: qualityOf(b) };
 }
 
+/**
+ * Per-system `SlottedBody` lists in `bodies` order — the fill order's tie-break (generation
+ * order), so this grouping must never be re-sorted. Shared by every worked-yield fold site: the
+ * tick's refolds (`lib/world/tick.ts`), the save load hook (`rebuildWorkedYieldColumns`,
+ * `lib/world/save.ts`), and the industry service's per-system read (`lib/services/universe.ts`).
+ */
+export function slottedBodiesBySystem(bodies: readonly WorldBody[]): Map<string, SlottedBody[]> {
+  const bySystem = new Map<string, SlottedBody[]>();
+  for (const b of bodies) {
+    const entry = toSlottedBody(b);
+    const list = bySystem.get(b.systemId);
+    if (list) list.push(entry);
+    else bySystem.set(b.systemId, [entry]);
+  }
+  return bySystem;
+}
+
 /** One deposit slot in the fill order: the body it belongs to, and its ground-value inputs. */
 export interface DepositSlot {
   bodyIndex: number;

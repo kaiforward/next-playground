@@ -11,22 +11,12 @@ import {
   summariseSpace,
   summariseDeposits,
 } from "@/lib/engine/industry";
-import { workedByBody, toSlottedBody, type SlottedBody } from "@/lib/engine/worked-deposits";
+import { workedByBody, toSlottedBody } from "@/lib/engine/worked-deposits";
 import { systemPopNeeds } from "@/lib/services/pop-needs";
 import { readSystemIndustry } from "@/lib/services/system-industry-readout";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import { occupiedBodyIds } from "@/lib/utils/substrate";
 import { resolveEffectiveHabitabilityQuality } from "@/lib/engine/habitability";
-import type { WorldBody } from "@/lib/world/types";
-
-/**
- * `WorldBody` rows as the worked-deposits engine module's minimal per-body input — the same
- * mapping `slottedBodiesBySystem` (`lib/world/tick.ts`) uses at the tick's refold sites, reused
- * here for a single system's read rather than the tick's whole-galaxy grouping.
- */
-function slottedBodiesOf(bodies: readonly WorldBody[]): SlottedBody[] {
-  return bodies.map(toSlottedBody);
-}
 
 /**
  * Get all regions, star systems, and connections.
@@ -130,9 +120,9 @@ export function getSystemSubstrate(systemId: string): SystemSubstrateData {
 
   // Per-body worked/total slot counts (`workedByBody`) — the astrography read of the same
   // worked-prefix fold the deposit table's marginal/average figures come from, keyed by this
-  // array's own index since `slottedBodiesOf` preserves `systemBodies`' order exactly.
+  // array's own index since `.map(toSlottedBody)` preserves `systemBodies`' order exactly.
   const buildings = buildingsBySystem().get(systemId) ?? {};
-  const worked = workedByBody(slottedBodiesOf(systemBodies), buildings);
+  const worked = workedByBody(systemBodies.map(toSlottedBody), buildings);
 
   const bodies: BodyView[] = systemBodies.map((b, i) => {
     const arch = BODY_ARCHETYPES[b.bodyType];
@@ -183,7 +173,7 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
 
   const depositCounts = depositCountsOf(system);
   const worked = extractorsByResource(buildings);
-  const slottedBodies = slottedBodiesOf(bodiesBySystem().get(systemId) ?? []);
+  const slottedBodies = (bodiesBySystem().get(systemId) ?? []).map(toSlottedBody);
 
   // The readout's labourAllocation IS the civilian demand basis — reuse it
   // rather than running a second labour pass for the needs read.
@@ -194,7 +184,7 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
     unrest: system.unrest,
     ...readout,
     space: summariseSpace(system.peopleLand, depositCounts, buildings),
-    deposits: summariseDeposits(depositCounts, worked, yields, slottedBodies),
+    deposits: summariseDeposits(depositCounts, worked, yields, effOf(system), slottedBodies),
     goods: capacityGoodRates(buildings, system.population, yields, effOf(system)),
     popNeeds,
   };

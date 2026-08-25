@@ -4,9 +4,9 @@ import { minimalHarnessResults } from "@/lib/tick-harness/__tests__/harness-resu
 import type { TierZeroIdleSummary } from "@/lib/tick-harness/build-analysis";
 
 /**
- * The per-body-industry build plan's Task 6 requires the tier-0 idle-levels metric to appear in
- * the harness's PRINTED text report, not only in the returned `HarnessResults` object —
- * `formatTierZeroIdle` is the printed-report piece pulled out for that reason.
+ * The tier-0 idle-levels metric belongs in the harness's PRINTED text report, not only in the
+ * returned `HarnessResults` object — `formatTierZeroIdle` is the printed-report piece pulled out
+ * for that reason.
  */
 describe("formatTierZeroIdle", () => {
   it("renders both cohorts' idle-level counts and their systems-affected denominators", () => {

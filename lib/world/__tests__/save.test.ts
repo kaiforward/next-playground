@@ -14,7 +14,7 @@ import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import { provision } from "@/lib/engine/population";
 import { EXPECTATION_PARAMS } from "@/lib/constants/population";
-import { effColumns, makeResourceVector, yieldColumns } from "@/lib/engine/resources";
+import { effColumns, effOf, makeResourceVector, yieldColumns, yieldsOf } from "@/lib/engine/resources";
 import { workedYieldVectors } from "@/lib/engine/worked-deposits";
 import { craftedBodies, craftedSlots } from "./worked-yield-fixture";
 
@@ -144,6 +144,22 @@ describe("serialiseWorld / deserialiseWorld", () => {
     it("accepts a meta carrying all four numeric fields (the guards are not rejecting everything)", () => {
       expect(deserialiseWorld(badMeta({ ...world.meta })).ok).toBe(true);
     });
+
+    // The three array fields `rebuildWorkedYieldColumns` dereferences unconditionally in the `ok`
+    // arm — a save with valid meta but a missing/malformed one of these must fail cleanly
+    // ({ ok: false }), never throw out of deserialiseWorld.
+    const REQUIRED_ARRAY_FIELDS = ["systems", "bodies", "buildings"] as const;
+    for (const field of REQUIRED_ARRAY_FIELDS) {
+      it(`rejects a world with valid meta but no "${field}" array (never throws)`, () => {
+        const { [field]: _omitted, ...rest } = world;
+        expect(() => deserialiseWorld(badWorld(rest))).not.toThrow();
+        expectRejected(badWorld(rest), BAD_META);
+      });
+
+      it(`rejects a world whose "${field}" is present but not an array`, () => {
+        expectRejected(badWorld({ ...world, [field]: "not-an-array" }), BAD_META);
+      });
+    }
   });
 
   it("rejects a save with an unsupported formatVersion", () => {
@@ -702,7 +718,7 @@ describe("save compatibility — provisionExpectation seeds from Provision, not 
   }, 60_000);
 });
 
-describe("rebuildWorkedYieldColumns — the worked-prefix load hook (Task 4)", () => {
+describe("rebuildWorkedYieldColumns — the worked-prefix load hook", () => {
   it("a save whose columns hold deliberately-wrong pooled values reads worked-fold values after deserialiseWorld", () => {
     const base = generateWorld({ systemCount: 40, seed: 55 });
     const systemId = base.factions[0].homeworldId;
@@ -751,10 +767,21 @@ describe("rebuildWorkedYieldColumns — the worked-prefix load hook (Task 4)", (
     expect(system.yieldOre).not.toBeCloseTo(0.01, 3);
   });
 
-  it("a current-version save round-trips (no version rejection)", () => {
+  it("a current-version save round-trips (no version rejection), and every system's yield/eff columns survive serialise+deserialise unchanged", () => {
     const world = generateWorld({ systemCount: 30, seed: 77 });
+    // Non-vacuity: there is actually something to compare below.
+    expect(world.systems.length).toBeGreaterThan(0);
     const result = deserialiseWorld(serialiseWorld(world));
     expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const byId = new Map(result.world.systems.map((s) => [s.id, s]));
+    for (const before of world.systems) {
+      const after = byId.get(before.id);
+      expect(after).toBeDefined();
+      if (!after) continue;
+      expect(yieldsOf(after)).toEqual(yieldsOf(before));
+      expect(effOf(after)).toEqual(effOf(before));
+    }
   });
 
   it("a world with a body-less system loads without NaN, and leaves its columns untouched", () => {

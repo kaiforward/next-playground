@@ -102,12 +102,17 @@ export interface DepositTypeRow {
 
 export interface DepositRow {
   resource: ResourceType;
-  /** Worked-prefix mean yield — the number production actually uses (the secondary read). */
+  /** Worked-prefix mean GROUND VALUE — the number production actually uses, and the row's sole
+   *  table-cell figure (`SystemDepositSummary["yieldMult"]`'s own docstring covers the units). */
   yieldMult: number;
-  /** The ground value the NEXT extractor built here would realise — the row's headline. `null`
-   *  once every slot is worked (see `SystemDepositSummary`). */
-  marginal: { groundValue: number } | null;
+  /** The ground value the NEXT extractor built here would realise, and which body hosts it — the
+   *  tooltip's closing line, never the table cell. `null` once every slot is worked. Typed off
+   *  `SystemDepositSummary` rather than re-declared so the two can never drift apart. */
+  marginal: SystemDepositSummary["marginal"];
   band: QualityBandId;
+  /** The worked prefix broken out by hosting body — the tooltip's per-body breakdown. Typed off
+   *  `SystemDepositSummary` for the same reason as `marginal`. */
+  workedByBody: SystemDepositSummary["workedByBody"];
   /** Total deposit slots — the capacity ceiling. */
   depositCounts: number;
   /** Extractor levels built on this resource's slots. */
@@ -186,7 +191,7 @@ export function depositRows(
       const types = Object.keys(BUILDING_TYPES)
         .filter((t) => BUILDING_TYPES[t].resource === d.resource)
         .map((t): DepositTypeRow => byType.get(t) ?? { buildingType: t, outputGood: BUILDING_TYPES[t].outputGood, built: 0, staffed: 0, output: 0, health: "stable", staffedFraction: 0, idleReason: undefined });
-      return { resource: d.resource, yieldMult: d.yieldMult, marginal: d.marginal, band: d.band, depositCounts: d.depositCounts, ...agg, types };
+      return { resource: d.resource, yieldMult: d.yieldMult, marginal: d.marginal, workedByBody: d.workedByBody, band: d.band, depositCounts: d.depositCounts, ...agg, types };
     });
 }
 

@@ -54,7 +54,7 @@ import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
 import {
   depositCountsOf, yieldsOf, effOf, yieldColumns, effColumns, RESOURCE_TYPES,
 } from "@/lib/engine/resources";
-import { workedYieldVectors, toSlottedBody, type SlottedBody } from "@/lib/engine/worked-deposits";
+import { workedYieldVectors, slottedBodiesBySystem, type SlottedBody } from "@/lib/engine/worked-deposits";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import { isContributingBody } from "@/lib/engine/habitability";
@@ -128,7 +128,6 @@ import type {
 } from "@/lib/tick/rows";
 import type {
   World,
-  WorldBody,
   WorldBuilding,
   WorldConstructionProject,
   WorldEvent,
@@ -270,26 +269,10 @@ export function toTickSystems(world: World): TickSystem[] {
 // A system's realised extraction multiplier is the mean ground value over its WORKED prefix — the
 // first `n` deposit slots of the fill order, `n` being its built tier-0 extractor level count
 // (`lib/engine/worked-deposits.ts`). So the two columns are a cache of (bodies × extractor counts),
-// and they go stale the moment a count moves: a landed build level or a decay shed. Both mutation
-// sites refold the affected systems here, from `world.bodies` read AT THE SITE — deliberately not
-// joined onto every row in `toTickSystems`, which is what keeps the per-tick join cost flat. Every
-// other tick reads the cached columns exactly as before.
-
-/**
- * Per-system `SlottedBody` lists in `world.bodies` order — the fill order's tie-break, so this
- * grouping must never be re-sorted. Built at most once per tick and only when a refold site
- * actually fires, so a tick with no tier-0 count change never scans the body table at all.
- */
-export function slottedBodiesBySystem(bodies: WorldBody[]): Map<string, SlottedBody[]> {
-  const bySystem = new Map<string, SlottedBody[]>();
-  for (const b of bodies) {
-    const entry = toSlottedBody(b);
-    const list = bySystem.get(b.systemId);
-    if (list) list.push(entry);
-    else bySystem.set(b.systemId, [entry]);
-  }
-  return bySystem;
-}
+// and they go stale the moment a count moves: a landed build level, a decay shed, or an abandonment
+// wipe. All three mutation sites refold the affected systems here, from `world.bodies` read AT THE
+// SITE — deliberately not joined onto every row in `toTickSystems`, which is what keeps the per-tick
+// join cost flat. Every other tick reads the cached columns exactly as before.
 
 /** Component-wise identity of two resource vectors — the refold's no-op guard. */
 function resourceVectorsEqual(a: ResourceVector, b: ResourceVector): boolean {
@@ -1377,8 +1360,11 @@ export async function runWorldTick(
   }
 
   // ── infrastructure-decay ──
-  // Calibration-only: per-cycle whole building levels torn down, keyed by system (both decay
-  // channels combined). Declared here, read only by the final `instrumentation` return below.
+  // Per-cycle whole building levels torn down, keyed by system (both decay channels combined).
+  // Declared here for two readers: the final `instrumentation` return below (calibration-only), and
+  // the worked-yield refold just below the processor call, which folds every system whose keys
+  // appear here (a superset of the systems whose tier-0 extractor counts actually moved — see that
+  // call site's own comment).
   let teardownLevelsBySystem: TickInstrumentation["teardownLevelsBySystem"];
   if (economySignals) {
     const logisticsFundingBoundBySystem = new Map<string, Set<string>>();
@@ -1465,6 +1451,13 @@ export async function runWorldTick(
     systems = applyAbandonments(systems, abandonedSystemIds);
     markets = resetAbandonedMarkets(markets, abandonedSystemIds);
     constructionProjects = dropAbandonedBuildProjects(constructionProjects, abandonedSystemIds);
+    // The refold's abandonment-wipe site: `applyAbandonments` clears `buildings` to `{}`, dropping
+    // every tier-0 extractor count to 0 — refolded AFTER the wipe so `n = 0` folds to the best-ground
+    // slot on each resource, the same convention the load hook (`rebuildWorkedYieldColumns`,
+    // `lib/world/save.ts`) applies to a fresh read. Without this, an abandoned system's columns would
+    // keep the dead colony's worked-prefix reading indefinitely (the resettlement rule everywhere
+    // else on this row — see `applyAbandonments`'s own docstring — applies here too).
+    systems = refoldWorkedYields(systems, new Set(abandonedSystemIds), slottedBodies());
   }
 
   // ── cycle start: migration, directed-logistics, directed-build (cycle-start-gated) ──

@@ -262,7 +262,8 @@ export interface WorldSystem {
    *
    * A maintained CACHE of (this system's bodies × its tier-0 extractor counts), not fixed
    * substrate: written at generation, refolded by the tick at each count change (a landed build, a
-   * decay shed — `refoldWorkedYields`, `lib/world/tick.ts`) and rebuilt on load. The all-bodies
+   * decay shed, an abandonment wipe — `refoldWorkedYields`, `lib/world/tick.ts`) and rebuilt on
+   * load. The all-bodies
    * POTENTIAL pool the economy-type label reads is a separate derivation
    * (`substrateAggregates`' `potentialYieldMult`, `lib/engine/body-gen.ts`), never this column.
    */

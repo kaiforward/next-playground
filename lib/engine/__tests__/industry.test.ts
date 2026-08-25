@@ -59,7 +59,7 @@ import { USED_SLACK } from "@/lib/constants/infrastructure";
 import { brakeKnee, productionCeiling } from "@/lib/engine/tick";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { unitResourceVector, makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
-import type { SlottedBody } from "@/lib/engine/worked-deposits";
+import { workedYieldVectors, type SlottedBody } from "@/lib/engine/worked-deposits";
 import type { BodyArchetypeId } from "@/lib/types/game";
 import { HEAVY_INDUSTRY_COMPLEX } from "@/lib/constants/industry";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
@@ -883,7 +883,9 @@ describe("summariseDeposits", () => {
     const worked = makeResourceVector({ ore: 5, gas: 0 });
     const yields = makeResourceVector({ ore: 1.55, gas: 1 }); // ore 1.55 → "good"; gas unworked 1.0 → "average"
     const bodies = [slottedBody(TEMPERATE, { ore: 12, gas: 2 }, { ore: 1.55, gas: 1 })];
-    const deposits = summariseDeposits(depositCounts, worked, yields, bodies);
+    // temperate_world's extractionModifier is 1.0 — eff is neutral here, so multiplying by it below
+    // leaves the hand-computed `yields` figures unchanged.
+    const deposits = summariseDeposits(depositCounts, worked, yields, unitResourceVector(), bodies);
     // Only ore + gas have slots; sorted by depositCounts descending → ore first.
     expect(deposits.map((d) => d.resource)).toEqual(["ore", "gas"]);
     const ore = deposits[0];
@@ -897,7 +899,7 @@ describe("summariseDeposits", () => {
   });
 
   it("excludes resources with no deposit slots", () => {
-    expect(summariseDeposits(emptyResourceVector(), emptyResourceVector(), unitResourceVector(), [])).toEqual([]);
+    expect(summariseDeposits(emptyResourceVector(), emptyResourceVector(), unitResourceVector(), unitResourceVector(), [])).toEqual([]);
   });
 
   it("at n=0 the marginal headline equals the best slot's ground value — the prospecting read", () => {
@@ -909,7 +911,7 @@ describe("summariseDeposits", () => {
     const depositCounts = makeResourceVector({ ore: 4 });
     const worked = makeResourceVector({ ore: 0 }); // n=0: nothing built yet
     const yields = makeResourceVector({ ore: 0.9 }); // n=0 fold reads the best slot on every output
-    const deposits = summariseDeposits(depositCounts, worked, yields, bodies);
+    const deposits = summariseDeposits(depositCounts, worked, yields, unitResourceVector(), bodies);
     expect(deposits[0].marginal).not.toBeNull();
     expect(deposits[0].marginal?.groundValue).toBeCloseTo(0.9, 10);
   });
@@ -924,17 +926,27 @@ describe("summariseDeposits", () => {
     // n=2: both temperate slots worked — the marginal (3rd slot) is the FIRST barren slot.
     const worked = makeResourceVector({ ore: 2 });
     const yields = makeResourceVector({ ore: 0.9 });
-    const deposits = summariseDeposits(depositCounts, worked, yields, bodies);
+    const deposits = summariseDeposits(depositCounts, worked, yields, unitResourceVector(), bodies);
     expect(deposits[0].marginal?.groundValue).toBeCloseTo(0.35, 10);
   });
 
-  it("the secondary yieldMult figure equals the yields column the tick uses, unchanged by the marginal", () => {
-    const bodies = [slottedBody(TEMPERATE, { ore: 3 }, { ore: 0.8 })];
+  it("yieldMult reports the true realised ground value (yields × eff), not the bare yields ratio, for a sub-1.0-modifier archetype", () => {
+    // barren_rock's extractionModifier is 0.7 — a case where the raw `yields` column (realised/eff)
+    // and the true realised ground value genuinely differ, unlike temperate_world (modifier 1.0)
+    // used elsewhere in this file. Single body, single slot, n=0: the whole system is unworked, so
+    // the fold reads the one slot's ground value on every output and the reported yieldMult must
+    // equal the marginal's groundValue exactly (both are the same slot).
+    const bodies = [slottedBody(BARREN, { ore: 3 }, { ore: 1 })];
+    const worked = workedYieldVectors(bodies, {}); // n=0 on every resource: nothing built
     const depositCounts = makeResourceVector({ ore: 3 });
-    const worked = makeResourceVector({ ore: 1 });
-    const yields = makeResourceVector({ ore: 0.8 }); // the exact worked-prefix mean column value
-    const deposits = summariseDeposits(depositCounts, worked, yields, bodies);
-    expect(deposits[0].yieldMult).toBe(yields.ore);
+    const workedCounts = makeResourceVector({ ore: 0 });
+    const deposits = summariseDeposits(depositCounts, workedCounts, worked.yieldMult, worked.eff, bodies);
+    // eff (modifier) is 0.7, not 1 — the case a bare-yields report would misstate.
+    expect(worked.eff.ore).toBeCloseTo(0.7, 10);
+    const marginal = deposits[0].marginal;
+    if (!marginal) throw new Error("expected a marginal slot at n=0");
+    expect(deposits[0].yieldMult).toBeCloseTo(marginal.groundValue, 10);
+    expect(deposits[0].yieldMult).toBeCloseTo(0.7, 10);
   });
 
   it("a fully-worked resource renders the marginal as absent (null), never a 100% stand-in", () => {
@@ -942,7 +954,7 @@ describe("summariseDeposits", () => {
     const depositCounts = makeResourceVector({ ore: 2 });
     const worked = makeResourceVector({ ore: 2 }); // n === total slots: nothing left to work
     const yields = makeResourceVector({ ore: 0.9 });
-    const deposits = summariseDeposits(depositCounts, worked, yields, bodies);
+    const deposits = summariseDeposits(depositCounts, worked, yields, unitResourceVector(), bodies);
     expect(deposits[0].marginal).toBeNull();
   });
 });

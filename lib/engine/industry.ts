@@ -15,7 +15,7 @@
  * supply-chain cascade. The same functions feed the live tick and the
  * substrate read service.
  */
-import type { GoodTier, QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
+import type { BodyArchetypeId, GoodTier, QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import { GOOD_CONSUMPTION, GOOD_PRODUCTION, SKILL1_CONSUMPTION, SKILL2_CONSUMPTION } from "@/lib/constants/physical-economy";
@@ -944,17 +944,55 @@ export interface SystemDepositSummary {
   depositCounts: number;
   /** Slots worked by seeded extractors. */
   worked: number;
-  /** Worked-prefix mean yield multiplier — the number production actually uses. 1.0 when none worked. */
+  /**
+   * The worked-prefix mean GROUND VALUE (`yields[r] × extractionEff[r]`) — the true realised
+   * average a worked deposit delivers, not the raw `yields` column alone (that column is
+   * `realised / eff`, a ratio production multiplies by `eff` a second time; reporting it bare here
+   * would understate a low-`extractionModifier` archetype's real yield). 1.0 when none worked.
+   */
   yieldMult: number;
   /**
    * The ground value the NEXT extractor built on this resource would realise — the `(n+1)`th slot
-   * in the fill order (`marginalSlot`, `lib/engine/worked-deposits.ts`). `null` once every slot is
-   * already worked, INCLUDING when the resource has no deposits — a fully-worked resource has no
-   * next slot to promise, not a 100% one.
+   * in the fill order (`marginalSlot`, `lib/engine/worked-deposits.ts`), plus which body hosts it.
+   * `null` once every slot is already worked, INCLUDING when the resource has no deposits — a
+   * fully-worked resource has no next slot to promise, not a 100% one.
    */
-  marginal: { groundValue: number } | null;
+  marginal: { groundValue: number; bodyType: BodyArchetypeId } | null;
   /** Quality band of the worked-prefix yield — drives the row's colour/label. */
   band: QualityBandId;
+  /**
+   * The worked prefix broken out by hosting body, richest ground first — one entry per body
+   * contributing at least one worked slot to this resource. `groundValue` is that body's own
+   * ground value (`quality × extractionModifier`, constant across all of its slots for this
+   * resource), not the system-wide worked-prefix mean (`yieldMult` above). Empty when nothing is
+   * worked yet.
+   */
+  workedByBody: { bodyType: BodyArchetypeId; worked: number; groundValue: number }[];
+}
+
+/**
+ * The worked prefix's first `n` slots for `(bodies, r)`, grouped by hosting body in slot order
+ * (richest ground first) — one entry per body with at least one worked slot. Ground value is
+ * constant per body/resource, so grouping consecutive same-body slots is exact, not an average.
+ */
+function workedBodiesForResource(
+  bodies: SlottedBody[], r: ResourceType, n: number,
+): { bodyType: BodyArchetypeId; worked: number; groundValue: number }[] {
+  const slots = depositSlotOrder(bodies, r);
+  const workedCount = n <= 0 ? 0 : Math.min(n, slots.length);
+  const result: { bodyType: BodyArchetypeId; worked: number; groundValue: number }[] = [];
+  const indexByBody = new Map<number, number>();
+  for (let i = 0; i < workedCount; i++) {
+    const slot = slots[i];
+    const existingIndex = indexByBody.get(slot.bodyIndex);
+    if (existingIndex !== undefined) {
+      result[existingIndex].worked += 1;
+      continue;
+    }
+    indexByBody.set(slot.bodyIndex, result.length);
+    result.push({ bodyType: bodies[slot.bodyIndex].bodyType, worked: 1, groundValue: slot.groundValue });
+  }
+  return result;
 }
 
 /**
@@ -968,18 +1006,26 @@ export function summariseDeposits(
   depositCounts: ResourceVector,
   worked: ResourceVector,
   yields: ResourceVector,
+  eff: ResourceVector,
   bodies: SlottedBody[],
 ): SystemDepositSummary[] {
   return RESOURCE_TYPES.filter((r) => depositCounts[r] > 0)
     .map((r) => {
-      const marginal = marginalSlot(depositSlotOrder(bodies, r), worked[r]);
+      const slots = depositSlotOrder(bodies, r);
+      const marginalSlotEntry = marginalSlot(slots, worked[r]);
+      // The true realised worked-prefix average — production's `yields × eff` product, not the raw
+      // `yields` ratio alone (see the field's own docstring).
+      const groundYield = yields[r] * eff[r];
       return {
         resource: r,
         depositCounts: depositCounts[r],
         worked: worked[r],
-        yieldMult: yields[r],
-        marginal: marginal ? { groundValue: marginal.groundValue } : null,
-        band: bandForMultiplier(yields[r]),
+        yieldMult: groundYield,
+        workedByBody: workedBodiesForResource(bodies, r, worked[r]),
+        marginal: marginalSlotEntry
+          ? { groundValue: marginalSlotEntry.groundValue, bodyType: bodies[marginalSlotEntry.bodyIndex].bodyType }
+          : null,
+        band: bandForMultiplier(groundYield),
       };
     })
     .sort((a, b) => b.depositCounts - a.depositCounts);

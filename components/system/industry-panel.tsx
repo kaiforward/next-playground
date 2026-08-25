@@ -8,6 +8,7 @@ import { useSystemConstruction } from "@/lib/hooks/use-system-construction";
 import { useSystemBuildOptions } from "@/lib/hooks/use-build-options";
 import { useCancelOrder } from "@/lib/hooks/use-construction-orders";
 import { GOODS } from "@/lib/constants/goods";
+import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import {
   BUILDING_TYPES,
   HOUSING_TYPE,
@@ -25,7 +26,7 @@ import { QUALITY_BAND_TEXT, QUALITY_BAND_LABEL, GRADE } from "@/lib/constants/ui
 import { describeBuilding, TIER_LABELS } from "@/lib/constants/building-descriptions";
 import { buildingHealth, familyAnchorBuff, industryHealth, perGradeStaffing, skillLicensing } from "@/lib/engine/industry";
 import type { IndustryHealth, SystemIndustryReadout, SystemLabour, LabourPool, LabourAllocation, SkillBasketEntry } from "@/lib/engine/industry";
-import type { GoodTier } from "@/lib/types/game";
+import type { BodyArchetypeId, GoodTier } from "@/lib/types/game";
 import type { BuildOptionData, PopNeedData } from "@/lib/types/api";
 import { formatMagnitude, formatPeople, formatUnitsShort } from "@/lib/utils/format";
 import { formatEta } from "@/lib/utils/construction-format";
@@ -133,6 +134,11 @@ function label(id: string): string {
   return NON_GOOD_LABELS[id] ?? COMPLEX_LABELS[id] ?? GOODS[id]?.name ?? id;
 }
 
+/** Human-readable label for a body archetype — the deposit yield tooltip's per-body breakdown. */
+function bodyLabel(bodyType: BodyArchetypeId): string {
+  return BODY_ARCHETYPES[bodyType].name;
+}
+
 // ── Small shared pieces ──────────────────────────────────────────────────────
 
 /** Pool header: title · sub · right-aligned metric. */
@@ -147,34 +153,45 @@ function PoolHead({ title, sub, right }: { title: string; sub?: string; right: R
 }
 
 /**
- * The deposit row's yield read, gold-when-rich (`docs/active/design-system` copy register: a plain
- * percentage of normal, never a raw multiplier). The HEADLINE is the marginal yield — what the next
- * extractor built here would realise, the same figure a prospecting read shows before anything is
- * built (owner decision, Kai 2026-08-25: a stepping-down "next" reads as expectation-setting, where
- * a sliding-down average would read as decay). `avg` — the worked-prefix mean, the number
- * production actually uses — is the secondary read beside it. A resource with every slot already
- * worked has no next slot to promise: the headline reads "Fully worked" rather than defaulting to
- * 100%, which would misreport an absent figure as a real one.
+ * The deposit row's yield read: the worked-prefix mean ground value alone, band-coloured, one
+ * stat-register figure and nothing else in the cell (owner decision, Kai 2026-08-25 — a clean cell,
+ * the marginal/per-body story moved entirely into the tooltip below). The tooltip is the
+ * explanation surface: the same combined figure repeated as a labelled line, then which bodies are
+ * actually contributing worked ground and at what value each, then what the next extractor built
+ * here would realise (or that there is nothing left to build on).
  */
-function YieldTag({
-  marginal, avg, band, built, depositCounts,
-}: { marginal: DepositRow["marginal"]; avg: number; band: DepositRow["band"]; built: number; depositCounts: number }) {
-  const avgPct = Math.round(avg * 100);
-  const headline = marginal ? `Next: ${Math.round(marginal.groundValue * 100)}%` : "Fully worked";
+function YieldTag({ row }: { row: DepositRow }) {
+  const pct = Math.round(row.yieldMult * 100);
   return (
     <Tooltip>
       <TooltipTriggerLabel className="block text-right">
-        <span className={`block font-mono text-[9.5px] ${QUALITY_BAND_TEXT[band]}`}>{headline}</span>
-        <span className="block font-mono text-[8.5px] text-text-tertiary">
-          working {Math.round(built)} of {Math.round(depositCounts)} slots · avg {avgPct}%
-        </span>
+        <span className={`block font-mono text-[11px] ${QUALITY_BAND_TEXT[row.band]}`}>{pct}%</span>
       </TooltipTriggerLabel>
-      <TooltipContent className="w-64 text-xs">
-        {marginal
-          ? `The next extractor built here works this system's best free ground. Production runs on the worked average, ${avgPct}%.`
-          : `Every deposit slot for this resource is already worked. Production runs on the worked average, ${avgPct}%.`}
-      </TooltipContent>
+      <TooltipContent className="w-64 text-xs"><YieldTooltipBody row={row} /></TooltipContent>
     </Tooltip>
+  );
+}
+
+/** The yield tag's tooltip body: combined figure · per-body worked breakdown · next slot. */
+export function YieldTooltipBody({ row }: { row: DepositRow }) {
+  return (
+    <div className="space-y-1">
+      <p className="font-mono text-text-primary">Combined yield: {Math.round(row.yieldMult * 100)}%</p>
+      {row.workedByBody.length > 0 && (
+        <div className="space-y-0.5 border-t border-border/60 pt-1">
+          {row.workedByBody.map((b, i) => (
+            <p key={`${b.bodyType}-${i}`} className="font-mono text-text-secondary">
+              {bodyLabel(b.bodyType)}: {b.worked} {b.worked === 1 ? "slot" : "slots"} · {Math.round(b.groundValue * 100)}%
+            </p>
+          ))}
+        </div>
+      )}
+      <p className="border-t border-border/60 pt-1 text-text-tertiary">
+        {row.marginal
+          ? `Next slot: ${Math.round(row.marginal.groundValue * 100)}% on ${bodyLabel(row.marginal.bodyType)}`
+          : "All deposit slots worked"}
+      </p>
+    </div>
   );
 }
 
@@ -499,7 +516,7 @@ function DepositTable({
                 <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary"><Staffed staffed={row.staffed} total={row.built} health={row.health} /></td>
                 <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary">{Math.round(row.built)}/{Math.round(row.depositCounts)}</td>
                 <td className="px-1.5 py-1 align-top text-right">
-                  <YieldTag marginal={row.marginal} avg={row.yieldMult} band={row.band} built={row.built} depositCounts={row.depositCounts} />
+                  <YieldTag row={row} />
                 </td>
                 <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-primary">{row.output > 0 ? formatUnitsShort(row.output) : "—"}</td>
                 {canOrder && (
