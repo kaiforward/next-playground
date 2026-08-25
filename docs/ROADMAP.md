@@ -505,6 +505,10 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   cadence-invariance harness bands the branch's changes sit close to: the `build12` buildings-gate
   fixture's 1.2× margin and `FOUNDING_TOL`'s 1.7×/1.6× margins — re-derive both now the archetype
   tables are settled (post-Gate-A).
+  **Widened (per-body-industry, 2026-08-25):** a scoped sweep of that branch's `lib/` diff
+  (worked-deposits engine, industry summary, tick refold sites, save load hook, harness idle read) —
+  deferred from its pre-merge review to this batch; the branch's red-proof records are the
+  synchronous guarantee in the meantime.
   *Next step:* schedule the overnight batch (`--concurrency 8`, pre-approved) for a window Kai isn't
   using the machine.
 - **[M] Sim gates beyond the four founding identities** — agreed rule: a gate fails only when the
