@@ -1,11 +1,13 @@
 /**
  * Economy-type classifier — maps a system's effective deposit potential
- * (depositCounts[r] × yieldMult[r], the extractor capacity weighted by deposit
- * quality) + population to one of the six `EconomyType` labels.
+ * (depositCounts[r] × potentialYieldMult[r], the extractor capacity weighted by the
+ * all-unlocked-bodies deposit-quality pool) + population to one of the six `EconomyType` labels.
  *
- * Display-only: it drives UI economy badges and `Region.dominantEconomy`.
- * Nothing in the economy tick reads it — production and consumption derive
- * from the physical substrate directly. Thresholds are tuned via the simulator.
+ * Not display-only: it drives UI economy badges and `Region.dominantEconomy`, AND event
+ * targeting reads it (`targetFilter.economyTypes`, `lib/engine/events.ts`) — several shipped
+ * event definitions gate on the label. Nothing in the economy tick reads it directly; production
+ * and consumption derive from the physical substrate's worked-prefix yields instead. Thresholds
+ * are tuned via the simulator.
  */
 import type { EconomyType, ResourceVector } from "@/lib/types/game";
 import { RESOURCE_TYPES, emptyResourceVector } from "./resources";
@@ -17,12 +19,12 @@ function clamp01(n: number): number {
 
 export function deriveEconomyTypeLabel(
   depositCounts: ResourceVector,
-  yieldMult: ResourceVector,
+  potentialYieldMult: ResourceVector,
   population: number,
 ): EconomyType {
   // Effective deposit potential: extractor capacity weighted by deposit quality.
   const effective = emptyResourceVector();
-  for (const type of RESOURCE_TYPES) effective[type] = depositCounts[type] * yieldMult[type];
+  for (const type of RESOURCE_TYPES) effective[type] = depositCounts[type] * potentialYieldMult[type];
 
   const total = RESOURCE_TYPES.reduce((sum, type) => sum + effective[type], 0);
   if (total <= 0) return "extraction";

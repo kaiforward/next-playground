@@ -15,6 +15,7 @@ import type { RNG } from "./universe-gen";
 import { randInt } from "./universe-gen";
 import { depositGradeVector } from "@/lib/engine/deposit-grade";
 import { rollQualityBand } from "./substrate-space";
+import { workedYieldVectors } from "@/lib/engine/worked-deposits";
 
 /** Body size is display flavour only — decoupled from every budget. */
 const DISPLAY_SIZE_MIN = 0.5;
@@ -47,16 +48,29 @@ export interface GeneratedSubstrate {
   /** Σ body deposit counts — total extractor capacity per resource across the system, over unlocked bodies. */
   depositCounts: ResourceVector;
   /**
-   * Effective per-resource yield multiplier — the deposit-count-weighted mean quality of the system's
-   * unlocked deposits, Σ(counts·quality) / Σ counts (1.0 where the system has no counts for that
-   * resource). The grade a fully-worked field realises; independent of how many extractors are
-   * actually placed (`depositGrade`).
+   * Potential per-resource yield multiplier — the deposit-count-weighted mean quality of the
+   * system's unlocked deposits, Σ(counts·quality) / Σ counts (1.0 where the system has no counts
+   * for that resource). An all-unlocked-bodies pool, generation-frozen, fed ONLY to the
+   * economy-type label (and, through it, event targeting) — never a production input.
+   */
+  potentialYieldMult: ResourceVector;
+  /**
+   * Potential per-resource extraction-work efficiency — the deposit-count-weighted mean of the
+   * contributing (unlocked) bodies' `extractionModifier` (1.0 where the system has no counts for
+   * that resource). Same all-unlocked-bodies pool and same label-only audience as
+   * `potentialYieldMult`; kept as its OWN aggregate, never folded into it.
+   */
+  potentialExtractionEfficiency: ResourceVector;
+  /**
+   * Realised per-resource yield multiplier — the worked-prefix fold over the system's actually
+   * built extractor levels (`workedYieldVectors`). This is the production input: the `WorldSystem`
+   * yield column and the generation-time market seed both read this, never the potential vector.
    */
   yieldMult: ResourceVector;
   /**
-   * Effective per-resource extraction-work efficiency — the deposit-count-weighted mean of the
-   * contributing (unlocked) bodies' `extractionModifier` (1.0 where the system has no counts for
-   * that resource). Kept as its OWN aggregate, never folded into `yieldMult`.
+   * Realised per-resource extraction efficiency — the worked-prefix fold's `eff` component
+   * (`workedYieldVectors`). The `WorldSystem` eff column; production reads this, never the
+   * potential vector.
    */
   extractionEfficiency: ResourceVector;
 }
@@ -133,6 +147,9 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
   }
 
   const agg = substrateAggregates(bodies);
+  // Bare substrate has no built extractors: the worked fold reads n=0 on every resource, which
+  // resolves to each resource's best slot (the edge-behaviour rule) — never a mean of nothing.
+  const worked = workedYieldVectors(bodies, {});
 
   // Bare substrate: no seeded industry or population. Faction capitals are stamped with the home-system
   // prefab (see world-gen); every other system starts as an empty deposit field and is colonised into.
@@ -145,6 +162,8 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
     population: 0,
     buildings: {},
     ...agg,
+    yieldMult: worked.yieldMult,
+    extractionEfficiency: worked.eff,
   };
 }
 
@@ -159,8 +178,8 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
 export function substrateAggregates(bodies: GeneratedBody[]): {
   peopleLand: number;
   depositCounts: ResourceVector;
-  yieldMult: ResourceVector;
-  extractionEfficiency: ResourceVector;
+  potentialYieldMult: ResourceVector;
+  potentialExtractionEfficiency: ResourceVector;
   bodyDanger: number;
 } {
   const unlocked = bodies.filter((b) => !BODY_ARCHETYPES[b.bodyType].techLocked);
@@ -170,14 +189,14 @@ export function substrateAggregates(bodies: GeneratedBody[]): {
 
   const peopleLand = aboveThreshold.reduce((s, b) => s + b.peopleLand, 0);
   const depositCounts = sumResourceVectors(unlocked.map((b) => b.counts));
-  const yieldMult = depositGradeVector(unlocked);
-  const extractionEfficiency = extractionEfficiencyVector(unlocked);
+  const potentialYieldMult = depositGradeVector(unlocked);
+  const potentialExtractionEfficiency = extractionEfficiencyVector(unlocked);
 
   return {
     peopleLand,
     depositCounts,
-    yieldMult,
-    extractionEfficiency,
+    potentialYieldMult,
+    potentialExtractionEfficiency,
     bodyDanger: bodies.reduce((sum, b) => sum + BODY_ARCHETYPES[b.bodyType].dangerBaseline, 0),
   };
 }

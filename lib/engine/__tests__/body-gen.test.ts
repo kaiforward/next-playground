@@ -122,8 +122,8 @@ describe("substrateAggregates — Proves (1): tech-locked classes contribute zer
     expect(agg.depositCounts.ore).toBe(0);
     expect(agg.depositCounts.radioactive).toBe(0);
     // No counts reach the aggregate ⇒ the neutral default, not a weighted mean including the locked body.
-    expect(agg.extractionEfficiency.gas).toBe(1);
-    expect(agg.extractionEfficiency.radioactive).toBe(1);
+    expect(agg.potentialExtractionEfficiency.gas).toBe(1);
+    expect(agg.potentialExtractionEfficiency.radioactive).toBe(1);
     // Body danger is unaffected by the lock — a locked volcanic world is still dangerous ground.
     expect(agg.bodyDanger).toBeCloseTo(BODY_ARCHETYPES.volcanic_world.dangerBaseline, 10);
   });
@@ -149,8 +149,8 @@ describe("substrateAggregates — Proves (2): arid/tundra dark land", () => {
   });
 });
 
-describe("substrateAggregates — Proves (4): extractionEfficiency defaults to 1.0 where no counts", () => {
-  it("a resource with zero counts across every body reads extractionEfficiency 1.0 (no NaN)", () => {
+describe("substrateAggregates — Proves (4): potentialExtractionEfficiency defaults to 1.0 where no counts", () => {
+  it("a resource with zero counts across every body reads potentialExtractionEfficiency 1.0 (no NaN)", () => {
     const noWater: GeneratedBody = {
       bodyType: "temperate_world",
       size: 1,
@@ -159,11 +159,11 @@ describe("substrateAggregates — Proves (4): extractionEfficiency defaults to 1
       quality: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 1, water: 0, radioactive: 0 },
     };
     const agg = substrateAggregates([noWater]);
-    expect(agg.extractionEfficiency.water).toBe(1);
-    expect(Number.isNaN(agg.extractionEfficiency.water)).toBe(false);
+    expect(agg.potentialExtractionEfficiency.water).toBe(1);
+    expect(Number.isNaN(agg.potentialExtractionEfficiency.water)).toBe(false);
   });
 
-  it("with counts present, extractionEfficiency is the deposit-count-weighted mean extractionModifier", () => {
+  it("with counts present, potentialExtractionEfficiency is the deposit-count-weighted mean extractionModifier", () => {
     const a: GeneratedBody = {
       bodyType: "temperate_world", // extractionModifier 1.0
       size: 1, peopleLand: 0,      counts: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 6, radioactive: 0 },
@@ -176,7 +176,7 @@ describe("substrateAggregates — Proves (4): extractionEfficiency defaults to 1
     };
     // (6*1.0 + 2*0.6) / 8 = 0.9
     const agg = substrateAggregates([a, b]);
-    expect(agg.extractionEfficiency.water).toBeCloseTo((6 * 1.0 + 2 * 0.6) / 8, 10);
+    expect(agg.potentialExtractionEfficiency.water).toBeCloseTo((6 * 1.0 + 2 * 0.6) / 8, 10);
   });
 });
 

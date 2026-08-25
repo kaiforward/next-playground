@@ -16,7 +16,7 @@ import {
   type GeneratedSystem,
 } from "../universe-gen";
 import { HOME_SYSTEM_PREFAB } from "@/lib/engine/homeworld-prefab";
-import { emptyResourceVector } from "@/lib/engine/resources";
+import { emptyResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import {
   genConfigForSystemCount,
   DEFAULT_SYSTEM_COUNT,
@@ -24,6 +24,9 @@ import {
 } from "@/lib/constants/universe-gen";
 import { buildGenParams } from "@/lib/world/gen";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
+import { generateSubstrate, type GeneratedBody } from "@/lib/engine/body-gen";
+import { depositSlotOrder, workedYieldFold, workedYieldVectors } from "@/lib/engine/worked-deposits";
+import { deriveEconomyTypeLabel } from "@/lib/engine/economy-type";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -41,6 +44,7 @@ function mkSys(p: Partial<GeneratedSystem> & { index: number }): GeneratedSystem
  peopleLand: 0,
     depositCounts: emptyResourceVector(), yieldMult: emptyResourceVector(),
     extractionEfficiency: emptyResourceVector(),
+    potentialYieldMult: emptyResourceVector(), potentialExtractionEfficiency: emptyResourceVector(),
     x: 0, y: 0, regionIndex: 0, isGateway: false, description: "",
     ...p,
   };
@@ -444,6 +448,101 @@ describe("stampHomeworldPrefabs", () => {
     // Non-homeworld: an empty deposit field.
     expect(systems[1].population).toBe(0);
     expect(systems[1].buildings).toEqual({});
+  });
+});
+
+// ── Generation switch: potential/worked separation (Task 2) ─────
+
+describe("generation switch — potential/worked separation", () => {
+  it("a homeworld's columns fold against its stamped buildings, not against zero", () => {
+    // Two extra procedural bodies with very different ore ground values, on top of the
+    // garden body stampHomeworldPrefabs prepends. If the fold ran BEFORE buildings is
+    // stamped (today's named bug), it would fold against {} — n=0 on every resource,
+    // reading only the single best slot — regardless of the real built extractor count.
+    const highOre: GeneratedBody = {
+      bodyType: "temperate_world", size: 1, peopleLand: 0,
+      counts: { ...emptyResourceVector(), ore: 3 },
+      quality: { ...emptyResourceVector(), ore: 5 }, // groundValue 5.0 (modifier 1.0)
+    };
+    const lowOre: GeneratedBody = {
+      bodyType: "asteroid_belt", size: 1, peopleLand: 0,
+      counts: { ...emptyResourceVector(), ore: 200 },
+      quality: { ...emptyResourceVector(), ore: 1 }, // groundValue 0.6 (modifier 0.6)
+    };
+    const systems = [mkSys({ index: 0, population: 0, buildings: {}, bodies: [highOre, lowOre] })];
+    stampHomeworldPrefabs(systems, new Set([0]));
+    const stamped = systems[0];
+
+    const foldAgainstReal = workedYieldVectors(stamped.bodies, stamped.buildings);
+    const foldAgainstZero = workedYieldVectors(stamped.bodies, {});
+
+    expect(stamped.yieldMult).toEqual(foldAgainstReal.yieldMult);
+    expect(stamped.extractionEfficiency).toEqual(foldAgainstReal.eff);
+    // Guard: the two folds must actually diverge on ore, else this test would pass
+    // vacuously even under the old (fold-against-zero) code.
+    expect(foldAgainstReal.yieldMult.ore).not.toBeCloseTo(foldAgainstZero.yieldMult.ore, 6);
+    expect(stamped.yieldMult.ore).not.toBeCloseTo(foldAgainstZero.yieldMult.ore, 6);
+  });
+
+  it("a bare system's columns read its best slot per resource", () => {
+    const rng = mulberry32(3);
+    let sawDeposits = false;
+    for (let i = 0; i < 50; i++) {
+      const s = generateSubstrate(rng);
+      for (const r of RESOURCE_TYPES) {
+        const slots = depositSlotOrder(s.bodies, r);
+        if (slots.length === 0) continue;
+        sawDeposits = true;
+        const fold = workedYieldFold(slots, 0); // bare substrate: buildings = {} ⇒ n = 0
+        expect(s.yieldMult[r]).toBeCloseTo(fold.yieldMult, 10);
+        expect(s.extractionEfficiency[r]).toBeCloseTo(fold.eff, 10);
+        // The best-slot rule: equals the single highest ground-value slot's own values.
+        expect(s.extractionEfficiency[r]).toBeCloseTo(slots[0].modifier, 10);
+      }
+    }
+    expect(sawDeposits).toBe(true); // non-vacuous
+  });
+
+  it("on a fixture where worked and potential vectors differ, the economy-type label matches the potential computation", () => {
+    // A real bare galaxy: every system's worked vector (best-slot-first, n=0 — no extractors
+    // built yet) and potential vector (mean over all unlocked bodies) generically differ
+    // whenever a resource spans bodies of different ground value. Assert the wiring holds for
+    // EVERY system, and guard that the fixture space actually contains at least one system
+    // where the two vectors would classify differently — so wiring the label to the worked
+    // vector instead would fail this test, not pass it vacuously.
+    const params = defaultParams();
+    const rng = mulberry32(123);
+    const regions = generateRegions(rng, params, REGION_NAMES);
+    const systems = generateSystems(rng, regions, params);
+
+    let sawDivergentLabel = false;
+    for (const s of systems) {
+      const potentialLabel = deriveEconomyTypeLabel(s.depositCounts, s.potentialYieldMult, s.population);
+      const workedLabel = deriveEconomyTypeLabel(s.depositCounts, s.yieldMult, s.population);
+      if (workedLabel !== potentialLabel) sawDivergentLabel = true;
+      expect(s.economyType).toBe(potentialLabel);
+    }
+    expect(sawDivergentLabel).toBe(true); // non-vacuous: divergence actually occurs
+  });
+
+  it("a tech-locked body contributes to neither potential nor worked", () => {
+    const lockedBody: GeneratedBody = {
+      bodyType: "volcanic_world", size: 1, peopleLand: 0,
+      counts: { ...emptyResourceVector(), radioactive: 50 },
+      quality: { ...emptyResourceVector(), radioactive: 1 },
+    };
+    const withLocked = [mkSys({ index: 0, population: 0, buildings: {}, bodies: [lockedBody] })];
+    const withoutLocked = [mkSys({ index: 0, population: 0, buildings: {}, bodies: [] })];
+    stampHomeworldPrefabs(withLocked, new Set([0]));
+    stampHomeworldPrefabs(withoutLocked, new Set([0]));
+
+    expect(withLocked[0].depositCounts).toEqual(withoutLocked[0].depositCounts);
+    expect(withLocked[0].potentialYieldMult).toEqual(withoutLocked[0].potentialYieldMult);
+    expect(withLocked[0].potentialExtractionEfficiency).toEqual(withoutLocked[0].potentialExtractionEfficiency);
+    expect(withLocked[0].yieldMult).toEqual(withoutLocked[0].yieldMult);
+    expect(withLocked[0].extractionEfficiency).toEqual(withoutLocked[0].extractionEfficiency);
+    // The locked body is still physically present — dark ground, not deleted.
+    expect(withLocked[0].bodies.some((b) => b.bodyType === "volcanic_world")).toBe(true);
   });
 });
 

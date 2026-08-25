@@ -6,6 +6,7 @@
 import type { EconomyType } from "@/lib/types/game";
 import { generateSubstrate, substrateAggregates, type GeneratedSubstrate } from "./body-gen";
 import { deriveEconomyTypeLabel } from "./economy-type";
+import { workedYieldVectors } from "@/lib/engine/worked-deposits";
 import { computeHomeworldBuildings, HOME_SYSTEM_POP, homeworldGardenBody } from "./homeworld-prefab";
 import { housingPopCap } from "./industry";
 import {
@@ -348,7 +349,9 @@ export function generateSystems(
   const systems: GeneratedSystem[] = [];
   for (let i = 0; i < points.length; i++) {
     const substrate = generateSubstrate(rng);
-    const economyType = deriveEconomyTypeLabel(substrate.depositCounts, substrate.yieldMult, substrate.population);
+    const economyType = deriveEconomyTypeLabel(
+      substrate.depositCounts, substrate.potentialYieldMult, substrate.population,
+    );
     const regionIndex = regionAssignments[i];
     const localIndex = regionLocalCount[regionIndex]++;
 
@@ -364,6 +367,8 @@ export function generateSystems(
       buildings: substrate.buildings,
       peopleLand: substrate.peopleLand,
       depositCounts: substrate.depositCounts,
+      potentialYieldMult: substrate.potentialYieldMult,
+      potentialExtractionEfficiency: substrate.potentialExtractionEfficiency,
       yieldMult: substrate.yieldMult,
       extractionEfficiency: substrate.extractionEfficiency,
       x: points[i].x,
@@ -622,13 +627,18 @@ export function stampHomeworldPrefabs(
     s.bodies = bodies;
     s.depositCounts = agg.depositCounts;
     s.peopleLand = agg.peopleLand;
-    s.yieldMult = agg.yieldMult;
-    s.extractionEfficiency = agg.extractionEfficiency;
+    s.potentialYieldMult = agg.potentialYieldMult;
+    s.potentialExtractionEfficiency = agg.potentialExtractionEfficiency;
     s.bodyDanger = agg.bodyDanger;
     s.buildings = computeHomeworldBuildings(HOME_SYSTEM_POP);
     s.population = HOME_SYSTEM_POP;
     s.popCap = housingPopCap(s.buildings);
-    s.economyType = deriveEconomyTypeLabel(s.depositCounts, s.yieldMult, s.population);
+    // The worked fold must run AFTER buildings is stamped above — folding against the
+    // pre-stamp {} would credit the capital's extractors with zero worked slots.
+    const worked = workedYieldVectors(bodies, s.buildings);
+    s.yieldMult = worked.yieldMult;
+    s.extractionEfficiency = worked.eff;
+    s.economyType = deriveEconomyTypeLabel(s.depositCounts, s.potentialYieldMult, s.population);
   }
 }
 
