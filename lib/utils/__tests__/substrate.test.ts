@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { bodyDepositFeatures, habitabilityScoreBand, occupiedBodyIds, type OccupancyBody } from "../substrate";
+import {
+  bodyDepositFeatures, habitabilityScoreBand, occupiedBodyIds, potentialYieldRows,
+  type OccupancyBody,
+} from "../substrate";
 import { makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import { HABITABILITY_THRESHOLD } from "@/lib/constants/bodies";
+import type { PotentialYieldRow } from "@/lib/engine/worked-deposits";
 
 describe("bodyDepositFeatures", () => {
   it("lists present deposits as named features, richest grade first, carrying worked/total", () => {
@@ -87,5 +91,41 @@ describe("occupiedBodyIds", () => {
     expect(occupied.has("worse")).toBe(true);
     expect(occupied.has("dead")).toBe(false);
     expect(occupied.has("locked")).toBe(false);
+  });
+});
+
+describe("potentialYieldRows", () => {
+  const identities = [
+    { id: "b0", archetypeName: "Temperate World" },
+    { id: "b1", archetypeName: "Volcanic World" },
+  ];
+
+  it("resolves bodyIndex to identity, attaches a quality band, and passes yieldMult/slotCount through unchanged", () => {
+    const engineRows: PotentialYieldRow[] = [{
+      resource: "ore",
+      yieldMult: 1.6, // "good" band (≤1.8)
+      slotCount: 3,
+      byBody: [
+        { bodyIndex: 0, slotCount: 1, groundValue: 0.9, locked: false },
+        { bodyIndex: 1, slotCount: 2, groundValue: 0.36, locked: true },
+      ],
+    }];
+    const rows = potentialYieldRows(engineRows, identities);
+
+    expect(rows).toHaveLength(1);
+    const [row] = rows;
+    expect(row.resource).toBe("ore");
+    expect(row.yieldMult).toBe(1.6);
+    expect(row.slotCount).toBe(3);
+    expect(row.band).toBe("good");
+
+    expect(row.byBody).toEqual([
+      { bodyId: "b0", archetypeName: "Temperate World", slotCount: 1, groundValue: 0.9, locked: false },
+      { bodyId: "b1", archetypeName: "Volcanic World", slotCount: 2, groundValue: 0.36, locked: true },
+    ]);
+  });
+
+  it("an empty engine-row list resolves to an empty view list", () => {
+    expect(potentialYieldRows([], identities)).toEqual([]);
   });
 });

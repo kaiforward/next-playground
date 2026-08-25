@@ -86,6 +86,87 @@ export function depositSlotOrder(bodies: SlottedBody[], r: ResourceType): Deposi
 }
 
 /**
+ * `depositSlotOrder`'s sibling for the "if everything was habitable" reading: every unlocked OR
+ * tech-locked body's slots for `(bodies, r)`, same ground-value-descending order (ties broken by
+ * `bodyIndex` ascending). Never used by the tick or any staffing/build path — `depositSlotOrder`
+ * keeps its lock filter untouched for those. This is the Astrography "potential yield" table's own
+ * fold: a player judging what a system COULD be worth needs locked bodies' deposits counted, not
+ * hidden until the unlocking tech arrives.
+ */
+export function potentialSlotOrder(bodies: SlottedBody[], r: ResourceType): DepositSlot[] {
+  const slots: DepositSlot[] = [];
+  bodies.forEach((b, bodyIndex) => {
+    const archetype = BODY_ARCHETYPES[b.bodyType];
+    const count = b.counts[r];
+    if (count <= 0) return;
+    const modifier = archetype.extractionModifier;
+    const quality = b.quality[r];
+    const groundValue = quality * modifier;
+    for (let i = 0; i < count; i++) {
+      slots.push({ bodyIndex, groundValue, modifier, quality });
+    }
+  });
+  slots.sort((a, b) => b.groundValue - a.groundValue);
+  return slots;
+}
+
+/** One body's contribution to a resource's potential-yield row: its own slot count, ground value
+ *  (all its slots on this resource share one quality and one archetype modifier, so a single
+ *  figure covers them), and whether the body is currently tech-locked. */
+export interface PotentialYieldBody {
+  bodyIndex: number;
+  slotCount: number;
+  groundValue: number;
+  locked: boolean;
+}
+
+/** One resource's potential-yield row: the mean ground value over EVERY slot in the system
+ *  (locked bodies included) plus the total slot count and a per-body breakdown, richest first —
+ *  the same order `potentialSlotOrder` sorts slots into, since bodies are inserted in slot order. */
+export interface PotentialYieldRow {
+  resource: ResourceType;
+  yieldMult: number;
+  slotCount: number;
+  byBody: PotentialYieldBody[];
+}
+
+/**
+ * Per-resource potential yield across a system's bodies, locked bodies included — the Astrography
+ * "what could this system be worth" read. A resource with no slots anywhere (locked or unlocked)
+ * is absent from the result entirely, never a zero row. `yieldMult` is the mean of `groundValue`
+ * over every slot (not a mean of means): a resource concentrated on one rich locked body reads that
+ * body's true weight rather than being diluted or inflated by per-body averaging.
+ */
+export function potentialYieldByResource(bodies: SlottedBody[]): PotentialYieldRow[] {
+  const rows: PotentialYieldRow[] = [];
+  for (const r of RESOURCE_TYPES) {
+    const slots = potentialSlotOrder(bodies, r);
+    if (slots.length === 0) continue;
+
+    let groundSum = 0;
+    const byBody: PotentialYieldBody[] = [];
+    const indexOfBody = new Map<number, number>();
+    for (const slot of slots) {
+      groundSum += slot.groundValue;
+      const existingIndex = indexOfBody.get(slot.bodyIndex);
+      if (existingIndex !== undefined) {
+        byBody[existingIndex].slotCount += 1;
+      } else {
+        indexOfBody.set(slot.bodyIndex, byBody.length);
+        byBody.push({
+          bodyIndex: slot.bodyIndex,
+          slotCount: 1,
+          groundValue: slot.groundValue,
+          locked: BODY_ARCHETYPES[bodies[slot.bodyIndex].bodyType].techLocked,
+        });
+      }
+    }
+    rows.push({ resource: r, yieldMult: groundSum / slots.length, slotCount: slots.length, byBody });
+  }
+  return rows;
+}
+
+/**
  * The worked-prefix fold: `eff` is the mean modifier over the prefix (its authored meaning,
  * preserved), `realised` is the mean ground value over the prefix, and `yieldMult` is derived
  * as `realised / eff` so `eff * yieldMult` equals `realised` exactly.

@@ -1,7 +1,7 @@
 import type { StarSystemInfo, SunClass, GoodTier, BodyArchetypeId, ResourceVector } from "./game";
 import type { SubstrateGoodRate, ConsumptionBreakdown } from "@/lib/engine/physical-economy";
 import type { SupplyRegime } from "@/lib/engine/population";
-import type { FillOrderRow } from "@/lib/utils/substrate";
+import type { FillOrderRow, PotentialYieldRowView } from "@/lib/utils/substrate";
 
 export interface TradeFlowEdgeInfo {
   /** Net source system for the dominant good (where particles spawn). */
@@ -288,6 +288,7 @@ export interface BodyView {
    *  nothing). False for an unassessed system as well as for a body past the frontier. */
   occupied: boolean;
 }
+
 /**
  * Physical substrate for one system — the static "what is physically here":
  * star, surface size, habitable fraction, bodies, and the deposits they host.
@@ -301,6 +302,10 @@ export type SystemSubstrateData =
       /** Habitable surface across all bodies. */
       peopleLand: number;
       bodies: BodyView[];
+      /** Per-resource potential yield across every body, locked bodies included (`potentialYieldByResource`,
+       *  `lib/engine/worked-deposits.ts`) — the Astrography "what could this system be worth"
+       *  table, distinct from the industry panel's worked-prefix (currently-realised) figure. */
+      potentialYields: PotentialYieldRowView[];
     }
   | { visibility: "unknown" };
 

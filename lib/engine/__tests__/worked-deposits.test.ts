@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   depositSlotOrder, workedYieldFold, workedYieldVectors, marginalSlot, workedByBody,
+  potentialSlotOrder, potentialYieldByResource,
   type SlottedBody,
 } from "@/lib/engine/worked-deposits";
 import { makeResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
@@ -224,5 +225,75 @@ describe("workedByBody", () => {
   it("empty body list returns an empty map, no NaN", () => {
     const result = workedByBody([], {});
     expect(Object.keys(result)).toHaveLength(0);
+  });
+});
+
+describe("potentialSlotOrder", () => {
+  it("includes tech-locked archetype classes' slots — the opposite of depositSlotOrder", () => {
+    const bodies: SlottedBody[] = [
+      body(VOLCANIC, { ore: 5 }, { ore: 0.9 }), // locked
+      body(TEMPERATE, { ore: 1 }, { ore: 0.1 }), // unlocked
+    ];
+    const worked = depositSlotOrder(bodies, "ore");
+    const potential = potentialSlotOrder(bodies, "ore");
+    // depositSlotOrder (unchanged): only the unlocked body's single slot.
+    expect(worked).toHaveLength(1);
+    expect(worked[0].bodyIndex).toBe(1);
+    // potentialSlotOrder: both bodies' slots, still ground-value sorted (volcanic's 0.9*0.4=0.36
+    // beats temperate's 0.1*1.0=0.1, so the locked body sorts first here).
+    expect(potential).toHaveLength(6);
+    expect(potential[0].bodyIndex).toBe(0);
+  });
+});
+
+describe("potentialYieldByResource", () => {
+  it("a locked body's slots move the potential figure while the worked fold on the same fixture is untouched — pins the two folds apart", () => {
+    const bodies: SlottedBody[] = [
+      body(TEMPERATE, { ore: 1 }, { ore: 0.5 }), // unlocked, ground 0.5
+      body(VOLCANIC, { ore: 1 }, { ore: 0.9 }),  // locked, ground 0.36 (0.9 * 0.4)
+    ];
+    const buildings = { ore: 5 };
+
+    // The worked fold (depositSlotOrder-backed) reads exactly as if the locked body weren't there.
+    const withLocked = workedYieldVectors(bodies, buildings);
+    const withoutLocked = workedYieldVectors([bodies[0]], buildings);
+    expect(withLocked.eff.ore).toBeCloseTo(withoutLocked.eff.ore, 10);
+    expect(withLocked.yieldMult.ore).toBeCloseTo(withoutLocked.yieldMult.ore, 10);
+
+    // The potential figure DOES include the locked body — mean of both ground values, not just
+    // the unlocked one's 0.5.
+    const rows = potentialYieldByResource(bodies);
+    const oreRow = rows.find((r) => r.resource === "ore");
+    expect(oreRow).toBeDefined();
+    expect(oreRow!.slotCount).toBe(2);
+    expect(oreRow!.yieldMult).toBeCloseTo((0.5 + 0.36) / 2, 10);
+    expect(oreRow!.yieldMult).not.toBeCloseTo(0.5, 6); // would equal 0.5 if the locked slot were dropped
+  });
+
+  it("a resource with no slots anywhere (locked or unlocked) renders no row", () => {
+    const bodies: SlottedBody[] = [
+      body(TEMPERATE, { ore: 1 }, { ore: 0.5 }),
+      body(VOLCANIC, { minerals: 1 }, { minerals: 0.5 }),
+    ];
+    const rows = potentialYieldByResource(bodies);
+    // "gas" has no deposit on either body.
+    expect(rows.find((r) => r.resource === "gas")).toBeUndefined();
+    // "ore" and "minerals" each have exactly one slot, so both DO render.
+    expect(rows.find((r) => r.resource === "ore")).toBeDefined();
+    expect(rows.find((r) => r.resource === "minerals")).toBeDefined();
+  });
+
+  it("marks a locked body's breakdown entry as locked, an unlocked one as not", () => {
+    const bodies: SlottedBody[] = [
+      body(TEMPERATE, { ore: 1 }, { ore: 0.5 }), // unlocked
+      body(VOLCANIC, { ore: 2 }, { ore: 0.9 }),  // locked
+    ];
+    const rows = potentialYieldByResource(bodies);
+    const oreRow = rows.find((r) => r.resource === "ore")!;
+    const temperateEntry = oreRow.byBody.find((b) => b.bodyIndex === 0)!;
+    const volcanicEntry = oreRow.byBody.find((b) => b.bodyIndex === 1)!;
+    expect(temperateEntry.locked).toBe(false);
+    expect(volcanicEntry.locked).toBe(true);
+    expect(volcanicEntry.slotCount).toBe(2);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { IndustryPanel, YieldTooltipBody } from "@/components/system/industry-panel";
+import { IndustryPanel, YieldTooltipBody, DepositTooltipBody } from "@/components/system/industry-panel";
 import { depositRows } from "@/components/system/industry-rows";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { formatMagnitude } from "@/lib/utils/format";
@@ -162,6 +162,36 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
     expect(container.textContent).toContain("Combined yield: 140%");
     expect(container.textContent).toContain("All deposit slots worked");
     expect(container.textContent).not.toContain("Next slot:");
+  });
+
+  it("DepositTooltipBody no longer duplicates the Yield column's combined/next-slot figures — band, built/slots and staffed only", () => {
+    // Same real production join as the YieldTooltipBody tests above, so this fixture can't drift
+    // from the shape the panel actually builds. yieldMult 1.15 and marginal.groundValue 1.2 are the
+    // duplication bait: pre-fix this tooltip rendered "avg 115%" and "Next 120%" — both figures the
+    // Yield column's own tooltip (YieldTooltipBody) already owns.
+    const [row] = depositRows(
+      [{
+        resource: "arable",
+        depositCounts: 10,
+        worked: 3,
+        yieldMult: 1.15,
+        marginal: { groundValue: 1.2, bodyType: "temperate_world" },
+        workedByBody: [{ bodyType: "arid_world", worked: 3, groundValue: 1 }],
+        band: "average",
+      }],
+      [],
+      0,
+      0.75,
+    );
+    const { container } = render(<DepositTooltipBody row={row} contributors={[]} />);
+
+    expect(container.textContent).not.toContain("avg 115%");
+    expect(container.textContent).not.toContain("Next 120%");
+    expect(container.textContent).not.toContain("Fully worked");
+    // What the tooltip DOES still own: band label, built/slots count, staffed.
+    expect(container.textContent).toContain("Average");
+    expect(container.textContent).toContain(`${row.built}/${row.depositCounts} slots built`);
+    expect(container.textContent).toContain(`${row.staffed.toFixed(1)} staffed`);
   });
 
   it("never renders the retired industry-land vocabulary — no 'Industry land', 'General land', 'habitableFree' or 'factoryFree' anywhere in the DOM", () => {

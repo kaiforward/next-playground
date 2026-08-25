@@ -86,6 +86,7 @@ const VISIBLE_SUBSTRATE: SystemSubstrateData = {
       occupied: false,
     },
   ],
+  potentialYields: [],
 };
 
 function renderPanel(systemId: string) {

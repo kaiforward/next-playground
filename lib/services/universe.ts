@@ -11,11 +11,11 @@ import {
   summariseSpace,
   summariseDeposits,
 } from "@/lib/engine/industry";
-import { workedByBody, toSlottedBody } from "@/lib/engine/worked-deposits";
+import { workedByBody, toSlottedBody, potentialYieldByResource } from "@/lib/engine/worked-deposits";
 import { systemPopNeeds } from "@/lib/services/pop-needs";
 import { readSystemIndustry } from "@/lib/services/system-industry-readout";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
-import { occupiedBodyIds } from "@/lib/utils/substrate";
+import { occupiedBodyIds, potentialYieldRows } from "@/lib/utils/substrate";
 import { resolveEffectiveHabitabilityQuality } from "@/lib/engine/habitability";
 
 /**
@@ -122,7 +122,17 @@ export function getSystemSubstrate(systemId: string): SystemSubstrateData {
   // worked-prefix fold the deposit table's marginal/average figures come from, keyed by this
   // array's own index since `.map(toSlottedBody)` preserves `systemBodies`' order exactly.
   const buildings = buildingsBySystem().get(systemId) ?? {};
-  const worked = workedByBody(systemBodies.map(toSlottedBody), buildings);
+  const slottedBodies = systemBodies.map(toSlottedBody);
+  const worked = workedByBody(slottedBodies, buildings);
+
+  // The Astrography potential-yield table's data — locked bodies included, so a player can judge
+  // what a system COULD be worth before colonising (`potentialYieldByResource`'s own docstring).
+  // `bodyIndex` is resolved to this system's own body ids/names by `potentialYieldRows`, given the
+  // SAME `systemBodies` order the engine fold was built from.
+  const potentialYields = potentialYieldRows(
+    potentialYieldByResource(slottedBodies),
+    systemBodies.map((b) => ({ id: b.id, archetypeName: BODY_ARCHETYPES[b.bodyType].name })),
+  );
 
   const bodies: BodyView[] = systemBodies.map((b, i) => {
     const arch = BODY_ARCHETYPES[b.bodyType];
@@ -148,6 +158,7 @@ export function getSystemSubstrate(systemId: string): SystemSubstrateData {
     sunClass: system.sunClass,
     peopleLand: system.peopleLand,
     bodies,
+    potentialYields,
   };
 }
 

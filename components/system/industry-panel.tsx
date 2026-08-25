@@ -164,7 +164,7 @@ function YieldTag({ row }: { row: DepositRow }) {
   const pct = Math.round(row.yieldMult * 100);
   return (
     <Tooltip>
-      <TooltipTriggerLabel className="block text-right">
+      <TooltipTriggerLabel className="block w-full text-right">
         <span className={`block font-mono text-[11px] ${QUALITY_BAND_TEXT[row.band]}`}>{pct}%</span>
       </TooltipTriggerLabel>
       <TooltipContent className="w-64 text-xs"><YieldTooltipBody row={row} /></TooltipContent>
@@ -223,14 +223,15 @@ function Th({ children, right = false }: { children: React.ReactNode; right?: bo
 
 // ── Tooltips ─────────────────────────────────────────────────────────────────
 
-/** Deposit tooltip: resource · yield band · built/slots · staffed · the goods extracted from it. */
-function DepositTooltipBody({ row, contributors }: { row: DepositRow; contributors: BuildingEntry[] }) {
-  const nextText = row.marginal ? `Next ${Math.round(row.marginal.groundValue * 100)}%` : "Fully worked";
+/** Deposit tooltip: resource · yield band · built/slots · staffed · the goods extracted from it.
+ *  The combined/next-slot yield figures live in the Yield column's own tooltip
+ *  (`YieldTooltipBody`) — this one never repeats them. */
+export function DepositTooltipBody({ row, contributors }: { row: DepositRow; contributors: BuildingEntry[] }) {
   return (
     <div className="space-y-1">
       <p className="font-display text-[12px] font-semibold capitalize text-text-primary">{row.resource}</p>
       <p className="font-mono text-[10px] text-text-tertiary">
-        {nextText} · avg {Math.round(row.yieldMult * 100)}% · {QUALITY_BAND_LABEL[row.band]} · {row.built}/{row.depositCounts} slots built · {row.staffed.toFixed(1)} staffed
+        {QUALITY_BAND_LABEL[row.band]} · {row.built}/{row.depositCounts} slots built · {row.staffed.toFixed(1)} staffed
       </p>
       {contributors.length > 0 && (
         <div className="space-y-0.5 border-t border-border/60 pt-1.5">
