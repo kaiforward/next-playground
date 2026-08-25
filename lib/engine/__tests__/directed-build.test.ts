@@ -595,6 +595,174 @@ describe("directed-build — inputMissingAt (the shared per-input missingness pr
   });
 });
 
+describe("planFactionBundles — derived demand (the spill)", () => {
+  // Proves 1: reactor_cores (recipe { radioactives: 0.4, alloys: 0.3, components: 0.3 }) is short at
+  // A; A already locally produces alloys, components, metals and minerals (so those three legs, and
+  // everything downstream of them, are NOT missing), but has no radioactives building and no reachable
+  // radioactives surplus anywhere — the one truly missing input. Only radioactives may pick up derived
+  // demand; alloys and components (present, so not missing) must read exactly zero, even though a
+  // buggy "spill onto every input" implementation WOULD find them buildable here (A carries their own
+  // recipe inputs too, so a spurious alloys/components build is a real, catchable outcome, not one an
+  // input-gate would silently swallow regardless).
+  it("Proves 1 — a good missing 1 of 3 inputs spills onto exactly that one (the other two receive zero)", () => {
+    const A: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 1_000_000, control: "developed",
+      buildings: { alloys: 1, components: 1, metals: 1, minerals: 1 },
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "reactor_cores", stock: 1, demand: 1000, capacityProduction: 0 }],
+    };
+    const depositCounts = emptyResourceVector();
+    depositCounts.radioactive = 1000;
+    const E: BuildSystemState = {
+      systemId: "E", factionId: "f1", population: 1_000_000, control: "developed", buildings: {},
+      depositCounts, peopleLand: 0, goods: [],
+    };
+    const builds = planFactionBuilds([A, E], reachable, DEV_REFS);
+    expect(countFor(builds, "E", "radioactives")).toBeGreaterThan(0);
+    expect(countFor(builds, "A", "alloys")).toBe(0);
+    expect(countFor(builds, "A", "components")).toBe(0);
+    expect(countFor(builds, "E", "alloys")).toBe(0);
+    expect(countFor(builds, "E", "components")).toBe(0);
+  });
+
+  // Proves 2: ship_frames (recipe { hull_plating: 0.4, alloys: 0.3, components: 0.3 }) is short at A;
+  // A locally produces components and minerals only, so hull_plating, alloys, metals and ore are all
+  // genuinely missing — the worst real recipe chain, 4 hops (ship_frames → hull_plating → alloys →
+  // metals → ore). Reversed PRODUCTION_GOOD_ORDER visits ship_frames first (spilling onto hull_plating
+  // AND directly onto alloys, since both legs are missing), then hull_plating (spilling onto its own
+  // metals and alloys legs), then alloys (spilling onto its metals leg; minerals is present, so no
+  // spill there), then metals (spilling its combined total onto ore, ratio 1). Hand-derived total at
+  // ore, summing every path the entangled recipe graph actually creates:
+  //   R(ship_frames) = 440   (rateDeficit for demand 1000, no exporters)
+  //   D(hull_plating)        = 440×0.4 = 176
+  //   D(alloys)  = 440×0.3 (direct) + 176×0.5 (via hull_plating) = 132 + 88 = 220
+  //   D(metals)  = 176×0.5 (via hull_plating) + 220×0.6 (via alloys) = 88 + 132 = 220
+  //   D(ore)     = 220×1 = 220
+  // Pinning this (not "some ore demand exists") catches both a wrong ratio and a wrong walk order —
+  // a forward (inputs-first) walk would let ship_frames spill onto hull_plating/alloys too late for
+  // that demand to cascade further within the same pass, landing far short of 220 at ore.
+  it("Proves 2 — the 4-hop chain cascades, reaching ore scaled by the product of the ratios on the path", () => {
+    const demandShipFrames = 1000;
+    const A: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 0, control: "developed",
+      buildings: { components: 1, minerals: 1 },
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "ship_frames", stock: 1, demand: demandShipFrames, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const depositCounts = emptyResourceVector();
+    depositCounts.ore = 1_000_000;
+    const E: BuildSystemState = {
+      systemId: "E", factionId: "f1", population: 1_000_000, control: "developed", buildings: {},
+      depositCounts, peopleLand: 0, goods: [],
+    };
+    const plan = planFactionProposals([A, E], reachable, [], DEV_REFS);
+    const rShipFrames = (1 + DIRECTED_BUILD.PROVISION_MARGIN) * demandShipFrames * DIRECTED_BUILD.BUILD_RATE_CAP;
+    const expectedOre = rShipFrames * 0.5; // see hand-derivation above (220 for demand 1000)
+    const oreProposal = plan.proposals.find(
+      (p): p is Extract<typeof p, { kind: "build" }> => p.kind === "build" && p.systemId === "E" && p.items.some((i) => i.buildingType === "ore"),
+    );
+    expect(oreProposal?.value).toBeCloseTo(expectedOre, 6);
+  });
+
+  // Proves 3: fuel's recipe is single-input, ratio 1 ({ gas: 1 }) — the derived demand at gas must
+  // equal fuel's own remaining shortfall exactly, not a fraction of it.
+  it("Proves 3 — a single-input ratio-1 recipe forwards full magnitude", () => {
+    const demandFuel = 1000;
+    const A: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "fuel", stock: 1, demand: demandFuel, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const depositCounts = emptyResourceVector();
+    depositCounts.gas = 1_000_000;
+    const B: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 1_000_000, control: "developed", buildings: {},
+      depositCounts, peopleLand: 0, goods: [],
+    };
+    const plan = planFactionProposals([A, B], reachable, [], DEV_REFS);
+    const rFuel = (1 + DIRECTED_BUILD.PROVISION_MARGIN) * demandFuel * DIRECTED_BUILD.BUILD_RATE_CAP;
+    const gasProposal = plan.proposals.find(
+      (p): p is Extract<typeof p, { kind: "build" }> => p.kind === "build" && p.systemId === "B" && p.items.some((i) => i.buildingType === "gas"),
+    );
+    expect(gasProposal?.value).toBeCloseTo(rFuel, 6);
+  });
+
+  // Proves 4: metals (recipe { ore: 1 }) is short at C, ore missing there. Without any queued ore
+  // project, the external extractor E2 picks up the spilled ore demand. Queuing an ore project AT C
+  // folds queued levels into effective buildings BEFORE the planner ever sees C (`effectiveBuildSystems`,
+  // consumed here through `openProjects`) — ore reads as locally produced, so it is no longer missing
+  // and the spill (and so E2's opportunity) disappears, even though C's own metals shortfall is
+  // unchanged. This is the accepted pipelining: the input factory is already queued, so the input is
+  // treated as available while it finishes.
+  it("Proves 4 — a QUEUED input building suppresses the spill for that input", () => {
+    const C: BuildSystemState = {
+      systemId: "C", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "metals", stock: 1, demand: 1000, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const depositCounts = emptyResourceVector();
+    depositCounts.ore = 1_000_000;
+    const E2: BuildSystemState = {
+      systemId: "E2", factionId: "f1", population: 1_000_000, control: "developed", buildings: {},
+      depositCounts, peopleLand: 0, goods: [],
+    };
+    const hasOreProposalAtE2 = (proposals: Proposal[]) =>
+      proposals.some((p) => p.kind === "build" && p.systemId === "E2" && p.items.some((i) => i.buildingType === "ore"));
+
+    const withoutQueue = planFactionProposals([C, E2], reachable, [], DEV_REFS);
+    expect(hasOreProposalAtE2(withoutQueue.proposals)).toBe(true);
+
+    const queuedOre: WorldConstructionProject[] = [
+      { kind: "build", id: "q", origin: "auto", factionId: "f1", systemId: "C", buildingType: "ore", levels: 5, workTotal: 100, workDone: 0 },
+    ];
+    const withQueue = planFactionProposals([C, E2], reachable, queuedOre, DEV_REFS);
+    expect(hasOreProposalAtE2(withQueue.proposals)).toBe(false);
+  });
+
+  // Proves 5: metals' demand (1000) is fully covered by capacity (1100, ≥ the 1.10× provision margin)
+  // with default satisfaction 1 — the assessed structural residual is exactly zero, so metals never
+  // enters `remainingByGood` at all. Ore (metals' one input) must pick up nothing, even though B could
+  // build it if it were asked to (deposit slots + population present) — the fixture exists precisely
+  // so a bug reading a good's raw `demand` instead of its assessed remaining shortfall would be caught.
+  // A's textiles line carries a genuine, unrelated deficit (no recipe, so it can never spill) purely
+  // so `remainingByGood` is non-empty and the run's early-return guard does not mask the assertion.
+  it("Proves 5 — zero remaining shortfall spills nothing", () => {
+    const A: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [
+        { goodId: "metals", stock: 1, demand: 1000, capacityProduction: 1100, production: 1100 },
+        { goodId: "textiles", stock: 1, demand: 10, capacityProduction: 0 },
+      ],
+    };
+    const depositCounts = emptyResourceVector();
+    depositCounts.ore = 1_000_000;
+    const B: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 1_000_000, control: "developed", buildings: {},
+      depositCounts, peopleLand: 0, goods: [],
+    };
+    const builds = planFactionBuilds([A, B], reachable, DEV_REFS);
+    expect(countFor(builds, "B", "ore")).toBe(0);
+  });
+
+  // Proves 6: polymers (recipe { gas: 0.5, biomass: 0.5 }) is short at C; C itself holds deposit slots
+  // for both missing inputs, so the spilled tier-0 deficits are served by the SAME site, through the
+  // ordinary opportunity machinery — no new proposal kind, no new gate, an extractor just lands.
+  it("Proves 6 — a spilled tier-0 deficit is served by the ordinary opportunity machinery (an extractor lands at s)", () => {
+    const depositCounts = emptyResourceVector();
+    depositCounts.gas = 100;
+    depositCounts.biomass = 100;
+    const C: BuildSystemState = {
+      systemId: "C", factionId: "f1", population: 1_000_000, control: "developed", buildings: {},
+      depositCounts, peopleLand: 0,
+      goods: [{ goodId: "polymers", stock: 1, demand: 1000, capacityProduction: 0 }],
+    };
+    const builds = planFactionBuilds([C], reachable, DEV_REFS);
+    expect(countFor(builds, "C", "gas")).toBeGreaterThan(0);
+    expect(countFor(builds, "C", "biomass")).toBeGreaterThan(0);
+  });
+});
+
 describe("planFactionBuilds — relief housing", () => {
   it("does not build housing at a starved system", () => {
     const starved: BuildSystemState = {

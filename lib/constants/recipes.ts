@@ -6,10 +6,11 @@ import { GOOD_NAMES } from "@/lib/constants/goods";
  * here). Input quantities are first-draft tuning knobs; only the input
  * *structure* (which goods feed which) is fixed.
  *
- * Nothing consumes this table yet — it is the single source of truth for the
- * production graph, validated as an acyclic DAG by recipes.test.ts so a
- * consumer can topologically order production within a system (a
- * freshly-produced input can feed its consumer the same tick).
+ * The single source of truth for the production graph: industry's actual input draw, the
+ * build planner's input-supply gate and derived-demand spill, and treasury/colonisation-value
+ * costing all read it. Validated as an acyclic DAG by recipes.test.ts so a consumer can
+ * topologically order production within a system (a freshly-produced input can feed its
+ * consumer the same tick).
  */
 export const GOOD_RECIPES: Record<string, Record<string, number>> = {
   // ── Tier 1 ────────────────────────────────────────────────

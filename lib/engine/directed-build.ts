@@ -22,7 +22,7 @@ import {
   VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, SKILL1_PER_SCHOOL, SKILL2_PER_INSTITUTE, labourTotal,
   FAMILY_BY_GOOD, COMPLEX_TYPES, ANCHOR_CAP, ANCHOR_RATED_COVERAGE, ANCHOR_MIN_THROUGHPUT,
 } from "@/lib/constants/industry";
-import { GOOD_RECIPES } from "@/lib/constants/recipes";
+import { GOOD_RECIPES, PRODUCTION_GOOD_ORDER } from "@/lib/constants/recipes";
 import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import { charterFee, foundingCommitmentCost, foundingGoodsValue, projectedManifestWant } from "@/lib/engine/founding-cost";
@@ -866,6 +866,33 @@ function planFactionBundles(
   }
 
   if (remainingByGood.size === 0) return { bundles, blocked: [], topOpportunities: [] };
+
+  // Derived demand (the spill): unmet tier-1+ shortfall demands its own missing recipe
+  // inputs too. Walking `PRODUCTION_GOOD_ORDER` in REVERSE visits every consumer before its own
+  // inputs, so one pass cascades all the way down — a good's missing inputs pick up whatever was
+  // just spilled onto it before their own turn to spill arrives. "Missing" is exactly
+  // `inputMissingAt` (the same predicate the input-supply gate reads), read against the CURRENT
+  // `remainingByGood` entry (structural + floor + any derived demand already spilled from a
+  // higher good this same pass — that IS the cascade). Tier-0 goods carry no `GOOD_RECIPES` entry
+  // and terminate it. Never persisted: recomputed from live shortfalls and live missingness every
+  // run, and vanishes the run its parent shortfall closes or its input stops being missing.
+  for (const goodId of [...PRODUCTION_GOOD_ORDER].reverse()) {
+    const recipe = GOOD_RECIPES[goodId];
+    if (!recipe) continue; // tier-0: no recipe, nothing to spill onto
+    const deficitMap = remainingByGood.get(goodId);
+    if (!deficitMap) continue;
+    for (const [systemId, shortfall] of deficitMap) {
+      if (shortfall <= 0) continue;
+      const site = working.get(systemId);
+      if (!site) continue;
+      for (const [input, ratio] of Object.entries(recipe)) {
+        if (!inputMissingAt(input, site, surplusSystemsByGood, routeCost)) continue;
+        const m = remainingByGood.get(input) ?? new Map<string, number>();
+        m.set(systemId, (m.get(systemId) ?? 0) + shortfall * ratio);
+        remainingByGood.set(input, m);
+      }
+    }
+  }
 
   // Precompute every candidate (site, good) opportunity once — the reachable deficit
   // list depends only on static route costs, so building it here (not per-build) keeps
