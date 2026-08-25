@@ -13,12 +13,13 @@ import type { BodyView } from "@/lib/types/api";
  * the same vocabulary the deposit list already uses), shown for every body including a locked
  * one — a lock states itself in its own badge, never by hiding the band. Locked bodies still show
  * their authored budgets/deposits: they're dark (present but non-functional) until a future
- * technology unlocks them, not absent. Extraction pooling (a body's contribution to the system's
- * shared deposit yield) is a performance concession, not a mechanic a body owns — it is never
- * shown here; see the deposit table's per-resource yield tag for the system-level read.
+ * technology unlocks them, not absent. Extraction YIELD (a percentage of normal) is a system-level
+ * story and is never shown here — see the deposit table's yield tag. Each deposit line does show
+ * this body's own worked/total slot count, though: physical occupancy of its own ground, not the
+ * system's blended yield.
  */
 export function BodyCard({ body }: { body: BodyView }) {
-  const features = bodyDepositFeatures(body.counts, body.quality);
+  const features = bodyDepositFeatures(body.counts, body.quality, body.workedCounts);
   const band = habitabilityScoreBand(body.score);
   return (
     <Card padding="sm" className={body.occupied ? "border-l-status-green" : undefined}>
@@ -55,6 +56,7 @@ export function BodyCard({ body }: { body: BodyView }) {
                 className={`inline-block h-1.5 w-1.5 shrink-0 ${QUALITY_BAND_DOT[f.band]}`}
               />
               <span className={QUALITY_BAND_TEXT[f.band]}>{f.name}</span>
+              <span className="ml-auto font-mono text-text-tertiary">{f.worked}/{f.total} worked</span>
             </li>
           ))}
         </ul>

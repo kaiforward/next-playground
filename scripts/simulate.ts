@@ -28,6 +28,7 @@
 import "dotenv/config";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 import { parse as parseYaml } from "yaml";
 import { runTickHarness } from "../lib/tick-harness/runner";
 import {
@@ -40,6 +41,7 @@ import {
 import type { PinnedRolesDocument } from "../lib/tick-harness/experiment";
 import { summarisePopulation, detectPingPong, summariseInfrastructure, summariseSupplyRegimes } from "../lib/tick-harness/population-analysis";
 import { summariseColonisation, summariseConstructionPool, CONSTRUCTION_WARMUP_TICKS } from "../lib/tick-harness/build-analysis";
+import type { TierZeroIdleSummary } from "../lib/tick-harness/build-analysis";
 import { LOGISTICS_WARMUP_TICKS } from "../lib/tick-harness/logistics-analysis";
 import { conservationGateFailure } from "../lib/tick-harness/conservation-analysis";
 import type { ConservationReport } from "../lib/tick-harness/conservation-analysis";
@@ -175,7 +177,26 @@ function fmtNum(n: number): string {
   return n.toFixed(0);
 }
 
-function formatTable(results: HarnessResults): string {
+/**
+ * Print lines for the tier-0 (extractor) idle-level read — one of the per-body-industry feature's
+ * two second-order health reads (the other, shed levels, is `episodeCosts`). A running idle
+ * countdown IS one whole idle level (`summariseTierZeroIdle`'s docstring), so the planner's
+ * assumed-1.0 tier-0 sizing over-serving a deficit under the worked-prefix fold shows up here as a
+ * nonzero count. Exported as its own function (rather than inlined into `formatTable`) so the
+ * printed text is unit-testable without constructing a full `HarnessResults` fixture.
+ */
+export function formatTierZeroIdle(t: TierZeroIdleSummary): string[] {
+  return [
+    "",
+    "Tier-0 Idle Levels — extractor levels currently sitting idle (whole run's final state):",
+    `  homeworld: ${fmtNum(t.homeworld.idleLevels)} idle levels over ${t.homeworld.systemsWithIdleTier0} ` +
+      `of ${t.homeworld.systemCount} systems`,
+    `  colony: ${fmtNum(t.colony.idleLevels)} idle levels over ${t.colony.systemsWithIdleTier0} ` +
+      `of ${t.colony.systemCount} systems`,
+  ];
+}
+
+export function formatTable(results: HarnessResults): string {
   const { marketHealth, roleCoverLevels, worldCohorts, eventImpacts, logisticsActivity, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, initialBuildingTotal, populationSnapshots } = results;
 
   // Computed once and reused by both the population/unrest and infrastructure
@@ -544,6 +565,8 @@ function formatTable(results: HarnessResults): string {
       ));
     }
   }
+
+  lines.push(...formatTierZeroIdle(results.tierZeroIdle));
 
   // The ratchet check — a positive slope (higher trailing Provision variance -> higher mean
   // grievance, at comparable Provision) is the memory rectifying jitter into permanent grievance,
@@ -1166,7 +1189,13 @@ async function main(): Promise<void> {
   failOnBrokenIdentities(conservation);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Guarded so the module can be imported for its pure formatters (e.g. `formatTierZeroIdle`) —
+// by a test, or any future caller — without running the whole CLI as a side effect of import.
+// `tsx scripts/simulate.ts` (the npm script) sets `process.argv[1]` to this file, so the URL
+// comparison is true only when the file is the actual entry point.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

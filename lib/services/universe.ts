@@ -1,20 +1,21 @@
 import { getWorld } from "@/lib/world/store";
-import { regionInfos, bodiesBySystem } from "./world-index";
+import { regionInfos, bodiesBySystem, buildingsBySystem } from "./world-index";
 import { ServiceError } from "./errors";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import type { UniverseData } from "@/lib/types/game";
 import type { SystemDetailData, SystemSubstrateData, SystemIndustryData, BodyView } from "@/lib/types/api";
-import { depositCountsOf, qualityOf, effOf } from "@/lib/engine/resources";
+import { depositCountsOf, qualityOf, effOf, RESOURCE_TYPES, emptyResourceVector } from "@/lib/engine/resources";
 import {
   capacityGoodRates,
   extractorsByResource,
   summariseSpace,
   summariseDeposits,
 } from "@/lib/engine/industry";
+import { workedByBody, toSlottedBody, potentialYieldByResource } from "@/lib/engine/worked-deposits";
 import { systemPopNeeds } from "@/lib/services/pop-needs";
 import { readSystemIndustry } from "@/lib/services/system-industry-readout";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
-import { occupiedBodyIds } from "@/lib/utils/substrate";
+import { occupiedBodyIds, potentialYieldRows } from "@/lib/utils/substrate";
 import { resolveEffectiveHabitabilityQuality } from "@/lib/engine/habitability";
 
 /**
@@ -117,8 +118,27 @@ export function getSystemSubstrate(systemId: string): SystemSubstrateData {
   // `frontierIndex` covers, never a second occupancy opinion.
   const occupied = occupiedBodyIds(occupancyBodies, effectiveQuality);
 
-  const bodies: BodyView[] = systemBodies.map((b) => {
+  // Per-body worked/total slot counts (`workedByBody`) — the astrography read of the same
+  // worked-prefix fold the deposit table's marginal/average figures come from, keyed by this
+  // array's own index since `.map(toSlottedBody)` preserves `systemBodies`' order exactly.
+  const buildings = buildingsBySystem().get(systemId) ?? {};
+  const slottedBodies = systemBodies.map(toSlottedBody);
+  const worked = workedByBody(slottedBodies, buildings);
+
+  // The Astrography potential-yield table's data — locked bodies included, so a player can judge
+  // what a system COULD be worth before colonising (`potentialYieldByResource`'s own docstring).
+  // `bodyIndex` is resolved to this system's own body ids/names by `potentialYieldRows`, given the
+  // SAME `systemBodies` order the engine fold was built from.
+  const potentialYields = potentialYieldRows(
+    potentialYieldByResource(slottedBodies),
+    systemBodies.map((b) => ({ id: b.id, archetypeName: BODY_ARCHETYPES[b.bodyType].name })),
+  );
+
+  const bodies: BodyView[] = systemBodies.map((b, i) => {
     const arch = BODY_ARCHETYPES[b.bodyType];
+    const workedEntry = worked[i];
+    const workedCounts = emptyResourceVector();
+    for (const r of RESOURCE_TYPES) workedCounts[r] = workedEntry?.[r]?.worked ?? 0;
     return {
       id: b.id,
       bodyType: b.bodyType,
@@ -127,6 +147,7 @@ export function getSystemSubstrate(systemId: string): SystemSubstrateData {
       locked: arch.techLocked,
       counts: depositCountsOf(b),
       quality: qualityOf(b),
+      workedCounts,
       peopleLand: b.peopleLand,
       occupied: occupied.has(b.id),
     };
@@ -137,6 +158,7 @@ export function getSystemSubstrate(systemId: string): SystemSubstrateData {
     sunClass: system.sunClass,
     peopleLand: system.peopleLand,
     bodies,
+    potentialYields,
   };
 }
 
@@ -162,6 +184,7 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
 
   const depositCounts = depositCountsOf(system);
   const worked = extractorsByResource(buildings);
+  const slottedBodies = (bodiesBySystem().get(systemId) ?? []).map(toSlottedBody);
 
   // The readout's labourAllocation IS the civilian demand basis — reuse it
   // rather than running a second labour pass for the needs read.
@@ -172,7 +195,7 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
     unrest: system.unrest,
     ...readout,
     space: summariseSpace(system.peopleLand, depositCounts, buildings),
-    deposits: summariseDeposits(depositCounts, worked, yields),
+    deposits: summariseDeposits(depositCounts, worked, yields, effOf(system), slottedBodies),
     goods: capacityGoodRates(buildings, system.population, yields, effOf(system)),
     popNeeds,
   };

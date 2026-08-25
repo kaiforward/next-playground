@@ -3,7 +3,7 @@ import {
   summariseColonisation, summariseConstructionPool, summariseBuildBursts,
   trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample, summariseFoundingStock,
   recordFoundingManifest, newFoundingStallTotals, recordFoundingStall, newInFlightEstablishTotals,
-  sampleOpenColonies, summariseFoundingLifecycle, summariseFounderCohort,
+  sampleOpenColonies, summariseFoundingLifecycle, summariseFounderCohort, summariseTierZeroIdle,
   foundingCadenceMarkTick, FOUNDING_CADENCE_MARK_SHARE, CONSTRUCTION_WARMUP_TICKS,
   newFoundingTrajectoryTotals, sampleFoundingTrajectory, summariseFoundingTrajectory,
   hasColonyInTrajectoryWindow, FOUNDING_TRAJECTORY_BUCKET_CYCLES, FOUNDING_TRAJECTORY_BUCKET_COUNT,
@@ -18,13 +18,18 @@ import type { FoundingStallEvent } from "@/lib/tick/types";
 import { EXPANSION } from "@/lib/constants/expansion";
 import {
   HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, HEAVY_INDUSTRY_COMPLEX,
-  CONSTRUCTION_CENTRE_TYPE,
+  CONSTRUCTION_CENTRE_TYPE, BUILDING_TYPES, labourTotal,
 } from "@/lib/constants/industry";
 import { CONSTRUCTION, workCostPerLevel } from "@/lib/constants/construction";
 import { unitResourceVector, emptyResourceVector, makeResourceVector } from "@/lib/engine/resources";
+import { computeSystemDecay } from "@/lib/engine/infrastructure-decay";
 import type { TickSystem } from "@/lib/tick/rows";
 import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
 import type { ResourceVector } from "@/lib/types/game";
+
+const oreDef = BUILDING_TYPES.ore;
+if (!oreDef?.labour) throw new Error("expected BUILDING_TYPES.ore.labour");
+const ORE_LABOUR = labourTotal(oreDef.labour);
 
 /**
  * Characterization tests for the colonisation / build-loop health summary. This is the
@@ -1196,6 +1201,81 @@ describe("summariseFounderCohort", () => {
     expect(summary.founder.meanRealisedProduction).toBe(0);
     expect(summary.founder.productionSuppressedShare).toBe(0);
     expect(summary.founder.idleSystemShare).toBe(0);
+    expect(JSON.parse(JSON.stringify(summary))).toEqual(summary);
+  });
+});
+
+describe("summariseTierZeroIdle", () => {
+  const sys = (
+    id: string,
+    control: SystemControl,
+    buildings: Record<string, number> = {},
+    idle: Record<string, number> = {},
+  ) => ({ id, control, buildings, buildingIdleCycles: idle });
+
+  it("reports a deliberately idle tier-0 extractor level, split homeworld vs colony", () => {
+    // hw: ore's idle countdown is running (>0) — one whole idle tier-0 level.
+    // c1: ore itself is calm (idleCycles 0); metals carries an idle countdown but is NOT tier-0
+    // (GOOD_TIER_BY_KEY), so it must not be counted.
+    const systems = [
+      sys("hw", "developed", { ore: 4 }, { ore: 2 }),
+      sys("c1", "developed", { ore: 2, metals: 1 }, { ore: 0, metals: 3 }),
+    ];
+    const summary = summariseTierZeroIdle(systems, new Set(["hw"]));
+    expect(summary.homeworld.systemCount).toBe(1);
+    expect(summary.homeworld.idleLevels).toBe(1);
+    expect(summary.homeworld.systemsWithIdleTier0).toBe(1);
+    expect(summary.colony.systemCount).toBe(1);
+    expect(summary.colony.idleLevels).toBe(0);
+    expect(summary.colony.systemsWithIdleTier0).toBe(0);
+  });
+
+  it("reports zero on a fully-utilised world, cross-checked against the decay engine's own teardown signal staying zero too", () => {
+    // The same "built = used, calm" fixture the decay engine's own test suite uses
+    // (lib/engine/__tests__/infrastructure-decay.test.ts) to prove nothing sheds: 2 ore levels
+    // fully staffed and selling. computeSystemDecay confirms the INDEPENDENT signal (whole levels
+    // torn down, and the idle countdown itself) both stay at zero for this exact state, so a
+    // summariseTierZeroIdle reading of zero over the same buildingIdleCycles input agrees with it
+    // rather than merely asserting its own output in isolation.
+    const decayResult = computeSystemDecay(
+      {
+        buildings: { ore: 2 },
+        buildingIdleCycles: {},
+        collapseDebt: 0,
+        population: 2 * ORE_LABOUR,
+        unrest: 0,
+        sellingFactor: () => 1,
+      },
+      { idleBufferCycles: 3, unrestThreshold: 0.75 },
+    );
+    expect(decayResult.newCounts).toEqual({}); // independent signal: nothing torn down
+    expect(decayResult.newIdleCycles).toEqual({}); // independent signal: idle countdown never armed
+
+    const summary = summariseTierZeroIdle(
+      [sys("c1", "developed", { ore: 2 }, { ore: 0 })],
+      new Set(),
+    );
+    expect(summary.colony.idleLevels).toBe(0);
+    expect(summary.colony.systemsWithIdleTier0).toBe(0);
+  });
+
+  it("ignores non-developed systems and zero/negative-count building entries", () => {
+    const summary = summariseTierZeroIdle(
+      [
+        sys("outpost", "controlled", { ore: 5 }, { ore: 9 }), // never developed — excluded entirely
+        sys("c1", "developed", { ore: 0, metals: -2 }, { ore: 9, metals: 9 }), // no positive tier-0 count
+      ],
+      new Set(),
+    );
+    expect(summary.colony.systemCount).toBe(1); // outpost excluded, c1 counted
+    expect(summary.colony.idleLevels).toBe(0);
+    expect(summary.colony.systemsWithIdleTier0).toBe(0);
+  });
+
+  it("reports an empty galaxy as zeroes that survive JSON, never NaN", () => {
+    const summary = summariseTierZeroIdle([], new Set());
+    expect(summary.homeworld).toEqual({ systemCount: 0, idleLevels: 0, systemsWithIdleTier0: 0 });
+    expect(summary.colony).toEqual({ systemCount: 0, idleLevels: 0, systemsWithIdleTier0: 0 });
     expect(JSON.parse(JSON.stringify(summary))).toEqual(summary);
   });
 });

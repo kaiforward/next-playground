@@ -13,6 +13,7 @@ function mkSys(p: Partial<GeneratedSystem> & { index: number }): GeneratedSystem
  peopleLand: 0,
     depositCounts: emptyResourceVector(), yieldMult: emptyResourceVector(),
     extractionEfficiency: emptyResourceVector(),
+    potentialYieldMult: emptyResourceVector(), potentialExtractionEfficiency: emptyResourceVector(),
     x: 0, y: 0, regionIndex: 0, isGateway: false, description: "",
     ...p,
   };

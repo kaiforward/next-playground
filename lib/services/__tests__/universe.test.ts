@@ -1,13 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld } from "@/lib/world/store";
-import { getUniverse, getSystemDetail, getSystemSubstrate } from "@/lib/services/universe";
+import { getUniverse, getSystemDetail, getSystemSubstrate, getSystemIndustry } from "@/lib/services/universe";
 import { getSystemPopulation } from "@/lib/services/system-population";
 import { ServiceError } from "@/lib/services/errors";
 import { regionInfos } from "@/lib/services/world-index";
 import { BODY_ARCHETYPES, HABITABILITY_THRESHOLD } from "@/lib/constants/bodies";
 import type { World } from "@/lib/world/types";
 import type { ResourceVector } from "@/lib/types/game";
+import { RESOURCE_TYPES } from "@/lib/engine/resources";
 
 let world: World;
 
@@ -133,6 +134,28 @@ describe("getSystemSubstrate", () => {
     expect(bodyView.counts).toEqual(expectedSlots);
     expect(bodyView.quality).toEqual(expectedQuality);
     expect(bodyView.peopleLand).toBe(body.peopleLand);
+
+    // workedCounts is per-resource slot occupancy on THIS body — never more than the body's own
+    // slot count, for every resource.
+    for (const r of RESOURCE_TYPES) {
+      expect(bodyView.workedCounts[r]).toBeGreaterThanOrEqual(0);
+      expect(bodyView.workedCounts[r]).toBeLessThanOrEqual(bodyView.counts[r]);
+    }
+  });
+
+  it("sums per-body workedCounts to the same worked-slot figure getSystemIndustry's deposit summary reads — one worked-prefix fold, not two", () => {
+    const system = [...world.systems].sort((a, b) => b.population - a.population)[0];
+    expect(system.population).toBeGreaterThan(0);
+
+    const substrate = getSystemSubstrate(system.id);
+    if (substrate.visibility !== "visible") throw new Error("expected visible");
+    const industry = getSystemIndustry(system.id);
+    if (industry.visibility !== "visible") throw new Error("expected visible");
+
+    for (const d of industry.deposits) {
+      const summedWorked = substrate.bodies.reduce((sum, b) => sum + b.workedCounts[d.resource], 0);
+      expect(summedWorked).toBe(d.worked);
+    }
   });
 
   it("marks occupied bodies from the cached fill-best-first fold, not every people-land body", () => {
@@ -236,6 +259,45 @@ describe("getSystemSubstrate", () => {
     if (data.visibility !== "visible") throw new Error("expected visible");
     expect(data.peopleLand).toBe(0);
     expect(Number.isNaN(data.peopleLand)).toBe(false);
+  });
+
+  it("potentialYields includes a locked body's deposit slots — an 'if everything was habitable' read distinct from the worked/industry figures, which never see it", () => {
+    // volcanic_world is tech-locked (`lib/constants/bodies.ts`) and authors ore/gas/minerals/
+    // radioactive deposits — a real locked archetype with real deposits, not a fixture bending the
+    // rule. Patch it onto a system with no pre-existing locked ore deposit so this body is the
+    // ENTIRE source of any locked ore contribution — nothing else could produce this result.
+    const system = world.systems.find((s) => !world.bodies.some((b) => b.systemId === s.id
+      && BODY_ARCHETYPES[b.bodyType].techLocked && b.countOre > 0))!;
+    expect(system).toBeDefined();
+    const existing = world.bodies.find((b) => b.systemId === system.id)!;
+    const lockedOre: World["bodies"][number] = {
+      ...existing, id: "locked-ore-body", systemId: system.id, bodyType: "volcanic_world",
+      countOre: 4, qualOre: 0.6, peopleLand: 0,
+    };
+    const patched: World = { ...world, bodies: [...world.bodies, lockedOre] };
+    setWorld(patched);
+
+    const data = getSystemSubstrate(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+
+    const oreRow = data.potentialYields.find((r) => r.resource === "ore")!;
+    expect(oreRow).toBeDefined();
+    const lockedEntry = oreRow.byBody.find((b) => b.bodyId === "locked-ore-body")!;
+    expect(lockedEntry).toBeDefined();
+    expect(lockedEntry.locked).toBe(true);
+    expect(lockedEntry.slotCount).toBe(4);
+    expect(lockedEntry.archetypeName).toBe(BODY_ARCHETYPES.volcanic_world.name);
+
+    // The locked body never appears in this body's own worked/current-yield read — it's dark, not
+    // part of any workable prefix.
+    const lockedBodyView = data.bodies.find((b) => b.id === "locked-ore-body")!;
+    expect(lockedBodyView.workedCounts.ore).toBe(0);
+
+    // A resource nobody deposits (neither locked nor unlocked) never renders a row at all.
+    const anyOreOrRadioactive = data.bodies.some((b) => b.counts.gas > 0);
+    if (!anyOreOrRadioactive) {
+      expect(data.potentialYields.find((r) => r.resource === "gas")).toBeUndefined();
+    }
   });
 
   it('throws ServiceError("not_found") for an unknown system', () => {

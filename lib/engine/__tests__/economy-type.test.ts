@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { deriveEconomyTypeLabel } from "../economy-type";
 import { makeResourceVector, unitResourceVector } from "../resources";
 
-// The classifier reads the effective deposit potential (depositCounts[r] × yieldMult[r]).
+// The classifier reads the effective deposit potential (depositCounts[r] × potentialYieldMult[r]).
 // Passing unit yields makes the effective vector equal the depositCounts, so these cases
 // exercise the threshold logic on a known vector exactly as the legacy aggregate did.
 const UNIT = unitResourceVector();
@@ -42,7 +42,7 @@ describe("deriveEconomyTypeLabel", () => {
       .toBe("tech");
   });
 
-  it("reads the effective potential — yieldMult scales the depositCounts", () => {
+  it("reads the effective potential — potentialYieldMult scales the depositCounts", () => {
     // A slot-rich-but-poor-quality ore world reads low-potential; a high yield on
     // ore lifts the effective ore share so a balanced depositCounts reads extraction.
     const depositCounts = makeResourceVector({ ore: 4, water: 4 });

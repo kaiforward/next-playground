@@ -7,7 +7,8 @@
 > consumption and pricing, and [colonisation.md](./colonisation.md) covers claims, founding and
 > abandonment.
 > Implementation: `lib/constants/bodies.ts` (archetype table), `lib/engine/body-gen.ts`
-> (generation), `lib/engine/habitability.ts` (fill-best-first quality), `lib/engine/population.ts`
+> (generation), `lib/engine/habitability.ts` (fill-best-first quality),
+> `lib/engine/worked-deposits.ts` (worked-prefix extraction fold), `lib/engine/population.ts`
 > (growth coupling), `lib/services/colony-eligibility.ts` (colonisability).
 
 ---
@@ -18,9 +19,11 @@ Habitable worlds are rare and big, and a world's nature means something. Each bo
 class on a freezing→volcanic spectrum, and each class carries a **habitability score** against the
 default population's preference. Only bodies whose score clears a threshold contribute **habitable
 land** — the budget housing draws on. Every body, habitable or not, carries a handful of **authored
-deposit counts** per resource it hosts. A colonised system works the deposits on all its bodies;
-population fills its best land first, so a colony's growth rate is a direct read of how good its
-occupied land actually is. Systems that decline to empty end, famine or not.
+deposit counts** per resource it hosts. A colonised system works its best deposits first — built
+extractor levels are deemed to work the highest-value slots across a resource's hosting bodies, so
+yield is the worked-prefix mean of the ground those extractors actually sit on, never diluted by
+unworked ground — and population fills its best land first, so a colony's growth rate is a direct
+read of how good its occupied land actually is. Systems that decline to empty end, famine or not.
 
 Industry buildings — factories, academies, complexes and construction centres — **bill no land
 at all**; labour, demand and decay bound them instead (see "Why industry bills no land" below).
@@ -106,32 +109,57 @@ premise ("extractor count is deposit-capped") is true for the first time.
 ### Deposit quality
 
 Each authored deposit count carries its own **quality band** (poor / average / good / rich), rolled
-independently per resource per body (`rollQualityBand`, `lib/engine/substrate-space.ts`) and folded
-into `yieldMult` — the pure ground-grade multiplier a resource's worked extractors read
-(`depositGradeVector`, `lib/engine/deposit-grade.ts`). A deposit's display name is generated from its
-band + resource (e.g. "rich ore deposit", "marginal water-ice seam") rather than drawn from a
+independently per resource per body (`rollQualityBand`, `lib/engine/substrate-space.ts`). A band
+feeds the **grade term of a slot's ground value** (`quality × archetype extractionModifier`,
+`lib/engine/worked-deposits.ts`) — the figure a worked extractor on that specific deposit actually
+realises (see "Extraction and the worked prefix" below). `depositGradeVector` still exists, but now
+produces the separate all-bodies POTENTIAL pool consumed only by the economy-type label
+(`lib/engine/body-gen.ts`'s `substrateAggregates`) — a static "what's in the ground galaxy-wide"
+figure, never the worked-prefix number production reads. A deposit's display name is generated from
+its band + resource (e.g. "rich ore deposit", "marginal water-ice seam") rather than drawn from a
 curated proper-noun catalog, so every band × resource pair reads naturally without hand-authoring
 one. Quality bands are unchanged by the habitability retune — only how much of each resource a body
 carries (an authored integer count, not a slot cap derived from body size) changed.
 
 ---
 
-## Extraction pooling
+## Extraction and the worked prefix
 
-Extractors bill deposit counts, but the *yield* they achieve is a per-system pool, fixed at
-generation: `extractionEfficiency[resource]` is the deposit-count-weighted mean of each
-contributing unlocked body's `extractionModifier` (`lib/engine/body-gen.ts`,
-`extractionEfficiencyVector`), and reads 1.0 where the system has no counts for that resource.
-Tier-0 output multiplies count × `yieldMult` (the deposit's ground-grade quality, unchanged in
-meaning) × `extractionEfficiency`. Because pooling happens once at generation across a system's
-bodies rather than per placed extractor, a body's habitability modifier is a **contribution weight**
-to the system's shared yield, not the yield of an extractor physically placed there — a body's own
-deposit list is presented per-body in the Astrography panel, but the pooled efficiency read lives
-at the system-level deposit table, not restated per body.
+Extractors bill deposit counts, but the *yield* they achieve reads only the ground they actually
+work. A **slot** is one authored deposit of a resource on one unlocked body — a body with a count
+of 3 for ore contributes three ore slots, each carrying that body's quality band and its
+archetype's `extractionModifier`. A slot's **ground value** is `quality × extractionModifier`, the
+yield an extractor working that specific deposit would realise. Slots for a (system, resource) pair
+sort by ground value descending, ties broken by the hosting body's generation order — the **slot
+order**. The **worked prefix** is the first `n` slots of that order, where `n` is the system's built
+extractor level count for the resource (the same figure the build cap enforces). Tier-0 output reads
+the **worked-prefix mean of ground values**: extractors are deemed to work the system's best ground
+first, so a system with one rich deposit and several poor ones reads like a colony built on the rich
+one, never diluted by ground nobody has built on.
 
-Tech-locked classes contribute zero counts, zero extraction-efficiency weight and zero habitable
-land to every aggregate; locks only ever *release* (unlock re-aggregates the bodies), and there is
-no unlock mechanic shipped yet — `[PENDING: technology]`.
+Storage keeps the read site's two-column shape (`extractionEfficiency` × `yieldMult`) and their
+authored meanings: `extractionEfficiency` holds the worked-prefix mean of `extractionModifier`
+alone, and `yieldMult` is derived so the product of the two equals the worked-prefix mean of ground
+values exactly (`lib/engine/worked-deposits.ts`). At `n = 0` with deposits present, both columns
+read the single best slot in the order — the yield the first extractor would get — rather than a
+mean; neutral 1.0 keeps its own separate meaning, "no deposits of this resource at all". The columns
+are a derived cache, not a fixed pool: generation writes them, a build landing, a decay shed or an
+abandonment wipe refolds the affected (system, resource) pair at the mutation site, and load
+rebuilds every system's columns before the first tick runs — so a save from before this model reads
+correctly the moment it loads.
+
+**Surfaces:** an Industry deposit-table row shows one figure — the worked-prefix mean ground value
+(`yields × extractionEff`) as a percentage of normal, band-coloured. The row's tooltip is the
+explanation surface: the same combined figure, then which bodies are actually contributing worked
+ground and at what value each, then what the next extractor built here would realise (or that
+nothing is left to build on). Astrography body cards show worked/total slots per deposit, so the
+per-body story in the panel matches the number the tick uses.
+
+Tech-locked classes contribute zero slots to every resource, and there is no unlock mechanic
+shipped yet — `[PENDING: technology]`. **Unlocking is monotone non-decreasing on realised yield:**
+a newly unlocked body's slots insert wherever their ground value falls in the order, and since the
+worked set is always the top-`n` slots by ground value, adding candidates to that pool can only
+raise or hold the mean of the top `n` — an unlock can never cut an existing extractor's output.
 
 ---
 
@@ -205,7 +233,12 @@ specialisation complex's own cost over the demand it would actually serve) divid
 demand-weighted proximity sum, so a big shortfall justifies standing up a new complex and a small
 one doesn't, and projected staffing of the marginal unit keeps an unstaffable site from
 outranking a staffed hub. Tier-0 (deposit-capacity) scoring is unchanged (`lib/engine/
-directed-build.ts`, the opportunity-score branch).
+directed-build.ts`, the opportunity-score branch) — and stays **yield-blind**: it reads no ground
+value at all, worked or marginal. Under the worked prefix, the sign of a site's marginal value can
+flip relative to what a pooled read would have said — a site that looked worse under the old
+system-wide pool can be strictly better marginal ground, and vice versa — and the planner cannot
+see either direction. Yield-aware sizing is booked on the necessity-weighting build-planner roadmap
+row, not shipped here.
 
 ---
 

@@ -51,13 +51,17 @@ import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { CONSTRUCTION } from "@/lib/constants/construction";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
-import { depositCountsOf, yieldsOf, effOf, RESOURCE_TYPES } from "@/lib/engine/resources";
+import {
+  depositCountsOf, yieldsOf, effOf, yieldColumns, effColumns, RESOURCE_TYPES,
+} from "@/lib/engine/resources";
+import { workedYieldVectors, slottedBodiesBySystem, type SlottedBody } from "@/lib/engine/worked-deposits";
+import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import { isContributingBody } from "@/lib/engine/habitability";
 import { hopRouteCost, type ColonyEstablishCandidate } from "@/lib/engine/directed-build";
 import type { ClaimCandidate } from "@/lib/engine/expansion";
 import { housingPopCap } from "@/lib/engine/industry";
-import { HOUSING_TYPE, effectiveSpaceCost } from "@/lib/constants/industry";
+import { BUILDING_TYPES, HOUSING_TYPE, effectiveSpaceCost } from "@/lib/constants/industry";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
 import { isEconomicallyActive } from "@/lib/engine/control";
@@ -69,7 +73,7 @@ import type { EdgeView } from "@/lib/tick/world/trade-flow-topology";
 import type { ReachableSystemIds, RouteCost } from "@/lib/engine/directed-logistics";
 import type { EventDefinition, EventPhaseDefinition, EventTypeId } from "@/lib/constants/events";
 import { buildModifiersForPhase } from "@/lib/engine/events";
-import type { GovernmentType } from "@/lib/types/game";
+import type { GovernmentType, ResourceVector } from "@/lib/types/game";
 
 import { runShipArrivalsProcessor } from "@/lib/tick/processors/ship-arrivals";
 import { runEventsProcessor } from "@/lib/tick/processors/events";
@@ -260,6 +264,72 @@ export function toTickSystems(world: World): TickSystem[] {
   });
 }
 
+// ── Worked-deposit refold (the tick's only writer of the yield*/eff* columns) ──
+//
+// A system's realised extraction multiplier is the mean ground value over its WORKED prefix — the
+// first `n` deposit slots of the fill order, `n` being its built tier-0 extractor level count
+// (`lib/engine/worked-deposits.ts`). So the two columns are a cache of (bodies × extractor counts),
+// and they go stale the moment a count moves: a landed build level, a decay shed, or an abandonment
+// wipe. All three mutation sites refold the affected systems here, from `world.bodies` read AT THE
+// SITE — deliberately not joined onto every row in `toTickSystems`, which is what keeps the per-tick
+// join cost flat. Every other tick reads the cached columns exactly as before.
+
+/** Component-wise identity of two resource vectors — the refold's no-op guard. */
+function resourceVectorsEqual(a: ResourceVector, b: ResourceVector): boolean {
+  for (const r of RESOURCE_TYPES) if (a[r] !== b[r]) return false;
+  return true;
+}
+
+/**
+ * True for a tier-0 extractor type — the only builds whose count moves a worked prefix (housing,
+ * academies, complexes and construction centres work no deposits). Same two facts
+ * `extractorsOnResource` (`lib/engine/directed-build.ts`) reads to count the prefix, so a type that
+ * counts there is a type that triggers here.
+ */
+function isTierZeroExtractor(buildingType: string): boolean {
+  return GOOD_TIER_BY_KEY[buildingType] === 0 && BUILDING_TYPES[buildingType]?.resource !== undefined;
+}
+
+/** The systems in `updates` that landed at least one tier-0 extractor level. */
+export function extractorUpdateSystemIds(updates: BuildBuildingUpdate[]): Set<string> {
+  const ids = new Set<string>();
+  for (const u of updates) if (isTierZeroExtractor(u.buildingType)) ids.add(u.systemId);
+  return ids;
+}
+
+/**
+ * Refold `yields`/`extractionEff` for each candidate system from its CURRENT building roster, using
+ * the per-body inputs in `bodiesBySystem`. All seven resources of a candidate are refolded together
+ * (the fold is one pass over ≤~8 bodies); systems outside the candidate set are never folded.
+ *
+ * A row whose fold reproduces the vectors it already carries is returned untouched — identity, not a
+ * fresh copy holding equal numbers. That is what keeps a candidate set that is a SUPERSET of the
+ * systems whose tier-0 counts really moved (the decay site's, which reports levels rather than
+ * types) from churning columns.
+ */
+export function refoldWorkedYields(
+  systems: TickSystem[],
+  candidateSystemIds: Set<string>,
+  bodiesBySystem: Map<string, SlottedBody[]>,
+): TickSystem[] {
+  if (candidateSystemIds.size === 0) return systems;
+  return systems.map((s) => {
+    if (!candidateSystemIds.has(s.id)) return s;
+    const bodies = bodiesBySystem.get(s.id);
+    // No bodies means no slots, and the fold's neutral 1.0 is not a reading this row earned — a
+    // body-less system keeps whatever its columns already hold.
+    if (bodies === undefined || bodies.length === 0) return s;
+    const worked = workedYieldVectors(bodies, s.buildings);
+    if (
+      resourceVectorsEqual(worked.yieldMult, s.yields)
+      && resourceVectorsEqual(worked.eff, s.extractionEff)
+    ) {
+      return s;
+    }
+    return { ...s, yields: worked.yieldMult, extractionEff: worked.eff };
+  });
+}
+
 // ── Tick → World row merges (write only the fields tick processors mutate;
 // everything else is immutable substrate) ──────────────────────
 
@@ -278,6 +348,12 @@ function mergeSystemsIntoWorld(worldSystems: WorldSystem[], tickSystems: TickSys
       popCap: tickSystem.popCap,
       unrest: tickSystem.unrest,
       collapseDebt: tickSystem.collapseDebt,
+      // The worked-prefix columns. Carried for EVERY system, not just the refolded ones: the row's
+      // vectors were read straight off these same columns by `toTickSystems`, so an untouched system
+      // writes back exactly what it held (no churn), and a refolded one cannot silently lose its
+      // recompute at the merge — the failure this write exists to close.
+      ...yieldColumns(tickSystem.yields),
+      ...effColumns(tickSystem.extractionEff),
     };
     // Written via delete/assign rather than `provisionExpectation: tickSystem.provisionExpectation`
     // in the object literal above: the latter would leave the KEY present with value `undefined`
@@ -1129,6 +1205,16 @@ export async function runWorldTick(
 
   const newTickCtx = (): TickContext => ({ tick, results: new Map() });
 
+  // The worked-deposit refold's per-body inputs, built lazily: a tick where no tier-0 extractor
+  // count moves never touches `world.bodies` at all, and a tick where both sites fire builds the
+  // grouping once. `world.bodies` is immutable substrate — no stage writes it — so one grouping is
+  // valid for the whole tick.
+  let slottedBodyCache: Map<string, SlottedBody[]> | undefined;
+  const slottedBodies = (): Map<string, SlottedBody[]> => {
+    slottedBodyCache ??= slottedBodiesBySystem(world.bodies);
+    return slottedBodyCache;
+  };
+
   // ── latched treasury funding (read at tick START = last settlement's latch;
   // the treasury stage settles LAST, so every consumer below runs one cycle
   // behind — the accepted funding lag, same shape as construction's). Built
@@ -1274,8 +1360,11 @@ export async function runWorldTick(
   }
 
   // ── infrastructure-decay ──
-  // Calibration-only: per-cycle whole building levels torn down, keyed by system (both decay
-  // channels combined). Declared here, read only by the final `instrumentation` return below.
+  // Per-cycle whole building levels torn down, keyed by system (both decay channels combined).
+  // Declared here for two readers: the final `instrumentation` return below (calibration-only), and
+  // the worked-yield refold just below the processor call, which folds every system whose keys
+  // appear here (a superset of the systems whose tier-0 extractor counts actually moved — see that
+  // call site's own comment).
   let teardownLevelsBySystem: TickInstrumentation["teardownLevelsBySystem"];
   if (economySignals) {
     const logisticsFundingBoundBySystem = new Map<string, Set<string>>();
@@ -1298,6 +1387,13 @@ export async function runWorldTick(
     );
     systems = decayWorld.systems;
     teardownLevelsBySystem = decayResult.teardownLevelsBySystem;
+    // The refold's decay-shed site: a shed tier-0 level shortens the worked prefix, dropping the
+    // WORST ground first. The teardown map reports levels lost per system, not which types lost
+    // them, so its keys are a superset of the systems whose extractor counts moved — a housing-only
+    // shed folds to the vectors the row already carries and `refoldWorkedYields` leaves it alone.
+    if (teardownLevelsBySystem !== undefined && teardownLevelsBySystem.size > 0) {
+      systems = refoldWorkedYields(systems, new Set(teardownLevelsBySystem.keys()), slottedBodies());
+    }
     processorsRun.push("infrastructure-decay");
   }
 
@@ -1355,6 +1451,13 @@ export async function runWorldTick(
     systems = applyAbandonments(systems, abandonedSystemIds);
     markets = resetAbandonedMarkets(markets, abandonedSystemIds);
     constructionProjects = dropAbandonedBuildProjects(constructionProjects, abandonedSystemIds);
+    // The refold's abandonment-wipe site: `applyAbandonments` clears `buildings` to `{}`, dropping
+    // every tier-0 extractor count to 0 — refolded AFTER the wipe so `n = 0` folds to the best-ground
+    // slot on each resource, the same convention the load hook (`rebuildWorkedYieldColumns`,
+    // `lib/world/save.ts`) applies to a fresh read. Without this, an abandoned system's columns would
+    // keep the dead colony's worked-prefix reading indefinitely (the resettlement rule everywhere
+    // else on this row — see `applyAbandonments`'s own docstring — applies here too).
+    systems = refoldWorkedYields(systems, new Set(abandonedSystemIds), slottedBodies());
   }
 
   // ── cycle start: migration, directed-logistics, directed-build (cycle-start-gated) ──
@@ -1656,6 +1759,13 @@ export async function runWorldTick(
             : undefined,
       });
       systems = applyBuildingIncreases(systems, dbWorld.buildingUpdates);
+      // The refold's build-landing site: a landed tier-0 level lengthens the worked prefix onto the
+      // next-best ground. Only extractor landings qualify — a housing/academy/complex/centre build
+      // never enters the candidate set, so it cannot move a column.
+      const extractorSystemIds = extractorUpdateSystemIds(dbWorld.buildingUpdates);
+      if (extractorSystemIds.size > 0) {
+        systems = refoldWorkedYields(systems, extractorSystemIds, slottedBodies());
+      }
       systems = applyClaims(systems, dbWorld.claims);
       // Before applyDevelopments: a system founded this very run was still `controlled` when
       // directed-build's own visited set was captured, so it is cleared here (nothing dropped for a

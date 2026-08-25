@@ -61,9 +61,10 @@ export type YieldColumns = {
 };
 
 /**
- * A system's per-resource extraction-work efficiency — the deposit-count-weighted mean of the
- * contributing bodies' `extractionModifier`, kept as its OWN aggregate never folded into
- * `yieldMult` (see `lib/constants/bodies.ts` and `substrateAggregates`).
+ * A system's per-resource extraction-work efficiency — the worked-prefix mean of the hosting
+ * bodies' `extractionModifier`, kept as its OWN aggregate never folded into the yield columns
+ * (see `lib/constants/bodies.ts` and `lib/engine/worked-deposits.ts`; the all-bodies pool
+ * lives on as `substrateAggregates`' `potentialExtractionEfficiency`).
  */
 export type EffColumns = {
   effGas: number; effMinerals: number; effOre: number; effBiomass: number;

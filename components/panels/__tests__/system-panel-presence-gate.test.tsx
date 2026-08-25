@@ -81,10 +81,12 @@ const VISIBLE_SUBSTRATE: SystemSubstrateData = {
       locked: false,
       counts: ZERO_RESOURCES,
       quality: ZERO_RESOURCES,
+      workedCounts: ZERO_RESOURCES,
       peopleLand: 0,
       occupied: false,
     },
   ],
+  potentialYields: [],
 };
 
 function renderPanel(systemId: string) {

@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatList, StatRow } from "@/components/ui/stat-row";
 import { StarGlyph } from "@/components/system/star-glyph";
 import { BodyCard } from "@/components/system/body-card";
+import { PotentialYieldTable } from "@/components/system/potential-yield-table";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
 
 /** Moved from `app/(game)/@panel/system/[systemId]/astrography/page.tsx`. */
@@ -26,7 +27,7 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
     );
   }
 
-  const { sunClass, peopleLand, bodies } = substrate;
+  const { sunClass, peopleLand, bodies, potentialYields } = substrate;
   const habitabilityPct = pop.visibility === "visible" ? Math.round(pop.growthMultiplier * 100) : undefined;
 
   return (
@@ -56,6 +57,19 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
           )}
         </StatList>
       </Card>
+
+      {/* Potential yield — what this system COULD produce, locked bodies included; never what its
+          extractors currently realise (that stays the industry panel's worked-prefix yield). */}
+      {potentialYields.length > 0 && (
+        <Card variant="bordered" padding="md">
+          <SectionHeader className="mb-1">Potential yield</SectionHeader>
+          <p className="mb-3 text-xs text-text-tertiary">
+            What this system could produce if every body here were fully developed — not what it
+            produces today.
+          </p>
+          <PotentialYieldTable rows={potentialYields} />
+        </Card>
+      )}
 
       {/* Bodies */}
       <div>

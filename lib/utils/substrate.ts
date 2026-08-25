@@ -2,6 +2,7 @@ import { RESOURCE_TYPES } from "@/lib/engine/resources";
 import { bandForMultiplier, depositDisplayName } from "@/lib/engine/substrate-space";
 import { HABITABILITY_THRESHOLD } from "@/lib/constants/bodies";
 import { contributingBodiesSorted } from "@/lib/engine/habitability";
+import type { PotentialYieldRow } from "@/lib/engine/worked-deposits";
 import type { QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
 
 /** One body's deposit as a named physical feature — astrography flavour. */
@@ -10,19 +11,29 @@ export interface DepositFeature {
   band: QualityBandId;
   /** Generated display name, e.g. "Rich ore body". */
   name: string;
+  /** Slots of this deposit inside the system's current worked prefix — the physical occupancy of
+   *  THIS body's own ground, never a yield percentage (that stays system-level, see body-card.tsx). */
+  worked: number;
+  /** Total slots authored on this body — same figure as `slots[resource]`, carried per-feature so
+   *  the render site never re-indexes the vector. */
+  total: number;
 }
 
 /**
  * The deposits physically present on one body, as named features ordered
  * richest-first. This is the static intrinsic grade ("what is in the ground") —
- * distinct from the industry panel's worked-slot / effective-yield view. A
- * resource with no slots on the body is absent.
+ * distinct from the industry panel's system-level effective-yield view. A
+ * resource with no slots on the body is absent. `worked` is per-body slot occupancy
+ * (`workedByBody`, `lib/engine/worked-deposits.ts`) — a physical fact about this body,
+ * not the system's blended yield.
  */
-export function bodyDepositFeatures(slots: ResourceVector, quality: ResourceVector): DepositFeature[] {
+export function bodyDepositFeatures(
+  slots: ResourceVector, quality: ResourceVector, worked: ResourceVector,
+): DepositFeature[] {
   return RESOURCE_TYPES.filter((r) => slots[r] > 0)
     .map((r) => {
       const band = bandForMultiplier(quality[r]);
-      return { resource: r, band, name: depositDisplayName(r, band) };
+      return { resource: r, band, name: depositDisplayName(r, band), worked: worked[r], total: slots[r] };
     })
     .sort((a, b) => quality[b.resource] - quality[a.resource]);
 }
@@ -77,6 +88,62 @@ export function occupiedBodyIds(
   if (!habitabilityQuality) return new Set();
   const contributing = contributingBodiesSorted(bodies);
   return new Set(contributing.slice(0, habitabilityQuality.frontierIndex + 1).map((b) => b.id));
+}
+
+/** One body's identity for resolving `potentialYieldByResource`'s bare `bodyIndex` back to
+ *  something a player reads — same array, same order the engine fold was given. */
+export interface PotentialYieldBodyIdentity {
+  id: string;
+  archetypeName: string;
+}
+
+/** One body's contribution to a resource's potential-yield row — the Astrography potential-yield
+ *  table's per-body breakdown. `groundValue` is the modifier this body's slots realise (quality ×
+ *  its archetype's extraction modifier), not a system-blended figure. */
+export interface PotentialYieldBodyView {
+  bodyId: string;
+  archetypeName: string;
+  slotCount: number;
+  groundValue: number;
+  locked: boolean;
+}
+
+/** One resource's potential-yield row: the mean ground value over every deposit slot in the
+ *  system — locked bodies included — plus the total slot count, its quality band (same band
+ *  vocabulary the deposit table already uses), and a per-body breakdown. Absent entirely for a
+ *  resource with no slots anywhere in the system (`potentialYieldByResource` never emits a zero
+ *  row). */
+export interface PotentialYieldRowView {
+  resource: ResourceType;
+  yieldMult: number;
+  slotCount: number;
+  band: QualityBandId;
+  byBody: PotentialYieldBodyView[];
+}
+
+/**
+ * Resolves the engine fold's `PotentialYieldRow[]` (bare `bodyIndex`) against a system's own
+ * bodies, in the SAME order the fold was given them, into the Astrography table's presentation
+ * shape — band-coloured, body identity resolved, still richest-slot-first inside each row's
+ * `byBody` (the fold already sorted slots that way).
+ */
+export function potentialYieldRows(
+  rows: PotentialYieldRow[],
+  bodies: PotentialYieldBodyIdentity[],
+): PotentialYieldRowView[] {
+  return rows.map((r) => ({
+    resource: r.resource,
+    yieldMult: r.yieldMult,
+    slotCount: r.slotCount,
+    band: bandForMultiplier(r.yieldMult),
+    byBody: r.byBody.map((b) => ({
+      bodyId: bodies[b.bodyIndex].id,
+      archetypeName: bodies[b.bodyIndex].archetypeName,
+      slotCount: b.slotCount,
+      groundValue: b.groundValue,
+      locked: b.locked,
+    })),
+  }));
 }
 
 /** One people-land-contributing body's static identity for the fill-order decomposition —

@@ -13,6 +13,8 @@ const deposit = (resource: SystemDepositSummary["resource"], depositCounts: numb
   depositCounts,
   worked: 0,
   yieldMult: 1,
+  marginal: null,
+  workedByBody: [],
   band: "average",
 });
 const extractor = (
@@ -53,6 +55,21 @@ describe("depositRows", () => {
     // 1.9/2.0 → floor(0.1) = 0 idle levels → stable (the engine never sheds a sub-unit gap).
     const rows = depositRows([deposit("arable", 4)], [extractor("food", 2, 1.9, 8)], 0, T);
     expect(rows[0].health).toBe("stable");
+  });
+
+  it("threads the deposit summary's marginal straight onto the row", () => {
+    const withMarginal: SystemDepositSummary = { ...deposit("ore", 5), marginal: { groundValue: 0.72, bodyType: "barren_rock" } };
+    const rows = depositRows([withMarginal], [], 0, T);
+    expect(rows[0].marginal).toEqual({ groundValue: 0.72, bodyType: "barren_rock" });
+  });
+
+  it("threads the deposit summary's workedByBody straight onto the row", () => {
+    const withWorkedByBody: SystemDepositSummary = {
+      ...deposit("ore", 5),
+      workedByBody: [{ bodyType: "temperate_world", worked: 2, groundValue: 0.9 }],
+    };
+    const rows = depositRows([withWorkedByBody], [], 0, T);
+    expect(rows[0].workedByBody).toEqual([{ bodyType: "temperate_world", worked: 2, groundValue: 0.9 }]);
   });
 
   it("drops zero-slot resources; an undeveloped deposit reads stable with zero work", () => {

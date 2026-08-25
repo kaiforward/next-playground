@@ -16,20 +16,13 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-1. **[M] Bodies and the mechanics above them — the per-body industry question.** Booked from the
-  habitability-seeding Gate D discussion (Kai, 2026-08-24); the generation work and the two-budget
-  space model are settled — this row is about how bodies compose with mechanics built on top.
-  Today extraction pools per-system (count-weighted yield fixed at generation) and space/occupancy
-  accounting is system-level, which reads confusingly at the edges: if a tundra world hosts the
-  system's only radioactive deposit, the extractor physically belongs there, yet its land bills
-  against the system's occupied worlds. Question: is there a performant way to know where industry
-  actually sits per body — which would also unlock per-body yield instead of the game-start pool?
-  Interacts with the tech-unlock yield-dilution input on the growth-gated-behind-technology row
-  above (a per-body model dissolves that hazard; a frozen-at-start pool sidesteps it).
-  *Next step:* /brainstorm. Queued ahead of logistics by owner decision (2026-08-24): the
-  logistics mechanics build on bodies, so this discussion lands first.
-  *Don't:* re-litigate the two-budget generation model or the deleted industry-land budget; both
-  are settled and orthogonal to where industry physically sits.
+1. **[M] Visual system view — bodies as a spatial layout inside the system detail panel.** A simple
+  2D/3D view alongside (not replacing) the body cards, so a system's bodies read as a place instead
+  of a list — popovers on each body surface its score, lock state, occupancy and worked/total
+  deposits. Consumes the engine's `workedByBody` read (`lib/engine/worked-deposits.ts`), which
+  already returns per-body, per-resource worked/total slot counts. UI-heavy: gets the
+  browser-viewable HTML prototype pass approved before implementation (AGENTS.md, UI/dataviz).
+  *Next step:* prototype pass.
 2. **[S] Abandonment warning for non-famine decline — a let-through bug, not a feature ask.**
   Found at the habitability-seeding uber-review (2026-08-24): Abandonment Rule 2 fires on
   below-floor population alone, but the player-facing countdown (`lib/services/alerts.ts`, the
@@ -74,17 +67,12 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   dead, and they compose with (rather than replace) the shipped viability cut. Overlaps the
   control-shaped **claim pricing** item in
   [player-seat-roadmap.md](./planned/player-seat-roadmap.md) — settle the two together, not twice.
-  **Design input for the unlock mechanic (Kai, 2026-08-24):** per-resource extraction yield is
-  the deposit-count-weighted mean of `extractionModifier` over UNLOCKED bodies
-  (`lib/engine/body-gen.ts:190-198`), and live extractor output reads it at tick time — so
-  unlocking a low-modifier, deposit-heavy body would immediately reduce every existing
-  extractor's output in that system (capacity up, current production down: a felt penalty for
-  progress, worst on heavy extractors). Cannot fire today (no unlock mechanic; the pool is
-  fixed at generation). Options for the design pass: freeze efficiency per built extractor;
-  pool per body instead of per system where unlocks make the concession gameplay-visible; or
-  make unlocking an explicit player choice so the dilution trade is theirs. Interacts with the
-  per-body-industry row below (a per-body model dissolves this hazard; a frozen-at-start pool
-  sidesteps it).
+  **Unlock-dilution hazard: dissolved by construction, not by this row.** Extraction yield reads
+  the worked-prefix mean of ground value (quality × `extractionModifier`) over the deposit slots a
+  resource's built extractor levels actually work, best ground first
+  (`lib/engine/worked-deposits.ts`) — so unlocking a body only ever adds candidate slots to that
+  order, and adding candidates to a top-`n` mean can only raise or hold it. A future unlock can
+  never cut an existing extractor's output; no design lever is needed here.
   **Honest dependency:** there is no technology or progression system in the codebase today — a grep
   for terraforming or technology finds only event and faction flavour text. "Gated behind
   technology" is therefore a new system, not a constant change, and the sequencing of the two is
@@ -148,6 +136,12 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   raises food builds on its own, and what is missing is the *tiebreak* when several goods are short at
   once. And the unit bias that skews the ranking toward bulk goods is **13×** (`ship_frames` 0.6 →
   `gas` 8.0 across all 26 goods), not the "orders of magnitude" an earlier finding claimed.
+  **Also fold in: tier-0 yield-awareness.** Tier-0 opportunity scoring is yield-blind — nothing in
+  `lib/engine/directed-build.ts` reads `extractionEff` or `yields`. The marginal slot's ground
+  value (quality × extraction modifier of the next unworked deposit in the system's slot order) is
+  a cheap lookup (`marginalSlot`, `lib/engine/worked-deposits.ts`) that should scale a tier-0
+  opportunity's projected output in the score, so a shortfall served from poor ground ranks below
+  the same shortfall served from good ground.
   *Next step:* `/measure` how often survival and non-survival opportunities actually compete inside one
   planner run, both horizons, cohorted by developed systems — the weighting's value depends entirely on
   that rate, and Kai's prior is that it is often.
@@ -511,6 +505,10 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   cadence-invariance harness bands the branch's changes sit close to: the `build12` buildings-gate
   fixture's 1.2× margin and `FOUNDING_TOL`'s 1.7×/1.6× margins — re-derive both now the archetype
   tables are settled (post-Gate-A).
+  **Widened (per-body-industry, 2026-08-25):** a scoped sweep of that branch's `lib/` diff
+  (worked-deposits engine, industry summary, tick refold sites, save load hook, harness idle read) —
+  deferred from its pre-merge review to this batch; the branch's red-proof records are the
+  synchronous guarantee in the meantime.
   *Next step:* schedule the overnight batch (`--concurrency 8`, pre-approved) for a window Kai isn't
   using the machine.
 - **[M] Sim gates beyond the four founding identities** — agreed rule: a gate fails only when the

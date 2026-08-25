@@ -8,6 +8,7 @@ import { useSystemConstruction } from "@/lib/hooks/use-system-construction";
 import { useSystemBuildOptions } from "@/lib/hooks/use-build-options";
 import { useCancelOrder } from "@/lib/hooks/use-construction-orders";
 import { GOODS } from "@/lib/constants/goods";
+import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import {
   BUILDING_TYPES,
   HOUSING_TYPE,
@@ -25,7 +26,7 @@ import { QUALITY_BAND_TEXT, QUALITY_BAND_LABEL, GRADE } from "@/lib/constants/ui
 import { describeBuilding, TIER_LABELS } from "@/lib/constants/building-descriptions";
 import { buildingHealth, familyAnchorBuff, industryHealth, perGradeStaffing, skillLicensing } from "@/lib/engine/industry";
 import type { IndustryHealth, SystemIndustryReadout, SystemLabour, LabourPool, LabourAllocation, SkillBasketEntry } from "@/lib/engine/industry";
-import type { GoodTier } from "@/lib/types/game";
+import type { BodyArchetypeId, GoodTier } from "@/lib/types/game";
 import type { BuildOptionData, PopNeedData } from "@/lib/types/api";
 import { formatMagnitude, formatPeople, formatUnitsShort } from "@/lib/utils/format";
 import { formatEta } from "@/lib/utils/construction-format";
@@ -133,6 +134,11 @@ function label(id: string): string {
   return NON_GOOD_LABELS[id] ?? COMPLEX_LABELS[id] ?? GOODS[id]?.name ?? id;
 }
 
+/** Human-readable label for a body archetype — the deposit yield tooltip's per-body breakdown. */
+function bodyLabel(bodyType: BodyArchetypeId): string {
+  return BODY_ARCHETYPES[bodyType].name;
+}
+
 // ── Small shared pieces ──────────────────────────────────────────────────────
 
 /** Pool header: title · sub · right-aligned metric. */
@@ -147,22 +153,45 @@ function PoolHead({ title, sub, right }: { title: string; sub?: string; right: R
 }
 
 /**
- * Gold-when-rich yield tag — the system-level read of extraction output, since extractors work a
- * shared per-system pool with no single body's yield to show (`docs/active/design-system` copy
- * register: a plain percentage of normal, never a raw multiplier). A resource's yield can run
- * above or below 100% (poor deposits as low as 40%, rich ones above 200%), so the number carries
- * no sign — just the whole percentage.
+ * The deposit row's yield read: the worked-prefix mean ground value alone, band-coloured, one
+ * stat-register figure and nothing else in the cell (owner decision, Kai 2026-08-25 — a clean cell,
+ * the marginal/per-body story moved entirely into the tooltip below). The tooltip is the
+ * explanation surface: the same combined figure repeated as a labelled line, then which bodies are
+ * actually contributing worked ground and at what value each, then what the next extractor built
+ * here would realise (or that there is nothing left to build on).
  */
-function YieldTag({ mult, band }: { mult: number; band: DepositRow["band"] }) {
+function YieldTag({ row }: { row: DepositRow }) {
+  const pct = Math.round(row.yieldMult * 100);
   return (
     <Tooltip>
-      <TooltipTriggerLabel className={`font-mono text-[9.5px] ${QUALITY_BAND_TEXT[band]}`}>
-        Yield: {Math.round(mult * 100)}%
+      <TooltipTriggerLabel className="block w-full text-right">
+        <span className={`block font-mono text-[11px] ${QUALITY_BAND_TEXT[row.band]}`}>{pct}%</span>
       </TooltipTriggerLabel>
-      <TooltipContent className="w-56 text-xs">
-        A system&rsquo;s mines and wells work its deposits together.
-      </TooltipContent>
+      <TooltipContent className="w-64 text-xs"><YieldTooltipBody row={row} /></TooltipContent>
     </Tooltip>
+  );
+}
+
+/** The yield tag's tooltip body: combined figure · per-body worked breakdown · next slot. */
+export function YieldTooltipBody({ row }: { row: DepositRow }) {
+  return (
+    <div className="space-y-1">
+      <p className="font-mono text-text-primary">Combined yield: {Math.round(row.yieldMult * 100)}%</p>
+      {row.workedByBody.length > 0 && (
+        <div className="space-y-0.5 border-t border-border/60 pt-1">
+          {row.workedByBody.map((b, i) => (
+            <p key={`${b.bodyType}-${i}`} className="font-mono text-text-secondary">
+              {bodyLabel(b.bodyType)}: {b.worked} {b.worked === 1 ? "slot" : "slots"} · {Math.round(b.groundValue * 100)}%
+            </p>
+          ))}
+        </div>
+      )}
+      <p className="border-t border-border/60 pt-1 text-text-tertiary">
+        {row.marginal
+          ? `Next slot: ${Math.round(row.marginal.groundValue * 100)}% on ${bodyLabel(row.marginal.bodyType)}`
+          : "All deposit slots worked"}
+      </p>
+    </div>
   );
 }
 
@@ -194,13 +223,15 @@ function Th({ children, right = false }: { children: React.ReactNode; right?: bo
 
 // ── Tooltips ─────────────────────────────────────────────────────────────────
 
-/** Deposit tooltip: resource · yield band · built/slots · staffed · the goods extracted from it. */
-function DepositTooltipBody({ row, contributors }: { row: DepositRow; contributors: BuildingEntry[] }) {
+/** Deposit tooltip: resource · yield band · built/slots · staffed · the goods extracted from it.
+ *  The combined/next-slot yield figures live in the Yield column's own tooltip
+ *  (`YieldTooltipBody`) — this one never repeats them. */
+export function DepositTooltipBody({ row, contributors }: { row: DepositRow; contributors: BuildingEntry[] }) {
   return (
     <div className="space-y-1">
       <p className="font-display text-[12px] font-semibold capitalize text-text-primary">{row.resource}</p>
       <p className="font-mono text-[10px] text-text-tertiary">
-        Yield: {Math.round(row.yieldMult * 100)}% · {QUALITY_BAND_LABEL[row.band]} · {row.built}/{row.depositCounts} slots built · {row.staffed.toFixed(1)} staffed
+        {QUALITY_BAND_LABEL[row.band]} · {row.built}/{row.depositCounts} slots built · {row.staffed.toFixed(1)} staffed
       </p>
       {contributors.length > 0 && (
         <div className="space-y-0.5 border-t border-border/60 pt-1.5">
@@ -485,7 +516,9 @@ function DepositTable({
                 </td>
                 <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary"><Staffed staffed={row.staffed} total={row.built} health={row.health} /></td>
                 <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary">{Math.round(row.built)}/{Math.round(row.depositCounts)}</td>
-                <td className="px-1.5 py-1 align-top text-right"><YieldTag mult={row.yieldMult} band={row.band} /></td>
+                <td className="px-1.5 py-1 align-top text-right">
+                  <YieldTag row={row} />
+                </td>
                 <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-primary">{row.output > 0 ? formatUnitsShort(row.output) : "—"}</td>
                 {canOrder && (
                   <td className="px-1.5 py-1 align-top text-right">
