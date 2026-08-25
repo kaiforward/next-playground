@@ -11,7 +11,7 @@ import {
   summariseSpace,
   summariseDeposits,
 } from "@/lib/engine/industry";
-import { workedByBody, type SlottedBody } from "@/lib/engine/worked-deposits";
+import { workedByBody, toSlottedBody, type SlottedBody } from "@/lib/engine/worked-deposits";
 import { systemPopNeeds } from "@/lib/services/pop-needs";
 import { readSystemIndustry } from "@/lib/services/system-industry-readout";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
@@ -25,7 +25,7 @@ import type { WorldBody } from "@/lib/world/types";
  * here for a single system's read rather than the tick's whole-galaxy grouping.
  */
 function slottedBodiesOf(bodies: readonly WorldBody[]): SlottedBody[] {
-  return bodies.map((b) => ({ bodyType: b.bodyType, counts: depositCountsOf(b), quality: qualityOf(b) }));
+  return bodies.map(toSlottedBody);
 }
 
 /**

@@ -52,9 +52,9 @@ import { CONSTRUCTION } from "@/lib/constants/construction";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
 import {
-  depositCountsOf, yieldsOf, effOf, qualityOf, yieldColumns, effColumns, RESOURCE_TYPES,
+  depositCountsOf, yieldsOf, effOf, yieldColumns, effColumns, RESOURCE_TYPES,
 } from "@/lib/engine/resources";
-import { workedYieldVectors, type SlottedBody } from "@/lib/engine/worked-deposits";
+import { workedYieldVectors, toSlottedBody, type SlottedBody } from "@/lib/engine/worked-deposits";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import { isContributingBody } from "@/lib/engine/habitability";
@@ -283,9 +283,7 @@ export function toTickSystems(world: World): TickSystem[] {
 export function slottedBodiesBySystem(bodies: WorldBody[]): Map<string, SlottedBody[]> {
   const bySystem = new Map<string, SlottedBody[]>();
   for (const b of bodies) {
-    const entry: SlottedBody = {
-      bodyType: b.bodyType, counts: depositCountsOf(b), quality: qualityOf(b),
-    };
+    const entry = toSlottedBody(b);
     const list = bySystem.get(b.systemId);
     if (list) list.push(entry);
     else bySystem.set(b.systemId, [entry]);

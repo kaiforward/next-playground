@@ -19,13 +19,19 @@
 import type { BodyArchetypeId, ResourceType, ResourceVector } from "@/lib/types/game";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import { extractorsOnResource } from "@/lib/engine/directed-build";
-import { RESOURCE_TYPES, unitResourceVector } from "@/lib/engine/resources";
+import { RESOURCE_TYPES, unitResourceVector, depositCountsOf, qualityOf } from "@/lib/engine/resources";
+import type { WorldBody } from "@/lib/world/types";
 
 /** Minimal per-body view the fold needs: archetype (for modifier + lock) plus counts/quality. */
 export interface SlottedBody {
   bodyType: BodyArchetypeId;
   counts: ResourceVector;
   quality: ResourceVector;
+}
+
+/** A `WorldBody` row as the fold's minimal per-body view. */
+export function toSlottedBody(b: WorldBody): SlottedBody {
+  return { bodyType: b.bodyType, counts: depositCountsOf(b), quality: qualityOf(b) };
 }
 
 /** One deposit slot in the fill order: the body it belongs to, and its ground-value inputs. */
