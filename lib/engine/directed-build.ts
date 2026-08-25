@@ -100,12 +100,6 @@ export interface BuildSystemState {
   buildings: Record<string, number>;
   /** Per-resource deposit-slot cap (Σ body slots) — caps tier-0 extractor counts. */
   depositCounts: ResourceVector;
-  /** Per-resource ground value (quality × extraction modifier) of the NEXT unworked deposit slot —
-   *  required, matching `extractionEff`'s precedent (`lib/tick/world/directed-build-world.ts`): a
-   *  fixture that omits it is a type error rather than a silent neutral-1.0 fallback that could mask
-   *  a real deposit-grade effect on tier-0 ranking. Pass `unitResourceVector()` for the neutral
-   *  reading. */
-  marginalGround: ResourceVector;
   /** People land — housing's own budget. Extractors and factories never draw on this budget;
    *  factories, academies, complexes and construction centres bill no land at all. */
   peopleLand: number;
@@ -961,47 +955,28 @@ function planFactionBundles(
       // higher (the snowball): buffed output means more served demand per unit of capacity.
       const perUnit = baseUnit * familyAnchorBuff(site.buildings, goodId);
 
-      // Tier-0's SCORE additionally scales by the NEXT unworked deposit's ground value
-      // (`marginalGround`, adapter-folded from `marginalSlot`): a rich-ground site ranks above an
-      // equal-shortfall site whose next slot is poor. `scorePerUnit` is deliberately a SEPARATE
-      // quantity from `perUnit` above: `perUnit` is what gets stored on the opportunity and read by
-      // the take/capacity loop and the ranked-consumption loop further down this function — both
-      // stay on the unscaled figure, so realised production and the served/deficit-decrement
-      // arithmetic are unaffected. Only `scorePerUnit` (this block) and everything derived from it
-      // (`buildWorkPerUnit`, the tier-0 demand-proximity fold just below) carries the multiplier.
-      const groundResource = isTier0 ? BUILDING_TYPES[goodId]?.resource : undefined;
-      // Clamped at 1: poor ground DEMOTES a tier-0 opportunity, rich ground never promotes it.
-      // The score is one shared scale across both tiers, and raw ground values run 0.4-2.5
-      // (QUALITY_BANDS) with colonies working best-first — an unclamped multiplier inflates the
-      // whole tier-0 band ~1.4-2.5x against tier-1+ at exactly the sites being developed, and
-      // extraction then out-claims the factories the shared labour pool was about to staff.
-      const groundMult = groundResource !== undefined ? Math.min(1, site.marginalGround[groundResource]) : 1;
-      const scorePerUnit = perUnit * groundMult;
-
       // ONE shared score unit for both tiers — marginal-construction-work-per-delivered-unit,
       // exactly the tier-1+ quantity, now also underlying tier-0: this good's own build cost
-      // amortised over its (buffed, ground-scaled) per-level output (`scorePerUnit`, which already
-      // folds in whatever yield/efficiency scaling the existing tier-0 capacity maths defines output
-      // with), plus — only when the site carries NO specialisation complex of any family yet
-      // (COMPLEX_TYPES, ANCHOR_CAP 1 site-wide, the same gate complexLift itself uses) — the
-      // complex's build cost amortised over the full demand this opportunity would serve
-      // (`totalServed`). Tier-0 goods carry no family (`FAMILY_BY_GOOD`), so the surcharge is always
-      // 0 for them — the formula is shared regardless, so there is exactly one scale to compare, not
-      // two coincidentally similar-looking ones.
-      const buildWorkPerUnit = workCostPerLevel(goodId) / scorePerUnit;
+      // amortised over its (buffed) per-level output (`perUnit`, which already folds in whatever
+      // yield/efficiency scaling the existing tier-0 capacity maths defines output with), plus —
+      // only when the site carries NO specialisation complex of any family yet (COMPLEX_TYPES,
+      // ANCHOR_CAP 1 site-wide, the same gate complexLift itself uses) — the complex's build cost
+      // amortised over the full demand this opportunity would serve (`totalServed`). Tier-0 goods
+      // carry no family (`FAMILY_BY_GOOD`), so the surcharge is always 0 for them — the formula is
+      // shared regardless, so there is exactly one scale to compare, not two coincidentally
+      // similar-looking ones.
+      const buildWorkPerUnit = workCostPerLevel(goodId) / perUnit;
 
       // Demand numerator: proximity-weighted served demand. Tier-0 keeps its real physics — the
       // site's finite deposit-slot output capacity, allocated to reachable deficits nearest-first
       // (the capacity cap this tier actually has and tier-1+ does not, `capUnits` there being
       // Infinity — buildableUnits has no land ceiling left to bind it). Tier-1+ is uncapped:
       // nothing bounds how much of the reachable shortfall a site COULD serve, so every reachable
-      // deficit counts in full (`take = short`, no capacity to exhaust). This fold is SCORE-ONLY (it
-      // feeds `demandProximity`/`totalServed` alone, never stored on the opportunity), so it is the
-      // one tier-0 place that legitimately uses `scorePerUnit` instead of `perUnit`.
+      // deficit counts in full (`take = short`, no capacity to exhaust).
       let demandProximity = 0;
       let totalServed = 0;
       if (isTier0) {
-        let capOutput = capUnits * scorePerUnit;
+        let capOutput = capUnits * perUnit;
         for (const r of reachable) {
           if (capOutput <= 0) break;
           const short = deficitMap.get(r.sysId) ?? 0;

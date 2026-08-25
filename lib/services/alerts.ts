@@ -42,7 +42,7 @@ import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { DEFAULT_ALERT_CATEGORIES } from "@/lib/constants/attention";
 import type { WorldSystem, World } from "@/lib/world/types";
 import { buildingsBySystem, marketsBySystem, systemNameById } from "@/lib/services/world-index";
-import { depositCountsOf, unitResourceVector } from "@/lib/engine/resources";
+import { depositCountsOf } from "@/lib/engine/resources";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import {
   habitableHousingHeadroom, queuedBuildLevelsBySystem,
@@ -173,8 +173,7 @@ function buildOpportunitySortKey(goodId: string, score: number): number {
  * because none of its readers write).
  *
  * `goods: []` and a real `depositCounts` (unused by `habitableHousingHeadroom`, but not fabricated either)
- * fill out the rest of the interface honestly. `marginalGround` is genuinely unused here too (no
- * tier-0 score is read), so it takes the neutral `unitResourceVector()` fill.
+ * fill out the rest of the interface honestly.
  */
 function hasNoHousingHeadroom(system: WorldSystem, queued: Record<string, number>): boolean {
   const buildings = { ...(buildingsBySystem().get(system.id) ?? {}) };
@@ -188,7 +187,6 @@ function hasNoHousingHeadroom(system: WorldSystem, queued: Record<string, number
     population: system.population,
     buildings,
     depositCounts: depositCountsOf(system),
-    marginalGround: unitResourceVector(),
     peopleLand: system.peopleLand,
     goods: [],
   };

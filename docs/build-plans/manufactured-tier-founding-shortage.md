@@ -371,31 +371,19 @@ and the survival test reads `producedGood ∈ SURVIVAL_GOODS` — never a positi
 `items[0]`, the wrong end). Banding is by the good being BUILT; derived demand never changes a
 good's band.
 
-**B3 — Tier-0 yield-awareness.** A tier-0 opportunity's score-side `perUnit`
-(`lib/engine/directed-build.ts:897`) is additionally scaled by the marginal slot's ground value —
-the quality × extraction-modifier of the next unworked deposit the build would sit on
-(`marginalSlot`, `lib/engine/worked-deposits.ts:206`; existing consumer precedent
-`lib/engine/industry.ts:1015`) — **clamped at 1 (`min(1, groundValue)`): poor ground demotes,
-rich ground never promotes** (amended after the 24K attribution runs, Kai 2026-08-25: "demand is
-demand — you shouldn't build a water extractor just because the yield is high if everyone really
-needs fuel"). The clamp exists because the score is one shared scale across both tiers and raw
-ground values run 0.4-2.5 (`QUALITY_BANDS`, `lib/constants/substrate-gen.ts:26-31`) with colonies
-working best-first — unclamped, the multiplier inflated the whole tier-0 band against tier-1+ and
-extraction out-claimed the factories at the shared labour pool (attribution: B3 alone reproduced
-the full 100→80 colony-industrialisation regression; ledger, 24K A/B table). Fallback if the
-clamp still distorts: remove the multiplier entirely — yield preference is primarily a
-colonisation-time concern. **Data path (spec-review F1):** the planner's input types
-(`SystemBuildRow`, `lib/tick/world/directed-build-world.ts:18-39`; `BuildSystemState`) carry no
-body/slot data — only folded vectors — so the slot array cannot be read in the planner. Instead
-the adapter precomputes a per-resource **`marginalGround: ResourceVector`** (new — the
-groundValue of the next unworked slot per resource, computed where the adapter already derives
-the other body-folded vectors, neutral 1.0 when no unworked slot remains) and threads it through
-`SystemBuildRow`/`BuildSystemState`; B3 multiplies by that. This follows the row's existing
-body-derived-aggregate pattern (`depositCounts`) rather than threading `SlottedBody[]` and
-re-running `depositSlotOrder` per planner run. Ranking only: the take/capacity arithmetic and
-realised production (which already runs on worked-prefix yields) are untouched. Multi-level
-opportunities approximate with the first marginal slot's value. A site with no unworked slot
-never reaches scoring (`capUnits ≤ 0`, `buildableUnits` :532-543).
+**B3 — Tier-0 yield-awareness: REMOVED (Kai, 2026-08-26), measured harmful in both directions.**
+Built as specced (a `marginalGround` vector threaded to the planner, multiplying the tier-0
+score), then killed by the 24K attribution runs and reverted. The score is one shared scale
+across both tiers, and ground values run 0.4-2.5 (`QUALITY_BANDS`,
+`lib/constants/substrate-gen.ts:26-31`): unclamped, rich ground inflated the whole tier-0 band
+against tier-1+ and extraction out-claimed factories at the shared labour pool (colonies with
+tier-1+ industry at 24K: 80 vs 100 on main, B3 alone reproducing the full regression); clamped
+at `min(1, groundValue)`, poor-ground demotion starved exactly the colonies whose extraction
+feeds the input gate (84 vs 100). Owner's call, quoted: "once your on a system, demand is demand,
+you shouldnt build a water extractor just because the yield is high if everyone really needs
+fuel" — yield preference is a colonisation-time concern (`colonyValue` already prices deposit
+richness), not a build-ranking one. Nothing of the thread survives in code; this block is the
+record of why nobody rebuilds it.
 
 **Edges.** Zero shortfall → zero spill. A suppressed (striking) local producer of i still counts
 as "not missing" — mirrors `inputsAvailable` exactly, stated deliberately. Automation off: the

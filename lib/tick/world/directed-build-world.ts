@@ -31,11 +31,6 @@ export interface SystemBuildRow {
   extractionEff: ResourceVector;
   /** Per-resource deposit-slot cap — caps tier-0 extractor builds. */
   depositCounts: ResourceVector;
-  /** Per-resource ground value (quality × extraction modifier) of the NEXT unworked deposit slot —
-   *  required, matching `extractionEff` above: a fixture that omits it is a type error rather than a
-   *  silent neutral-1.0 fallback that could mask a real deposit-grade effect on tier-0 ranking. Pass
-   *  `unitResourceVector()` when a fixture genuinely wants the neutral reading. */
-  marginalGround: ResourceVector;
   /** Habitable land — caps housing. Factories, academies, complexes and construction centres bill
    *  no land at all. */
   peopleLand: number;

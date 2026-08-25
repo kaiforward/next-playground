@@ -33,13 +33,13 @@ import {
 import { readExpectation } from "@/lib/engine/expectation";
 import { sizeColonyEstablish, fed, type BuildSystemState } from "@/lib/engine/directed-build";
 import { housingUsed, idleLevels } from "@/lib/engine/infrastructure-decay";
-import { emptyResourceVector, unitResourceVector } from "@/lib/engine/resources";
+import { emptyResourceVector } from "@/lib/engine/resources";
 
 /** A minimal buildable system carrying just the market readings the fed gate looks at. */
 function sysWithGoods(readings: GoodSatisfaction[]): BuildSystemState {
   return {
     systemId: "s1", factionId: "f1", control: "developed", population: 20,
-    buildings: {}, depositCounts: emptyResourceVector(), marginalGround: unitResourceVector(),
+    buildings: {}, depositCounts: emptyResourceVector(),
     peopleLand: 10,
     goods: readings.map((r) => ({
       goodId: r.goodId, stock: 0, demand: r.demanded, civilianDemand: r.demanded,
