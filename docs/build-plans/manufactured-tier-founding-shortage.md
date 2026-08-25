@@ -317,9 +317,17 @@ nothing. **"Missing" is exactly `inputsAvailable`'s per-input predicate**
 surplus source of i) — extracted into one shared helper so the spill exists precisely where the
 gate blocks and the two can never disagree. Because the walk is reverse-topological, D lands on
 components before components is visited, so its own missing inputs receive the cascade in turn;
-tier-0 goods have no recipe and terminate it. Magnitude is bounded: recipe ratios per input are
-≤ 1 and sum to ~1 per good, so each hop attenuates geometrically and depth is ≤ 2 (tier-2 → 1 →
-0).
+tier-0 goods have no recipe and terminate it. Termination and bounding come from the recipe
+graph's validated acyclicity (`PRODUCTION_GOOD_ORDER`'s own tests), NOT from tier depth:
+intra-tier recipe edges make the worst real chain 4 hops (`ship_frames → hull_plating → alloys
+→ metals → ore`), and single-input ratio-1 recipes (`metals: {ore: 1}`, `fuel: {gas: 1}`)
+forward their full magnitude — only multi-input recipes split it. (Corrected at spec review; a
+good can never feed back into itself.)
+
+**Seam ordering (spec-review F5):** `surplusSystemsByGood` — the reachable-donor map the
+missingness helper reads — is today built AFTER the named seam
+(`lib/engine/directed-build.ts:841-852` vs the floor at :825-834). Its construction moves ahead
+of the spill; semantics-neutral, since the speculative floor does not read it.
 
 **Death rule (the roadmap's Don't):** derived demand is never persisted — it is recomputed from
 live shortfalls and live missingness every planner run, and vanishes by construction the run its
@@ -331,6 +339,20 @@ the consuming system s in `remainingByGood`, so any site reachable to s (includi
 which wins on `selfCost`) scores an opportunity to serve it, extraction sites included. No new
 proposal kind, no new gate.
 
+**Queued inputs count as available — accepted, deliberate (spec-review F2, owner call).**
+`effectiveBuildSystems` folds queued project levels into `buildings`
+(`lib/engine/directed-build.ts:351-354`) before planning, and the missingness/gate test reads
+`buildings[input] > 0` (:609) — so the cycle after a spill-triggered input extractor is queued,
+the factory above it can be proposed while its supply is still under construction. This is
+accepted as pipelining, not tightened: the chain builds ahead of itself so the factory finishes
+soon after its input does, rather than waiting serially ("it actually makes more sense in that
+way build ahead of time, so the factory needing input is finished soon after the input factory"
+— Kai, 2026-08-25). The bound: the factory idles only for the construction gap (the economy's
+`inputGate` throttles it meanwhile; decay cannot shed for recipe-input idleness by design;
+founding-era pool is near idle, R2), and the per-level landing row (roadmap queue item 2)
+shrinks that gap to months. Consistent with the fold's own authored intent ("Queued consumers
+also expose their input draw before they land, keeping the supply chain honest", :340).
+
 **B2 — Necessity weighting (survival band).** Two ordering points change; no score formula
 changes. (1) The opportunity claim order: the descending-score sort
 (`lib/engine/directed-build.ts:993`) becomes band-then-score — opportunities whose built good is
@@ -340,18 +362,31 @@ persisting the per-system best opportunity (`recordScoredOpportunity`,
 `lib/engine/directed-build.ts:776-786`) and the alert bar applies on read
 (`lib/services/alerts.ts:149`) — one rule, now applied where builds are actually chosen. (2) The
 funding order: `orderProposals` (`lib/engine/construction.ts:279`) becomes housing →
-survival-serving industry bundles (production good in `SURVIVAL_GOODS`) by descending ROI →
-everything else (industry, colonies, centres) by descending ROI, tiebreaks unchanged. Banding is
-by the good being BUILT; derived demand never changes a good's band.
+survival-serving industry bundles by descending ROI → everything else (industry, colonies,
+centres) by descending ROI, tiebreaks unchanged. **Resolver (spec-review F4):** `BuildProposal`
+gains an explicit `producedGood` field (new — set where the industry bundle is emitted,
+`lib/engine/directed-build.ts:1159`, from `opp.goodId`; absent/undefined on housing bundles),
+and the survival test reads `producedGood ∈ SURVIVAL_GOODS` — never a positional read of
+`items` (whose gate-first order puts production LAST, and whose existing tiebreak reads
+`items[0]`, the wrong end). Banding is by the good being BUILT; derived demand never changes a
+good's band.
 
 **B3 — Tier-0 yield-awareness.** A tier-0 opportunity's score-side `perUnit`
 (`lib/engine/directed-build.ts:897`) is additionally scaled by the marginal slot's ground value —
-`marginalSlot(slots, worked).groundValue` (`lib/engine/worked-deposits.ts:206`; existing
-consumer precedent `lib/engine/industry.ts:1015`), the quality × extraction-modifier of the next
-unworked deposit the build would sit on. Ranking only: the take/capacity arithmetic and realised
-production (which already runs on worked-prefix yields) are untouched. Multi-level opportunities
-approximate with the first marginal slot's value. A site with no unworked slot never reaches
-scoring (`capUnits ≤ 0`).
+the quality × extraction-modifier of the next unworked deposit the build would sit on
+(`marginalSlot`, `lib/engine/worked-deposits.ts:206`; existing consumer precedent
+`lib/engine/industry.ts:1015`). **Data path (spec-review F1):** the planner's input types
+(`SystemBuildRow`, `lib/tick/world/directed-build-world.ts:18-39`; `BuildSystemState`) carry no
+body/slot data — only folded vectors — so the slot array cannot be read in the planner. Instead
+the adapter precomputes a per-resource **`marginalGround: ResourceVector`** (new — the
+groundValue of the next unworked slot per resource, computed where the adapter already derives
+the other body-folded vectors, neutral 1.0 when no unworked slot remains) and threads it through
+`SystemBuildRow`/`BuildSystemState`; B3 multiplies by that. This follows the row's existing
+body-derived-aggregate pattern (`depositCounts`) rather than threading `SlottedBody[]` and
+re-running `depositSlotOrder` per planner run. Ranking only: the take/capacity arithmetic and
+realised production (which already runs on worked-prefix yields) are untouched. Multi-level
+opportunities approximate with the first marginal slot's value. A site with no unworked slot
+never reaches scoring (`capUnits ≤ 0`, `buildableUnits` :532-543).
 
 **Edges.** Zero shortfall → zero spill. A suppressed (striking) local producer of i still counts
 as "not missing" — mirrors `inputsAvailable` exactly, stated deliberately. Automation off: the
@@ -380,7 +415,7 @@ run's inputs, no RNG, no wall-clock. Save/load: nothing persisted, no `World` sh
 | `remainingByGood` (planner-run-local map) | `planFactionBundles` only — opportunity construction and take-decrement (`directed-build.ts:813-836, 858, 1008`) | Adds derived entries before opportunity construction | Yes — the seam `speculativeFloorExtra` already uses; run-local, so no cross-system reader exists |
 | `SURVIVAL_GOODS` | impact run pasted below: 10 refs / 5 modules — population (unrest fold), tick, alerts (band), directed-build (`recordScoredOpportunity`), constants. HAZARD 1 APPLIES | Adds two readers (opportunity sort, `orderProposals`) | Yes — deliberately COUPLED: one necessity definition everywhere; the alert-bar band and the planner band must never diverge (the row exists because they did) |
 | `GOOD_RECIPES` | impact: 22 refs / 8 modules (industry input draw, treasury, colonisation-value, homeworld-prefab, supply-chain, industry-panel, directed-build) | Adds the spill as a reader (via shared missing-input helper) | Yes — coupled by meaning: the spill must use the same production graph the economy runs. NOTE its docstring's "Nothing consumes this table yet" is stale — correct it in this work |
-| `surplusDrawable` | worksheet-listed "still unresolved" three-way share (logistics donor, build input gate, founding manifest) | Read via the missing-input predicate, unchanged | Yes — deliberately unchanged; narrowing it is out of scope and flagged Not-claimed |
+| `surplusDrawable` | fresh impact (spec review): `SHARED — 8 references across 3 modules: directed-build, directed-logistics, construction` — logistics donor, build input gate, founding manifest, PLUS `lib/services/construction.ts:69` (`foundingSupplyBySource`, read-only UI mirror of the founding staging draw) | Read via the missing-input predicate, unchanged; the UI mirror unaffected (no write path) | Yes — deliberately unchanged; narrowing it is out of scope and flagged Not-claimed |
 | `marginalSlot` | impact: CONTAINED, 2 modules (worked-deposits producer, industry worked-prefix maths) | Adds the tier-0 score as a third reader | Yes — read-only lookup of authored ground value; the score reads the same ground the build would realise |
 
 `npm run impact -- SURVIVAL_GOODS` (verdict block, verbatim): `SHARED — 10 references across 5
@@ -390,7 +425,9 @@ treasury, colonisation-value, directed-build, homeworld-prefab, supply-chain, in
 `npm run impact -- marginalSlot`: `CONTAINED — 3 references across 2 module(s): industry,
 worked-deposits.` `npm run impact -- assessStructuralDeficits`: `CONTAINED — 3 references across
 1 module(s): directed-build.` `npm run impact -- orderProposals`: `CONTAINED — 4 references
-across 2 module(s): construction, directed-build.`
+across 2 module(s): construction, directed-build.` `npm run impact -- surplusDrawable` (spec
+review): `SHARED — 8 references across 3 modules: directed-build, directed-logistics,
+construction.`
 
 **2. Constants read for their authored meaning.**
 
@@ -408,11 +445,11 @@ across 2 module(s): construction, directed-build.`
 | Events | Indirect only: event modifiers move production/demand, which move the shortfalls the spill reads — automatic, no event-specific code path | — |
 | Population + migration | More colony industry → jobs pull migration (existing chain); spill itself reads nothing population-side and writes nothing | — |
 | Unrest / regime | None — unrest folds read satisfaction/Provision, which this never touches | Planner-local quantities only |
-| Industry + staffing | The labour gate (`fitFor`) and one-unit lead bound every released proposal exactly as today; no-labour expected to RISE as the gate stops firing first (R5 licenses this) — acceptance reads it |  |
+| Industry + staffing | The labour gate (`fitFor`) and one-unit lead bound every released proposal exactly as today; no-labour expected to RISE as the gate stops firing first (R5 licenses this) — acceptance reads it. Queued inputs count as available (B1's accepted-pipelining block, spec-review F2): a released factory may idle input-starved for the construction gap, throttled by the economy `inputGate` |  |
 | Infrastructure decay | Built-ahead-of-staffing risk unchanged: the one-unit lead is decay-safe by the existing whole-idle-level rule | — |
 | Directed logistics | Deliberately none: logistics reads market demand, not planner deficits — derived demand creates NO hauls until real factories exist and draw real inputs | — |
 | Directed build / planner | The subject | — |
-| Colonisation + founding manifest | Colony proposals rank in orderProposals' third band — they now sit behind survival industry; small, intended (feeding existing worlds precedes founding new ones) | — |
+| Colonisation + founding manifest | Colony proposals rank in orderProposals' third band — they now sit behind survival industry; intended (feeding existing worlds precedes founding new ones), and expected small on R2's receipts: construction funded fraction median 1.000/p10 1.000 over 13.0K billed cycles with the pool near idle, so a reorder rarely changes which proposal a cycle funds — read at the acceptance run | — |
 | Treasury / purse | More funded construction work → bigger construction-band bill; R2 measured funded fraction median 1.000 and pool near idle, so headroom exists at founding; equilibrium bill growth is a tuning read, not a design risk | — |
 | Factions + relations | None — per-faction planner, no cross-faction read | — |
 | Save format | None — nothing persisted | Run-local recomputation |
@@ -428,8 +465,8 @@ across 2 module(s): construction, directed-build.`
 | Per-input missingness | `inputsAvailable` body, `directed-build.ts:608-612` | boolean per input: local building OR reachable surplus source | Same predicate, extracted shared |
 | `remainingByGood` seam | `directed-build.ts:813-836` | `Map<goodId, Map<systemId, shortfall>>`, mutated by the floor already | Additive writes compose (they do — floor precedent) |
 | Reverse topological order | `PRODUCTION_GOOD_ORDER`, `recipes.ts:44-62` | array, inputs-first; validated acyclic | Reversing gives consumers-first |
-| `marginalSlot` | `worked-deposits.ts:206` | `DepositSlot \| null` with `groundValue` | null only when no unworked slot (capUnits already 0 there) |
-| Worked count per resource | `extractorsOnResource` via `workedYieldVectors` (`worked-deposits.ts:216`) | shared built-level count per resource | The score can read the same count the yield maths uses |
+| `marginalSlot` | `worked-deposits.ts:206` | `DepositSlot \| null` with `groundValue` — needs `DepositSlot[]`, which the planner's input types do NOT carry (spec-review F1) | Consumed adapter-side only, never in the planner |
+| `marginalGround: ResourceVector` | NEW — adapter-side, computed with the other body-folded vectors and threaded through `SystemBuildRow`/`BuildSystemState` | per-resource groundValue of next unworked slot, neutral 1.0 when none | B3's score multiplier |
 | Survival band rule | `recordScoredOpportunity` (`directed-build.ts:776-786`), `alerts.ts:149` | band-then-score, first-scored tie | Same rule at sort + funding |
 
 **6. Aggregates that move for other reasons.**
