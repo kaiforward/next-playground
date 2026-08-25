@@ -375,7 +375,16 @@ good's band.
 (`lib/engine/directed-build.ts:897`) is additionally scaled by the marginal slot's ground value —
 the quality × extraction-modifier of the next unworked deposit the build would sit on
 (`marginalSlot`, `lib/engine/worked-deposits.ts:206`; existing consumer precedent
-`lib/engine/industry.ts:1015`). **Data path (spec-review F1):** the planner's input types
+`lib/engine/industry.ts:1015`) — **clamped at 1 (`min(1, groundValue)`): poor ground demotes,
+rich ground never promotes** (amended after the 24K attribution runs, Kai 2026-08-25: "demand is
+demand — you shouldn't build a water extractor just because the yield is high if everyone really
+needs fuel"). The clamp exists because the score is one shared scale across both tiers and raw
+ground values run 0.4-2.5 (`QUALITY_BANDS`, `lib/constants/substrate-gen.ts:26-31`) with colonies
+working best-first — unclamped, the multiplier inflated the whole tier-0 band against tier-1+ and
+extraction out-claimed the factories at the shared labour pool (attribution: B3 alone reproduced
+the full 100→80 colony-industrialisation regression; ledger, 24K A/B table). Fallback if the
+clamp still distorts: remove the multiplier entirely — yield preference is primarily a
+colonisation-time concern. **Data path (spec-review F1):** the planner's input types
 (`SystemBuildRow`, `lib/tick/world/directed-build-world.ts:18-39`; `BuildSystemState`) carry no
 body/slot data — only folded vectors — so the slot array cannot be read in the planner. Instead
 the adapter precomputes a per-resource **`marginalGround: ResourceVector`** (new — the

@@ -3588,6 +3588,23 @@ describe("planFactionBuilds — marginalGround: tier-0 score scaled by the next 
     expect(countFor(richBuilds, "B", "ore")).toBe(countFor(poorBuilds, "B", "ore"));
   });
 
+  it("rich ground never promotes a tier-0 opportunity above the shared scale — the multiplier clamps at 1", () => {
+    // Ground 5 vs ground 1 (neutral): under the clamp both score IDENTICALLY, so the winner is the
+    // deterministic tie-break, not the ground value — swap which system holds the rich value and the
+    // SAME system must win both times. An unclamped multiplier makes the ground-5 site win in both
+    // orientations instead, which fails exactly one of the two assertions below.
+    const routes: RouteCost = () => 1;
+    const winners: string[] = [];
+    for (const richId of ["S", "T"] as const) {
+      const builds = planFactionBuilds(
+        [consumer("A", 1), miner("S", richId === "S" ? 5 : 1), miner("T", richId === "T" ? 5 : 1)],
+        routes, DEV_REFS,
+      );
+      winners.push(countFor(builds, "S", "ore") === 1 ? "S" : "T");
+    }
+    expect(winners[0]).toBe(winners[1]);
+  });
+
   // Proves 5 (omitting `marginalGround` in a fixture is a compile error, not a silent neutral) is
   // pinned by the type system itself, not a runtime assertion: `BuildSystemState.marginalGround` and
   // `SystemBuildRow.marginalGround` are required fields (see their docstrings), so `npx tsc --noEmit`

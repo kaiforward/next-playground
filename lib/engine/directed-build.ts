@@ -970,7 +970,12 @@ function planFactionBundles(
       // arithmetic are unaffected. Only `scorePerUnit` (this block) and everything derived from it
       // (`buildWorkPerUnit`, the tier-0 demand-proximity fold just below) carries the multiplier.
       const groundResource = isTier0 ? BUILDING_TYPES[goodId]?.resource : undefined;
-      const groundMult = groundResource !== undefined ? site.marginalGround[groundResource] : 1;
+      // Clamped at 1: poor ground DEMOTES a tier-0 opportunity, rich ground never promotes it.
+      // The score is one shared scale across both tiers, and raw ground values run 0.4-2.5
+      // (QUALITY_BANDS) with colonies working best-first — an unclamped multiplier inflates the
+      // whole tier-0 band ~1.4-2.5x against tier-1+ at exactly the sites being developed, and
+      // extraction then out-claims the factories the shared labour pool was about to staff.
+      const groundMult = groundResource !== undefined ? Math.min(1, site.marginalGround[groundResource]) : 1;
       const scorePerUnit = perUnit * groundMult;
 
       // ONE shared score unit for both tiers — marginal-construction-work-per-delivered-unit,
