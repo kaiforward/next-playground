@@ -526,25 +526,11 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   layer) and `jsx-a11y` (the component tests lean on roles/accessible names). Flat config,
   `typescript-eslint` + the two plugins, a `lint` script; owner decides whether it joins the CI
   gate. *Next step:* write the flat config and run it once over the tree to size the fix-up.
-- **[S/M] Overnight mutation re-sweep** — the first Stryker cycle (merged 2026-08-09) swept 40 files;
-  the remaining ~66 `lib/` files have never been swept at all. Owed: an overnight re-sweep of the 40
-  (incremental cache invalidates most of them anyway) plus a first sweep of the rest, same
-  kill-or-accept discipline as the first cycle. **Noise-survivor warning:** the review that closed
-  cycle 1 reverted the mutator-class exclusions in `stryker.config.mjs`, so the re-sweep will
-  re-report the ~204 already-accepted noise-class survivors (`temp/fix-wave/noise-ledger.md`) —
-  don't re-triage them.
-  **Widened (habitability-seeding, 2026-08-24):** two items this branch owes overnight, folded into
-  the same batch rather than a separate one — (1) a scoped `npm run mutation` sweep of this branch's
-  diff (`lib/` files touched by habitability seeding); (2) a thin-margin re-measure of the
-  cadence-invariance harness bands the branch's changes sit close to: the `build12` buildings-gate
-  fixture's 1.2× margin and `FOUNDING_TOL`'s 1.7×/1.6× margins — re-derive both now the archetype
-  tables are settled (post-Gate-A).
-  **Widened (per-body-industry, 2026-08-25):** a scoped sweep of that branch's `lib/` diff
-  (worked-deposits engine, industry summary, tick refold sites, save load hook, harness idle read) —
-  deferred from its pre-merge review to this batch; the branch's red-proof records are the
-  synchronous guarantee in the meantime.
-  *Next step:* schedule the overnight batch (`--concurrency 8`, pre-approved) for a window Kai isn't
-  using the machine.
+- **[S] Thin-margin re-measure of the cadence-invariance harness bands** (booked at
+  habitability-seeding, 2026-08-24): the `build12` buildings-gate fixture's 1.2× margin and
+  `FOUNDING_TOL`'s 1.7×/1.6× margins sit close to that branch's changes — re-derive both now the
+  archetype tables are settled (post-Gate-A).
+  *Next step:* re-run the cadence-invariance pair and re-derive the two margins.
 - **[M] Sim gates beyond the four founding identities** — agreed rule: a gate fails only when the
   code is broken, never when the balance is off; if a designer could plausibly fix it by changing a
   constant, it's a bar to read, not a gate. Three families, all seed-proof (never "X of Y systems"):
@@ -578,12 +564,6 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   colonisation-economics spec, booked at its calibration gate. Prerequisite for tuning doctrine
   allocation (government layer revisit) and for the founding-constant retune when the sibling treasury
   drains (priced logistics, military, industry pricing) land.
-- **[M] Pre-existing mutation survivors in the colonisation-adjacent files** — the PR #217 scoped
-  sweep (27 files) surfaced ~1,000 surviving/no-coverage mutants on lines *outside* that PR's diff;
-  the in-diff ones were handled at the PR's own gate. Heaviest: `lib/world/tick.ts`,
-  `lib/engine/directed-build.ts`, `lib/tick-harness/runner.ts`. The incremental cache
-  (`reports/stryker-incremental.json`, machine-local) makes re-runs minutes, not hours.
-  *Next step:* chip file-by-file, worst first, same kill-or-accept discipline as the PR gate.
 - **[S] Harden the runner integration suite's thin anchors** — found while re-deriving the
   drawBrakeCeiling divergence fixture. The gate-split identity test (`runner-founding.test.ts:101`,
   `charter + funds + pool + unGated === observed`) passes vacuously: the 20/7/240 fixture never

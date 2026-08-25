@@ -126,5 +126,5 @@ text, so write it into the prompt and record it in the ledger rather than assumi
 - It does not run `/uber-review`, and it does not merge — both sit after the fix wave.
 - It does not do the doc fold; the plan's Doc fold section owns that, on the branch, before the
   final review.
-- It does not run the mutation sweep in-session — that rides the periodic overnight batch; the
-  red-proof record is the synchronous guarantee a test could ever fail.
+- The red-proof record is the sole guarantee a test could ever fail — there is no later sweep or
+  batch behind it.

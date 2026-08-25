@@ -44,7 +44,7 @@ When adding a safeguard, prefer the highest rank available:
 1. **Baked into a tool** — cannot be skipped. `npm run simulate` reading both horizons by default
    fixed permanently what a "read both horizons" rule never did.
 2. **A step that emits an artifact** — visible when skipped: the worksheet, the committed falsifier,
-   the mutation survivor report.
+   the red-proof record.
 3. **A rule in a file** — fires only if read and applied. This is where failures live; when a rank-3
    rule keeps being dropped, promote it upward instead of rewording it.
 
@@ -96,24 +96,6 @@ Two mechanisms upgrade rank-3 rules toward rank 2, and every skill carries them 
    passed cleanly at 1,000 ticks — nothing had been abandoned yet — and failed only at 10,000. A PR
    reading one horizon would have shipped it green, and it then took a bisect across 108 commits to
    find. Run per PR, it is one diff to search.
-
-## The mutation sweep — a periodic batch, not an in-session gate
-
-A surviving mutant is a code change no test noticed, and the bar is unchanged: **every in-diff survivor is
-killed with a test or accepted with a stated reason** (equivalent mutant, dev-harness-only weight). No
-Stryker disable comments — an accepted survivor is recorded in prose, where a reader can disagree with it.
-
-What moved is the *scheduling*. The sweep no longer blocks requesting a review. It runs as a periodic batch,
-typically overnight, as one cycle: **sweep → fix wave → re-sweep**, with the survivor report and the fix
-wave's outcome brought to the next working session. Batching it is what keeps the synchronous loop short
-enough to stay honest; the red-proof gate above remains the in-session guarantee that a test was ever
-capable of failing.
-
-The run is **always scoped** (`npm run mutation -- --mutate "<changed lib .ts files, comma-separated>"`),
-never bare. The harness dev instrument (`lib/tick-harness/`) stays inside the scope: its output feeds
-decisions, so a mutant it does not notice is a decision made on an unverified number. The incremental cache
-lives in `reports/stryker-incremental.json` (machine-local), which makes a re-sweep minutes rather than
-hours.
 
 ## Review and merge
 
