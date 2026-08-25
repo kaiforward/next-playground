@@ -258,6 +258,205 @@ tier-0 raw drops (all sites): total 492 — no-labour 301, no-consumer 191
 validation vs persisted world state (t=15984): buildBlocked 202 match / 0 mismatch; buildOpportunity 201 match / 0 mismatch
 ```
 
+## Spec — necessity weighting + derived demand in the build planner
+
+```
+What changes:  Colonies start building the supply chains for goods they cannot yet make. When a
+               higher-tier good is short and one of its ingredients is the reason a factory can't
+               be proposed, the planner now treats that missing ingredient as demanded too — and
+               that demand keeps flowing down through missing ingredients until it reaches raw
+               extraction, which can always be built. Separately, the planner puts food- and
+               water-serving builds ahead of everything else when several goods are short at once,
+               and extraction builds on rich ground now rank above the same build on poor ground.
+Why:           The founding-era manufactured-tier collapse is a proposal deadlock (Round 1-2
+               evidence). Owner decisions encoded, quoted:
+               - "combine the weighting of input goods with the higher tier goods that require
+                 them so if there is a high demand for luxuries, than demand spills down onto the
+                 goods that supply it" (Kai, 2026-08-25)
+               - "the demand spills down onto ALL lower tiers, and is gated by whatever thats
+                 goods missing input is, if something is missing a tier-1 component but needs 3,
+                 it only affects the missing component, which in turns affects any missing input
+                 components all the way down to tier-0, and labor doesnt come into it" (Kai,
+                 2026-08-25)
+               - Roadmap row direction: "extend unmet tier-1/2 demand down the recipe chain as
+                 derived demand on the unsatisfied inputs" and the survival-first half: "the
+                 player gets survival-first advice by hand and the planner does not follow it
+                 when automated — same data, two answers depending on a switch. This row closes
+                 that." Plus the row's fold-in: tier-0 yield-awareness via marginalSlot.
+Evidence:      R4 (competition): bands compete in 62.5%/26.3% of founding runs, interleaving
+               100% — licenses "weighting has a large surface"; does NOT license "survival
+               builds are starved" (realised displacement 8-9.5%). R5 (gate): colony tier-1+
+               candidacies fail inputsAvailable 69-79%, homeworlds 0%, largest reason by 2.6× —
+               licenses the deadlock mechanism and its colony location; does NOT license
+               "removing the gate is safe" (no-labour 26.9% stands behind it). R1-R3 (Round 1):
+               factories that exist are not starved; construction pool/funding not the
+               constraint; the gate's mechanism with receipts. All founding-era horizons; no
+               equilibrium claim anywhere in this spec.
+Not claimed:   The inputsAvailable gate itself is unchanged — nothing is proposed where inputs
+               are missing; the spill builds the inputs instead. Nothing here touches demandRate,
+               market demand, pricing, satisfaction or Provision (the killed "necessity as
+               demand-curve slope" precedent: demandRate is the unit of account). The no-labour
+               binder (26.9% and rising) is NOT addressed — a released proposal may still fail
+               staffing; per-level landing is queue item 2, separate. The 13× per-good unit bias
+               inside a band is not corrected. No claim that survival builds are being rescued —
+               the weighting changes claim/funding ORDER. No UI change; no save-shape change.
+```
+
+### Behaviour
+
+**B1 — Derived demand (the spill).** Inside one faction planner run, after the structural pass
+and the speculative floor have built `remainingByGood` (the same planner-internal seam the floor
+already writes, `lib/engine/directed-build.ts:825-834`), the planner walks goods in REVERSE
+recipe-topological order (`PRODUCTION_GOOD_ORDER` reversed, `lib/constants/recipes.ts:44` —
+consumers before their inputs, so one pass cascades fully). For each system s with remaining
+shortfall R(g,s) of a tier-1+ good g, and for each recipe input i of g (`GOOD_RECIPES`,
+`lib/constants/recipes.ts:14`): if i is **missing at s**, add a derived shortfall
+`D(i,s) = R(g,s) × recipe[g][i]` onto `remainingByGood[i][s]`. Inputs that are not missing get
+nothing. **"Missing" is exactly `inputsAvailable`'s per-input predicate**
+(`lib/engine/directed-build.ts:599-613`: no local production building of i, and no reachable
+surplus source of i) — extracted into one shared helper so the spill exists precisely where the
+gate blocks and the two can never disagree. Because the walk is reverse-topological, D lands on
+components before components is visited, so its own missing inputs receive the cascade in turn;
+tier-0 goods have no recipe and terminate it. Magnitude is bounded: recipe ratios per input are
+≤ 1 and sum to ~1 per good, so each hop attenuates geometrically and depth is ≤ 2 (tier-2 → 1 →
+0).
+
+**Death rule (the roadmap's Don't):** derived demand is never persisted — it is recomputed from
+live shortfalls and live missingness every planner run, and vanishes by construction the run its
+parent shortfall closes or its input stops being missing. There is no decay rule because there
+is no state.
+
+**What serves a derived deficit:** the existing opportunity machinery unchanged — D(i,s) sits at
+the consuming system s in `remainingByGood`, so any site reachable to s (including s itself,
+which wins on `selfCost`) scores an opportunity to serve it, extraction sites included. No new
+proposal kind, no new gate.
+
+**B2 — Necessity weighting (survival band).** Two ordering points change; no score formula
+changes. (1) The opportunity claim order: the descending-score sort
+(`lib/engine/directed-build.ts:993`) becomes band-then-score — opportunities whose built good is
+in `SURVIVAL_GOODS` (water, food — `lib/constants/physical-economy.ts:153`) rank above all
+others, score-descending within each band. This is the same rule the engine already applies when
+persisting the per-system best opportunity (`recordScoredOpportunity`,
+`lib/engine/directed-build.ts:776-786`) and the alert bar applies on read
+(`lib/services/alerts.ts:149`) — one rule, now applied where builds are actually chosen. (2) The
+funding order: `orderProposals` (`lib/engine/construction.ts:279`) becomes housing →
+survival-serving industry bundles (production good in `SURVIVAL_GOODS`) by descending ROI →
+everything else (industry, colonies, centres) by descending ROI, tiebreaks unchanged. Banding is
+by the good being BUILT; derived demand never changes a good's band.
+
+**B3 — Tier-0 yield-awareness.** A tier-0 opportunity's score-side `perUnit`
+(`lib/engine/directed-build.ts:897`) is additionally scaled by the marginal slot's ground value —
+`marginalSlot(slots, worked).groundValue` (`lib/engine/worked-deposits.ts:206`; existing
+consumer precedent `lib/engine/industry.ts:1015`), the quality × extraction-modifier of the next
+unworked deposit the build would sit on. Ranking only: the take/capacity arithmetic and realised
+production (which already runs on worked-prefix yields) are untouched. Multi-level opportunities
+approximate with the first marginal slot's value. A site with no unworked slot never reaches
+scoring (`capUnits ≤ 0`).
+
+**Edges.** Zero shortfall → zero spill. A suppressed (striking) local producer of i still counts
+as "not missing" — mirrors `inputsAvailable` exactly, stated deliberately. Automation off: the
+assessment (and so the spill) still runs — the switch gates proposal emission only
+(`lib/tick/processors/directed-build.ts:470-471`) — so the alert bar's Build opportunity chip
+now surfaces derived-demand-driven tier-0 opportunities to a manual player; same data, same
+answer as the automated planner, which is the row's point. Determinism: pure function of the
+run's inputs, no RNG, no wall-clock. Save/load: nothing persisted, no `World` shape change.
+
+### Acceptance (sim-observable, founding-era)
+
+- Colony-site tier-1+ input-gate failure share (R5's instrument or its BuildDropReport proxy)
+  falls materially below the 69.4%/79.1% baseline at the same boundary windows, same seed.
+- 16K electronics/machinery producing-market count rises above the baseline 20 (colonies gain
+  producers); manufactured-tier consumer cover at 16K lifts off 0.00.
+- Survival guard: food/water consumer cover at 1K/10K/16K never reads below baseline (the band
+  must not be needed for this — R4 says survival mostly lands today — but it must not regress).
+- Conservation identities hold; both horizons quoted on the PR per AGENTS.md.
+
+### Hazard worksheet
+
+**1. One quantity, several jobs.**
+
+| Quantity | Readers today | This design moves | Intended? |
+|---|---|---|---|
+| `remainingByGood` (planner-run-local map) | `planFactionBundles` only — opportunity construction and take-decrement (`directed-build.ts:813-836, 858, 1008`) | Adds derived entries before opportunity construction | Yes — the seam `speculativeFloorExtra` already uses; run-local, so no cross-system reader exists |
+| `SURVIVAL_GOODS` | impact run pasted below: 10 refs / 5 modules — population (unrest fold), tick, alerts (band), directed-build (`recordScoredOpportunity`), constants. HAZARD 1 APPLIES | Adds two readers (opportunity sort, `orderProposals`) | Yes — deliberately COUPLED: one necessity definition everywhere; the alert-bar band and the planner band must never diverge (the row exists because they did) |
+| `GOOD_RECIPES` | impact: 22 refs / 8 modules (industry input draw, treasury, colonisation-value, homeworld-prefab, supply-chain, industry-panel, directed-build) | Adds the spill as a reader (via shared missing-input helper) | Yes — coupled by meaning: the spill must use the same production graph the economy runs. NOTE its docstring's "Nothing consumes this table yet" is stale — correct it in this work |
+| `surplusDrawable` | worksheet-listed "still unresolved" three-way share (logistics donor, build input gate, founding manifest) | Read via the missing-input predicate, unchanged | Yes — deliberately unchanged; narrowing it is out of scope and flagged Not-claimed |
+| `marginalSlot` | impact: CONTAINED, 2 modules (worked-deposits producer, industry worked-prefix maths) | Adds the tier-0 score as a third reader | Yes — read-only lookup of authored ground value; the score reads the same ground the build would realise |
+
+`npm run impact -- SURVIVAL_GOODS` (verdict block, verbatim): `SHARED — 10 references across 5
+modules: physical-economy, directed-build, population, tick, alerts. HAZARD 1 APPLIES.`
+`npm run impact -- GOOD_RECIPES`: `SHARED — 22 references across 8 modules: industry, recipes,
+treasury, colonisation-value, directed-build, homeworld-prefab, supply-chain, industry-panel.`
+`npm run impact -- marginalSlot`: `CONTAINED — 3 references across 2 module(s): industry,
+worked-deposits.` `npm run impact -- assessStructuralDeficits`: `CONTAINED — 3 references across
+1 module(s): directed-build.` `npm run impact -- orderProposals`: `CONTAINED — 4 references
+across 2 module(s): construction, directed-build.`
+
+**2. Constants read for their authored meaning.**
+
+| Constant | Docstring says | Used as | Same? |
+|---|---|---|---|
+| `GOOD_RECIPES` | "produced good → input good: units consumed per unit output… input *structure* is fixed, quantities first-draft" (`recipes.ts:3-13`) | Input structure for missingness; quantities for D's magnitude | Yes — structure is the load-bearing part; magnitudes inherit the same first-draft status as the recipe itself |
+| `SURVIVAL_GOODS` | "the survival goods" fold basis, water+food (`physical-economy.ts:153`) | The band membership | Yes — same authored meaning the unrest fold and alert bar use |
+| `PRODUCTION_GOOD_ORDER` | "every good appears after all of its recipe inputs… Kahn's over GOOD_RECIPES, validated acyclic" (`recipes.ts:37-43`) | Reversed, as the spill's cascade order | Yes — the acyclicity its tests pin is exactly what makes one reverse pass complete |
+| `groundValue` (DepositSlot) | worked-prefix realised yield component (quality × modifier) | Tier-0 score scaling | Yes — the score predicts the same figure production realises |
+
+**3. A system not thought about.**
+
+| System | Interaction | Reason if none |
+|---|---|---|
+| Events | Indirect only: event modifiers move production/demand, which move the shortfalls the spill reads — automatic, no event-specific code path | — |
+| Population + migration | More colony industry → jobs pull migration (existing chain); spill itself reads nothing population-side and writes nothing | — |
+| Unrest / regime | None — unrest folds read satisfaction/Provision, which this never touches | Planner-local quantities only |
+| Industry + staffing | The labour gate (`fitFor`) and one-unit lead bound every released proposal exactly as today; no-labour expected to RISE as the gate stops firing first (R5 licenses this) — acceptance reads it |  |
+| Infrastructure decay | Built-ahead-of-staffing risk unchanged: the one-unit lead is decay-safe by the existing whole-idle-level rule | — |
+| Directed logistics | Deliberately none: logistics reads market demand, not planner deficits — derived demand creates NO hauls until real factories exist and draw real inputs | — |
+| Directed build / planner | The subject | — |
+| Colonisation + founding manifest | Colony proposals rank in orderProposals' third band — they now sit behind survival industry; small, intended (feeding existing worlds precedes founding new ones) | — |
+| Treasury / purse | More funded construction work → bigger construction-band bill; R2 measured funded fraction median 1.000 and pool near idle, so headroom exists at founding; equilibrium bill growth is a tuning read, not a design risk | — |
+| Factions + relations | None — per-faction planner, no cross-faction read | — |
+| Save format | None — nothing persisted | Run-local recomputation |
+| Harness metrics | BuildDropReport reason mix shifts (fewer no-input-supplier, more no-labour/landed); cover metrics move — acceptance reads them cohorted | — |
+
+**4. Symptoms asserted with measurement.** All claims this spec rests on carry R1-R5's frames
+(horizon + cohort) above; no new behavioural claims are introduced beyond them.
+
+**5. Primitives that must exist.**
+
+| Consumes | Produced at | Shape today | Design assumes |
+|---|---|---|---|
+| Per-input missingness | `inputsAvailable` body, `directed-build.ts:608-612` | boolean per input: local building OR reachable surplus source | Same predicate, extracted shared |
+| `remainingByGood` seam | `directed-build.ts:813-836` | `Map<goodId, Map<systemId, shortfall>>`, mutated by the floor already | Additive writes compose (they do — floor precedent) |
+| Reverse topological order | `PRODUCTION_GOOD_ORDER`, `recipes.ts:44-62` | array, inputs-first; validated acyclic | Reversing gives consumers-first |
+| `marginalSlot` | `worked-deposits.ts:206` | `DepositSlot \| null` with `groundValue` | null only when no unworked slot (capUnits already 0 there) |
+| Worked count per resource | `extractorsOnResource` via `workedYieldVectors` (`worked-deposits.ts:216`) | shared built-level count per resource | The score can read the same count the yield maths uses |
+| Survival band rule | `recordScoredOpportunity` (`directed-build.ts:776-786`), `alerts.ts:149` | band-then-score, first-scored tie | Same rule at sort + funding |
+
+**6. Aggregates that move for other reasons.**
+
+| Metric | Cohort read at | What else moves it |
+|---|---|---|
+| Tier-1+ gate-failure share | Colony sites, boundary windows, per horizon | Colony COUNT grows over founding — read the share, not the raw count, and quote candidacy totals beside it |
+| Manufactured-tier cover | Consumer-market cohort, 16K | Cohort mix (new colonies enter as zero-cover consumers) — read cohorted per the simulate report, both horizons |
+| Producing-market count | Per good, colonies vs homeworlds | Nothing else adds producers at colonies today (R5: 0 gate passes → near-zero colony producers), so this is the clean signal |
+| Survival cover guard | Consumer cohort, all three windows | Founding cohort mix — compare same-seed baseline, same windows |
+
+### Falsifiers (provenance)
+
+Committed at `535e4134` before the instruments ran, moved here unedited:
+
+> Falsifier: if at both the 10K-era and 16K-era boundary windows fewer than 10% of planner runs
+> with any scored opportunity score both bands, OR fewer than 10% of those both-band runs show
+> any interleaving (every survival opportunity already out-ranks every non-survival one), the
+> weighting has nothing to act on and the weighting half of the row goes back to brainstorm.
+
+> Falsifier: if at the 16K-era boundary window under 25% of colony-site tier-1+ candidacies
+> reaching the input gate fail it, or "no-input-supplier" is not the largest raw tier-1+ drop
+> reason at colony sites, the deadlock framing is false and the derived-demand direction goes
+> back to brainstorm.
+
+Both survived (Round 2 outcome below).
+
 ### Round 2 outcome
 
 Claim 3 **confirmed** (falsifier needed <10% both-band runs or <10% interleaving; actual
