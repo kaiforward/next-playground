@@ -494,6 +494,104 @@ Committed at `535e4134` before the instruments ran, moved here unedited:
 
 Both survived (Round 2 outcome below).
 
+## Build plan
+
+Pure engine + one adapter thread; no UI tasks. Single `feat/*` branch, one PR (AGENTS.md owns
+the PR unit); tasks are check-in pauses, not PRs.
+
+### Resolution table
+
+| Measure (spec prose) | State | Producer |
+|---|---|---|
+| Derived shortfall `D(i,s) = R(g,s) × recipe[g][i]` | new | Task 2 |
+| `remainingByGood` seam | exists | `lib/engine/directed-build.ts:813-836` (read this session) |
+| Per-input missingness predicate | exists → extracted | `inputsAvailable` body `:608-612`; Task 1 extracts unchanged |
+| `surplusSystemsByGood` (moved earlier) | exists | `:841-852`; Task 1 moves construction ahead of the floor |
+| Reverse topological order | exists | `PRODUCTION_GOOD_ORDER`, `lib/constants/recipes.ts:44-62`, reversed |
+| Recipe ratios | exists | `GOOD_RECIPES`, `lib/constants/recipes.ts:14-35` |
+| Survival band membership | exists | `SURVIVAL_GOODS`, `lib/constants/physical-economy.ts:153` |
+| Band-then-score comparator precedent | exists | `recordScoredOpportunity`, `lib/engine/directed-build.ts:776-786` |
+| `producedGood` on industry proposals | new | Task 3 (set from `opp.goodId` at bundle emission `:1159`) |
+| Funding-order bands | exists → changed | `orderProposals`, `lib/engine/construction.ts:279-304` |
+| `marginalGround: ResourceVector` | new | Task 4 (adapter-side fold; `ResourceVector` at `lib/types/game.ts:34`, `unitResourceVector` at `lib/engine/resources.ts:18`) |
+| Good → resource mapping (tier-0) | exists | `BUILDING_TYPES[goodId].resource`, used at `directed-build.ts:536` |
+| Marginal slot lookup | exists | `marginalSlot`, `lib/engine/worked-deposits.ts:206`; bodies via `slottedBodiesBySystem` (`lib/world/tick.ts:57` import) |
+| Row build site for the thread | exists | `buildBuildRows`, `lib/world/tick.ts:466-482`; consumer adapter `lib/tick/adapters/memory/directed-build.ts:49` |
+| Colony gate-failure share (verification) | exists (instrument) | `temp/planner-competition-diag.ts` + its PLANNER_DIAG hook re-patch (gitignored; memory: temp-diag-runners) |
+
+### Task 1 — Move the surplus map ahead of the demand seam and extract the shared missingness helper
+
+Files:      lib/engine/directed-build.ts
+Interface:  `inputMissingAt(input: string, site: BuildSystemState, surplusSystemsByGood: Map<string, string[]>, routeCost: RouteCost): boolean` — the exact per-input term of today's `inputsAvailable` (`:608-612`), negated naming for the spill's reading; `inputsAvailable` reconsumes it. `surplusSystemsByGood` construction relocated above the speculative-floor loop (before any `remainingByGood` mutation); the early-return at `:836` keeps its position relative to the floor.
+Proves:     the gate's verdict is bit-identical to today on every existing engine test (pure refactor); a site with a local producing building of the input reads not-missing; a surplus donor reachable only beyond maxHops reads missing; the relocated map is built from unmutated market state (the floor's `remainingByGood` writes cannot feed it); the helper and the gate can never disagree on the same inputs (one body, two callers).
+Consumes:   nothing.
+
+### Task 2 — The spill: derived demand onto missing inputs, reverse-topologically
+
+Files:      lib/engine/directed-build.ts
+Interface:  internal to `planFactionBundles`: after the speculative-floor loop, a pass over `[...PRODUCTION_GOOD_ORDER].reverse()` adds `D(i,s) = R(g,s) × GOOD_RECIPES[g][i]` to `remainingByGood[i][s]` for every tier-1+ good g with remaining shortfall at s and every input i where `inputMissingAt(...)` is true. No new exported symbols, no persistence, no World-shape change.
+Proves:     a good missing 1 of 3 inputs spills onto exactly that one (the other two receive zero); the 4-hop chain cascades (a ship_frames shortfall with everything missing reaches ore, scaled by the product of the ratios on the path); a single-input ratio-1 recipe forwards full magnitude; a QUEUED input building suppresses the spill for that input (the effective-buildings fold); zero parent shortfall spills nothing; a spilled tier-0 deficit is served by the ordinary opportunity machinery (an extractor opportunity appears at or near s and can land).
+Consumes:   Task 1 (`inputMissingAt`, relocated `surplusSystemsByGood`).
+
+### Task 3 — Survival band at the claim order and the funding order
+
+Files:      lib/engine/directed-build.ts, lib/engine/construction.ts
+Interface:  `PlannedBundle` and `BuildProposal` gain `producedGood?: string` — set to `opp.goodId` on industry bundles at emission (`directed-build.ts:1159` and the bundle→proposal join in `planFactionProposals`), absent on housing; `opportunities.sort` (`:993`) becomes band-then-score with band = `SURVIVAL_GOODS.includes(goodId)` (comparator mirrors `recordScoredOpportunity`'s rule); `orderProposals` (`construction.ts:279`) orders housing → `producedGood ∈ SURVIVAL_GOODS` by descending ROI → everything else by descending ROI, existing tiebreaks unchanged within bands.
+Proves:     a higher-scored non-survival opportunity ranks below any survival opportunity at the sort (and claims shared deficit capacity after it); within one band, order is still by score/ROI; housing still leads everything; a colony proposal funds in the third band; `producedGood` is present on every industry bundle and absent on every housing bundle (the vacuity check: the survival test read `producedGood`, never `items[0]`); determinism — equal inputs in permuted order produce the identical queue.
+Consumes:   nothing from Tasks 1-2 (same file; ordered here to serialise edits).
+
+### Task 4 — marginalGround: fold, thread, and fold into the tier-0 score
+
+Files:      lib/engine/worked-deposits.ts, lib/world/tick.ts, lib/tick/world/directed-build-world.ts, lib/tick/processors/directed-build.ts, lib/engine/directed-build.ts, plus every engine/adapter/processor test fixture constructing a `SystemBuildRow`/`BuildSystemState` (required field, `extractionEff` precedent — the docstring at `directed-build-world.ts:27-30` is the model)
+Interface:  `marginalGroundVector(bodies: SlottedBody[], workedOf: (r: ResourceType) => number): ResourceVector` (new, `worked-deposits.ts`) — per resource, the `groundValue` of `marginalSlot(depositSlotOrder(bodies, r), workedOf(r))`, neutral 1.0 when null. Worked counts are passed IN by the caller (`extractorsOnResource` lives in `directed-build.ts:517`; `worked-deposits.ts` must not import from it — cycle); `SystemBuildRow.marginalGround: ResourceVector` (required) computed in `buildBuildRows` (`lib/world/tick.ts:466`) from the `slottedBodiesBySystem` fold already in scope in `runWorldTick`; threaded through `toBuildState` into `BuildSystemState`; the tier-0 score's `perUnit` (`directed-build.ts:897`) multiplied by `site.marginalGround[resource]` (resource via `BUILDING_TYPES[goodId].resource`). Fixtures pass `unitResourceVector()` for the neutral reading.
+Proves:     two sites with equal shortfall service and unequal next-slot ground rank rich-first; the multiplier reads the NEXT unworked slot, not the worked average (a site whose worked prefix is rich but next slot poor ranks by the poor slot); neutral 1.0 when no unworked slot remains (and such a site is already capUnits-gated); take/served arithmetic and realised production unchanged (score-only); omitting the field in a fixture is a compile error, not a silent neutral.
+Consumes:   nothing (independent of Tasks 1-3 except shared-file serialisation).
+
+### Gate — sim verification (after Task 4)
+
+Arms: `npm run build`; `npx vitest run`; `npm run simulate` (both horizons) plus the 16K config used for R1-R5 (seed 42, 600 systems); re-patch the PLANNER_DIAG hook and re-run `temp/planner-competition-diag.ts` (same windows).
+Reads: colony-site tier-1+ input-gate failure share vs 69.4%/79.1% baseline (16K/10K windows); electronics/machinery producing-market counts vs baseline 20 (colonies must gain producers); manufactured-tier consumer cover at 16K vs 0.00 — all cohorted; survival guard: food/water consumer cover at 1K/10K/16K not below baseline; conservation identities green.
+Merge condition: gate-failure share materially down AND colony producers appear AND survival cover not regressed AND identities hold; the PR quotes both horizons per AGENTS.md. Hook reverted after the re-run (grep PLANNER_DIAG over lib/ clean).
+
+### Verification
+
+The gate above is the feature proof — sim metrics at both horizons, cohorted (homeworld vs
+colony), never fixtures alone. No new committed harness metric: the drop-share read lives in the
+gitignored diag (booked in memory temp-diag-runners with its re-patch instructions); the
+simulate report already carries cover and producing-market counts cohorted.
+
+### Doc fold (on the branch, before final review)
+
+- `docs/active/gameplay/economy-autonomic-agency.md` — planner section gains the spill, the
+  survival band, the tier-0 ground-value scaling, and the accepted queued-inputs pipelining
+  statement (present tense, no history).
+- `docs/SPEC.md` — the Directed Logistics & Autonomic Agency paragraph's planner sentences
+  updated to match.
+- `docs/ROADMAP.md` — queue item 1 (necessity weighting) deleted at ship; its non-shipped
+  remainders move per Not covered below.
+- This working file deleted at ship (evidence worth keeping is already in the roadmap row's
+  history and the active-doc fold).
+
+### Not covered
+
+- **No-labour binder (26.9% of colony tier-1+ drops, rising as the gate opens)** — deliberately
+  untouched (spec Not-claimed). Booked: the per-level landing row is roadmap queue item 2; the
+  binder itself is re-read at this plan's gate (its share is in the diag output the gate quotes).
+- **Within-band 13× per-good unit bias** — dropped, with reason: the band removes the
+  cross-band consequence the roadmap row cared about; within-band bias is the same score
+  semantics as today, and re-scaling it is tuning this spec's evidence does not license.
+- **Necessity in logistics routing** — booked already: the goods-pillar row's "carry necessity
+  into the routing calculations too" line (`docs/ROADMAP.md`, good-allocation cliff row); not
+  duplicated here.
+- **`surplusDrawable` three-way (now four-way) share** — dropped from this feature, with reason:
+  spec review confirmed the fourth reader is a read-only UI mirror; narrowing the shared
+  denominator is its own design conversation, flagged in the hazards file already.
+
+### Net-new UI
+
+None — no task touches a component; the alert bar already renders banded opportunities and
+inherits the planner's signals unchanged.
+
 ### Round 2 outcome
 
 Claim 3 **confirmed** (falsifier needed <10% both-band runs or <10% interleaving; actual
