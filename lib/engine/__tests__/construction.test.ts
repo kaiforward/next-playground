@@ -358,8 +358,9 @@ function proposal(
   value: number,
   work: number,
   role: "housing" | "industry" = "industry",
+  producedGood?: string,
 ): Proposal {
-  return { kind: "build", factionId: "f1", systemId, role, items, value, work };
+  return { kind: "build", factionId: "f1", systemId, role, items, value, work, producedGood };
 }
 
 describe("proposalRoi", () => {
@@ -419,6 +420,73 @@ describe("orderProposals", () => {
     const snapshot = input.map((p) => p.systemId);
     orderProposals(input);
     expect(input.map((p) => p.systemId)).toEqual(snapshot);
+  });
+});
+
+describe("orderProposals — survival band (necessity weighting)", () => {
+  it("still funds housing ahead of everything, including a survival-serving industry proposal", () => {
+    const housing = proposal("s1", [{ buildingType: "housing", levels: 1 }], 0, 8, "housing");
+    const richSurvival = proposal("s2", [{ buildingType: "food", levels: 1 }], 1000, 1, "industry", "food"); // enormous ROI
+    const ordered = orderProposals([richSurvival, housing]);
+    expect(ordered[0]).toBe(housing);
+    expect(ordered[1]).toBe(richSurvival);
+  });
+
+  it("funds a survival-serving proposal ahead of a higher-ROI non-survival one", () => {
+    const survival = proposal("s1", [{ buildingType: "food", levels: 1 }], 10, 20, "industry", "food"); // ROI 0.5
+    const richOther = proposal("s2", [{ buildingType: "electronics", levels: 1 }], 100, 4); // ROI 25, no producedGood band
+    const ordered = orderProposals([richOther, survival]);
+    expect(ordered[0]).toBe(survival);
+    expect(ordered[1]).toBe(richOther);
+  });
+
+  it("orders two survival-serving proposals by descending ROI within their own band", () => {
+    const lo = proposal("s1", [{ buildingType: "water", levels: 1 }], 10, 20, "industry", "water"); // ROI 0.5
+    const hi = proposal("s2", [{ buildingType: "food", levels: 1 }], 30, 20, "industry", "food");    // ROI 1.5
+    expect(orderProposals([lo, hi]).map((p) => p.systemId)).toEqual(["s2", "s1"]);
+  });
+
+  it("funds a colony proposal in the third band — behind a survival-serving proposal even at a lower ROI", () => {
+    const survival = proposal("s1", [{ buildingType: "food", levels: 1 }], 5, 20, "industry", "food"); // ROI 0.25
+    const col = colony("c1", 1000, 1); // enormous ROI, no producedGood — the colony branch never carries one
+    const ordered = orderProposals([col, survival]);
+    expect(ordered[0]).toBe(survival);
+    expect(ordered[1]).toBe(col);
+  });
+
+  it("a colony still interleaves with ordinary (non-survival) industry by ROI, band-equal", () => {
+    const hi = proposal("s1", [{ buildingType: "ore", levels: 1 }], 40, 20);   // ROI 2.0, no producedGood
+    const col = colony("c1", 30, 20);                                          // ROI 1.5
+    const lo = proposal("s2", [{ buildingType: "gas", levels: 1 }], 10, 20);   // ROI 0.5, no producedGood
+    expect(orderProposals([lo, col, hi]).map((p) => p.systemId)).toEqual(["s1", "c1", "s2"]);
+  });
+
+  it("the vacuity check — bands by producedGood, never by items[0] (a survival good gated behind an unrelated first item)", () => {
+    // items[0] is a school, not a survival good at all — a reader keyed off items[0] would call this
+    // non-survival. producedGood alone says it serves food.
+    const gatedSurvival = proposal("s1", [
+      { buildingType: "vocational_school", levels: 1 },
+      { buildingType: "food", levels: 1 },
+    ], 5, 40, "industry", "food"); // ROI 0.125 — deliberately low, so only the BAND (not ROI) could put it first
+    const richOther = proposal("s2", [{ buildingType: "electronics", levels: 1 }], 100, 4); // ROI 25
+    const ordered = orderProposals([richOther, gatedSurvival]);
+    expect(ordered[0]).toBe(gatedSurvival);
+    expect(ordered[1]).toBe(richOther);
+  });
+
+  it("is deterministic under input reordering with a mixed housing/survival/other/colony queue", () => {
+    const housing = proposal("s0", [{ buildingType: "housing", levels: 1 }], 0, 8, "housing");
+    const survivalA = proposal("s1", [{ buildingType: "food", levels: 1 }], 10, 20, "industry", "food");
+    const survivalB = proposal("s2", [{ buildingType: "water", levels: 1 }], 30, 20, "industry", "water");
+    const other = proposal("s3", [{ buildingType: "ore", levels: 1 }], 40, 20);
+    const col = colony("c1", 30, 20);
+    const input = [housing, survivalA, survivalB, other, col];
+    const order1 = orderProposals(input).map((p) => p.systemId);
+    const order2 = orderProposals([...input].reverse()).map((p) => p.systemId);
+    const order3 = orderProposals([col, other, survivalB, housing, survivalA]).map((p) => p.systemId);
+    expect(order1).toEqual(order2);
+    expect(order1).toEqual(order3);
+    expect(order1).toEqual(["s0", "s2", "s1", "s3", "c1"]);
   });
 });
 

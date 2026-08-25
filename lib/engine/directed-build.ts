@@ -35,6 +35,16 @@ import {
   familyAnchorBuff, familyThroughput, inputDemandFromProduction, labourFulfilment,
 } from "@/lib/engine/industry";
 
+/**
+ * A good the necessity band ranks above every other good (water, food — `SURVIVAL_GOODS`). The ONE
+ * definition of the band: `recordScoredOpportunity`'s per-system alert-bar report and the
+ * `opportunities.sort` claim order both call this, so the two can never disagree about which good is
+ * survival-serving.
+ */
+function isSurvivalGood(goodId: string): boolean {
+  return SURVIVAL_GOODS.includes(goodId);
+}
+
 /** Market state for one good at one system — the build planner's per-good input. */
 export interface BuildGoodState {
   goodId: string;
@@ -720,6 +730,10 @@ export interface BuildProposal {
   value: number;
   /** Σ over items of `levels × workCostPerLevel` — the ROI denominator. */
   work: number;
+  /** The good this bundle's production serves — set on every industry bundle (`opp.goodId`), absent
+   *  on housing. The funding order's survival test (`orderProposals`) reads this, never `items[0]`
+   *  (whose gate-first order puts production last). */
+  producedGood?: string;
 }
 
 /** The proposal union the decision layer emits — build bundles and colony-establishments, ranked on one pool. */
@@ -732,6 +746,8 @@ interface PlannedBundle {
   items: ProposalItem[];
   value: number;
   work: number;
+  /** The good this bundle's production serves — set on every industry bundle, absent on housing. */
+  producedGood?: string;
 }
 
 /**
@@ -787,7 +803,7 @@ function planFactionBundles(
   // reduced afterward, so it needs no second pass over `opportunities`.
   const bestOpportunityBySystem = new Map<string, BuildOpportunityReport & { survival: boolean }>();
   const recordScoredOpportunity = (systemId: string, goodId: string, score: number): void => {
-    const survival = SURVIVAL_GOODS.includes(goodId);
+    const survival = isSurvivalGood(goodId);
     const current = bestOpportunityBySystem.get(systemId);
     if (current) {
       // A survival-serving current always outranks a non-survival candidate, whatever the scores.
@@ -1033,7 +1049,16 @@ function planFactionBundles(
     }
   }
 
-  opportunities.sort((a, b) => b.score - a.score);
+  // Band-then-score claim order: a survival-serving opportunity (`isSurvivalGood`) always claims the
+  // shared per-site capacity/labour ahead of every non-survival one, whatever the scores; within a
+  // band, descending score (a stable sort preserves the first-scored tie already implicit in push
+  // order, mirroring `recordScoredOpportunity`'s rule above).
+  opportunities.sort((a, b) => {
+    const aSurvival = isSurvivalGood(a.goodId);
+    const bSurvival = isSurvivalGood(b.goodId);
+    if (aSurvival !== bSurvival) return aSurvival ? -1 : 1;
+    return b.score - a.score;
+  });
 
   for (const opp of opportunities) {
     const site = working.get(opp.systemId);
@@ -1199,7 +1224,7 @@ function planFactionBundles(
       value += take;
     }
 
-    bundles.push({ systemId: site.systemId, role: "industry", items, value, work });
+    bundles.push({ systemId: site.systemId, role: "industry", items, value, work, producedGood: opp.goodId });
   }
 
   // A ranked drop always outranks an unranked one for the same system (see the docstring on the two
@@ -1286,6 +1311,7 @@ export function planFactionProposals(
       items: bundle.items,
       value: bundle.value,
       work: bundle.work,
+      producedGood: bundle.producedGood,
     });
   }
   return {

@@ -763,6 +763,131 @@ describe("planFactionBundles — derived demand (the spill)", () => {
   });
 });
 
+describe("planFactionBundles — survival band at the claim order (necessity weighting)", () => {
+  // A single self-serving site: enough deposit slots for a whole level of EITHER good, but a
+  // population of 1 — via the one-unit labour lead, exactly one production level can ever be
+  // staffed here this run, whichever good claims it first. ore's shortfall (5000) is two
+  // orders of magnitude past food's (5), scoring it far above food alone — the fixture that would
+  // let ore claim the site's only buildable slot under a pure descending-score sort.
+  function contestedSite(systemId: string): BuildSystemState {
+    const depositCounts = emptyResourceVector();
+    depositCounts.arable = 10;
+    depositCounts.ore = 10;
+    return {
+      systemId, factionId: "f1", population: 1, control: "developed", buildings: {},
+      depositCounts, peopleLand: 0,
+      goods: [
+        { goodId: "food", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 },
+        { goodId: "ore", stock: 1, demand: 5000, capacityProduction: 0, proposalCycles: 1 },
+      ],
+    };
+  }
+
+  it("a higher-scored non-survival opportunity ranks below survival at the claim order, and loses the site's one buildable slot to it", () => {
+    const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
+    // Sanity, measured not assumed (mirrors the buildOpportunities regression fixture): ore really
+    // does outscore food alone, with ample labour to build either.
+    const ample = (systemId: string, goodId: string, demand: number): BuildSystemState => {
+      const depositCounts = emptyResourceVector();
+      depositCounts.arable = 10;
+      depositCounts.ore = 10;
+      return {
+        systemId, factionId: "f1", population: 100_000, control: "developed", buildings: {},
+        depositCounts, peopleLand: 0,
+        goods: [{ goodId, stock: 1, demand, capacityProduction: 0, proposalCycles: 1 }],
+      };
+    };
+    const foodScore = planFactionProposals([ample("F", "food", 5)], rc, [], DEV_REFS)
+      .buildOpportunities.find((o) => o.systemId === "F")?.score ?? 0;
+    const oreScore = planFactionProposals([ample("O", "ore", 5000)], rc, [], DEV_REFS)
+      .buildOpportunities.find((o) => o.systemId === "O")?.score ?? 0;
+    expect(oreScore).toBeGreaterThan(foodScore);
+
+    // The real, contested site: both goods score this run, food (survival, lower score) must claim
+    // the one staffable slot first, leaving ore — despite its higher score — dropped for no-labour.
+    const builds = planFactionBuilds([contestedSite("X")], rc, DEV_REFS);
+    expect(countFor(builds, "X", "food")).toBeGreaterThan(0);
+    expect(countFor(builds, "X", "ore")).toBe(0);
+  });
+
+  it("orders two opportunities in the SAME band by score alone, unaffected by the new banding rule", () => {
+    // Both non-survival: minerals and ore share a band, so the claim order still falls back to the
+    // descending-score rule the sort always had — minerals' far larger shortfall wins the site's one
+    // staffable slot, ore is dropped.
+    const depositCounts = emptyResourceVector();
+    depositCounts.minerals = 10;
+    depositCounts.ore = 10;
+    const site: BuildSystemState = {
+      systemId: "X", factionId: "f1", population: 1, control: "developed", buildings: {},
+      depositCounts, peopleLand: 0,
+      goods: [
+        { goodId: "minerals", stock: 1, demand: 5000, capacityProduction: 0, proposalCycles: 1 },
+        { goodId: "ore", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 },
+      ],
+    };
+    const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
+    const builds = planFactionBuilds([site], rc, DEV_REFS);
+    expect(countFor(builds, "X", "minerals")).toBeGreaterThan(0);
+    expect(countFor(builds, "X", "ore")).toBe(0);
+  });
+
+  it("is deterministic under input reordering — permuted systems produce the identical claim order", () => {
+    const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
+    const x1 = contestedSite("X1");
+    const x2 = contestedSite("X2");
+    const summarize = (builds: PlannedBuild[]) =>
+      [...builds].map((b) => `${b.systemId}|${b.buildingType}|${b.count}`).sort();
+    const forward = summarize(planFactionBuilds([x1, x2], rc, DEV_REFS));
+    const reversed = summarize(planFactionBuilds([contestedSite("X2"), contestedSite("X1")], rc, DEV_REFS));
+    expect(forward).toEqual(reversed);
+    // The permutation check is only meaningful if the claim order it is checking actually fired.
+    expect(forward.some((s) => s.includes("|food|"))).toBe(true);
+    expect(forward.some((s) => s.includes("|ore|"))).toBe(false);
+  });
+
+  it("carries producedGood on every industry proposal and never on a housing proposal", () => {
+    const depositCounts = emptyResourceVector();
+    for (const k of RESOURCE_TYPES) depositCounts[k] = 10;
+    const deficitFood: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "food", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const deficitWater: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "water", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const builder: BuildSystemState = {
+      systemId: "C", factionId: "f1", population: 10000, control: "developed", buildings: {},
+      depositCounts, peopleLand: 50, goods: [],
+    };
+    const plan = planFactionProposals([deficitFood, deficitWater, builder], () => 1, [], DEV_REFS);
+    const industry = plan.proposals.filter((p) => p.kind === "build" && p.role === "industry");
+    const housing = plan.proposals.filter((p) => p.kind === "build" && p.role === "housing");
+    expect(industry.length).toBeGreaterThan(0);
+    expect(housing.length).toBeGreaterThan(0);
+    expect(industry.every((p) => p.kind === "build" && p.producedGood !== undefined)).toBe(true);
+    expect(housing.every((p) => p.kind === "build" && p.producedGood === undefined)).toBe(true);
+    // producedGood names the good actually built — not a stand-in for some other item in the bundle.
+    for (const p of industry) {
+      if (p.kind !== "build") continue;
+      expect(p.items.some((i) => i.buildingType === p.producedGood)).toBe(true);
+    }
+  });
+
+  it("the vacuity check — producedGood names the good even when items[0] is the academy that gates it, not the good itself", () => {
+    // electronics' bundle is gate-first: vocational_school/research_institute BEFORE the production
+    // item (see "academy co-build" above) — reading items[0] here would name the wrong thing.
+    const proposals = planFactionProposals(makeElectronicsDeficitWithCapableSite(), selfAndNeighbourRoute, [], DEV_REFS).proposals;
+    const bundle = proposals.find((p) => p.kind === "build" && p.items.some((i) => i.buildingType === "electronics"));
+    expect(bundle).toBeDefined();
+    if (bundle?.kind !== "build") throw new Error("expected a build proposal");
+    expect(bundle.producedGood).toBe("electronics");
+    expect(bundle.items[0]?.buildingType).not.toBe("electronics");
+  });
+});
+
 describe("planFactionBuilds — relief housing", () => {
   it("does not build housing at a starved system", () => {
     const starved: BuildSystemState = {

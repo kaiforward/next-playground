@@ -12,6 +12,7 @@ import { isEconomicallyActive } from "@/lib/engine/control";
 import { clamp } from "@/lib/utils/math";
 import { computeLabourAllocation, labourParts, labourStateFromParts } from "@/lib/engine/industry";
 import { CONSTRUCTION_CENTRE_TYPE } from "@/lib/constants/industry";
+import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 
 /** The per-system fields the pool reads: ownership tier, headcount, and the built base. */
 export interface ConstructionPoolSystem {
@@ -266,10 +267,22 @@ function isHousing(p: Proposal): boolean {
 }
 
 /**
+ * A build proposal whose production serves a survival good (water, food — `SURVIVAL_GOODS`). Reads
+ * `producedGood` — the field the industry bundle carries from the good it was built for — never
+ * `items[0]`, whose gate-first order (academy/complex before production) puts the produced good LAST,
+ * not first. A colony or construction-centre proposal carries no `producedGood` and so is never
+ * survival-serving.
+ */
+function isSurvivalBuild(p: Proposal): boolean {
+  return p.kind === "build" && p.producedGood !== undefined && SURVIVAL_GOODS.includes(p.producedGood);
+}
+
+/**
  * Order this cycle's new proposals into funding priority (front = funded first) — the reorder of
  * `fundQueue`'s input the value-order model prescribes (docs/active/gameplay/colonisation.md):
  *   1. housing — the proactive population substrate leads (no served-demand ROI of its own);
- *   2. everything else by descending ROI (value ÷ whole-bundle work).
+ *   2. survival-serving industry (water, food) by descending ROI;
+ *   3. everything else (industry, colonies, centres) by descending ROI.
  * Ties break by systemId then first-item type, a total order independent of input order (determinism).
  * A proposal is atomic — its gate-first `items` are never split, so a bundled academy stays ahead of
  * the production it gates. The caller expands each proposal into its item rows and prepends the
@@ -296,7 +309,10 @@ export function orderProposals(proposals: Proposal[]): Proposal[] {
     const bh = isHousing(b);
     if (ah !== bh) return ah ? -1 : 1; // housing first
     if (!ah) {
-      const dRoi = proposalRoi(b) - proposalRoi(a); // then descending ROI
+      const asurv = isSurvivalBuild(a);
+      const bsurv = isSurvivalBuild(b);
+      if (asurv !== bsurv) return asurv ? -1 : 1; // survival-serving industry next
+      const dRoi = proposalRoi(b) - proposalRoi(a); // then descending ROI within the band
       if (Math.abs(dRoi) > 1e-12) return dRoi;
     }
     return tiebreak(a).localeCompare(tiebreak(b)); // deterministic within a tier / ROI tie
