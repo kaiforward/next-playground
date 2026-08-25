@@ -158,3 +158,114 @@ Horizons: boundary-tick windows ending at 1K (pre-founding — homeworlds only),
 one 16K run (seed 42, 600 systems, defaults). Cohort: homeworld (`faction.homeworldId`) vs
 colony, within developed systems (the planner only visits those).
 
+### Reading 4 — survival vs non-survival competition per planner run (Claim 3)
+
+```
+Meaning:    In the founding era the two bands compete in most planner runs, and when they do
+            the ranking always interleaves — some non-survival opportunity out-scores some
+            survival opportunity in 100% of both-band runs, and the TOP opportunity is
+            non-survival in ~95-98% of them. A necessity weight would reorder almost every
+            run it applies to. Realised displacement today is small (survival builds still
+            mostly land because take is shortfall-bounded), so the weight's effect is on
+            claim/funding order, not on rescuing survival builds that currently die.
+Number:     10K window: 80/84 runs scored anything; both bands 50 (62.5%); interleaved
+            50/50 (100%); top non-survival while survival exists 49 (98.0%); non-survival
+            landed while a survival opportunity was ranked-dropped: 4 (8.0%). Scored
+            opportunities survival 723 vs non-survival 4,271.
+            16K window: both bands 21/80 (26.3%); interleaved 21/21 (100%); top
+            non-survival 20 (95.2%); realised 2 (9.5%). Scored survival 202 vs 4,386.
+            1K window (pre-founding): both bands 1/40 (2.5%) — homeworlds only, nothing
+            to weight yet.
+Claim:      Claim 3 — survival/non-survival competition is common inside one planner run.
+Horizon:    boundary windows ending at 1K, 10K, 16K of one 16K run (4 boundaries × 21
+            factions each). 10K and 16K are both founding-era (first colony ~t=4,128);
+            no equilibrium claim.
+Cohort:     per-faction planner runs; scored opportunities split homeworld vs colony
+            (10K: homeworld 67 surv / 1,179 non; colony 656 surv / 3,092 non).
+Licenses:   confirms the weighting has a large surface to act on (coexistence common,
+            inversion universal within it). Does NOT say survival builds are being starved
+            today (realised displacement 8-9.5%); does NOT size the weight; says nothing
+            about equilibrium behaviour.
+Instrument: temp/planner-competition-diag.ts + temporary PLANNER_DIAG hook inside
+            planFactionBundles (lib/engine/directed-build.ts; reverted same session, grep
+            clean). Validated: per-system dedupe recomputed from raw rows at t=15984
+            matches persisted world state exactly — buildBlocked 202/0, buildOpportunity
+            201/0. First run sampled loop-index ticks and read all-zeroes: runWorldTick
+            advances to currentTick + 1 before processors run, so boundary sampling must
+            use t + 1 (counter-armed-on-wrong-tick, caught by the zero-row validation).
+```
+
+Raw rows (10K / 16K windows, verbatim):
+
+```
+===== window 10K — 84 planner runs (faction×boundary) =====
+runs with any scored opportunity: 80/84
+  both bands scored:      50 (62.5% of scored runs)
+  interleaved (some non-survival above some survival): 50 (100.0% of both-band runs)
+  top opportunity non-survival while survival exists:  49 (98.0%)
+  realised competition (non-survival landed AND survival ranked-dropped): 4 (8.0%)
+  scored opportunities: survival 723, non-survival 4271
+  scored by site cohort: homeworld surv 67 / non 1179; colony surv 656 / non 3092
+===== window 16K — 84 planner runs (faction×boundary) =====
+runs with any scored opportunity: 80/84
+  both bands scored:      21 (26.3% of scored runs)
+  interleaved (some non-survival above some survival): 21 (100.0% of both-band runs)
+  top opportunity non-survival while survival exists:  20 (95.2%)
+  realised competition (non-survival landed AND survival ranked-dropped): 2 (9.5%)
+  scored opportunities: survival 202, non-survival 4386
+  scored by site cohort: homeworld surv 23 / non 890; colony surv 179 / non 3496
+```
+
+### Reading 5 — the input gate's raw drop share (Claim 4)
+
+```
+Meaning:    The deadlock is real, colony-specific, and the gate is where tier-1+ proposals
+            die: at colony sites roughly seven in ten tier-1+ site×good candidacies that
+            clear capacity fail inputsAvailable, and no-input-supplier is the largest raw
+            tier-1+ drop reason there by far — while homeworlds fail the same gate exactly
+            never. The colony tier-1+ pipeline is otherwise labour-limited, not
+            consumer-limited.
+Number:     16K window, colony sites: input gate fails 8,758/12,619 tier-1+ candidacies
+            (69.4%); raw tier-1+ drop mix no-input-supplier 69.4%, no-labour 26.9%,
+            no-consumer 3.7%. Homeworld sites: 0/1,327 gate failures (0.0%); drops there
+            are no-labour 64.3% / no-consumer 35.7%. 10K window, colony: 9,325/11,788
+            fail (79.1%). 1K window: zero tier-1+ candidacies exist at all (no tier-1+
+            structural deficits assessed pre-founding).
+Claim:      Claim 4 — the input gate is the deadlock's dominant drop, on colonies.
+Horizon:    same three boundary windows of the same 16K run. Founding-era readings; the
+            10K→16K drift (79.1% → 69.4%, machinery passes rising 0 → 96) shows the gate
+            loosening very slowly as intermediates appear, consistent with the observed
+            bottom-up unblock being far too slow rather than absent.
+Cohort:     homeworld vs colony sites, developed systems only. Per-good failures at 16K
+            led by weapons_systems 702, luxuries 696, ship_frames 691, targeting_arrays
+            680, weapons 675, reactor_cores 646, consumer_goods 638, machinery 632.
+Licenses:   confirms the proposal-deadlock mechanism and locates it on colonies at the
+            gate. Does NOT say removing the gate is safe (no-labour is the next binder at
+            26.9% and would catch some of what the gate releases); does NOT measure how
+            much capacity derived demand would actually unblock; no equilibrium claim.
+Instrument: same run and hook as Reading 4; same validation.
+```
+
+Raw rows (16K window, verbatim; 10K figures quoted above):
+
+```
+input gate (homeworld sites): 0/1327 tier-1+ candidacies fail (0.0%)
+  raw tier-1+ drops (homeworld): total 1326 — no-labour 853 (64.3%), no-consumer 473 (35.7%)
+input gate (colony sites): 8758/12619 tier-1+ candidacies fail (69.4%)
+  top failing goods: weapons_systems 702 (passes 2), luxuries 696 (passes 32), ship_frames 691 (passes 13), targeting_arrays 680 (passes 24), weapons 675 (passes 50), reactor_cores 646 (passes 58), consumer_goods 638 (passes 54), machinery 632 (passes 96)
+  raw tier-1+ drops (colony): total 12617 — no-input-supplier 8758 (69.4%), no-labour 3398 (26.9%), no-consumer 461 (3.7%)
+tier-0 raw drops (all sites): total 492 — no-labour 301, no-consumer 191
+validation vs persisted world state (t=15984): buildBlocked 202 match / 0 mismatch; buildOpportunity 201 match / 0 mismatch
+```
+
+### Round 2 outcome
+
+Claim 3 **confirmed** (falsifier needed <10% both-band runs or <10% interleaving; actual
+62.5%/26.3% and 100%/100%). Claim 4 **confirmed** (falsifier needed <25% gate failure or a
+larger rival reason; actual 69-79% and largest by 2.6×). Both pre-design reads the roadmap row
+committed are now taken; next is the single design pass covering necessity weighting + derived
+demand together. Two evidence-shaped notes for that pass: the weight's leverage is ordering
+(claim priority and funding order), not rescuing survival builds that currently die; and
+no-labour (26.9% and rising as the gate loosens) is the binder standing behind the gate, so
+derived demand's unblock estimate must not assume a released proposal lands.
+

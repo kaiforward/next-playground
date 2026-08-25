@@ -49,11 +49,12 @@ The attention layer — how the player finds what to do — is two surfaces, bot
   the binary gate sits *before* ranking, so derived demand alone may not unblock a good whose own
   inputs are deficit-bound; and demand from factories that don't exist yet must die cleanly once the
   chain is built.
-  *Next step:* `/measure` two reads — how often survival and non-survival opportunities actually
-  compete inside one planner run (the weighting's value depends entirely on that rate, Kai's prior:
-  often), and the BuildDropReport "no-input-supplier" share over a 16K run (the deadlock's actual
-  drop rate) — both horizons, cohorted by developed systems. Then one design pass covering weighting
-  + derived demand together: they touch the same score.
+  Both pre-design reads taken 2026-08-25 (Round 2 in the evidence file, falsifiers committed,
+  instrument validated): bands compete in 62.5%/26.3% of founding-era runs (10K/16K) and the ranking
+  interleaves in 100% of those; the input gate fails 69-79% of colony tier-1+ candidacies (0% on
+  homeworlds), the largest drop reason by 2.6×.
+  *Next step:* one design pass covering weighting + derived demand together (they touch the same
+  score), then `/spec-review` — cross-mechanic surface.
   *Don't:* copy the alert bar's band across without a sim reading. That band is a presentation
   ordering with no simulation consequence; this one changes what every faction builds at every horizon.
   And don't ship derived demand without a decay/dissolution rule for it — permanent phantom demand is
