@@ -15,7 +15,7 @@ import type {
 } from "@/lib/world/types";
 import type { AlertCategory } from "@/lib/types/api";
 import { planFactionProposals, type BuildSystemState, type BuildGoodState } from "@/lib/engine/directed-build";
-import { emptyResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
+import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import type { DevelopmentRefs } from "@/lib/engine/development";
 import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 
@@ -1548,7 +1548,7 @@ describe("getAlertData", () => {
       const devRefs: DevelopmentRefs = { popRef: 150, industryRef: 12 };
       const builder = (): BuildSystemState => ({
         systemId: "B", factionId: "f1", population: 100_000, control: "developed", buildings: {},
-        depositCounts, peopleLand: 0, goods: [],
+        depositCounts, marginalGround: unitResourceVector(), peopleLand: 0, goods: [],
       });
       const survivalGood = SURVIVAL_GOODS[0];
       const survivalOnlyGoods: BuildGoodState[] = [
@@ -1559,7 +1559,7 @@ describe("getAlertData", () => {
       ];
       const sinkWith = (goods: BuildGoodState[]): BuildSystemState => ({
         systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
-        depositCounts: emptyResourceVector(), peopleLand: 0, goods,
+        depositCounts: emptyResourceVector(), marginalGround: unitResourceVector(), peopleLand: 0, goods,
       });
 
       // Sanity, measured not assumed: ore's own opportunity genuinely outscores the survival good's

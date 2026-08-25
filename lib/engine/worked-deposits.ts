@@ -228,6 +228,28 @@ export function workedYieldVectors(
   return { eff, yieldMult };
 }
 
+/**
+ * Per-resource ground value of the NEXT unworked deposit slot — what the tier-0 build planner
+ * scores a fresh extractor level against, as opposed to `workedYieldVectors`' worked-prefix
+ * MEAN (what production already realises). Neutral 1.0 for a resource with no unworked slot left
+ * (including no slots at all): the site has nothing left to rank on ground quality, and is
+ * already `capUnits`-gated by `buildableUnits` before this vector is ever read. `workedOf` is
+ * supplied by the caller rather than computed here (`extractorsOnResource` lives in
+ * `directed-build.ts`, which this module must not import — see this file's own producer/consumer
+ * boundary with `directed-build.ts`'s `extractorsOnResource`).
+ */
+export function marginalGroundVector(
+  bodies: SlottedBody[], workedOf: (r: ResourceType) => number,
+): ResourceVector {
+  const ground = unitResourceVector();
+  for (const r of RESOURCE_TYPES) {
+    const slots = depositSlotOrder(bodies, r);
+    const slot = marginalSlot(slots, workedOf(r));
+    if (slot) ground[r] = slot.groundValue;
+  }
+  return ground;
+}
+
 /** Per-body, per-resource worked/total slot counts — the Astrography body-card read. */
 export type WorkedByBody = Record<number, Record<ResourceType, { worked: number; total: number }>>;
 

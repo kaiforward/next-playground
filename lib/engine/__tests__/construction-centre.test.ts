@@ -4,14 +4,14 @@ import type { Proposal, BuildSystemState } from "@/lib/engine/directed-build";
 import type { WorldConstructionProject } from "@/lib/world/types";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import { CONSTRUCTION_CENTRE_TYPE } from "@/lib/constants/industry";
-import { emptyResourceVector } from "@/lib/engine/resources";
+import { emptyResourceVector, unitResourceVector } from "@/lib/engine/resources";
 
 const PARAMS = { pointsPerLevel: 5, paybackHorizon: 12, backlogWindow: 6 };
 
 function system(systemId: string, population: number): BuildSystemState {
   return {
     systemId, factionId: "f1", control: "developed", population,
-    buildings: {}, depositCounts: emptyResourceVector(), peopleLand: 10, goods: [],
+    buildings: {}, depositCounts: emptyResourceVector(), marginalGround: unitResourceVector(), peopleLand: 10, goods: [],
   };
 }
 

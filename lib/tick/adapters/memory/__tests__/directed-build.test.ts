@@ -7,7 +7,7 @@ import { emptyResourceVector, unitResourceVector } from "@/lib/engine/resources"
 function row(systemId: string, factionId: string | null): SystemBuildRow {
   return {
     systemId, factionId, control: "unclaimed", population: 100, buildings: {},
-    yields: emptyResourceVector(), extractionEff: unitResourceVector(), depositCounts: emptyResourceVector(),
+    yields: emptyResourceVector(), extractionEff: unitResourceVector(), depositCounts: emptyResourceVector(), marginalGround: unitResourceVector(),
  peopleLand: 0, markets: [],
   };
 }

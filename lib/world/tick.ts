@@ -52,13 +52,13 @@ import { CONSTRUCTION } from "@/lib/constants/construction";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
 import {
-  depositCountsOf, yieldsOf, effOf, yieldColumns, effColumns, RESOURCE_TYPES,
+  depositCountsOf, yieldsOf, effOf, yieldColumns, effColumns, RESOURCE_TYPES, unitResourceVector,
 } from "@/lib/engine/resources";
-import { workedYieldVectors, slottedBodiesBySystem, type SlottedBody } from "@/lib/engine/worked-deposits";
+import { workedYieldVectors, slottedBodiesBySystem, marginalGroundVector, type SlottedBody } from "@/lib/engine/worked-deposits";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import { isContributingBody } from "@/lib/engine/habitability";
-import { hopRouteCost, type ColonyEstablishCandidate } from "@/lib/engine/directed-build";
+import { hopRouteCost, extractorsOnResource, type ColonyEstablishCandidate } from "@/lib/engine/directed-build";
 import type { ClaimCandidate } from "@/lib/engine/expansion";
 import { housingPopCap } from "@/lib/engine/industry";
 import { BUILDING_TYPES, HOUSING_TYPE, effectiveSpaceCost } from "@/lib/constants/industry";
@@ -466,19 +466,27 @@ function buildLogisticsRows(
 function buildBuildRows(
   systems: TickSystem[],
   marketsBySystem: Map<string, MarketRowForLogistics[]>,
+  bodiesBySystem: Map<string, SlottedBody[]>,
 ): SystemBuildRow[] {
-  return systems.map((s) => ({
-    systemId: s.id,
-    factionId: s.factionId,
-    control: s.control,
-    population: s.population,
-    buildings: s.buildings,
-    yields: s.yields,
-    extractionEff: s.extractionEff,
-    depositCounts: s.depositCounts,
-    peopleLand: s.peopleLand,
-    markets: marketsBySystem.get(s.id) ?? [],
-  }));
+  return systems.map((s) => {
+    const bodies = bodiesBySystem.get(s.id);
+    const marginalGround = bodies !== undefined && bodies.length > 0
+      ? marginalGroundVector(bodies, (r) => extractorsOnResource(s.buildings, r))
+      : unitResourceVector();
+    return {
+      systemId: s.id,
+      factionId: s.factionId,
+      control: s.control,
+      population: s.population,
+      buildings: s.buildings,
+      yields: s.yields,
+      extractionEff: s.extractionEff,
+      depositCounts: s.depositCounts,
+      peopleLand: s.peopleLand,
+      markets: marketsBySystem.get(s.id) ?? [],
+      marginalGround,
+    };
+  });
 }
 
 /** The three fields directed-logistics writes back, present in both market row shapes it reaches. */
@@ -1686,6 +1694,7 @@ export async function runWorldTick(
           dlFundingBoundUpdates,
           dlUnservedShortfallUpdates,
         ),
+        slottedBodies(),
       );
       const dbWorld = new MemoryDirectedBuildWorld(rows, constructionProjects);
       const dbResult = await runDirectedBuildProcessor(dbWorld, { tick }, {

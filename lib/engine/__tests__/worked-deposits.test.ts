@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   depositSlotOrder, workedYieldFold, workedYieldVectors, marginalSlot, workedByBody,
-  potentialSlotOrder, potentialYieldByResource,
+  potentialSlotOrder, potentialYieldByResource, marginalGroundVector,
   type SlottedBody,
 } from "@/lib/engine/worked-deposits";
 import { makeResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
@@ -206,6 +206,49 @@ describe("marginalSlot", () => {
     expect(marginal1?.bodyIndex).toBe(1);
     const marginal2 = marginalSlot(slots, 2);
     expect(marginal2).toBeNull();
+  });
+});
+
+describe("marginalGroundVector", () => {
+  it("reads the NEXT unworked slot's ground value, not the worked prefix's mean", () => {
+    // body0 is the rich slot (worked first); body1 is the poor slot. With one extractor already
+    // built (workedOf → 1), the worked prefix is body0 ALONE — its mean is 0.9 — but the marginal
+    // slot the next extractor would work is body1, at 0.1. A fold that read the worked-prefix mean
+    // (or the all-slots mean, 0.5) instead of the true next slot would fail this.
+    const bodies: SlottedBody[] = [
+      body(TEMPERATE, { ore: 1 }, { ore: 0.9 }), // ground 0.9 — worked first
+      body(TEMPERATE, { ore: 1 }, { ore: 0.1 }), // ground 0.1 — the marginal slot at n=1
+    ];
+    const ground = marginalGroundVector(bodies, (r) => (r === "ore" ? 1 : 0));
+    expect(ground.ore).toBeCloseTo(0.1, 10);
+    expect(ground.ore).not.toBeCloseTo(0.9, 6); // worked-prefix mean, wrongly read
+    expect(ground.ore).not.toBeCloseTo(0.5, 6); // all-slots mean, wrongly read
+  });
+
+  it("reads the best (first) slot when nothing is worked yet", () => {
+    const bodies: SlottedBody[] = [
+      body(TEMPERATE, { ore: 1 }, { ore: 0.9 }),
+      body(BARREN, { ore: 1 }, { ore: 0.5 }), // ground 0.35
+    ];
+    const ground = marginalGroundVector(bodies, () => 0);
+    expect(ground.ore).toBeCloseTo(0.9, 10);
+  });
+
+  it("is neutral 1.0 once every slot is worked, and for a resource with no slots at all", () => {
+    const bodies: SlottedBody[] = [
+      body(TEMPERATE, { ore: 1 }, { ore: 0.9 }),
+      body(BARREN, { ore: 1 }, { ore: 0.5 }),
+    ];
+    // n = slots.length: nothing left to work.
+    const exhausted = marginalGroundVector(bodies, (r) => (r === "ore" ? 2 : 0));
+    expect(exhausted.ore).toBe(1);
+    // "gas" has no deposit on either body at all.
+    expect(exhausted.gas).toBe(1);
+  });
+
+  it("an empty body list is neutral 1.0 on every resource", () => {
+    const ground = marginalGroundVector([], () => 0);
+    for (const type of RESOURCE_TYPES) expect(ground[type]).toBe(1);
   });
 });
 
