@@ -102,10 +102,21 @@ export interface TickSystem {
    *  (`applyPopulationUpdates`, `lib/tick/adapters/memory/population.ts`), merged back the same way
    *  `provisionExpectation` is (see `lib/world/types.ts` for the field's full docstring). */
   habitabilityQuality?: SystemHabitabilityQuality;
-  /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */
+  /**
+   * Per-resource yield multiplier — `realised / extractionEff`, so the read site's product
+   * `yields × extractionEff` is exactly the worked-prefix mean ground value
+   * (`lib/engine/worked-deposits.ts`). Feeds tier-0 production.
+   *
+   * A CACHE of (this system's bodies × its tier-0 extractor counts), not immutable substrate: the
+   * `toTickSystems` join reads it off the world columns, and the tick's two count-change sites
+   * (a landed build, a decay shed) rewrite this row's pair via `refoldWorkedYields`
+   * (`lib/world/tick.ts`) before the merge writes both back to the columns. Every other stage
+   * reads it and never writes it.
+   */
   yields: ResourceVector;
-  /** Per-resource extraction-work efficiency — deposit-count-weighted mean of the contributing
-   *  bodies' extractionModifier; feeds tier-0 production alongside `yields` (never folded into it). */
+  /** Per-resource extraction-work efficiency — the WORKED-PREFIX mean of the contributing bodies'
+   *  extractionModifier (its own aggregate, never folded into `yields`); same cache/write contract
+   *  as `yields` above. */
   extractionEff: ResourceVector;
   /** Body-derived deposit-slot capacity per resource — caps tier-0 extractor builds. */
   depositCounts: ResourceVector;

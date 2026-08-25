@@ -256,7 +256,16 @@ export interface WorldSystem {
   countArable: number;
   countWater: number;
   countRadioactive: number;
-  /** Effective quality multipliers, one per resource — deposit grade, a pure property of the ground. */
+  /**
+   * Effective quality multipliers, one per resource — `realised / eff*`, so `yield* × eff*` is
+   * exactly the mean ground value over the worked deposit prefix (`lib/engine/worked-deposits.ts`).
+   *
+   * A maintained CACHE of (this system's bodies × its tier-0 extractor counts), not fixed
+   * substrate: written at generation, refolded by the tick at each count change (a landed build, a
+   * decay shed — `refoldWorkedYields`, `lib/world/tick.ts`) and rebuilt on load. The all-bodies
+   * POTENTIAL pool the economy-type label reads is a separate derivation
+   * (`substrateAggregates`' `potentialYieldMult`, `lib/engine/body-gen.ts`), never this column.
+   */
   yieldGas: number;
   yieldMinerals: number;
   yieldOre: number;
@@ -264,9 +273,10 @@ export interface WorldSystem {
   yieldArable: number;
   yieldWater: number;
   yieldRadioactive: number;
-  /** Effective per-resource extraction-work efficiency — deposit-count-weighted mean of the
-   *  contributing bodies' `extractionModifier` (1.0 where the system has no counts for that
-   *  resource). Kept as its OWN aggregate, never folded into yield*. */
+  /** Effective per-resource extraction-work efficiency — the WORKED-PREFIX mean of the contributing
+   *  bodies' `extractionModifier` (1.0 where the system has no deposits of that resource at all).
+   *  Kept as its OWN aggregate, never folded into yield*; same cache/write contract as yield*
+   *  above. Not monotone under a future body unlock on its own — only the product is. */
   effGas: number;
   effMinerals: number;
   effOre: number;
