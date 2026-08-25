@@ -24,8 +24,15 @@
  * shape that happens to pass the spot-checks.
  */
 
-import type { World } from "./types";
+import type { World, WorldSystem } from "./types";
+import { slottedBodiesBySystem } from "./tick";
+import { workedYieldVectors } from "@/lib/engine/worked-deposits";
+import { effColumns, yieldColumns } from "@/lib/engine/resources";
 
+// v16 does NOT bump for the worked-prefix extraction switch: the stored yield*/eff* columns are
+// recomputed by `rebuildWorkedYieldColumns` in `deserialiseWorld`'s ok arm below, so their stored
+// values are never actually read across the version boundary — a pre-change save's pooled columns
+// are overwritten before anything else touches them, rather than being trusted as-is.
 export const SAVE_FORMAT_VERSION = 16;
 
 /** Reserved save name the tick loop autosaves to; the start screen's "Continue" loads it. */
@@ -85,7 +92,44 @@ export function deserialiseWorld(json: string): DeserialiseResult {
     return { ok: false, error: "Save file's world is missing required meta fields" };
   }
 
-  return { ok: true, world: parsed.world };
+  return { ok: true, world: rebuildWorkedYieldColumns(parsed.world) };
+}
+
+/**
+ * The worked-prefix load hook: recomputes every system's `yields`/`extractionEff` columns from
+ * `world.bodies` + `world.buildings`, the same fold the tick's write path uses
+ * (`workedYieldVectors`, `lib/engine/worked-deposits.ts`). Pure, deterministic, no RNG — so a
+ * pre-change save's generation-frozen pooled columns are replaced with worked-prefix values
+ * before anything else in the game reads them, and a current-format save that was already
+ * worked-fold-correct round-trips unchanged. A body-less system's columns are left as-is (no
+ * slots to fold, and the fold's own neutral 1.0 is not a reading a body-less row earned) —
+ * mirrors `refoldWorkedYields`'s same guard in the tick write path (`lib/world/tick.ts`).
+ *
+ * This is the one seam every load path passes through (`deserialiseWorld` itself, called by
+ * `loadGame`/the worker boot/save-files/the harness) — so this hook, not a second transform in
+ * any caller, is what pre-change saves and file vs. IndexedDB loads share.
+ */
+export function rebuildWorkedYieldColumns(world: World): World {
+  const bodiesBySystem = slottedBodiesBySystem(world.bodies);
+  const buildingsBySystem = new Map<string, Record<string, number>>();
+  for (const b of world.buildings) {
+    let counts = buildingsBySystem.get(b.systemId);
+    if (!counts) {
+      counts = {};
+      buildingsBySystem.set(b.systemId, counts);
+    }
+    counts[b.buildingType] = b.count;
+  }
+
+  const systems: WorldSystem[] = world.systems.map((s) => {
+    const bodies = bodiesBySystem.get(s.id);
+    if (bodies === undefined || bodies.length === 0) return s;
+    const buildings = buildingsBySystem.get(s.id) ?? {};
+    const worked = workedYieldVectors(bodies, buildings);
+    return { ...s, ...yieldColumns(worked.yieldMult), ...effColumns(worked.eff) };
+  });
+
+  return { ...world, systems };
 }
 
 /**

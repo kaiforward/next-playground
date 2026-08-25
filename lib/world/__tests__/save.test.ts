@@ -1,7 +1,10 @@
 import { describe, it, expect, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { generateWorld } from "../gen";
 import { serialiseWorld, deserialiseWorld, sanitiseSaveName, SAVE_FORMAT_VERSION } from "../save";
-import type { World } from "../types";
+import type { World, WorldBody } from "../types";
 import { runWorldTick } from "../tick";
 import { setWorld, clearWorld } from "../store";
 import { getTrackerData } from "@/lib/services/tracker";
@@ -11,6 +14,18 @@ import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import { provision } from "@/lib/engine/population";
 import { EXPECTATION_PARAMS } from "@/lib/constants/population";
+import {
+  countColumns, depositCountsOf, effColumns, makeResourceVector, qualColumns, qualityOf,
+  yieldColumns,
+} from "@/lib/engine/resources";
+import { workedYieldVectors, type SlottedBody } from "@/lib/engine/worked-deposits";
+
+const RESOURCE_YIELD_COLUMNS = [
+  "yieldGas", "yieldMinerals", "yieldOre", "yieldBiomass", "yieldArable", "yieldWater", "yieldRadioactive",
+] as const;
+const RESOURCE_EFF_COLUMNS = [
+  "effGas", "effMinerals", "effOre", "effBiomass", "effArable", "effWater", "effRadioactive",
+] as const;
 
 afterEach(() => {
   clearWorld();
@@ -687,4 +702,129 @@ describe("save compatibility — provisionExpectation seeds from Provision, not 
     expect(system.provisionExpectation).not.toBeCloseTo(0, 3);
     expect(system.provisionExpectation).not.toBeCloseTo(EXPECTATION_PARAMS.floor, 3);
   }, 60_000);
+});
+
+describe("rebuildWorkedYieldColumns — the worked-prefix load hook (Task 4)", () => {
+  /**
+   * A two-body fixture straddling a boundary, mirroring
+   * `lib/world/__tests__/worked-yield-write-path.test.ts`'s craftedBodies: a rich body
+   * (extractionModifier 1.0) whose single ore slot beats a poor body's (extractionModifier 0.6)
+   * nine, so folding n=1 reads a value the all-bodies pooled mean could never produce.
+   */
+  const RICH_TYPE = "temperate_world";
+  const POOR_TYPE = "frozen_world";
+
+  function craftedBodies(systemId: string): WorldBody[] {
+    return [
+      {
+        id: `${systemId}-rich`, systemId, bodyType: RICH_TYPE, size: 1, peopleLand: 5_000,
+        ...countColumns(makeResourceVector({ ore: 1 })),
+        ...qualColumns(makeResourceVector({ ore: 2 })),
+      },
+      {
+        id: `${systemId}-poor`, systemId, bodyType: POOR_TYPE, size: 1, peopleLand: 0,
+        ...countColumns(makeResourceVector({ ore: 9 })),
+        ...qualColumns(makeResourceVector({ ore: 0.5 })),
+      },
+    ];
+  }
+
+  function craftedSlots(systemId: string): SlottedBody[] {
+    return craftedBodies(systemId).map((b) => ({
+      bodyType: b.bodyType, counts: depositCountsOf(b), quality: qualityOf(b),
+    }));
+  }
+
+  it("a save whose columns hold deliberately-wrong pooled values reads worked-fold values after deserialiseWorld", () => {
+    const base = generateWorld({ systemCount: 40, seed: 55 });
+    const systemId = base.factions[0].homeworldId;
+    // Independent oracle: the same fold, computed directly from the crafted fixture — not read
+    // back off the world under test.
+    const expected = workedYieldVectors(craftedSlots(systemId), { ore: 1 });
+    // Premise: the fold's answer really is one a count-weighted pool over both bodies could not
+    // produce (a pool would land strictly between the two bodies' ground values).
+    expect(expected.eff.ore).toBe(1);
+    expect(expected.yieldMult.ore).toBe(2);
+
+    const staleShaped = {
+      formatVersion: SAVE_FORMAT_VERSION,
+      world: {
+        ...base,
+        bodies: [...base.bodies.filter((b) => b.systemId !== systemId), ...craftedBodies(systemId)],
+        buildings: [
+          ...base.buildings.filter((b) => b.systemId !== systemId),
+          { systemId, buildingType: "ore", count: 1, idleCycles: 0 },
+        ],
+        systems: base.systems.map((s) =>
+          s.id === systemId
+            ? {
+                ...s,
+                // Deliberately wrong: values a worked-prefix fold of this fixture can never
+                // produce (0.01 sits nowhere near either body's modifier or ground value).
+                ...effColumns(makeResourceVector({ ore: 0.01 })),
+                ...yieldColumns(makeResourceVector({ ore: 0.01 })),
+              }
+            : s,
+        ),
+      },
+    };
+
+    const result = deserialiseWorld(JSON.stringify(staleShaped));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const system = result.world.systems.find((s) => s.id === systemId);
+    expect(system).toBeDefined();
+    if (!system) return;
+    expect(system.effOre).toBeCloseTo(expected.eff.ore, 10);
+    expect(system.yieldOre).toBeCloseTo(expected.yieldMult.ore, 10);
+    // Non-vacuity: the deliberately-wrong stored value really was overwritten, not coincidentally
+    // close to the fold's answer.
+    expect(system.effOre).not.toBeCloseTo(0.01, 3);
+    expect(system.yieldOre).not.toBeCloseTo(0.01, 3);
+  });
+
+  it("a current-version save round-trips (no version rejection)", () => {
+    const world = generateWorld({ systemCount: 30, seed: 77 });
+    const result = deserialiseWorld(serialiseWorld(world));
+    expect(result.ok).toBe(true);
+  });
+
+  it("a world with a body-less system loads without NaN, and leaves its columns untouched", () => {
+    const world = generateWorld({ systemCount: 30, seed: 88 });
+    const systemId = world.systems[0].id;
+    const bodyless: World = {
+      ...world,
+      bodies: world.bodies.filter((b) => b.systemId !== systemId),
+    };
+    const result = deserialiseWorld(JSON.stringify({ formatVersion: SAVE_FORMAT_VERSION, world: bodyless }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const system = result.world.systems.find((s) => s.id === systemId);
+    expect(system).toBeDefined();
+    if (!system) return;
+    for (const col of [...RESOURCE_EFF_COLUMNS, ...RESOURCE_YIELD_COLUMNS]) {
+      expect(Number.isFinite(system[col]), col).toBe(true);
+      // No slots to fold: the guard leaves a body-less row exactly as it was, rather than
+      // folding it to the neutral-1.0 reading it never earned.
+      expect(system[col]).toBe(world.systems[0][col]);
+    }
+  });
+
+  describe("the hook lives solely in deserialiseWorld — file and IndexedDB loads share it", () => {
+    const here = fileURLToPath(import.meta.url);
+    const repoRoot = join(dirname(here), "..", "..", "..");
+    const read = (relPath: string) => readFileSync(join(repoRoot, relPath), "utf8");
+
+    it("lib/services/game.ts's loadGame passes deserialiseWorld's own result straight to setWorld, no second transform", () => {
+      const src = read("lib/services/game.ts");
+      const bodyMatch = src.match(/export async function loadGame[\s\S]*?\r?\n\}\r?\n/);
+      expect(bodyMatch).not.toBeNull();
+      const body = bodyMatch ? bodyMatch[0] : "";
+      expect(body).toMatch(/const parsed = deserialiseWorld\(json\);/);
+      // setWorld receives parsed.world literally — nothing rebuilds or re-wraps it at this call
+      // site, because the load hook already ran inside deserialiseWorld itself.
+      expect(body).toMatch(/setWorld\(parsed\.world\);/);
+      expect(src).not.toMatch(/rebuildWorkedYieldColumns/);
+    });
+  });
 });
