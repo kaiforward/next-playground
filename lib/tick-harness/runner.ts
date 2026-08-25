@@ -25,7 +25,7 @@ import {
   summariseFoundingStock, recordFoundingManifest, newFoundingStallTotals, recordFoundingStall,
   newInFlightEstablishTotals, sampleOpenColonies, summariseFoundingLifecycle, summariseFounderCohort,
   newFoundingTrajectoryTotals, sampleFoundingTrajectory, hasColonyInTrajectoryWindow,
-  summariseFoundingTrajectory,
+  summariseFoundingTrajectory, summariseTierZeroIdle,
 } from "./build-analysis";
 import type {
   BuildCommitmentRecord, FoundedColonyRecord, FoundingStagingRecord, FoundingStagingTotals,
@@ -508,5 +508,6 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     episodeCosts,
     foundingTrajectory,
     provisionRatchet,
+    tierZeroIdle: summariseTierZeroIdle(finalTickSystems, homeworldIds),
   };
 }

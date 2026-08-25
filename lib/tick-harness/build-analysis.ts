@@ -753,6 +753,56 @@ export interface FounderCohortSummary {
   other: FounderCohortStats;
 }
 
+/** One class's (homeworld/colony) tier-0 idle-level reading. */
+export interface TierZeroIdleStats {
+  /** Developed systems in this class. */
+  systemCount: number;
+  /** Σ (system, tier-0 buildingType) pairs currently sitting idle across the class. */
+  idleLevels: number;
+  /** Distinct systems carrying at least one idle tier-0 level — incidence, not magnitude. */
+  systemsWithIdleTier0: number;
+}
+
+/**
+ * Tier-0 (extractor) idle levels, homeworld vs colony — one of the feature's two second-order
+ * health reads for the per-body-industry worked-prefix switch (build-plan Task 6). The directed
+ * build planner sizes tier-0 commitments assuming a 1.0 multiplier (`directed-build.ts`), which
+ * the worked-prefix fold can now exceed, so a commitment can over-serve its deficit and leave the
+ * marginal level idle — this is the gate read that catches it.
+ *
+ * A running idle countdown (`buildingIdleCycles[type] > 0`) IS one whole idle level: the buffered
+ * decay channel tracks exactly one marginal level per (system, type) at a time
+ * (`lib/engine/infrastructure-decay.ts`'s `idleLevels`/`computeSystemDecay`), never a count of how
+ * many levels sit idle, so a running countdown for a tier-0 type contributes exactly 1 here.
+ */
+export function summariseTierZeroIdle(
+  systems: ReadonlyArray<Pick<TickSystem, "id" | "control" | "buildings" | "buildingIdleCycles">>,
+  homeworldIds: ReadonlySet<string>,
+): TierZeroIdleSummary {
+  const homeworld: TierZeroIdleStats = { systemCount: 0, idleLevels: 0, systemsWithIdleTier0: 0 };
+  const colony: TierZeroIdleStats = { systemCount: 0, idleLevels: 0, systemsWithIdleTier0: 0 };
+
+  for (const s of systems) {
+    if (s.control !== "developed") continue;
+    const cls = homeworldIds.has(s.id) ? homeworld : colony;
+    cls.systemCount++;
+    let idleHere = 0;
+    for (const [type, count] of Object.entries(s.buildings)) {
+      if (count <= 0 || GOOD_TIER_BY_KEY[type] !== 0) continue;
+      if ((s.buildingIdleCycles[type] ?? 0) > 0) idleHere++;
+    }
+    cls.idleLevels += idleHere;
+    if (idleHere > 0) cls.systemsWithIdleTier0++;
+  }
+
+  return { homeworld, colony };
+}
+
+export interface TierZeroIdleSummary {
+  homeworld: TierZeroIdleStats;
+  colony: TierZeroIdleStats;
+}
+
 export interface ColonisationSummary {
   homeworld: ClassBuildStats;
   colony: ClassBuildStats;

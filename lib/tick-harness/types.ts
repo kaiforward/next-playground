@@ -13,7 +13,9 @@ import type { TickCadence } from "@/lib/constants/tick-cadence";
 import type { World } from "@/lib/world/types";
 import type { DrawBrakeCeiling } from "@/lib/tick/processors/good-market-state";
 import type { FoundingEraSummary, TreasurySnapshot, TreasurySummary } from "./treasury-analysis";
-import type { FounderCohortSummary, FoundingLifecycleSummary, FoundingTrajectorySummary } from "./build-analysis";
+import type {
+  FounderCohortSummary, FoundingLifecycleSummary, FoundingTrajectorySummary, TierZeroIdleSummary,
+} from "./build-analysis";
 import type { DemandHuntingSummary } from "./market-analysis";
 import type { ConservationSummary } from "./conservation-analysis";
 import type { QuantileLevels } from "./population-analysis";
@@ -622,4 +624,9 @@ export interface HarnessResults {
   /** The ratchet check: settled systems bucketed by trailing Provision variance, mean grievance per
    *  bucket per cohort — a positive slope is the memory rectifying jitter into permanent grievance. */
   provisionRatchet: RatchetCheckSummary;
+  /** Tier-0 (extractor) idle-level counts, homeworld vs colony — the per-body-industry feature's
+   *  other second-order health read (alongside `episodeCosts`' shed counts): the planner's
+   *  assumed-1.0 sizing can over-serve a deficit once the worked-prefix fold lifts realised yield
+   *  above 1, and this catches the marginal level left idle. */
+  tierZeroIdle: TierZeroIdleSummary;
 }
