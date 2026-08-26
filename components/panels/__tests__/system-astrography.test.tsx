@@ -31,7 +31,13 @@ describe("SystemAstrography — the system-level habitable-land header, absolute
     substrateValue = { visibility: "visible", sunClass: "yellow", peopleLand: 0, bodies: [], potentialYields: [] };
     popValue = { visibility: "unknown" };
     const { container } = renderPanel();
-    expect(container.textContent).toContain("Habitable land0");
+    // Label and value are queried separately (rather than a concatenated "Habitable land0" string)
+    // because the figures now render as sibling dt/dd elements in an inline row instead of one text
+    // node — this is what would break if the inline layout ever lost the label association.
+    expect(screen.getByText("Habitable land", { selector: "dt" })).toBeInTheDocument();
+    const dd = screen.getByText("Habitable land", { selector: "dt" }).nextElementSibling;
+    expect(dd?.tagName).toBe("DD");
+    expect(dd).toHaveTextContent("0");
     expect(container.textContent).not.toContain("People land");
     expect(container.innerHTML).not.toContain("NaN");
     expect(container.textContent).not.toContain("%");
@@ -53,12 +59,14 @@ describe("SystemAstrography — the system-level habitable-land header, absolute
       potentialYields: [],
     };
     popValue = { visibility: "unknown" };
-    const { container } = renderPanel();
-    expect(container.textContent).toContain("Habitable land1250");
+    renderPanel();
+    const dd = screen.getByText("Habitable land", { selector: "dt" }).nextElementSibling;
+    expect(dd?.tagName).toBe("DD");
+    expect(dd).toHaveTextContent("1250");
     // The header's own habitable-land stat is absolute, never a percent — this system carries no
     // habitability read (popValue unknown), so the only "%" on the page comes from the body card's
     // own deposit-yield stat, not from the header.
-    expect(container.textContent).not.toContain("Habitability");
+    expect(screen.queryByText("Habitability")).not.toBeInTheDocument();
   });
 
   it("shows the system's habitability percentage next to habitable land, reusing the population service's growthMultiplier", () => {
@@ -75,15 +83,17 @@ describe("SystemAstrography — the system-level habitable-land header, absolute
       growthMultiplier: 0.93,
       fillOrder: [],
     };
-    const { container } = renderPanel();
-    expect(container.textContent).toContain("Habitability93%");
+    renderPanel();
+    const dd = screen.getByText("Habitability").nextElementSibling;
+    expect(dd?.tagName).toBe("DD");
+    expect(dd).toHaveTextContent("93%");
   });
 
   it("omits the habitability stat (never N/A, never a fabricated 100%) when the system has no assessment yet", () => {
     substrateValue = { visibility: "visible", sunClass: "yellow", peopleLand: 300, bodies: [], potentialYields: [] };
     popValue = { visibility: "unknown" };
     const { container } = renderPanel();
-    expect(container.textContent).not.toContain("Habitability");
+    expect(screen.queryByText("Habitability")).not.toBeInTheDocument();
     expect(container.textContent).not.toContain("N/A");
   });
 
@@ -113,7 +123,9 @@ describe("SystemAstrography — the ring diagram", () => {
     popValue = { visibility: "unknown" };
     renderPanel();
 
-    expect(screen.getByRole("heading", { name: "System Map" })).toBeInTheDocument();
+    // No standalone "System Map" heading any more — the ring diagram now sits directly in the
+    // combined card, identified by its own body trigger rather than a section label.
+    expect(screen.getByRole("button", { name: "Temperate World" })).toBeInTheDocument();
     await user.tab();
     // "Temperate World" also headlines the body card below — scoped to the opened popover's own
     // dialog (its `aria-label`) so this asserts the diagram's OWN wiring, not the card grid's.
@@ -124,8 +136,10 @@ describe("SystemAstrography — the ring diagram", () => {
   it("renders no System section when the system has no charted bodies", () => {
     substrateValue = { visibility: "visible", sunClass: "yellow", peopleLand: 0, bodies: [], potentialYields: [] };
     popValue = { visibility: "unknown" };
-    renderPanel();
-    expect(screen.queryByRole("heading", { name: "System Map" })).not.toBeInTheDocument();
+    const { container } = renderPanel();
+    // No ring diagram at all — assert the SVG the diagram renders into is absent, not just one
+    // body's trigger (there are no bodies to have one).
+    expect(container.querySelector("svg")).not.toBeInTheDocument();
   });
 });
 
