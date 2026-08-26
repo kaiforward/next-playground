@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
-import { bodyDepositFeatures, habitabilityScoreBand } from "@/lib/utils/substrate";
-import { QUALITY_BAND_DOT, QUALITY_BAND_TEXT, QUALITY_BAND_LABEL } from "@/lib/constants/ui";
+import { bodyDepositFeatures } from "@/lib/utils/substrate";
+import { QUALITY_BAND_DOT, QUALITY_BAND_TEXT } from "@/lib/constants/ui";
 import type { BodyView } from "@/lib/types/api";
 
 /**
@@ -11,45 +11,54 @@ import type { BodyView } from "@/lib/types/api";
  * popover renders it directly, since `PopoverContent` is already a surface and a nested `Card`
  * inside it doubled the left accent stripe).
  *
- * The header row is `flex-wrap`: at the popover's narrow, fixed width the habitable-land stat and
- * badges wrap below the name exactly as before; at the Astrography list's full-width row there is
- * room for all of it on one line, so it sits inline instead. Nothing here reads a width or a prop
- * to decide that — it is plain flexbox reflow, so the same markup serves both callers.
+ * The header row is `flex-wrap`, name and Occupied badge only; habitable land and habitability
+ * each get their own labelled row below it, so they read at the popover's narrow, fixed width just
+ * as they do at the Astrography list's full-width row — nothing here reads a width or a prop to
+ * decide layout.
  *
  * The left-accent stripe (applied by whichever surface wraps this) and an "Occupied" badge mark a
  * body inside the system's current fill-best-first occupied prefix (the cached habitability
  * quality fold, read straight off `body.occupied` — this component computes nothing). That
- * replaces the retired per-body `habitable: boolean` and its "Habitable" badge: habitability is
- * now a score BAND (dot + label, the same vocabulary the deposit list already uses), shown for
- * every body including a locked one — a lock states itself in its own badge, never by hiding the
- * band. Locked bodies still show their authored budgets/deposits: they're dark (present but
- * non-functional) until a future technology unlocks them, not absent. Extraction YIELD (a
- * percentage of normal) is a system-level story and is never shown here — see the deposit table's
- * yield tag. Each deposit line does show this body's own worked/total slot count, though:
- * physical occupancy of its own ground, not the system's blended yield.
+ * replaces the retired per-body `habitable: boolean` and its "Habitable" badge.
+ *
+ * `body.score` renders as a labelled percentage under "Habitability", never the deposit-quality
+ * band vocabulary (Poor/Average/Good/Rich) below it — that vocabulary grades extraction yield, and
+ * a habitability rating wearing it reads as a yield label, which is what it used to be.
+ *
+ * The word is the same one the Astrography header uses for the SYSTEM (`growthMultiplier`, a fold
+ * across occupied bodies feeding the growth modifier), and deliberately so: habitability scopes
+ * itself to whatever it describes, so a body has one and so does the system. They are different
+ * quantities, and a body at 100% under a system at 87% is not an arithmetic contradiction — the
+ * header's figure carries a tooltip decomposing itself into these very bodies, which is where the
+ * relationship is shown rather than left to be inferred from a label.
+ *
+ * Locked bodies still show their authored budgets/deposits: they're dark (present but
+ * non-functional) until a future technology unlocks them, not absent — a lock states itself in its
+ * own badge below the header, never by hiding the stats. Extraction YIELD (a percentage of normal)
+ * is a system-level story and is never shown here — see the deposit table's yield tag. Each
+ * deposit line does show this body's own worked/total slot count, though: physical occupancy of
+ * its own ground, not the system's blended yield.
  */
 export function BodyReadout({ body }: { body: BodyView }) {
   const features = bodyDepositFeatures(body.counts, body.quality, body.workedCounts);
-  const band = habitabilityScoreBand(body.score);
+  const habitabilityPct = Math.round(body.score * 100);
   return (
     <>
-      <div className="mb-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         <h4 className="font-display text-sm font-semibold text-text-primary">
           {body.archetypeName}
         </h4>
-        <span className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-tertiary">
-          <span className="whitespace-nowrap">
-            <span className="font-display">Habitable land</span>{" "}
-            <span className="font-mono text-text-secondary">{body.peopleLand.toFixed(0)}</span>
-          </span>
-          <span className="flex shrink-0 items-center gap-1.5">
-            {body.occupied && <Badge color="green">Occupied</Badge>}
-            <span className="inline-flex items-center gap-1">
-              <span aria-hidden className={`inline-block h-1.5 w-1.5 shrink-0 ${QUALITY_BAND_DOT[band]}`} />
-              <span className={QUALITY_BAND_TEXT[band]}>{QUALITY_BAND_LABEL[band]}</span>
-            </span>
-          </span>
-        </span>
+        {body.occupied && <Badge color="green">Occupied</Badge>}
+      </div>
+      <div className="mb-2 space-y-0.5 text-xs text-text-tertiary">
+        <div className="whitespace-nowrap">
+          <span className="font-display">Habitable land</span>{" "}
+          <span className="font-mono text-text-secondary">{body.peopleLand.toFixed(0)}</span>
+        </div>
+        <div className="whitespace-nowrap">
+          <span className="font-display">Habitability</span>{" "}
+          <span className="font-mono text-text-secondary">{habitabilityPct}%</span>
+        </div>
       </div>
       {body.locked && (
         <div className="mb-2">

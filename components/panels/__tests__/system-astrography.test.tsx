@@ -63,10 +63,10 @@ describe("SystemAstrography — the system-level habitable-land header, absolute
     const dd = screen.getByText("Habitable land", { selector: "dt" }).nextElementSibling;
     expect(dd?.tagName).toBe("DD");
     expect(dd).toHaveTextContent("1250");
-    // The header's own habitable-land stat is absolute, never a percent — this system carries no
-    // habitability read (popValue unknown), so the only "%" on the page comes from the body card's
-    // own deposit-yield stat, not from the header.
-    expect(screen.queryByText("Habitability")).not.toBeInTheDocument();
+    // The header's habitable-land stat is absolute, never a percent. That the header OMITS its
+    // habitability stat when there is no assessment is pinned by its own test below, on a
+    // body-less system — the header cannot be isolated by text here, because every body row now
+    // labels its own habitability with the same word.
   });
 
   it("shows the system's habitability percentage next to habitable land, reusing the population service's growthMultiplier", () => {
@@ -84,9 +84,54 @@ describe("SystemAstrography — the system-level habitable-land header, absolute
       fillOrder: [],
     };
     renderPanel();
-    const dd = screen.getByText("Habitability").nextElementSibling;
+    // The label is now a tooltip trigger (a `<button>`) sitting inside the `<dt>` rather than being
+    // the `<dt>` itself, so the dd is found off the dt, not off the button's own (nonexistent)
+    // sibling.
+    const trigger = screen.getByRole("button", { name: "Habitability" });
+    const dt = trigger.closest("dt");
+    expect(dt).not.toBeNull();
+    const dd = dt?.nextElementSibling;
     expect(dd?.tagName).toBe("DD");
     expect(dd).toHaveTextContent("93%");
+  });
+
+  it("opens the habitability figure's breakdown tooltip, naming the contributing bodies — the same breakdown the Population tab uses", async () => {
+    // Radix's `Tooltip.Arrow` needs `ResizeObserver`, which jsdom doesn't provide — stubbed here,
+    // same convention as the "Potential yield" tooltip test below.
+    class StubResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", StubResizeObserver);
+
+    const user = userEvent.setup({ delay: null });
+    substrateValue = { visibility: "visible", sunClass: "yellow", peopleLand: 300, bodies: [], potentialYields: [] };
+    popValue = {
+      visibility: "visible",
+      population: 100,
+      popCap: 500,
+      unrest: 0,
+      striking: false,
+      needs: [],
+      provision: { assessed: false },
+      unrestBreakdown: { assessed: false, contributors: { tax: 0, crowding: 0 }, strikeThreshold: 0.8 },
+      growthMultiplier: 0.93,
+      fillOrder: [
+        { className: "Temperate World", score: 1.0, occupied: true, frontier: true, partial: true },
+      ],
+    };
+    renderPanel();
+
+    const trigger = screen.getByRole("button", { name: "Habitability" });
+    await user.tab();
+    while (document.activeElement !== trigger) {
+      await user.tab();
+    }
+    expect(trigger).toHaveFocus();
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Temperate World");
+    expect(tooltip).toHaveTextContent("Population growth");
   });
 
   it("omits the habitability stat (never N/A, never a fabricated 100%) when the system has no assessment yet", () => {

@@ -9,6 +9,7 @@ import { StarGlyph } from "@/components/system/star-glyph";
 import { BodyReadout } from "@/components/system/body-readout";
 import { SystemRings } from "@/components/system/system-rings";
 import { PotentialYieldTable } from "@/components/system/potential-yield-table";
+import { HabitabilityTooltipContent } from "@/components/system/habitability-tooltip-content";
 import { Tooltip, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
 import { splitBracketedName } from "@/lib/utils/format";
@@ -30,7 +31,9 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
   }
 
   const { sunClass, peopleLand, bodies, potentialYields } = substrate;
-  const habitabilityPct = pop.visibility === "visible" ? Math.round(pop.growthMultiplier * 100) : undefined;
+  const habitability = pop.visibility === "visible"
+    ? { pct: Math.round(pop.growthMultiplier * 100), growthMultiplier: pop.growthMultiplier, fillOrder: pop.fillOrder }
+    : undefined;
   // The sun-class name is uppercased to match the labels either side of it, but its bracketed
   // temperature descriptor ("Sol-like", "hot", …) is left as authored — a bracket is a gloss on the
   // name, and shouting it flattens the hierarchy it exists to create. Split here, cased in CSS on
@@ -75,14 +78,29 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
               <dt className="font-display text-text-tertiary">Habitable land</dt>
               <dd className="font-mono text-text-primary">{peopleLand.toFixed(0)}</dd>
             </div>
-            {habitabilityPct !== undefined && (
+            {habitability !== undefined && (
               <>
                 <span aria-hidden="true" className="text-text-tertiary">
                   ·
                 </span>
                 <div className="flex items-baseline gap-1">
-                  <dt className="font-display text-text-tertiary">Habitability</dt>
-                  <dd className="font-mono text-text-primary">{habitabilityPct}%</dd>
+                  {/* The trigger is a `<button>` sitting inside the `<dt>` rather than replacing it,
+                      so the dt/dd association (and "Habitability, 87%" read together) survives —
+                      only the label text itself becomes interactive. Not `uppercase`: this row's
+                      labels are plain case (unlike the "Potential yield" SectionHeader below),
+                      so the trigger needs no text-transform restatement. */}
+                  <dt className="font-display text-text-tertiary">
+                    <Tooltip>
+                      <TooltipTriggerLabel>Habitability</TooltipTriggerLabel>
+                      <TooltipContent className="w-64">
+                        <HabitabilityTooltipContent
+                          growthMultiplier={habitability.growthMultiplier}
+                          fillOrder={habitability.fillOrder}
+                        />
+                      </TooltipContent>
+                    </Tooltip>
+                  </dt>
+                  <dd className="font-mono text-text-primary">{habitability.pct}%</dd>
                 </div>
               </>
             )}

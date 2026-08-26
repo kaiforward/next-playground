@@ -1,6 +1,5 @@
 import { RESOURCE_TYPES } from "@/lib/engine/resources";
 import { bandForMultiplier, depositDisplayName } from "@/lib/engine/substrate-space";
-import { HABITABILITY_THRESHOLD } from "@/lib/constants/bodies";
 import { contributingBodiesSorted } from "@/lib/engine/habitability";
 import type { PotentialYieldRow } from "@/lib/engine/worked-deposits";
 import type { QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
@@ -36,25 +35,6 @@ export function bodyDepositFeatures(
       return { resource: r, band, name: depositDisplayName(r, band), worked: worked[r], total: slots[r] };
     })
     .sort((a, b) => quality[b.resource] - quality[a.resource]);
-}
-
-/**
- * Buckets a body's default-pop habitability score into the same band vocabulary the deposit-grade
- * presentation uses (`QUALITY_BAND_DOT`/`QUALITY_BAND_TEXT`/`QUALITY_BAND_LABEL`), so Astrography
- * shows a score BAND rather than the retired bare-number/`habitable: boolean` reading. The deposit
- * `QUALITY_BANDS` multiplier ranges (0.4-2.5) don't cover a [0,1] score, so this is its own
- * threshold ladder, authored against the archetype table (`lib/constants/bodies.ts`): "rich" is the
- * two 1.0-score classes (temperate/gaia) alone; "good" starts at `HABITABILITY_THRESHOLD` so every
- * people-land-contributing class (jungle 0.7, ocean 0.65, boreal 0.6) reads as habitable; "average"
- * covers the sub-threshold-but-still-authored arid/tundra classes (0.35/0.3) whose people land is
- * dark, not absent; "poor" is everything at or below the effectively-dead tail (frozen through
- * gas_giant, 0.1 down to 0).
- */
-export function habitabilityScoreBand(score: number): QualityBandId {
-  if (score >= 0.9) return "rich";
-  if (score >= HABITABILITY_THRESHOLD) return "good";
-  if (score >= 0.2) return "average";
-  return "poor";
 }
 
 /** One body's static occupancy inputs — score and lock state, exactly what the fill-best-first

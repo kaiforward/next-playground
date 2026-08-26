@@ -266,9 +266,11 @@ export interface BodyView {
   id: string;
   bodyType: BodyArchetypeId;
   archetypeName: string;
-  /** This body's default-pop habitability score — the archetype's static rating. Presented as a
-   *  BAND (`habitabilityScoreBand`, `lib/utils/substrate.ts`), never a bare number or the retired
-   *  per-body `habitable: boolean`. */
+  /** This body's default-pop habitability score — the archetype's static rating in [0, 1].
+   *  Presented as a labelled percentage under "Habitability" (`body-readout.tsx`), never the
+   *  deposit-quality band vocabulary (Poor/Average/Good/Rich), which grades extraction yield. The
+   *  system-level figure of the same name is a different quantity — a fold across occupied bodies,
+   *  not an average of this one. */
   score: number;
   /** True when this body's archetype is tech-locked (contributes no land or counts yet). */
   locked: boolean;

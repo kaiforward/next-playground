@@ -27,12 +27,20 @@ function body(overrides: Partial<BodyView> = {}): BodyView {
   };
 }
 
-describe("BodyReadout — score band, lock state, occupancy marking", () => {
-  it("a locked body states its lock in accessible text, below the header row, and shows a score band, never the retired Habitable badge", () => {
+describe("BodyReadout — habitability percentage, lock state, occupancy marking", () => {
+  it("a locked body states its lock in accessible text, below the header row, and shows its habitability as a labelled percentage, never the retired band words or Habitable badge", () => {
     render(<BodyReadout body={body({ bodyType: "volcanic_world", archetypeName: "Volcanic World", score: 0.05, locked: true })} />);
     const lockedBadge = screen.getByText("Locked — awaiting technology");
     expect(lockedBadge).toBeInTheDocument();
-    expect(screen.getByText("Poor")).toBeInTheDocument(); // 0.05 bands as poor
+    expect(screen.getByText("Habitability")).toBeInTheDocument();
+    expect(screen.getByText("5%")).toBeInTheDocument(); // 0.05 as a whole percent
+    // The deposit-quality band vocabulary must not appear for habitability any more — this body
+    // hosts no deposits (empty counts), so any of these words appearing would have to come from
+    // the habitability reading itself.
+    expect(screen.queryByText("Poor")).not.toBeInTheDocument();
+    expect(screen.queryByText("Average")).not.toBeInTheDocument();
+    expect(screen.queryByText("Good")).not.toBeInTheDocument();
+    expect(screen.queryByText("Rich")).not.toBeInTheDocument();
     expect(screen.queryByText("Habitable")).not.toBeInTheDocument();
 
     // The lock badge sits on its own row below the header, not sharing the header's flex row with
@@ -43,9 +51,11 @@ describe("BodyReadout — score band, lock state, occupancy marking", () => {
     expect(headerRow).not.toContainElement(lockedBadge);
   });
 
-  it("an unlocked above-threshold body shows its score band without a lock marker", () => {
+  it("an unlocked above-threshold body shows its habitability as a percentage without a lock marker", () => {
     render(<BodyReadout body={body({ score: 0.6 })} />);
-    expect(screen.getByText("Good")).toBeInTheDocument();
+    expect(screen.getByText("Habitability")).toBeInTheDocument();
+    expect(screen.getByText("60%")).toBeInTheDocument();
+    expect(screen.queryByText("Good")).not.toBeInTheDocument();
     expect(screen.queryByText("Locked — awaiting technology")).not.toBeInTheDocument();
   });
 
