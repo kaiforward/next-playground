@@ -605,8 +605,11 @@ export function speculativeFloorExtra(
  * `input`) or held as a surplus at a system REACHABLE FROM THE SITE. The factory's inputs arrive
  * via logistics, which is route-cost bounded, so a surplus that merely exists somewhere in the
  * faction is not enough — it must be deliverable to this site (routeCost(source, site) non-null).
- * Shared by `inputsAvailable` (the tier-1+ proposal gate) and the derived-demand spill, so the two
- * can never disagree on the same input at the same site.
+ * Gate-only: the tier-1+ proposal gate (`inputsAvailable`) asks "could a factory here be fed at
+ * all" with this stock-based binary predicate. The derived-demand spill asks a different question
+ * — "how much flow do imports genuinely not cover" — and nets against reachable RATE spare instead
+ * (`netDerivedClaims`); the two are deliberately allowed to answer differently for the same input
+ * at the same site.
  */
 function inputMissingAt(
   input: string,
@@ -633,6 +636,65 @@ function inputsAvailable(
   // recipe here is a catalog defect and should throw, not read as "no input constraint".
   const recipe = GOOD_RECIPES[goodId];
   return Object.keys(recipe).every((input) => !inputMissingAt(input, site, surplusSystemsByGood, routeCost));
+}
+
+/**
+ * Net one input good's pooled raw derived claims (this planner run's spill onto `goodId`, keyed by
+ * claiming systemId) against its reachable RATE spare — mirrors `assessStructuralDeficits`' own
+ * flow-aware cancellation exactly (same reachability scan, same spare definition, same pooled
+ * `coveredFraction`), scoped to one good instead of every good at once. Spare is a producer's
+ * sustainable export RATE (realised `production − demand`, never negative): a strike-suppressed
+ * producer's `production` is already whatever the strike leaves it, so no separate suppression
+ * check is needed (mirrors structural). A producer counts toward covering a claim only when
+ * `routeCost(producer, claimant) !== null` — a site with local production of `goodId` is one more
+ * producer in this pool via `routeCost(site, site)`, not a special case: local output only cancels
+ * a claim to the extent it is actually surplus (production above the site's own demand), exactly as
+ * an external donor's would. Spare is NOT decremented for its structural-gap use (first-cut
+ * simplification, conservative — errs toward building less; the same spare unit can be pooled by
+ * both this spill's netting and the structural pass without either seeing the other's draw).
+ * Claiming systems with no reachable producer at all keep their full raw claim (unchanged spill).
+ */
+function netDerivedClaims(
+  goodId: string,
+  rawClaims: Map<string, number>,
+  systems: BuildSystemState[],
+  routeCost: RouteCost,
+): Map<string, number> {
+  const exporters: Array<{ systemId: string; spare: number }> = [];
+  for (const s of systems) {
+    const good = s.goods.find((g) => g.goodId === goodId);
+    if (!good) continue;
+    const demand = Math.max(0, good.demand);
+    const production = Math.max(0, good.production ?? good.capacityProduction);
+    const spare = Math.max(0, production - demand);
+    if (spare > 0) exporters.push({ systemId: s.systemId, spare });
+  }
+
+  const reachableExporterIds = new Set<string>();
+  const claimants = [...rawClaims.entries()].map(([systemId, gross]) => {
+    let hasExporter = false;
+    for (const exporter of exporters) {
+      if (routeCost(exporter.systemId, systemId) !== null) {
+        hasExporter = true;
+        reachableExporterIds.add(exporter.systemId);
+      }
+    }
+    return { systemId, gross, hasExporter };
+  });
+  const reachableClaims = claimants
+    .filter((c) => c.hasExporter)
+    .reduce((sum, c) => sum + c.gross, 0);
+  const reachableSpare = exporters
+    .filter((e) => reachableExporterIds.has(e.systemId))
+    .reduce((sum, e) => sum + e.spare, 0);
+  const coveredFraction = reachableClaims > 0 ? Math.min(1, reachableSpare / reachableClaims) : 0;
+
+  const netted = new Map<string, number>();
+  for (const c of claimants) {
+    const residual = c.hasExporter ? c.gross * (1 - coveredFraction) : c.gross;
+    if (residual > 0) netted.set(c.systemId, residual);
+  }
+  return netted;
 }
 
 /** One candidate build action: site S can produce `goodId` to serve nearby structural deficits. */
@@ -883,29 +945,44 @@ function planFactionBundles(
 
   if (remainingByGood.size === 0) return { bundles, blocked: [], topOpportunities: [] };
 
-  // Derived demand (the spill): unmet tier-1+ shortfall demands its own missing recipe
-  // inputs too. Walking `PRODUCTION_GOOD_ORDER` in REVERSE visits every consumer before its own
-  // inputs, so one pass cascades all the way down — a good's missing inputs pick up whatever was
-  // just spilled onto it before their own turn to spill arrives. "Missing" is exactly
-  // `inputMissingAt` (the same predicate the input-supply gate reads), read against the CURRENT
-  // `remainingByGood` entry (structural + floor + any derived demand already spilled from a
-  // higher good this same pass — that IS the cascade). Tier-0 goods carry no `GOOD_RECIPES` entry
-  // and terminate it. Never persisted: recomputed from live shortfalls and live missingness every
-  // run, and vanishes the run its parent shortfall closes or its input stops being missing.
+  // Derived demand (the spill): unmet tier-1+ shortfall demands its own recipe inputs too, netted
+  // against how much of that raw need reachable supply genuinely does NOT cover (`netDerivedClaims`
+  // — the 2026-08-26 amendment; the earlier all-or-nothing `inputMissingAt` test now gates only the
+  // proposal, never the spill). Walking `PRODUCTION_GOOD_ORDER` in REVERSE visits every consumer
+  // before its own inputs, so one pass cascades all the way down. Two-phase per good, in the SAME
+  // walk: (1) every claim raw derived claim onto `goodId` lands in `rawClaims`, not yet netted,
+  // while `goodId`'s consumers are visited (they all precede it in this reversed topological
+  // order — no consumer of `goodId` can add a claim after this point); (2) at `goodId`'s own turn,
+  // ALL of its raw claims are known, so they are netted ONCE by one shared `coveredFraction` and
+  // folded into `remainingByGood[goodId]` — which is what its OWN spill onto its inputs reads below,
+  // so the cascade propagates netted amounts, never raw ones. Tier-0 goods carry no `GOOD_RECIPES`
+  // entry: they still receive and net incoming claims (phase 1 above) but never spill further
+  // (phase 2 is skipped), terminating the cascade. Never persisted: recomputed from live shortfalls
+  // and live reachable spare every run, and vanishes the run its parent shortfall closes or the
+  // spare covering it changes.
+  const rawClaims = new Map<string, Map<string, number>>();
   for (const goodId of [...PRODUCTION_GOOD_ORDER].reverse()) {
+    const claims = rawClaims.get(goodId);
+    if (claims && claims.size > 0) {
+      const netted = netDerivedClaims(goodId, claims, systems, routeCost);
+      if (netted.size > 0) {
+        const m = remainingByGood.get(goodId) ?? new Map<string, number>();
+        for (const [systemId, amount] of netted) m.set(systemId, (m.get(systemId) ?? 0) + amount);
+        remainingByGood.set(goodId, m);
+      }
+    }
+
     const recipe = GOOD_RECIPES[goodId];
     if (!recipe) continue; // tier-0: no recipe, nothing to spill onto
     const deficitMap = remainingByGood.get(goodId);
     if (!deficitMap) continue;
     for (const [systemId, shortfall] of deficitMap) {
       if (shortfall <= 0) continue;
-      const site = working.get(systemId);
-      if (!site) continue;
+      if (!working.has(systemId)) continue; // economically-active sites only, mirrors the pass above
       for (const [input, ratio] of Object.entries(recipe)) {
-        if (!inputMissingAt(input, site, surplusSystemsByGood, routeCost)) continue;
-        const m = remainingByGood.get(input) ?? new Map<string, number>();
+        const m = rawClaims.get(input) ?? new Map<string, number>();
         m.set(systemId, (m.get(systemId) ?? 0) + shortfall * ratio);
-        remainingByGood.set(input, m);
+        rawClaims.set(input, m);
       }
     }
   }

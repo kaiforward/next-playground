@@ -597,19 +597,27 @@ describe("directed-build — inputMissingAt (the shared per-input missingness pr
 
 describe("planFactionBundles — derived demand (the spill)", () => {
   // Proves 1: reactor_cores (recipe { radioactives: 0.4, alloys: 0.3, components: 0.3 }) is short at
-  // A; A already locally produces alloys, components, metals and minerals (so those three legs, and
-  // everything downstream of them, are NOT missing), but has no radioactives building and no reachable
-  // radioactives surplus anywhere — the one truly missing input. Only radioactives may pick up derived
-  // demand; alloys and components (present, so not missing) must read exactly zero, even though a
-  // buggy "spill onto every input" implementation WOULD find them buildable here (A carries their own
-  // recipe inputs too, so a spurious alloys/components build is a real, catchable outcome, not one an
-  // input-gate would silently swallow regardless).
+  // A; A already produces alloys and components at ample RATE spare (production far above its own
+  // demand, so the netting fully covers whatever reactor_cores' shortfall would claim on them), but
+  // has no radioactives production and no reachable radioactives surplus anywhere — the one input
+  // whose claim goes fully uncovered. Only radioactives may pick up derived demand; alloys and
+  // components (fully covered) must read exactly zero, even though a buggy "spill onto every input"
+  // implementation WOULD find them buildable here (A carries their own recipe inputs too, so a
+  // spurious alloys/components build is a real, catchable outcome, not one the netting would
+  // silently swallow regardless). The spill nets against reachable RATE spare, not a binary
+  // "any local building" test: a mere `buildings.alloys = 1` with no `goods`
+  // market entry no longer reads as covered — the site must actually PRODUCE the input at a rate
+  // that covers the claim.
   it("Proves 1 — a good missing 1 of 3 inputs spills onto exactly that one (the other two receive zero)", () => {
     const A: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 1_000_000, control: "developed",
       buildings: { alloys: 1, components: 1, metals: 1, minerals: 1 },
       depositCounts: emptyResourceVector(), peopleLand: 0,
-      goods: [{ goodId: "reactor_cores", stock: 1, demand: 1000, capacityProduction: 0 }],
+      goods: [
+        { goodId: "reactor_cores", stock: 1, demand: 1000, capacityProduction: 0 },
+        { goodId: "alloys", stock: 1, demand: 0, production: 1_000_000, capacityProduction: 1_000_000 },
+        { goodId: "components", stock: 1, demand: 0, production: 1_000_000, capacityProduction: 1_000_000 },
+      ],
     };
     const depositCounts = emptyResourceVector();
     depositCounts.radioactive = 1000;
@@ -626,13 +634,16 @@ describe("planFactionBundles — derived demand (the spill)", () => {
   });
 
   // Proves 2: ship_frames (recipe { hull_plating: 0.4, alloys: 0.3, components: 0.3 }) is short at A;
-  // A locally produces components and minerals only, so hull_plating, alloys, metals and ore are all
-  // genuinely missing — the worst real recipe chain, 4 hops (ship_frames → hull_plating → alloys →
-  // metals → ore). Reversed PRODUCTION_GOOD_ORDER visits ship_frames first (spilling onto hull_plating
-  // AND directly onto alloys, since both legs are missing), then hull_plating (spilling onto its own
-  // metals and alloys legs), then alloys (spilling onto its metals leg; minerals is present, so no
-  // spill there), then metals (spilling its combined total onto ore, ratio 1). Hand-derived total at
-  // ore, summing every path the entangled recipe graph actually creates:
+  // A produces components at ample RATE spare (so its claim nets fully to zero — the netting reads
+  // actual coverage, never merely a building's presence), so hull_plating, alloys, metals and
+  // ore are the only legs that pick up any net derived demand — the worst real recipe chain, 4 hops
+  // (ship_frames → hull_plating → alloys → metals → ore). Reversed PRODUCTION_GOOD_ORDER visits
+  // ship_frames first (spilling onto hull_plating AND directly onto alloys, since neither has any
+  // reachable spare), then hull_plating (spilling onto its own metals and alloys legs), then alloys
+  // (spilling onto its metals leg; its minerals leg is untouched by this derivation since minerals
+  // has no recipe of its own and cannot feed back into metals/ore), then metals (spilling its
+  // combined total onto ore, ratio 1). Hand-derived total at ore, summing every path the entangled
+  // recipe graph actually creates (components contributes nothing — its claim nets to zero):
   //   R(ship_frames) = 440   (rateDeficit for demand 1000, no exporters)
   //   D(hull_plating)        = 440×0.4 = 176
   //   D(alloys)  = 440×0.3 (direct) + 176×0.5 (via hull_plating) = 132 + 88 = 220
@@ -640,14 +651,19 @@ describe("planFactionBundles — derived demand (the spill)", () => {
   //   D(ore)     = 220×1 = 220
   // Pinning this (not "some ore demand exists") catches both a wrong ratio and a wrong walk order —
   // a forward (inputs-first) walk would let ship_frames spill onto hull_plating/alloys too late for
-  // that demand to cascade further within the same pass, landing far short of 220 at ore.
+  // that demand to cascade further within the same pass, landing far short of 220 at ore. Under
+  // rate netting, `buildings.components = 1` alone (no `goods` market entry) does not net
+  // the components claim to zero, so A carries an actual ample-production components entry.
   it("Proves 2 — the 4-hop chain cascades, reaching ore scaled by the product of the ratios on the path", () => {
     const demandShipFrames = 1000;
     const A: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 0, control: "developed",
       buildings: { components: 1, minerals: 1 },
       depositCounts: emptyResourceVector(), peopleLand: 0,
-      goods: [{ goodId: "ship_frames", stock: 1, demand: demandShipFrames, capacityProduction: 0, proposalCycles: 1 }],
+      goods: [
+        { goodId: "ship_frames", stock: 1, demand: demandShipFrames, capacityProduction: 0, proposalCycles: 1 },
+        { goodId: "components", stock: 1, demand: 0, production: 1_000_000, capacityProduction: 1_000_000 },
+      ],
     };
     const depositCounts = emptyResourceVector();
     depositCounts.ore = 1_000_000;
@@ -688,17 +704,27 @@ describe("planFactionBundles — derived demand (the spill)", () => {
   });
 
   // Proves 4: metals (recipe { ore: 1 }) is short at C, ore missing there. Without any queued ore
-  // project, the external extractor E2 picks up the spilled ore demand. Queuing an ore project AT C
-  // folds queued levels into effective buildings BEFORE the planner ever sees C (`effectiveBuildSystems`,
-  // consumed here through `openProjects`) — ore reads as locally produced, so it is no longer missing
-  // and the spill (and so E2's opportunity) disappears, even though C's own metals shortfall is
-  // unchanged. This is the accepted pipelining: the input factory is already queued, so the input is
-  // treated as available while it finishes.
+  // project, the external extractor E2 picks up the spilled ore demand. Queuing an AMPLE ore project
+  // AT C folds queued levels into effective buildings AND effective production BEFORE the planner
+  // ever sees C (`effectiveBuildSystems`, consumed here through `openProjects` — queued capacity is
+  // added directly onto the good's `production` figure, exposing the input draw before it lands) —
+  // ore's rate spare now covers C's own derived claim on it in full, so the netted claim is zero and
+  // E2's opportunity disappears, even though C's own metals shortfall is unchanged. This is the
+  // accepted pipelining: the input factory is already queued, so the input is treated as available
+  // while it finishes. Two fixture consequences of rate netting: C needs an actual `goods` market
+  // entry for ore (effectiveBuildSystems only folds queued capacity into an EXISTING goods entry,
+  // never buildings alone), and the queued level count must be large enough that the queued output
+  // actually covers C's raw claim (440 = 1.1 × 1000 × BUILD_RATE_CAP) — a small queued order now
+  // gives only PARTIAL coverage (proportional netting), not the old binary "any building at all"
+  // full suppression.
   it("Proves 4 — a QUEUED input building suppresses the spill for that input", () => {
     const C: BuildSystemState = {
       systemId: "C", factionId: "f1", population: 0, control: "developed", buildings: {},
       depositCounts: emptyResourceVector(), peopleLand: 0,
-      goods: [{ goodId: "metals", stock: 1, demand: 1000, capacityProduction: 0, proposalCycles: 1 }],
+      goods: [
+        { goodId: "metals", stock: 1, demand: 1000, capacityProduction: 0, proposalCycles: 1 },
+        { goodId: "ore", stock: 1, demand: 0, capacityProduction: 0 },
+      ],
     };
     const depositCounts = emptyResourceVector();
     depositCounts.ore = 1_000_000;
@@ -712,8 +738,10 @@ describe("planFactionBundles — derived demand (the spill)", () => {
     const withoutQueue = planFactionProposals([C, E2], reachable, [], DEV_REFS);
     expect(hasOreProposalAtE2(withoutQueue.proposals)).toBe(true);
 
+    // 200 levels × OUTPUT_PER_UNIT.ore (4.0) = 800 queued output ≫ C's 440 raw claim on ore — ample
+    // coverage, not a token amount, so the netted residual is exactly zero.
     const queuedOre: WorldConstructionProject[] = [
-      { kind: "build", id: "q", origin: "auto", factionId: "f1", systemId: "C", buildingType: "ore", levels: 5, workTotal: 100, workDone: 0 },
+      { kind: "build", id: "q", origin: "auto", factionId: "f1", systemId: "C", buildingType: "ore", levels: 200, workTotal: 100, workDone: 0 },
     ];
     const withQueue = planFactionProposals([C, E2], reachable, queuedOre, DEV_REFS);
     expect(hasOreProposalAtE2(withQueue.proposals)).toBe(false);
@@ -760,6 +788,194 @@ describe("planFactionBundles — derived demand (the spill)", () => {
     const builds = planFactionBuilds([C], reachable, DEV_REFS);
     expect(countFor(builds, "C", "gas")).toBeGreaterThan(0);
     expect(countFor(builds, "C", "biomass")).toBeGreaterThan(0);
+  });
+});
+
+describe("planFactionBundles — the spill nets against reachable rate spare", () => {
+  // Proves 1: metals (recipe { ore: 1 }) is short at A (demand 1000, no capacity) — raw claim on ore
+  // is R(metals) = 1.1 × 1000 × BUILD_RATE_CAP = 440. Donor D produces ore at ample sustainable RATE
+  // (spare 900 = production 1000 − demand 100, far above the 440 claim) but holds ZERO drawable
+  // stock (stock 0 never clears its own export reserve) — the OLD binary test (`surplusSystemsByGood`,
+  // stock-based) would have read D as no donor at all and spilled the full 440 onto ore regardless.
+  // The new netting reads D's sustainable export RATE instead of its stock, so the claim nets fully
+  // to zero and no ore opportunity is ever built anywhere.
+  it("Proves 1 — full rate coverage zeroes the spill even where the OLD binary stock test would have spilled", () => {
+    const demandMetals = 1000;
+    const A: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "metals", stock: 1, demand: demandMetals, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const D: BuildSystemState = {
+      systemId: "D", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "ore", stock: 0, demand: 100, production: 1000, capacityProduction: 1000 }],
+    };
+    const depositCounts = emptyResourceVector();
+    depositCounts.ore = 1_000_000;
+    const E: BuildSystemState = {
+      systemId: "E", factionId: "f1", population: 1_000_000, control: "developed", buildings: {},
+      depositCounts, peopleLand: 0, goods: [],
+    };
+    const plan = planFactionProposals([A, D, E], reachable, [], DEV_REFS);
+    const hasOreProposalAtE = plan.proposals.some(
+      (p) => p.kind === "build" && p.systemId === "E" && p.items.some((i) => i.buildingType === "ore"),
+    );
+    expect(hasOreProposalAtE).toBe(false);
+  });
+
+  // Proves 2: same metals→ore claim (raw 440), but donor D's rate spare (220) covers only HALF the
+  // pooled claim — the netted residual must be exactly the other half (220), not the full 440 (no
+  // netting) and not zero (over-netting). D has no ore deposit of its own, so it never competes with
+  // builder E for the residual.
+  it("Proves 2 — partial coverage nets proportionally: half the pooled claim covered spills half the raw need", () => {
+    const demandMetals = 1000;
+    const A: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "metals", stock: 1, demand: demandMetals, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const D: BuildSystemState = {
+      systemId: "D", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "ore", stock: 1, demand: 0, production: 220, capacityProduction: 220 }],
+    };
+    const depositCounts = emptyResourceVector();
+    depositCounts.ore = 1_000_000;
+    const E: BuildSystemState = {
+      systemId: "E", factionId: "f1", population: 1_000_000, control: "developed", buildings: {},
+      depositCounts, peopleLand: 0, goods: [],
+    };
+    const plan = planFactionProposals([A, D, E], reachable, [], DEV_REFS);
+    const rMetals = (1 + DIRECTED_BUILD.PROVISION_MARGIN) * demandMetals * DIRECTED_BUILD.BUILD_RATE_CAP; // 440
+    const expectedOre = rMetals * 0.5; // spare 220 covers exactly half of the 440 raw claim
+    const oreProposal = plan.proposals.find(
+      (p): p is Extract<typeof p, { kind: "build" }> => p.kind === "build" && p.systemId === "E" && p.items.some((i) => i.buildingType === "ore"),
+    );
+    expect(oreProposal?.value).toBeCloseTo(expectedOre, 6);
+  });
+
+  // Proves 3: two colonies (A1, A2) each carry an identical metals shortfall, both reaching the SAME
+  // donor D (spare 440, exactly one colony's worth). Pooled correctly, the shared coveredFraction is
+  // 440 ÷ 880 = 0.5 — each colony keeps a 220 residual, 440 total spilling onto ore. A bug that nets
+  // each claimant against the FULL spare independently (never subtracting what the other claimant
+  // already drew) would read coveredFraction = 440 ÷ 440 = 1 for EACH claimant and spill nothing at
+  // all (total 0) — the two models are 440 tick apart, not a rounding difference.
+  it("Proves 3 — spare is pooled across claimants, never given in full to each", () => {
+    const demandMetals = 1000;
+    const colony = (systemId: string): BuildSystemState => ({
+      systemId, factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "metals", stock: 1, demand: demandMetals, capacityProduction: 0, proposalCycles: 1 }],
+    });
+    const A1 = colony("A1");
+    const A2 = colony("A2");
+    const D: BuildSystemState = {
+      systemId: "D", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "ore", stock: 1, demand: 0, production: 440, capacityProduction: 440 }],
+    };
+    const depositCounts = emptyResourceVector();
+    depositCounts.ore = 1_000_000;
+    const E: BuildSystemState = {
+      systemId: "E", factionId: "f1", population: 1_000_000, control: "developed", buildings: {},
+      depositCounts, peopleLand: 0, goods: [],
+    };
+    const plan = planFactionProposals([A1, A2, D, E], reachable, [], DEV_REFS);
+    const oreTotal = plan.proposals
+      .filter((p): p is Extract<typeof p, { kind: "build" }> => p.kind === "build" && p.items.some((i) => i.buildingType === "ore"))
+      .reduce((sum, p) => sum + p.value, 0);
+    const rMetalsEach = (1 + DIRECTED_BUILD.PROVISION_MARGIN) * demandMetals * DIRECTED_BUILD.BUILD_RATE_CAP; // 440
+    const expectedTotal = 2 * rMetalsEach - 440; // 880 raw − 440 spare absorbed ONCE (pooled) = 440
+    expect(oreTotal).toBeCloseTo(expectedTotal, 6);
+  });
+
+  // Proves 4: identical metals→ore claim as Proves 1/2, but with NO producer of ore anywhere reachable
+  // (E is a fresh builder with deposit slots, never a market entry for ore) — the netting must leave
+  // the raw claim untouched, exactly the pre-amendment (Task 2) behaviour.
+  it("Proves 4 — no reachable spare anywhere leaves the spill unchanged (full spill)", () => {
+    const demandMetals = 1000;
+    const A: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "metals", stock: 1, demand: demandMetals, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const depositCounts = emptyResourceVector();
+    depositCounts.ore = 1_000_000;
+    const E: BuildSystemState = {
+      systemId: "E", factionId: "f1", population: 1_000_000, control: "developed", buildings: {},
+      depositCounts, peopleLand: 0, goods: [],
+    };
+    const plan = planFactionProposals([A, E], reachable, [], DEV_REFS);
+    const rMetals = (1 + DIRECTED_BUILD.PROVISION_MARGIN) * demandMetals * DIRECTED_BUILD.BUILD_RATE_CAP;
+    const oreProposal = plan.proposals.find(
+      (p): p is Extract<typeof p, { kind: "build" }> => p.kind === "build" && p.systemId === "E" && p.items.some((i) => i.buildingType === "ore"),
+    );
+    expect(oreProposal?.value).toBeCloseTo(rMetals, 6);
+  });
+
+  // Proves 5: alloys (recipe { metals: 0.6, minerals: 0.4 }) is short at A (demand 1000, no capacity)
+  // — raw claim on metals is 440 × 0.6 = 264. Donor D's metals rate spare (132) covers exactly HALF
+  // of that, netting metals' own remaining shortfall to 132 — which is what metals' OWN turn (later
+  // in the same reversed walk) must spill onward onto ORE (ratio 1), since ore has no donor of its
+  // own. A cascade that propagated the RAW 264 instead of the NETTED 132 would double ore's claim.
+  it("Proves 5 — the cascade propagates the NETTED amount down a 2-hop chain, not the raw one", () => {
+    const demandAlloys = 1000;
+    const A: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "alloys", stock: 1, demand: demandAlloys, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const D: BuildSystemState = {
+      systemId: "D", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "metals", stock: 1, demand: 0, production: 132, capacityProduction: 132 }],
+    };
+    const depositCounts = emptyResourceVector();
+    depositCounts.ore = 1_000_000;
+    const E: BuildSystemState = {
+      systemId: "E", factionId: "f1", population: 1_000_000, control: "developed", buildings: {},
+      depositCounts, peopleLand: 0, goods: [],
+    };
+    const plan = planFactionProposals([A, D, E], reachable, [], DEV_REFS);
+    const rAlloys = (1 + DIRECTED_BUILD.PROVISION_MARGIN) * demandAlloys * DIRECTED_BUILD.BUILD_RATE_CAP; // 440
+    const rawMetalsClaim = rAlloys * 0.6; // 264
+    const nettedMetalsClaim = rawMetalsClaim * 0.5; // spare 132 covers half → 132
+    const oreProposal = plan.proposals.find(
+      (p): p is Extract<typeof p, { kind: "build" }> => p.kind === "build" && p.systemId === "E" && p.items.some((i) => i.buildingType === "ore"),
+    );
+    expect(oreProposal?.value).toBeCloseTo(nettedMetalsClaim, 6);
+  });
+
+  // Proves 6: identical metals→ore claim (raw 440), but donor D's built CAPACITY is ample (1000) while
+  // a strike has suppressed its REALISED production to 0 — mirrors `assessStructuralDeficits`' own
+  // spare definition, which reads realised `production`, never `capacityProduction`. A bug that read
+  // capacity instead of realised output would net the claim to zero; the correct reading leaves the
+  // full 440 unmitigated, since idle strike-suppressed capacity is not export anyone can plan against.
+  it("Proves 6 — a strike-suppressed producer's idle capacity is not spare", () => {
+    const demandMetals = 1000;
+    const A: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "metals", stock: 1, demand: demandMetals, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const D: BuildSystemState = {
+      systemId: "D", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "ore", stock: 1, demand: 0, production: 0, capacityProduction: 1000, productionSuppressed: true }],
+    };
+    const depositCounts = emptyResourceVector();
+    depositCounts.ore = 1_000_000;
+    const E: BuildSystemState = {
+      systemId: "E", factionId: "f1", population: 1_000_000, control: "developed", buildings: {},
+      depositCounts, peopleLand: 0, goods: [],
+    };
+    const plan = planFactionProposals([A, D, E], reachable, [], DEV_REFS);
+    const rMetals = (1 + DIRECTED_BUILD.PROVISION_MARGIN) * demandMetals * DIRECTED_BUILD.BUILD_RATE_CAP;
+    const oreProposal = plan.proposals.find(
+      (p): p is Extract<typeof p, { kind: "build" }> => p.kind === "build" && p.systemId === "E" && p.items.some((i) => i.buildingType === "ore"),
+    );
+    expect(oreProposal?.value).toBeCloseTo(rMetals, 6);
   });
 });
 
