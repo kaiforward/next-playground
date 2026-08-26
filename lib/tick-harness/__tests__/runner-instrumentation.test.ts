@@ -316,8 +316,10 @@ describe("runTickHarness: the per-tick instrumentation", () => {
     // galaxy never gets there: probe-backed peak unrest is 0.4755 at 10,000 ticks (BUSY's own
     // horizon), falling to 0.324 by 20,000 — an accepted calm regime (Kai, 2026-08-24), not a
     // broken wire, with a roadmap row owning re-arming strikes once adversarial mechanics ship.
-    // `suppressed` is pinned at exactly 0 here as that regime's signature: a future `suppressed >
-    // 0` means pressure has returned and that roadmap row is due. The accounting mechanism this
+    // Derived demand (the planner's spill of unmet tier-1+ shortfall onto uncovered inputs)
+    // applies the first real pressure this fixture has seen: 18 of the eligible pairs read
+    // suppressed on BUSY's horizon. Pinned exactly, as the regime's signature — a drift in either
+    // direction is a mechanics change to re-read, not noise. The accounting mechanism this
     // number depends on — a live pair actually incrementing `suppressed` — is proven where it can
     // be constructed directly, not on this dormant galaxy: lib/engine/__tests__/directed-build.test.ts
     // "planFactionProposals: strikeSuppressedProposals — per-eligible-pair suppression count" and
@@ -328,12 +330,10 @@ describe("runTickHarness: the per-tick instrumentation", () => {
     const s = results.strikeSuppression;
 
     expect(s.eligible).toBeGreaterThan(0);
-    expect(s.suppressed).toBe(0);
+    expect(s.suppressed).toBe(18);
     expect(s.suppressed).toBeLessThanOrEqual(s.eligible);
-    // Not a 0/0 tautology: eligible is a real, nonzero count (asserted above), so this is 0
-    // divided by a real denominator, not two zeros agreeing vacuously.
     expect(s.ratePerEligible).toBeCloseTo(s.suppressed / s.eligible, 12);
-    expect(s.ratePerEligible).toBe(0);
+    expect(s.ratePerEligible).toBeGreaterThan(0);
   }, 120_000);
 });
 
@@ -470,13 +470,12 @@ describe("runTickHarness: episode costs, founding trajectory, the ratchet check"
     // quiet galaxy both print zero — this fixture confirms BUSY is not silently vacuous for the
     // sections that DO fire.
     //
-    // totalTeardownLevels is the one exception, and deliberately pinned rather than dropped: both
-    // decay channels gate on pressure this branch no longer reaches — the idle-buffer countdown
-    // peaks at 66/120 cycles at 10,000 ticks (never crosses the buffer) and the catastrophic
-    // channel needs unrest above 0.75 (lib/constants/infrastructure.ts:22) against a measured
-    // peak of 0.4755. Zero here is the calm regime's signature (accepted, Kai 2026-08-24), not a
-    // dropped fold — a future nonzero reading is teardown pressure returning, not a regression in
-    // this instrument. The counter's own wiring — that a torn-down level actually reaches
+    // totalTeardownLevels is deliberately pinned rather than dropped: derived demand (the
+    // planner's spill of unmet tier-1+ shortfall onto uncovered inputs) applies enough pressure
+    // on BUSY's horizon for the decay channels to shed 7 levels — the first nonzero this fixture
+    // has read. Pinned exactly as the regime's signature; a drift in either direction is a
+    // mechanics change to re-read, not a regression in this instrument. The counter's own wiring
+    // — that a torn-down level actually reaches
     // `totalTeardownLevels` — is proven at unit level where it can be forced to fire:
     // lib/tick/processors/__tests__/infrastructure-decay.test.ts "infrastructure-decay processor:
     // teardown instrumentation" constructs both channels tearing a level down and asserts
@@ -485,7 +484,7 @@ describe("runTickHarness: episode costs, founding trajectory, the ratchet check"
     // `totalTeardownLevels` and asserts the total. Together they cover both hops of the wire this
     // test cannot exercise on a dormant galaxy.
     const results = await runBusy();
-    expect(results.episodeCosts.totalTeardownLevels).toBe(0);
+    expect(results.episodeCosts.totalTeardownLevels).toBe(7);
     expect(results.foundingTrajectory.buckets[0].n).toBeGreaterThan(0); // colonies founded in-window
     expect(results.provisionRatchet.buckets.length).toBeGreaterThan(0);
 

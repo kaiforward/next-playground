@@ -16,14 +16,29 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-1. **[M] Visual system view — bodies as a spatial layout inside the system detail panel.** A simple
+1. **[S] Per-level project landing — a multi-level build lands level-by-level, never all-at-once.**
+  A planner bundle expands into ONE project row per building type
+  (`lib/tick/processors/directed-build.ts:560-568`): 22 housing levels is a single project with
+  `workTotal = 22 × per-level work`, and `fundCycle` lands it only when the whole total completes
+  (`lib/engine/construction.ts:116`) — a colony waits years for housing whose first levels should
+  arrive in months. Player orders take the same path. Direction (Kai, 2026-08-25): the levels are
+  individual projects that happened to be queued together — land `floor(workDone / perLevelWork)`
+  levels as work accrues. Decay already sheds whole levels, so partial landing is shape-safe.
+  Touches the progress/ETA read surfaces (ghost rows, `computeFactionConstruction`), whose
+  bar/ETA semantics assume all-at-once landing. Interacts with the shipped necessity/derived-demand
+  planner only through timing — housing → population → labour arrives earlier (no-labour is the
+  second colony binder, 26.9% of colony tier-1+ drops and rising as derived demand opens the input
+  gate), and a released factory starts producing at level 1.
+  *Next step:* implement — landing rule in `fundCycle` + the read surfaces; red-proofed test that
+  a 2-level project lands its first level at half work.
+2. **[M] Visual system view — bodies as a spatial layout inside the system detail panel.** A simple
   2D/3D view alongside (not replacing) the body cards, so a system's bodies read as a place instead
   of a list — popovers on each body surface its score, lock state, occupancy and worked/total
   deposits. Consumes the engine's `workedByBody` read (`lib/engine/worked-deposits.ts`), which
   already returns per-body, per-resource worked/total slot counts. UI-heavy: gets the
   browser-viewable HTML prototype pass approved before implementation (AGENTS.md, UI/dataviz).
   *Next step:* prototype pass.
-2. **[S] Abandonment warning for non-famine decline — a let-through bug, not a feature ask.**
+3. **[S] Abandonment warning for non-famine decline — a let-through bug, not a feature ask.**
   Found at the habitability-seeding uber-review (2026-08-24): Abandonment Rule 2 fires on
   below-floor population alone, but the player-facing countdown (`lib/services/alerts.ts`, the
   famine branch) is famine-gated — a well-fed colony declining to empty under unrest dies with
@@ -118,53 +133,14 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   unrest 0.867) and 123 teardown levels across 37 colonies at 10K — "systems doing well
   enough it rarely happens", not dormancy. The construction-cost site ranking already
   restored demand-hunting pressure above its old bound.
+  First pressure has arrived: derived demand shipped and the harness calm-regime pins were
+  re-derived against it (BUSY fixture now pins 18 suppressed pairs and 7 teardown levels, up from
+  0/0) — mild, not the full re-read; the both-scales re-read below still stands.
   *Next step:* when a mechanic that applies real pressure ships (war, events split, disasters
   pass, monetary demand), re-read both scales and re-derive the harness bands against it.
   *Don't:* re-tune the thresholds (0.65 / 0.75 / 120 cycles) downward to make the mechanics
   fire harder against today's incomplete economy — they are definitions; the pressure side is
   what's missing.
-- **[M] Necessity weighting in the build planner** — the autonomic planner ranks opportunities by
-  `BuildOpportunity.score` (`lib/engine/directed-build.ts:596-597, 850-856`): units of unmet demand it
-  could serve, divided by route cost. That carries no necessity at all — a hundred units of unmet food
-  and a hundred of unmet luxuries score identically, and nothing in the planner consults
-  `SURVIVAL_GOODS`. **The alert bar shipped the fix on the read side only**, banding survival-serving
-  builds above the rest on its Build opportunity chip, which exists only while build automation is
-  off. So the player gets survival-first advice by hand and the planner does not follow it when
-  automated — same data, two answers depending on a switch. This row closes that.
-  Two things already established, so nobody re-derives them: `score` **is** demand-gated (`take` is
-  bounded by the real shortfall), so the planner is not necessity-blind in effect — a food shortage
-  raises food builds on its own, and what is missing is the *tiebreak* when several goods are short at
-  once. And the unit bias that skews the ranking toward bulk goods is **13×** (`ship_frames` 0.6 →
-  `gas` 8.0 across all 26 goods), not the "orders of magnitude" an earlier finding claimed.
-  **Also fold in: tier-0 yield-awareness.** Tier-0 opportunity scoring is yield-blind — nothing in
-  `lib/engine/directed-build.ts` reads `extractionEff` or `yields`. The marginal slot's ground
-  value (quality × extraction modifier of the next unworked deposit in the system's slot order) is
-  a cheap lookup (`marginalSlot`, `lib/engine/worked-deposits.ts`) that should scale a tier-0
-  opportunity's projected output in the score, so a shortfall served from poor ground ranks below
-  the same shortfall served from good ground.
-  **Second planner defect, measured 2026-08-25 (evidence with committed falsifiers:
-  [manufactured-tier-founding-shortage](./build-plans/manufactured-tier-founding-shortage.md)): the
-  founding-era manufactured-tier collapse is a proposal deadlock, not starvation or construction
-  scarcity.** Homeworld factories run ~90% of capacity fully staffed and un-gated while galaxy cover
-  reads 0.00; the construction pool sits near idle and funding is never short; the block is
-  `inputsAvailable` (`lib/engine/directed-build.ts:881, :599-613`) — a factory is only proposed where
-  every recipe input already has a local producer or reachable *surplus* donor, and in a deficit-
-  everywhere founding galaxy almost no site qualifies, so the shortage self-perpetuates. Direction
-  (Kai, 2026-08-25): extend unmet tier-1/2 demand down the recipe chain as derived demand on the
-  unsatisfied inputs, so supplying lower tiers gains the ROI that eventually unblocks the chain
-  bottom-up (ore surplus → metals → components → electronics). Two design constraints already known:
-  the binary gate sits *before* ranking, so derived demand alone may not unblock a good whose own
-  inputs are deficit-bound; and demand from factories that don't exist yet must die cleanly once the
-  chain is built.
-  *Next step:* `/measure` two reads — how often survival and non-survival opportunities actually
-  compete inside one planner run (the weighting's value depends entirely on that rate, Kai's prior:
-  often), and the BuildDropReport "no-input-supplier" share over a 16K run (the deadlock's actual
-  drop rate) — both horizons, cohorted by developed systems. Then one design pass covering weighting
-  + derived demand together: they touch the same score.
-  *Don't:* copy the alert bar's band across without a sim reading. That band is a presentation
-  ordering with no simulation consequence; this one changes what every faction builds at every horizon.
-  And don't ship derived demand without a decay/dissolution rule for it — permanent phantom demand is
-  permanent over-building pressure.
 - **[L] Physical warehouse model — storage as a real, brake-relevant limit.** Today's storage
   constants (`EXTRACTOR/PRODUCTION_STORAGE_PER_UNIT`, `POP_CENTRE_STORAGE`) only deepen `maxStock`;
   they are authored per *producing* building while the brake knee is 40 cycles of *system-wide*
@@ -496,10 +472,11 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   recut because it overlaps this pass's hub/chain design — pick it up here.
   **Carry necessity into the routing calculations too** (Kai, 2026-08-16). The same gap the build
   planner has: logistics decides what to haul from shortfall quantity and route cost, and a unit of
-  unmet food ranks alongside a unit of unmet luxuries. Sibling of the necessity-weighting row under
-  Economy — settle the two together so survival goods are not privileged in one pillar and not the
-  other. The concrete place it lands is the **good-allocation cliff** row above, which owns the
-  allocation policy; this line exists so the pillar pass does not design that policy necessity-blind.
+  unmet food ranks alongside a unit of unmet luxuries. The build side has shipped — the planner's
+  survival band (docs/active/gameplay/economy-autonomic-agency.md, "Survival first") — so this line
+  closes the remaining half. The concrete place it lands is the **good-allocation cliff** row above,
+  which owns the allocation policy; this line exists so the pillar pass does not design that policy
+  necessity-blind.
 - **[S] §3.5 player-directed colony founding** — the mechanism (`employedGradientThreshold` speed-dial)
   ships **inert but tested**. Wire it when the player-agency phase reaches it.
 
@@ -510,25 +487,11 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   layer) and `jsx-a11y` (the component tests lean on roles/accessible names). Flat config,
   `typescript-eslint` + the two plugins, a `lint` script; owner decides whether it joins the CI
   gate. *Next step:* write the flat config and run it once over the tree to size the fix-up.
-- **[S/M] Overnight mutation re-sweep** — the first Stryker cycle (merged 2026-08-09) swept 40 files;
-  the remaining ~66 `lib/` files have never been swept at all. Owed: an overnight re-sweep of the 40
-  (incremental cache invalidates most of them anyway) plus a first sweep of the rest, same
-  kill-or-accept discipline as the first cycle. **Noise-survivor warning:** the review that closed
-  cycle 1 reverted the mutator-class exclusions in `stryker.config.mjs`, so the re-sweep will
-  re-report the ~204 already-accepted noise-class survivors (`temp/fix-wave/noise-ledger.md`) —
-  don't re-triage them.
-  **Widened (habitability-seeding, 2026-08-24):** two items this branch owes overnight, folded into
-  the same batch rather than a separate one — (1) a scoped `npm run mutation` sweep of this branch's
-  diff (`lib/` files touched by habitability seeding); (2) a thin-margin re-measure of the
-  cadence-invariance harness bands the branch's changes sit close to: the `build12` buildings-gate
-  fixture's 1.2× margin and `FOUNDING_TOL`'s 1.7×/1.6× margins — re-derive both now the archetype
-  tables are settled (post-Gate-A).
-  **Widened (per-body-industry, 2026-08-25):** a scoped sweep of that branch's `lib/` diff
-  (worked-deposits engine, industry summary, tick refold sites, save load hook, harness idle read) —
-  deferred from its pre-merge review to this batch; the branch's red-proof records are the
-  synchronous guarantee in the meantime.
-  *Next step:* schedule the overnight batch (`--concurrency 8`, pre-approved) for a window Kai isn't
-  using the machine.
+- **[S] Thin-margin re-measure of the cadence-invariance harness bands** (booked at
+  habitability-seeding, 2026-08-24): the `build12` buildings-gate fixture's 1.2× margin and
+  `FOUNDING_TOL`'s 1.7×/1.6× margins sit close to that branch's changes — re-derive both now the
+  archetype tables are settled (post-Gate-A).
+  *Next step:* re-run the cadence-invariance pair and re-derive the two margins.
 - **[M] Sim gates beyond the four founding identities** — agreed rule: a gate fails only when the
   code is broken, never when the balance is off; if a designer could plausibly fix it by changing a
   constant, it's a bar to read, not a gate. Three families, all seed-proof (never "X of Y systems"):
@@ -562,12 +525,6 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   colonisation-economics spec, booked at its calibration gate. Prerequisite for tuning doctrine
   allocation (government layer revisit) and for the founding-constant retune when the sibling treasury
   drains (priced logistics, military, industry pricing) land.
-- **[M] Pre-existing mutation survivors in the colonisation-adjacent files** — the PR #217 scoped
-  sweep (27 files) surfaced ~1,000 surviving/no-coverage mutants on lines *outside* that PR's diff;
-  the in-diff ones were handled at the PR's own gate. Heaviest: `lib/world/tick.ts`,
-  `lib/engine/directed-build.ts`, `lib/tick-harness/runner.ts`. The incremental cache
-  (`reports/stryker-incremental.json`, machine-local) makes re-runs minutes, not hours.
-  *Next step:* chip file-by-file, worst first, same kill-or-accept discipline as the PR gate.
 - **[S] Harden the runner integration suite's thin anchors** — found while re-deriving the
   drawBrakeCeiling divergence fixture. The gate-split identity test (`runner-founding.test.ts:101`,
   `charter + funds + pool + unGated === observed`) passes vacuously: the 20/7/240 fixture never
@@ -599,6 +556,13 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   is needed; it requires threading `foundedTick` onto `TickSystem` and world state (save-format).
 
 **Parked by an explicit decision — don't re-propose as new**
+- **Tier-0 yield-awareness in the build planner** — killed by owner decision 2026-08-26 after 24K
+  attribution runs. The planner's score is one shared scale across tiers: unclamped, rich ground
+  inflated the whole tier-0 band against tier-1+ (extraction out-claimed factories at the shared
+  labour pool); clamped at min(1, ground), poor-ground demotion starved exactly the extraction
+  that feeds the input gate. Owner's reason: "once you're on a system, demand is demand" — yield
+  preference is a colonisation-time concern (`colonyValue` already prices deposit richness), not a
+  build-ranking one. Don't rebuild it in either form.
 - **[S] Colony seed size scaled against the housing unit** — a 2-pop seed against a 20-pop housing level
   means no colony can open looking anything but empty. Variant on record: send what the founder can spare,
   up to a whole level. Changes colonisation pacing and the AI founding policy, which is why it parked.

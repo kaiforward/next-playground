@@ -498,15 +498,29 @@ describe("construction centres", () => {
   });
 
   it("prices the centre off the UNSCALED pool — the commit decision is interval-invariant", async () => {
-    // A world tuned so the backlog (one 12-work food bundle; housing is already at its habitable cap,
+    // A world tuned so the backlog (one 12-work ore bundle; housing is already at its habitable cap,
     // so it proposes nothing) sits just above the reference-interval frontier budget
     // (poolRef.total=0.1 × BACKLOG_WINDOW=60 = 6 < 12) but just below what a WRONGLY-scaled budget
     // would read at catchUp=2 (0.1 × 2 × 60 = 12, no longer < 12) — so a regression that fed the
     // scaled funding pool into planCentreProposal (instead of the unscaled poolRef.total) would
     // commit a centre at the reference interval (24) but NOT at interval 48, while the correct
     // unscaled valuation commits at both (mirrors the non-reference-interval construction in
-    // "interval invariance" below).
-    const fullyHoused = scenario(0, 100, 20, { control: "developed", foodCycles: 1 });
+    // "interval invariance" below). Ore, not food: a survival-serving backlog would now claim the
+    // shared pool ahead of the centre by band alone (the survival funding band), which is a
+    // different mechanism than the interval-invariant pricing this test isolates.
+    const fullyHoused: SystemBuildRow[] = [
+      {
+        systemId: "A", factionId: "f1", control: "developed", population: 100, buildings: {},
+        yields: unitResourceVector(), extractionEff: unitResourceVector(), depositCounts: emptyResourceVector(),
+        peopleLand: 0, markets: [{ id: "A|ore", goodId: "ore", stock: 1, anchorMult: 1, demandRate: 1000, storageCapacity: 0, proposalCycles: 1 }],
+      },
+      {
+        systemId: "B", factionId: "f1", control: "developed", population: 5000,
+        buildings: { housing: 100 },
+        yields: unitResourceVector(), extractionEff: unitResourceVector(), depositCounts: builderSlots(20),
+        peopleLand: 100, markets: [],
+      },
+    ];
     const committed = async (interval: number): Promise<boolean> => {
       const w = new MemoryDirectedBuildWorld(fullyHoused);
       await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
@@ -811,15 +825,20 @@ describe("runDirectedBuildProcessor: the charter", () => {
   });
 });
 
-/** A developed home saturated on housing (σ = 1, no housing headroom) but carrying a deep food deficit
- *  with spare labour + food slots — so it emits a food industry build proposal that competes with a
- *  colony in the same pool. Population sets labour; the pool is kept scarce via mkConstruction's rate. */
-function homeWithFoodDeficit(population = 1000): SystemBuildRow {
+/** A developed home saturated on housing (σ = 1, no housing headroom) but carrying a deep ore deficit
+ *  with spare labour + ore slots — so it emits a non-survival industry build proposal that competes
+ *  with a colony in the same pool, uncontaminated by the survival funding band
+ *  a food/water deficit would now add. `proposalCycles: 1` seeds the persisted clock so the
+ *  persistence-gated structural residual actually forms in one assessment — food/water get this for
+ *  free via the speculative floor (`SPECULATIVE_BASICS`), ore does not. Population sets labour; the
+ *  pool is kept scarce via mkConstruction's rate. */
+function homeWithOreDeficit(population = 1000): SystemBuildRow {
   return {
     systemId: "home", factionId: "f1", control: "developed", population,
     buildings: { [HOUSING_TYPE]: 5 },
     yields: unitResourceVector(), extractionEff: unitResourceVector(), depositCounts: builderSlots(20),
- peopleLand: 5, markets: [foodMarket("home", 1)], // habitable fully housed → σ = 1
+ peopleLand: 5, // habitable fully housed → σ = 1
+    markets: [{ id: "home|ore", goodId: "ore", stock: 1, anchorMult: 1, demandRate: 1000, storageCapacity: 0, proposalCycles: 1 }],
   };
 }
 
@@ -829,11 +848,11 @@ function colonyOf(systemId: string, peopleLand: number): ColonyEstablishCandidat
 
 describe("runDirectedBuildProcessor: build-vs-colony ROI arbitration (one shared pool)", () => {
   it("funds a high-ROI local build ahead of a low-value colony (colony deferred)", async () => {
-    const w = new MemoryDirectedBuildWorld([homeWithFoodDeficit(1000)]);
+    const w = new MemoryDirectedBuildWorld([homeWithOreDeficit(1000)]);
     // pool = 1000 × 0.004 = 4 → one cap-worth; only the front of the ROI-ordered queue funds this cycle.
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(6, 0.004),
-      // A barren colony (habitable 2, no deposits) scores colonyValue ≈ ROI 0.08 vs the food build's ≈ 0.25,
+      // A barren colony (habitable 2, no deposits) scores colonyValue ≈ ROI 0.08 vs the ore build's ≈ 0.25,
       // so the build out-ROIs it and takes the shared pool front-first.
       develop: { candidateProvider: (f) => (f === "f1" ? [colonyOf("c1", 2)] : []), params: COLONY_PARAMS },
     });
@@ -846,7 +865,7 @@ describe("runDirectedBuildProcessor: build-vs-colony ROI arbitration (one shared
   });
 
   it("funds a high-value colony ahead of a low-ROI local build (build starved)", async () => {
-    const w = new MemoryDirectedBuildWorld([homeWithFoodDeficit(1000)]);
+    const w = new MemoryDirectedBuildWorld([homeWithOreDeficit(1000)]);
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(6, 0.004),
       // Same home/deficit; only the colony's land changes — enormous habitable → colonyValue ROI ≫ the
@@ -856,7 +875,7 @@ describe("runDirectedBuildProcessor: build-vs-colony ROI arbitration (one shared
     const fundedColony = w.constructionProjects.find((p) => p.kind === "colony_establish");
     expect(fundedColony).toBeDefined();
     expect(fundedColony!.workDone).toBeGreaterThan(0);
-    // The food build was proposed but starved of the pool this cycle (builds persist at workDone 0).
+    // The ore build was proposed but starved of the pool this cycle (builds persist at workDone 0).
     const build = w.constructionProjects.find((p) => p.kind === "build");
     expect(build).toBeDefined();
     expect(build!.workDone).toBe(0);
@@ -1074,11 +1093,11 @@ describe("runDirectedBuildProcessor: player automation gating (proposal generati
   });
 
   it("skips colony proposal generation when automation.colonisation is off, leaving builds alone", async () => {
-    // Reuses the build-vs-colony arbitration fixture (homeWithFoodDeficit + colonyOf/COLONY_PARAMS):
+    // Reuses the build-vs-colony arbitration fixture (homeWithOreDeficit + colonyOf/COLONY_PARAMS):
     // a build deficit competes with an eligible colony candidate for the same pool. With colonisation
     // off, no colony_establish proposal is generated at all — the build proposal wins the whole pool
     // and its row persists regardless of funding (persist-if-funded only gates colonies/centres).
-    const w = new MemoryDirectedBuildWorld([homeWithFoodDeficit(1000)]);
+    const w = new MemoryDirectedBuildWorld([homeWithOreDeficit(1000)]);
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable,
       construction: mkConstruction(6, 0.004),

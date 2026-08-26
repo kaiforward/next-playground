@@ -22,7 +22,7 @@ import {
   VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, SKILL1_PER_SCHOOL, SKILL2_PER_INSTITUTE, labourTotal,
   FAMILY_BY_GOOD, COMPLEX_TYPES, ANCHOR_CAP, ANCHOR_RATED_COVERAGE, ANCHOR_MIN_THROUGHPUT,
 } from "@/lib/constants/industry";
-import { GOOD_RECIPES } from "@/lib/constants/recipes";
+import { GOOD_RECIPES, PRODUCTION_GOOD_ORDER } from "@/lib/constants/recipes";
 import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import { charterFee, foundingCommitmentCost, foundingGoodsValue, projectedManifestWant } from "@/lib/engine/founding-cost";
@@ -34,6 +34,16 @@ import {
   labourDemand, housingPopCap, skill1Demand, skill2Demand, skill1Cap, skill2Cap,
   familyAnchorBuff, familyThroughput, inputDemandFromProduction, labourFulfilment,
 } from "@/lib/engine/industry";
+
+/**
+ * A good the necessity band ranks above every other good (water, food — `SURVIVAL_GOODS`). The ONE
+ * definition of the band: `recordScoredOpportunity`'s per-system alert-bar report and the
+ * `opportunities.sort` claim order both call this, so the two can never disagree about which good is
+ * survival-serving.
+ */
+function isSurvivalGood(goodId: string): boolean {
+  return SURVIVAL_GOODS.includes(goodId);
+}
 
 /** Market state for one good at one system — the build planner's per-good input. */
 export interface BuildGoodState {
@@ -591,10 +601,30 @@ export function speculativeFloorExtra(
 }
 
 /**
- * A tier-1+ site is build-eligible this cycle only when every recipe input is either produced
- * locally or held as a surplus at a system REACHABLE FROM THE SITE. The factory's inputs arrive
+ * One recipe input is MISSING at a site unless it is either produced locally (a local building of
+ * `input`) or held as a surplus at a system REACHABLE FROM THE SITE. The factory's inputs arrive
  * via logistics, which is route-cost bounded, so a surplus that merely exists somewhere in the
  * faction is not enough — it must be deliverable to this site (routeCost(source, site) non-null).
+ * Gate-only: the tier-1+ proposal gate (`inputsAvailable`) asks "could a factory here be fed at
+ * all" with this stock-based binary predicate. The derived-demand spill asks a different question
+ * — "how much flow do imports genuinely not cover" — and nets against reachable RATE spare instead
+ * (`netDerivedClaims`); the two are deliberately allowed to answer differently for the same input
+ * at the same site.
+ */
+function inputMissingAt(
+  input: string,
+  site: BuildSystemState,
+  surplusSystemsByGood: Map<string, string[]>,
+  routeCost: RouteCost,
+): boolean {
+  if ((site.buildings[input] ?? 0) > 0) return false;
+  const sources = surplusSystemsByGood.get(input);
+  return !(sources !== undefined && sources.some((su) => routeCost(su, site.systemId) !== null));
+}
+
+/**
+ * A tier-1+ site is build-eligible this cycle only when every recipe input is either produced
+ * locally or held as a surplus at a system REACHABLE FROM THE SITE (`inputMissingAt`, negated).
  */
 function inputsAvailable(
   goodId: string,
@@ -605,11 +635,68 @@ function inputsAvailable(
   // Callers gate on !isTier0, and every tier-1+ good carries a GOOD_RECIPES entry — a missing
   // recipe here is a catalog defect and should throw, not read as "no input constraint".
   const recipe = GOOD_RECIPES[goodId];
-  return Object.keys(recipe).every((input) => {
-    if ((site.buildings[input] ?? 0) > 0) return true;
-    const sources = surplusSystemsByGood.get(input);
-    return sources !== undefined && sources.some((su) => routeCost(su, site.systemId) !== null);
+  return Object.keys(recipe).every((input) => !inputMissingAt(input, site, surplusSystemsByGood, routeCost));
+}
+
+/**
+ * Net one input good's pooled raw derived claims (this planner run's spill onto `goodId`, keyed by
+ * claiming systemId) against its reachable RATE spare — mirrors `assessStructuralDeficits`' own
+ * flow-aware cancellation exactly (same `isEconomicallyActive` exporter gate, same reachability scan,
+ * same spare definition, same pooled `coveredFraction`), scoped to one good instead of every good at
+ * once. Spare is a producer's
+ * sustainable export RATE (realised `production − demand`, never negative): a strike-suppressed
+ * producer's `production` is already whatever the strike leaves it, so no separate suppression
+ * check is needed (mirrors structural). A producer counts toward covering a claim only when
+ * `routeCost(producer, claimant) !== null` — a site with local production of `goodId` is one more
+ * producer in this pool via `routeCost(site, site)`, not a special case: local output only cancels
+ * a claim to the extent it is actually surplus (production above the site's own demand), exactly as
+ * an external donor's would. Spare is NOT decremented for its structural-gap use (first-cut
+ * simplification, conservative — errs toward building less; the same spare unit can be pooled by
+ * both this spill's netting and the structural pass without either seeing the other's draw).
+ * Claiming systems with no reachable producer at all keep their full raw claim (unchanged spill).
+ */
+function netDerivedClaims(
+  goodId: string,
+  rawClaims: Map<string, number>,
+  systems: BuildSystemState[],
+  routeCost: RouteCost,
+): Map<string, number> {
+  const exporters: Array<{ systemId: string; spare: number }> = [];
+  for (const s of systems) {
+    if (!isEconomicallyActive(s.control)) continue;
+    const good = s.goods.find((g) => g.goodId === goodId);
+    if (!good) continue;
+    const demand = Math.max(0, good.demand);
+    const production = Math.max(0, good.production ?? good.capacityProduction);
+    const spare = Math.max(0, production - demand);
+    if (spare > 0) exporters.push({ systemId: s.systemId, spare });
+  }
+
+  const reachableExporterIds = new Set<string>();
+  const claimants = [...rawClaims.entries()].map(([systemId, gross]) => {
+    let hasExporter = false;
+    for (const exporter of exporters) {
+      if (routeCost(exporter.systemId, systemId) !== null) {
+        hasExporter = true;
+        reachableExporterIds.add(exporter.systemId);
+      }
+    }
+    return { systemId, gross, hasExporter };
   });
+  const reachableClaims = claimants
+    .filter((c) => c.hasExporter)
+    .reduce((sum, c) => sum + c.gross, 0);
+  const reachableSpare = exporters
+    .filter((e) => reachableExporterIds.has(e.systemId))
+    .reduce((sum, e) => sum + e.spare, 0);
+  const coveredFraction = reachableClaims > 0 ? Math.min(1, reachableSpare / reachableClaims) : 0;
+
+  const netted = new Map<string, number>();
+  for (const c of claimants) {
+    const residual = c.hasExporter ? c.gross * (1 - coveredFraction) : c.gross;
+    if (residual > 0) netted.set(c.systemId, residual);
+  }
+  return netted;
 }
 
 /** One candidate build action: site S can produce `goodId` to serve nearby structural deficits. */
@@ -707,6 +794,10 @@ export interface BuildProposal {
   value: number;
   /** Σ over items of `levels × workCostPerLevel` — the ROI denominator. */
   work: number;
+  /** The good this bundle's production serves — set on every industry bundle (`opp.goodId`), absent
+   *  on housing. The funding order's survival test (`orderProposals`) reads this, never `items[0]`
+   *  (whose gate-first order puts production last). */
+  producedGood?: string;
 }
 
 /** The proposal union the decision layer emits — build bundles and colony-establishments, ranked on one pool. */
@@ -719,6 +810,8 @@ interface PlannedBundle {
   items: ProposalItem[];
   value: number;
   work: number;
+  /** The good this bundle's production serves — set on every industry bundle, absent on housing. */
+  producedGood?: string;
 }
 
 /**
@@ -754,9 +847,12 @@ function planFactionBundles(
   // Per-system best-ranked dropped opportunity this run (BuildDropReport docstring above has the
   // full reasoning). A ranked drop always wins over an unranked one for the same system — a scored
   // candidate is strictly more informative than one that was never scored — and within one class the
-  // FIRST one recorded wins: for ranked drops that is the highest-scored, because `opportunities`
-  // (below) is iterated in descending-score order; for unranked drops there is no ranking to prefer
-  // among, so it is whichever the deterministic scan order reaches first.
+  // FIRST one recorded wins: for ranked drops that is the highest-BANDED, then highest-scored,
+  // because `opportunities` (below) is claimed in band-then-score order (survival-serving goods
+  // ahead of every other good, descending score within a band) — `recordRankedDrop` itself carries
+  // no band logic, it inherits correct ordering for free from the claim loop it runs inside; for
+  // unranked drops there is no ranking to prefer among, so it is whichever the deterministic scan
+  // order reaches first.
   const rankedBlockBySystem = new Map<string, BuildDropReport>();
   const unrankedBlockBySystem = new Map<string, BuildDropReport>();
   const recordUnrankedDrop = (systemId: string, reason: BuildDropReason): void => {
@@ -774,7 +870,7 @@ function planFactionBundles(
   // reduced afterward, so it needs no second pass over `opportunities`.
   const bestOpportunityBySystem = new Map<string, BuildOpportunityReport & { survival: boolean }>();
   const recordScoredOpportunity = (systemId: string, goodId: string, score: number): void => {
-    const survival = SURVIVAL_GOODS.includes(goodId);
+    const survival = isSurvivalGood(goodId);
     const current = bestOpportunityBySystem.get(systemId);
     if (current) {
       // A survival-serving current always outranks a non-survival candidate, whatever the scores.
@@ -817,6 +913,25 @@ function planFactionBundles(
     remainingByGood.set(d.goodId, m);
   }
 
+  // Surplus-holding systems per good — the input-supply side of the tier-1+ gate. A factory's
+  // recipe inputs arrive via route-cost-bounded logistics, so the gate checks for a surplus
+  // reachable FROM each candidate site (see inputsAvailable), not merely one somewhere in the
+  // faction. Built from the untouched `systems` market state, ahead of the speculative-floor loop
+  // below (which only ever writes `remainingByGood`, never a system's goods) — so no floor write
+  // can feed this map.
+  const surplusSystemsByGood = new Map<string, string[]>();
+  for (const s of systems) {
+    for (const g of s.goods) {
+      const donorReserve = g.donorReserve
+        ?? DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * Math.max(0, g.demand);
+      if (surplusDrawable(g.stock, donorReserve, g.demand, g.production ?? 0, g.productionSuppressed) > 0) {
+        const list = surplusSystemsByGood.get(g.goodId) ?? [];
+        list.push(s.systemId);
+        surplusSystemsByGood.set(g.goodId, list);
+      }
+    }
+  }
+
   // Speculative local-basics floor (§3.2): an undeveloped system stands up a bounded floor of its own
   // tier-0 extraction of un-repurposable basics it imports, scaled by (1 − development). Added onto the
   // remaining shortfall so the same opportunity machinery builds and ROI-ranks it (self-supply wins on
@@ -835,18 +950,46 @@ function planFactionBundles(
 
   if (remainingByGood.size === 0) return { bundles, blocked: [], topOpportunities: [] };
 
-  // Surplus-holding systems per good — the input-supply side of the tier-1+ gate. A factory's
-  // recipe inputs arrive via route-cost-bounded logistics, so the gate checks for a surplus
-  // reachable FROM each candidate site (see inputsAvailable), not merely one somewhere in the faction.
-  const surplusSystemsByGood = new Map<string, string[]>();
-  for (const s of systems) {
-    for (const g of s.goods) {
-      const donorReserve = g.donorReserve
-        ?? DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * Math.max(0, g.demand);
-      if (surplusDrawable(g.stock, donorReserve, g.demand, g.production ?? 0, g.productionSuppressed) > 0) {
-        const list = surplusSystemsByGood.get(g.goodId) ?? [];
-        list.push(s.systemId);
-        surplusSystemsByGood.set(g.goodId, list);
+  // Derived demand (the spill): unmet tier-1+ shortfall demands its own recipe inputs too, netted
+  // against how much of that raw need reachable supply genuinely does NOT cover (`netDerivedClaims`).
+  // `inputMissingAt` gates only the proposal (an all-or-nothing "could a factory here be fed at all"
+  // stock check); the spill is a separate, flow-aware netting against reachable rate spare, and the
+  // two are allowed to answer differently for the same input at the same site. Walking
+  // `PRODUCTION_GOOD_ORDER` in REVERSE visits every consumer
+  // before its own inputs, so one pass cascades all the way down. Two-phase per good, in the SAME
+  // walk: (1) every claim raw derived claim onto `goodId` lands in `rawClaims`, not yet netted,
+  // while `goodId`'s consumers are visited (they all precede it in this reversed topological
+  // order — no consumer of `goodId` can add a claim after this point); (2) at `goodId`'s own turn,
+  // ALL of its raw claims are known, so they are netted ONCE by one shared `coveredFraction` and
+  // folded into `remainingByGood[goodId]` — which is what its OWN spill onto its inputs reads below,
+  // so the cascade propagates netted amounts, never raw ones. Tier-0 goods carry no `GOOD_RECIPES`
+  // entry: they still receive and net incoming claims (phase 1 above) but never spill further
+  // (phase 2 is skipped), terminating the cascade. Never persisted: recomputed from live shortfalls
+  // and live reachable spare every run, and vanishes the run its parent shortfall closes or the
+  // spare covering it changes.
+  const rawClaims = new Map<string, Map<string, number>>();
+  for (const goodId of [...PRODUCTION_GOOD_ORDER].reverse()) {
+    const claims = rawClaims.get(goodId);
+    if (claims && claims.size > 0) {
+      const netted = netDerivedClaims(goodId, claims, systems, routeCost);
+      if (netted.size > 0) {
+        const m = remainingByGood.get(goodId) ?? new Map<string, number>();
+        for (const [systemId, amount] of netted) m.set(systemId, (m.get(systemId) ?? 0) + amount);
+        remainingByGood.set(goodId, m);
+      }
+    }
+
+    const recipe = GOOD_RECIPES[goodId];
+    if (!recipe) continue; // tier-0: no recipe, nothing to spill onto
+    const deficitMap = remainingByGood.get(goodId);
+    if (!deficitMap) continue;
+    for (const [systemId, shortfall] of deficitMap) {
+      if (shortfall <= 0) continue;
+      if (!working.has(systemId)) continue; // economically-active sites only, mirrors the pass above
+      for (const [input, ratio] of Object.entries(recipe)) {
+        const m = rawClaims.get(input) ?? new Map<string, number>();
+        m.set(systemId, (m.get(systemId) ?? 0) + shortfall * ratio);
+        rawClaims.set(input, m);
       }
     }
   }
@@ -990,7 +1133,16 @@ function planFactionBundles(
     }
   }
 
-  opportunities.sort((a, b) => b.score - a.score);
+  // Band-then-score claim order: a survival-serving opportunity (`isSurvivalGood`) always claims the
+  // shared per-site capacity/labour ahead of every non-survival one, whatever the scores; within a
+  // band, descending score (a stable sort preserves the first-scored tie already implicit in push
+  // order, mirroring `recordScoredOpportunity`'s rule above).
+  opportunities.sort((a, b) => {
+    const aSurvival = isSurvivalGood(a.goodId);
+    const bSurvival = isSurvivalGood(b.goodId);
+    if (aSurvival !== bSurvival) return aSurvival ? -1 : 1;
+    return b.score - a.score;
+  });
 
   for (const opp of opportunities) {
     const site = working.get(opp.systemId);
@@ -1156,7 +1308,7 @@ function planFactionBundles(
       value += take;
     }
 
-    bundles.push({ systemId: site.systemId, role: "industry", items, value, work });
+    bundles.push({ systemId: site.systemId, role: "industry", items, value, work, producedGood: opp.goodId });
   }
 
   // A ranked drop always outranks an unranked one for the same system (see the docstring on the two
@@ -1243,6 +1395,7 @@ export function planFactionProposals(
       items: bundle.items,
       value: bundle.value,
       work: bundle.work,
+      producedGood: bundle.producedGood,
     });
   }
   return {

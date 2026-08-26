@@ -60,7 +60,7 @@ Distinguish carefully before flagging; these are the recurring false-positive tr
     - **A boundary's explicit field enumeration.** Where a persisted row is built field by field, the enumeration *is* the contract — spreading instead lets a new field leak silently into world state.
     - **A spec cross-reference repeated in the files implementing that spec**, and a comment pointing at a single shared owner. Repeating a pointer is not repeating a definition.
     - **Tuning tables and content data** — event phase blocks, colour matrices. Rows that look alike were authored and tuned independently. A Tailwind v4 class matrix additionally *cannot* be generated: only static class candidates are extracted.
-    - **A config mirror a tool forces** (Stryker cannot consume the `projects` wrapper).
+    - **A config mirror a tool forces** (a tool that cannot consume the `projects` wrapper needs its own flat copy).
     - **One-expression idioms** (`Math.round(x * 100)`, `Math.max(0, Math.min(1, x))`) embedded in different domain rules.
 
   Two things that are NOT exemptions. **Repetition inside a single file counts** — a function repeating a shape thirty lines below itself is a second occurrence, and that was where most of this repo's real duplication turned out to live. And a **badly named helper is why a duplicate exists**: when you reject an extraction because the shared helper is named for something the second caller isn't, that is a `name-misdescribes-behaviour` finding, not a clean reject.

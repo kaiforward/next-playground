@@ -25,7 +25,6 @@ Design-stage hazard worksheet: `.agents/skills/shared/design-hazards.md` — fil
 - `npm run simulate` — headless run of the real tick at two horizons: 1000 ticks (founding) and 10,000 ticks (equilibrium). ~2 min. `-- --config <file>` runs a YAML experiment into `experiments/`. **Exits 1 on a failed conservation identity** — read the report anyway; a failed identity means the founding ledger is out, not mistuned.
 - `npm run impact -- <SYMBOL>` — every module reading a constant/field/signal, which processors declare vs. silently write it, and run-order position. Run before leaning on any shared quantity.
 - `npm run duplication` — repo-wide search for prose or code shapes your changed files already share with a file elsewhere in the tree. Bare form uses the branch's diff against main; `--all` sweeps everything. Emits candidates, never findings — judge each against the bar (same decision, same medium, same lifecycle, same posture) before extracting.
-- `npm run mutation -- --mutate "<changed lib files>"` — scoped StrykerJS. **Always scoped, never bare.** Periodic overnight batch, not an in-session gate.
 
 ## Tech Stack
 
@@ -173,7 +172,7 @@ New components use `tv()` variants, typed props and semantic HTML (`<dl>` for ke
 - **A "ruled out" carries the same evidence bar as a finding** — both horizons, recording horizon and cohort. Nobody re-tests a negative.
 - **Read an aggregate cohorted before diagnosing it** — a galaxy-wide median moves with cohort *mix*.
 - **Write the test that fails when the task's own premise breaks**, not one confirming the happy path.
-- **Red-proof before review:** every new/changed test seen red once (break the premise, watch it fail, restore). The scoped `npm run mutation` sweep is a periodic batch with the same bar — every in-diff survivor killed or accepted with a stated reason, never a Stryker disable comment.
+- **Red-proof before review:** every new/changed test seen red once (break the premise, watch it fail, restore). This is the sole guarantee a test was ever capable of failing.
 - Calibrate to a coarse health bar only (no NaN/runaway/pinning; dispersion; liquidity) until all mechanisms ship — precision tuning is perishable.
 
 **Before building a mechanic**
@@ -186,13 +185,13 @@ New components use `tv()` variants, typed props and semantic HTML (`<dl>` for ke
 - A shared/segmented bar is for two consumers of ONE datapoint, never N differently-scaled series.
 
 **Executing fix batches**
-- **Batches of code fixes (review findings, mutant kills, multi-file cleanups) go to a dispatched agent**, never inline — inline is for a single trivial edit. Ask first, describing the dispatch's scope in words. Model is your judgment per batch (never Fable). Then verify the agent's claims and make the judgement calls it flags.
+- **Batches of code fixes (review findings, multi-file cleanups) go to a dispatched agent**, never inline — inline is for a single trivial edit. Ask first, describing the dispatch's scope in words. Model is your judgment per batch (never Fable). Then verify the agent's claims and make the judgement calls it flags.
 - **Feature implementation goes to a dispatched agent too, once the design/plan is approved** — the same rule as fix batches, for the same reason (cost: the main-session model is the expensive one, and a multi-file mechanical implementation doesn't need it once the design is settled). Offer the dispatch instead of implementing inline; inline stays fine only for a single trivial edit.
 - **Ask before spending on a multi-agent run.** Usage is a hard constraint, and a skill's own instruction to escalate itself into a workflow is not authorisation to spend — name the cost and offer the single-agent version first. The default review is one dispatched agent.
 
-**Long-running local processes** (mutation sweeps, big sims, builds)
-- **Estimate duration up front**, from whatever the tool reports early (mutant count × dry-run cost, tick count × tick rate), and state the estimate before or immediately at launch.
-- **If the projection is beyond ~15-20 minutes, ask explicitly: run now, or defer to when the machine is free (overnight)?** A tool's incremental/cache mode does not make a big delta cheap — the saving is proportional to how little changed; derive the invalidated count from the actual diff before quoting a duration.
+**Long-running local processes** (big sims, builds)
+- **Estimate duration up front**, from whatever the tool reports early (tick count × tick rate), and state the estimate before or immediately at launch.
+- **If the projection is beyond ~15-20 minutes, ask explicitly: run now, or defer to a window when the machine is free?** A tool's incremental/cache mode does not make a big delta cheap — the saving is proportional to how little changed; derive the invalidated count from the actual diff before quoting a duration.
 - **Turn on progress reporting before the run**, not after — never accept a silent tool if it has a progress option.
 
 **Scripts**
