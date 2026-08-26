@@ -24,7 +24,7 @@ import {
 // closing it and returning focus to its trigger is `Popover`'s own guarantee now (proven generically
 // in `components/ui/__tests__/popover.test.tsx`), not this file's to pin.
 
-const CRITICAL_LABELS = ["Famine", "Strike", "Maintenance unfunded", "Crisis"];
+const CRITICAL_LABELS = ["Dying worlds", "Strike", "Maintenance unfunded", "Crisis"];
 
 async function renderPanel(categories: AlertCategorySettings = DEFAULT_ALERT_CATEGORIES) {
   const user = userEvent.setup();
@@ -67,7 +67,7 @@ describe("AlertSettings — every category has a row, in each tier's own authore
    *  the panel itself reads — a derived expectation would agree with any ordering the component
    *  produced, including none. */
   const EXPECTED_ROWS: ReadonlyArray<readonly [string, readonly string[]]> = [
-    ["Critical", ["Famine", "Strike", "Maintenance unfunded", "Crisis"]],
+    ["Critical", ["Dying worlds", "Strike", "Maintenance unfunded", "Crisis"]],
     [
       "Important",
       [

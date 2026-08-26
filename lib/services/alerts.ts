@@ -1,5 +1,5 @@
 /**
- * Alert bar read service — all sixteen categories: the six state-derived ones (Famine, Deprived
+ * Alert bar read service — all sixteen categories: the six state-derived ones (Dying worlds, Deprived
  * worlds, Strike, Unrest rising, Overcrowded, No housing headroom), Survival stock falling, Demand
  * unservable, Build blocked, Industry idle, the faction-level Maintenance unfunded, the two
  * automation-gated opportunity categories (Build opportunity, Colony opportunity), and the three
@@ -52,7 +52,10 @@ import { readSystemIndustry } from "@/lib/services/system-industry-readout";
 import { strikeMultiplier } from "@/lib/engine/population";
 import { readExpectation } from "@/lib/engine/expectation";
 import { bandShortfall } from "@/lib/engine/treasury";
-import { STRIKE_PARAMS, EXPECTATION_PARAMS, ABANDON_POP_FLOOR } from "@/lib/constants/population";
+import {
+  STRIKE_PARAMS, EXPECTATION_PARAMS, ABANDON_POP_FLOOR, POPULATION_PARAMS,
+} from "@/lib/constants/population";
+import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { ALERT_CATEGORIES, BUILD_DROP_SEVERITY } from "@/lib/constants/alerts";
@@ -82,25 +85,24 @@ const TIER_RANK: Record<AlertTier, number> = { critical: 0, important: 1, info: 
 const SURVIVAL_STOCK_CYCLES_THRESHOLD = 3;
 
 /**
- * Famine's non-shrinking branch sorts after every shrinking world: a famine world that is not
- * shrinking carries no countdown at all, and sorts after the shrinking ones, by shortfall depth.
- * The real countdown (`ln(population / ABANDON_POP_FLOOR) / k`) is unbounded
- * above as the decline rate k approaches zero, so no additive offset is a mathematical guarantee —
- * this is a practical separation, not a proof: any famine world whose countdown would exceed this
- * (a decline rate below roughly 1e-6 of itself per cycle) sorts as if it were non-shrinking. That is
- * judged an acceptable trade over the alternative (an unbounded two-key sort the flat `sortKey:
- * number` interface cannot express) rather than a silent bug.
- * Abandonment Rule 2 no longer requires famine (population below the floor alone is enough), so
- * this countdown — computed only for famine systems here — reads exactly one of the two ways a
- * world can now reach the floor; a shrinking, well-fed world (quality-starved growth losing to
- * unrest) counts down toward the same abandonment with no alert-side formula, since it never sets
- * `supplyBand === "famine"` and so never reaches this branch.
+ * Population collapse's entry threshold: the smoothed, founding-excluded decline rate
+ * (`WorldSystem.populationTrend`) must be at or above this fraction per reference cycle. Derived
+ * from existing constants rather than authored as a magic number:
+ * `POPULATION_PARAMS.declineRate × REFERENCE_INTERVAL × STRIKE_PARAMS.threshold` ≈ 0.0078
+ * (~0.78%/cycle). Its authored meaning: the world is losing people at least as fast as the unrest
+ * decline term alone would drain it at the unrest level where workers already walk out — a decline
+ * rate a player would recognise as "genuinely dying", not ordinary noise. NOT a time-to-abandonment
+ * horizon: decline is exponential toward the floor of 1, so `declineRate` scaling with growth makes
+ * time-to-abandonment long even for a world genuinely on its way out — a horizon would fire far too
+ * late or never, which is why the trigger is the RATE, read off `populationTrend`, while the
+ * existing countdown below (read off `populationChange`) stays the sort/measure only.
  */
-const FAMINE_NON_SHRINKING_SORT_BASE = 1_000_000;
+const POPULATION_COLLAPSE_TREND_THRESHOLD =
+  POPULATION_PARAMS.declineRate * REFERENCE_INTERVAL * STRIKE_PARAMS.threshold;
 
 /**
- * Build blocked's sortKey packs two numbers into one flat number, honestly, following this file's own
- * `FAMINE_NON_SHRINKING_SORT_BASE` precedent: `BUILD_DROP_SEVERITY[reason]` (1..5, worst first) is
+ * Build blocked's sortKey packs two numbers into one flat number, honestly:
+ * `BUILD_DROP_SEVERITY[reason]` (1..5, worst first) is
  * the PRIMARY key, and `droppedRoi` is a tiebreak WITHIN one reason only — never comparable across
  * reasons: `droppedRoi` is annotated "Ordering only" at its own definition, summing served quantity
  * over route cost across goods whose `OUTPUT_PER_UNIT` differs by orders of magnitude, so it was
@@ -281,7 +283,7 @@ export function getAlertData(): AlertData {
   // each overcrowded system.
   const queuedBuildLevels = queuedBuildLevelsBySystem(world.constructionProjects);
 
-  const famine: AlertInstance[] = [];
+  const populationCollapse: AlertInstance[] = [];
   const strike: AlertInstance[] = [];
   const deprivedWorlds: AlertInstance[] = [];
   const unrestRising: AlertInstance[] = [];
@@ -293,34 +295,32 @@ export function getAlertData(): AlertData {
   const industryIdle: AlertInstance[] = [];
 
   for (const system of developed) {
-    // ── Famine: supplyBand === "famine" (lib/engine/population.ts:174) ──
-    // `provision`/`supplyBand` are written together every economy cycle (lib/world/types.ts:108-126)
-    // — never assessed means both are absent, so a famine reading implies `provision` is defined
-    // too; this is an invariant check, not a `?? 0` default.
-    if (system.supplyBand === "famine" && system.provision !== undefined) {
-      // Shrinking only when `populationChange` is present, negative, AND population is positive —
-      // the last guard keeps k = -delta/population from dividing by zero; a developed famine system
-      // reading population 0 is a degenerate state no formula here should extrapolate from.
+    // ── Population collapse: the smoothed, founding-excluded decline rate (`populationTrend`) is at
+    // or above POPULATION_COLLAPSE_TREND_THRESHOLD — famine or not (Abandonment Rule 2 fires on
+    // below-floor population alone). Two fields, two jobs: `populationTrend` GATES entry (a rate,
+    // read once per cycle, immune to the long-horizon problem a countdown would have); `populationChange`
+    // still drives the sort/measure countdown below, because it is the field authored for exactly
+    // that job and it orders worst-first correctly regardless of how long the absolute time reads. ──
+    if (system.populationTrend !== undefined && system.populationTrend >= POPULATION_COLLAPSE_TREND_THRESHOLD) {
+      // Countdown only when `populationChange` is present, negative, AND population is positive —
+      // the last guard keeps k = -delta/population from dividing by zero. A system can clear the
+      // trend gate (a smoothed reading) while this cycle's raw `populationChange` reads non-negative
+      // or absent — noisy but consistent with the two fields' different jobs — so this falls back to
+      // the trend rate itself for the countdown rather than leaving the row with no measure at all.
       const delta = system.populationChange;
-      let sortKey: number;
-      let measure: string;
-      if (delta !== undefined && delta < 0 && system.population > 0) {
-        const k = -delta / system.population; // fractional decline rate per reference cycle
-        // ln(population / floor) / k — the exponential time-to-abandonment, not the linear form that
-        // was tried and rejected (it collapses to ordering by unrest, not by collapse speed).
-        // Denominated per reference cycle, matching `populationChange`'s own
-        // denomination (lib/world/types.ts:143-148).
-        const countdown = Math.log(system.population / ABANDON_POP_FLOOR) / k;
-        sortKey = countdown;
-        measure = `${formatDuration(countdown * CYCLE_LENGTH)} to abandonment`;
-      } else {
-        const shortfallDepth = 1 - system.provision;
-        // Sorts after every shrinking world (see FAMINE_NON_SHRINKING_SORT_BASE), deepest shortfall
-        // first within this group.
-        sortKey = FAMINE_NON_SHRINKING_SORT_BASE - shortfallDepth;
-        measure = `not shrinking — ${Math.round(shortfallDepth * 100)}% short`;
-      }
-      famine.push({ systemId: system.id, name: system.name, measure, sortKey });
+      const usePreciseRate = delta !== undefined && delta < 0 && system.population > 0;
+      const k = usePreciseRate ? -delta / system.population : system.populationTrend;
+      // ln(population / floor) / k — the exponential time-to-abandonment, not the linear form that
+      // was tried and rejected (it collapses to ordering by unrest, not by collapse speed).
+      // Denominated per reference cycle, matching `populationChange`'s own
+      // denomination (lib/world/types.ts:143-148).
+      const countdown = Math.log(system.population / ABANDON_POP_FLOOR) / k;
+      populationCollapse.push({
+        systemId: system.id,
+        name: system.name,
+        measure: `${formatDuration(countdown * CYCLE_LENGTH)} to abandonment`,
+        sortKey: countdown,
+      });
     }
 
     // ── Strike: unrest past STRIKE_PARAMS.threshold (lib/constants/population.ts:79), matching the
@@ -646,7 +646,7 @@ export function getAlertData(): AlertData {
   }
 
   const categories: AlertCategory[] = [
-    toSystemCategory("famine", famine, denominator),
+    toSystemCategory("population_collapse", populationCollapse, denominator),
     toSystemCategory("strike", strike, denominator),
     toFactionCategory("maintenance_unfunded", maintenanceUnfunded),
     toEventCategory("crisis", crisis),

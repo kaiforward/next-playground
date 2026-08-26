@@ -25,8 +25,8 @@ import type {
 // the slash alone.
 const FAULT_SLASH = 'path[d="m2 2 20 20"]';
 
-const famine: SystemScopedAlertCategory = {
-  id: "famine",
+const populationCollapse: SystemScopedAlertCategory = {
+  id: "population_collapse",
   unit: "developed_systems",
   count: 3,
   denominator: 253,
@@ -64,10 +64,10 @@ const buildBlocked: SystemScopedAlertCategory = {
 };
 
 describe("AlertChip — accessible name carries the category, count and its own unit", () => {
-  it("a developed-systems category reads count and denominator: 'Famine, 3 of 253 developed systems'", () => {
-    render(<AlertChip category={famine} />);
+  it("a developed-systems category reads count and denominator: 'Dying worlds, 3 of 253 developed systems'", () => {
+    render(<AlertChip category={populationCollapse} />);
     expect(
-      screen.getByRole("button", { name: "Famine, 3 of 253 developed systems" }),
+      screen.getByRole("button", { name: "Dying worlds, 3 of 253 developed systems" }),
     ).toBeInTheDocument();
   });
 
@@ -97,8 +97,8 @@ describe("AlertChip — the fault slash", () => {
     expect(container.querySelector(FAULT_SLASH)).not.toBeNull();
   });
 
-  it("does not render for a category the registry does not mark faulted (Famine)", () => {
-    const { container } = render(<AlertChip category={famine} />);
+  it("does not render for a category the registry does not mark faulted (Dying worlds)", () => {
+    const { container } = render(<AlertChip category={populationCollapse} />);
     expect(container.querySelector(FAULT_SLASH)).toBeNull();
   });
 });

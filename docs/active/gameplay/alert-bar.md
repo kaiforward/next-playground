@@ -100,7 +100,7 @@ ROI at all, sit on the same bar as an industry proposal without inventing a weig
 
 | Tier | Category | Condition | Sorts by |
 |---|---|---|---|
-| critical | Famine | A survival good (water, food) is short and the world is losing population. | Time to abandonment (soonest first); a famine world that is not shrinking sorts after the shrinking ones, by shortfall depth. |
+| critical | Dying worlds | A world is losing population fast enough to end it, famine or not. | Time to abandonment (soonest first). |
 | critical | Strike | Unrest has passed the point where workers walk out. | Suppression (most suppressed first). |
 | critical | Maintenance unfunded | The treasury couldn't pay for maintenance the last settlement was asked to fund. | n/a — one faction-level row, count always 0 or 1. |
 | critical | Crisis | An event severe enough to threaten a world (plague, pirate raid, asteroid strike, inner-system or border conflict). | Authored impact rank. |
@@ -168,7 +168,7 @@ walk a long category one instance at a time without the flyout closing between c
 
 | Category | Destination |
 |---|---|
-| Famine, Strike, Deprived worlds, Unrest rising, Overcrowded, No housing headroom | system → Population tab |
+| Dying worlds, Strike, Deprived worlds, Unrest rising, Overcrowded, No housing headroom | system → Population tab |
 | Industry idle, Build blocked, Build opportunity | system → Industry tab |
 | Demand unservable, Survival stock falling | system → Logistics tab |
 | Colony opportunity | system → Overview |
@@ -202,8 +202,8 @@ back to these checkboxes, so it cannot depend on there being anything else on th
 
 ## What the engine emits
 
-Five signals exist only for this surface, persisted as optional `World` fields rather than computed at
-read time — each processor already computes the underlying value and used to throw it away. All five
+Six signals exist only for this surface, persisted as optional `World` fields rather than computed at
+read time — each processor already computes the underlying value and used to throw it away. All six
 follow the same conventions: **absent means never assessed, not zero**; each is written for every
 entity its producing run visited (the value where the condition held, absent where it did not), and
 left untouched for one the run did not visit; and each is reset on abandonment and again on
@@ -211,10 +211,17 @@ redevelopment, so a re-founded colony never inherits its predecessor's reading. 
 reads any of them back — they exist purely for this read surface.
 
 - **`WorldSystem.populationChange`** — the realised change in `population` across one economy cycle,
-  including migration and colony-founding transfers, denominated per reference cycle. Famine's
+  including migration and colony-founding transfers, denominated per reference cycle. Dying worlds'
   time-to-abandonment sort is built on it: `ln(population / ABANDON_POP_FLOOR) / k`, where `k` is the
   fractional decline rate this field implies. A donor that founds a colony this cycle reads more
   pessimistic for that one cycle, self-correcting the next.
+- **`WorldSystem.populationTrend`** — a smoothed (EMA, half-life ~3 reference cycles), founding-excluded
+  reading of the same per-cycle fractional population change: a colony-founding donor's debit is added
+  back out of the sample before it feeds the average, since handing settlers to a colony on purpose is
+  not dying, while migration losses stay in. Dying worlds' entry condition is gated on this field, not
+  on `populationChange` or on famine — a well-fed world whose population is falling fast enough
+  (quality-starved growth losing to unrest) now raises the alert, which a famine-gated condition never
+  could.
 - **`WorldMarket.stockChange`** — the realised change in `stock` across one economy cycle, written only
   for the survival goods (water, food). Survival stock falling's `stock / −stockChange` cycles-to-empty
   measure is built on it.
@@ -261,11 +268,11 @@ anything. It is a **required** field, which is why adding it bumped `SAVE_FORMAT
 save would load a seat with no settings record at all, and the surfaces that index it would throw
 rather than degrade.
 
-The save also carries the five signals above, all additive and optional, so those needed no bump of
+The save also carries the six signals above, all additive and optional, so those needed no bump of
 their own: an old save simply loads with every one of them absent, and each category reads that the
 same way it reads a system the economy has never assessed — as not in the category, not as a false
-zero. On a save predating those fields, Survival stock falling shows nothing and Famine's countdown
-sort has nothing to work from until the first economy cycle after load; that is correct, not a bug.
+zero. On a save predating those fields, Survival stock falling shows nothing and Dying worlds has
+nothing to gate or sort on until the first economy cycle after load; that is correct, not a bug.
 
 ## Out of scope
 

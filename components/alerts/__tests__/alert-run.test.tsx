@@ -157,23 +157,23 @@ function expectButtonNamesInOrder(names: string[]): void {
 describe("AlertRunContent — renders the live categories, in the order useAlerts already sorted them", () => {
   it("renders one chip per nonzero category with its accessible name, front to back", () => {
     alertsData = {
-      categories: [scoped("famine", 3), scoped("strike", 2), scoped("deprived_worlds", 1)],
+      categories: [scoped("population_collapse", 3), scoped("strike", 2), scoped("deprived_worlds", 1)],
     };
     render(<AlertRunContent availableWidth={ROOMY} />);
 
     expectButtonNamesInOrder([
-      "Famine, 3 of 253 developed systems",
+      "Dying worlds, 3 of 253 developed systems",
       "Strike, 2 of 253 developed systems",
       "Deprived worlds, 1 of 253 developed systems",
     ]);
   });
 
   it("a category with a zero count and no prior history renders no chip at all", () => {
-    alertsData = { categories: [scoped("famine", 0)] };
+    alertsData = { categories: [scoped("population_collapse", 0)] };
     render(<AlertRunContent availableWidth={ROOMY} />);
     // The settings control still renders — it is unconditional — so this checks for the absence of
     // a category chip specifically, not for zero buttons overall.
-    expect(screen.queryByRole("button", { name: /^Famine/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Dying worlds/ })).not.toBeInTheDocument();
     expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 });
@@ -190,12 +190,12 @@ describe("AlertRunContent — the settings control leads the run", () => {
     // sitting first is what makes its position independent of the chip count, and so what stops
     // turning a category on from its own popover pushing that popover rightward mid-click.
     alertsData = {
-      categories: [scoped("famine", 3), scoped("strike", 2), scoped("deprived_worlds", 1)],
+      categories: [scoped("population_collapse", 3), scoped("strike", 2), scoped("deprived_worlds", 1)],
     };
     render(<AlertRunContent availableWidth={ROOMY} />);
 
     const settings = screen.getByRole("button", { name: ALERT_SETTINGS_NAME });
-    for (const name of [/^Famine/, /^Strike/, /^Deprived worlds/]) {
+    for (const name of [/^Dying worlds/, /^Strike/, /^Deprived worlds/]) {
       expect(follows(settings, screen.getByRole("button", { name }))).toBe(true);
     }
   });
@@ -216,35 +216,35 @@ describe("AlertRunContent — the settings control leads the run", () => {
 
 describe("AlertRunContent — chip order does not change when a count changes", () => {
   it("keeps the same front-to-back order across a re-render with different counts", () => {
-    alertsData = { categories: [scoped("famine", 2), scoped("strike", 9)] };
+    alertsData = { categories: [scoped("population_collapse", 2), scoped("strike", 9)] };
     const { rerender } = render(<AlertRunContent availableWidth={ROOMY} />);
-    expectButtonNamesInOrder(["Famine, 2 of 253 developed systems", "Strike, 9 of 253 developed systems"]);
+    expectButtonNamesInOrder(["Dying worlds, 2 of 253 developed systems", "Strike, 9 of 253 developed systems"]);
 
-    // Strike's count now dwarfs Famine's — if anything ever sorted by count, this is the render
+    // Strike's count now dwarfs Dying worlds' — if anything ever sorted by count, this is the render
     // that would move it first.
-    alertsData = { categories: [scoped("famine", 25), scoped("strike", 1)] };
+    alertsData = { categories: [scoped("population_collapse", 25), scoped("strike", 1)] };
     rerender(<AlertRunContent availableWidth={ROOMY} />);
-    expectButtonNamesInOrder(["Famine, 25 of 253 developed systems", "Strike, 1 of 253 developed systems"]);
+    expectButtonNamesInOrder(["Dying worlds, 25 of 253 developed systems", "Strike, 1 of 253 developed systems"]);
   });
 });
 
 describe("AlertRunContent — below the width that fits the critical tier plus a +N, the run renders no chips", () => {
   it("renders no chips and no collapsed tail at a width that fits nothing, but keeps the settings control", () => {
-    alertsData = { categories: [scoped("famine", 4)] };
+    alertsData = { categories: [scoped("population_collapse", 4)] };
     render(<AlertRunContent availableWidth={1} />);
-    expect(screen.queryByRole("button", { name: /^Famine/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Dying worlds/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/^\+/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: ALERT_SETTINGS_NAME })).toBeInTheDocument();
   });
 
   it("does not render an empty container — the settings control survives even when no chip fits", () => {
     // Distinct from the assertion above: an empty-but-present wrapper element would also show no
-    // Famine button and no "+" text, so that test alone can't tell "no chips, but the settings
+    // Dying worlds button and no "+" text, so that test alone can't tell "no chips, but the settings
     // control survives" from "the whole run vanished". The settings control is the run's only entry
     // point back to its own category checkboxes (docs/active/gameplay/alert-bar.md → "Placement and
     // behaviour"), so it renders regardless of how many chips fit — this checks the container itself
     // carries that control, not nothing.
-    alertsData = { categories: [scoped("famine", 4)] };
+    alertsData = { categories: [scoped("population_collapse", 4)] };
     const { container } = render(<AlertRunContent availableWidth={1} />);
     expect(container).not.toBeEmptyDOMElement();
     expect(screen.getByRole("button", { name: ALERT_SETTINGS_NAME })).toBeInTheDocument();
@@ -253,7 +253,7 @@ describe("AlertRunContent — below the width that fits the critical tier plus a
 
 describe("AlertRunContent — the collapsed tail never folds away a critical chip", () => {
   it("keeps BOTH critical chips visible (stacked past the ordinary floor) rather than dropping the second", () => {
-    // Famine + Strike (both critical) + 2 important categories = 4 chips, a critical prefix of 2.
+    // Dying worlds + Strike (both critical) + 2 important categories = 4 chips, a critical prefix of 2.
     // The narrowest width that draws exactly two chips is the critical-stack step, which is the only
     // way to keep both: a wiring bug handing the layout a shorter critical prefix would satisfy the
     // same width by dropping Strike into the tail — a DIFFERENT chip set, not just a different
@@ -261,7 +261,7 @@ describe("AlertRunContent — the collapsed tail never folds away a critical chi
     const categories = [
       // All four default ON — `overcrowded` stands in for a second important category rather than
       // `unrest_rising`, which defaults OFF and would otherwise leave only 3 shown.
-      scoped("famine", 5),
+      scoped("population_collapse", 5),
       scoped("strike", 4),
       scoped("deprived_worlds", 3),
       scoped("overcrowded", 2),
@@ -271,7 +271,7 @@ describe("AlertRunContent — the collapsed tail never folds away a critical chi
     render(<AlertRunContent availableWidth={width} />);
 
     expectButtonNamesInOrder([
-      "Famine, 5 of 253 developed systems",
+      "Dying worlds, 5 of 253 developed systems",
       "Strike, 4 of 253 developed systems",
     ]);
     expect(screen.getByText("+2")).toBeInTheDocument();
@@ -299,13 +299,13 @@ describe("AlertRunContent — the collapsed tail names every folded category, ev
 describe("AlertRunContent — a flyout row click navigates to the row's own destination", () => {
   it("flies the map to the instance's system and opens the category's destination tab", async () => {
     const user = userEvent.setup();
-    // Famine's authored destination is the system's Population tab (lib/constants/alerts.ts), so
+    // Dying worlds' authored destination is the system's Population tab (lib/constants/alerts.ts), so
     // this exercises the real `resolveAlertTarget` → `useSystemFocus` wiring rather than a spy
     // standing in for it — the row has to carry a systemId the atlas above actually knows.
     alertsData = {
       categories: [
         {
-          id: "famine",
+          id: "population_collapse",
           unit: "developed_systems",
           count: 1,
           denominator: 253,
@@ -315,7 +315,7 @@ describe("AlertRunContent — a flyout row click navigates to the row's own dest
     };
     render(<AlertRunContent availableWidth={ROOMY} />);
 
-    await user.click(screen.getByRole("button", { name: /^Famine/ }));
+    await user.click(screen.getByRole("button", { name: /^Dying worlds/ }));
     await user.click(screen.getByRole("button", { name: /Vega/ }));
 
     // `loc` is a monotonic nonce shared by every `useSystemFocus()` caller, so its exact value is
@@ -334,7 +334,7 @@ describe("AlertRunContent — only the chips and the settings control are intera
     // chip buttons plus the settings control, so there is nothing else in the run's empty space a
     // click could land on.
     alertsData = {
-      categories: [scoped("famine", 1), scoped("strike", 1), scoped("deprived_worlds", 1)],
+      categories: [scoped("population_collapse", 1), scoped("strike", 1), scoped("deprived_worlds", 1)],
     };
     const { container } = render(<AlertRunContent availableWidth={ROOMY} />);
     expect(screen.getAllByRole("button")).toHaveLength(4);
@@ -344,18 +344,18 @@ describe("AlertRunContent — only the chips and the settings control are intera
 
 describe("AlertRunContent — a category's chip tracks its count directly, no grace window", () => {
   it("clears immediately, the same render its count drops to zero — no stale chip left behind", () => {
-    alertsData = { categories: [scoped("famine", 3)] };
+    alertsData = { categories: [scoped("population_collapse", 3)] };
     const { rerender } = render(<AlertRunContent availableWidth={ROOMY} />);
-    // Scoped by name — the settings control is rendered alongside Famine's chip,
+    // Scoped by name — the settings control is rendered alongside Dying worlds' chip,
     // so a plain `getByRole("button")` (singular) would throw on more than one match.
-    expect(screen.getByRole("button", { name: /^Famine/ })).toHaveAccessibleName(
-      "Famine, 3 of 253 developed systems",
+    expect(screen.getByRole("button", { name: /^Dying worlds/ })).toHaveAccessibleName(
+      "Dying worlds, 3 of 253 developed systems",
     );
 
-    alertsData = { categories: [scoped("famine", 0)] };
+    alertsData = { categories: [scoped("population_collapse", 0)] };
     rerender(<AlertRunContent availableWidth={ROOMY} />);
-    expect(screen.queryByRole("button", { name: /^Famine/ })).not.toBeInTheDocument();
-    // The settings control is unconditional, so it is the one button left once Famine clears.
+    expect(screen.queryByRole("button", { name: /^Dying worlds/ })).not.toBeInTheDocument();
+    // The settings control is unconditional, so it is the one button left once Dying worlds clears.
     expect(screen.getByRole("button", { name: ALERT_SETTINGS_NAME })).toBeInTheDocument();
   });
 });
@@ -363,33 +363,33 @@ describe("AlertRunContent — a category's chip tracks its count directly, no gr
 describe("AlertRunContent — only one flyout is open at a time", () => {
   it("opening a second chip's flyout closes the first, rather than stacking both", async () => {
     const user = userEvent.setup();
-    alertsData = { categories: [scoped("famine", 3), scoped("strike", 2)] };
+    alertsData = { categories: [scoped("population_collapse", 3), scoped("strike", 2)] };
     render(<AlertRunContent availableWidth={ROOMY} />);
 
-    await user.click(screen.getByRole("button", { name: /Famine/ }));
-    expect(screen.getByRole("dialog", { name: "Famine alerts" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Dying worlds/ }));
+    expect(screen.getByRole("dialog", { name: "Dying worlds alerts" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Strike/ }));
-    expect(screen.queryByRole("dialog", { name: "Famine alerts" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Dying worlds alerts" })).not.toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Strike alerts" })).toBeInTheDocument();
   });
 });
 
 describe("AlertRunContent — a default-off category starts filtered out of the run on a first visit", () => {
   it("renders no chip for Unrest rising even though it has live instances, at a new world's defaults", async () => {
-    alertsData = { categories: [scoped("famine", 1), scoped("unrest_rising", 5)] };
+    alertsData = { categories: [scoped("population_collapse", 1), scoped("unrest_rising", 5)] };
     render(<AlertRunContent availableWidth={ROOMY} />);
     await act(async () => {});
 
     expect(screen.queryByRole("button", { name: /Unrest rising/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Famine/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Dying worlds/ })).toBeInTheDocument();
   });
 });
 
 describe("AlertRunContent — the settings control opens the panel and its checkbox filters the run live", () => {
   it("opening settings and unchecking Deprived worlds hides its chip immediately, live in the run", async () => {
     const user = userEvent.setup();
-    alertsData = { categories: [scoped("famine", 1), scoped("deprived_worlds", 4)] };
+    alertsData = { categories: [scoped("population_collapse", 1), scoped("deprived_worlds", 4)] };
     render(<AlertRunContent availableWidth={ROOMY} />);
     await act(async () => {});
 
@@ -404,13 +404,13 @@ describe("AlertRunContent — the settings control opens the panel and its check
     expect(screen.queryByRole("button", { name: /Deprived worlds/ })).not.toBeInTheDocument();
     // The critical chip is unaffected, and the settings panel is still open — toggling a category
     // does not close it (components/alerts/alert-settings.tsx's own contract).
-    expect(screen.getByRole("button", { name: /^Famine/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Dying worlds/ })).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Alert settings" })).toBeInTheDocument();
   });
 
   it("checking a default-off category on shows its chip live", async () => {
     const user = userEvent.setup();
-    alertsData = { categories: [scoped("famine", 1), scoped("unrest_rising", 3)] };
+    alertsData = { categories: [scoped("population_collapse", 1), scoped("unrest_rising", 3)] };
     render(<AlertRunContent availableWidth={ROOMY} />);
     await act(async () => {});
 
@@ -430,26 +430,26 @@ describe("AlertRunContent — the settings checkbox cannot override the automati
     // for an automated category (a state the app never reaches); it proves the checkbox has no power
     // over a category whose count never went above zero, which is the only lever the checkbox has.
     categorySettings = { ...categorySettings, build_opportunity: true };
-    alertsData = { categories: [scoped("famine", 1), scoped("build_opportunity", 0)] };
+    alertsData = { categories: [scoped("population_collapse", 1), scoped("build_opportunity", 0)] };
     render(<AlertRunContent availableWidth={ROOMY} />);
     await act(async () => {});
 
     expect(screen.queryByRole("button", { name: /Build opportunity/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Famine/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Dying worlds/ })).toBeInTheDocument();
   });
 });
 
 describe("AlertRunContent — a critical category cannot be hidden even by a hand-edited save", () => {
-  it("still renders Famine's chip when the stored settings carry famine: false", async () => {
+  it("still renders Dying worlds' chip when the stored settings carry population_collapse: false", async () => {
     // The write boundary refuses this (lib/services/player-settings.ts), so the only way to reach it
     // is editing the save by hand — the render must not trust the flag for a non-hideable category
     // regardless of how the record got that way.
-    categorySettings = { ...categorySettings, famine: false };
-    alertsData = { categories: [scoped("famine", 2)] };
+    categorySettings = { ...categorySettings, population_collapse: false };
+    alertsData = { categories: [scoped("population_collapse", 2)] };
     render(<AlertRunContent availableWidth={ROOMY} />);
     await act(async () => {});
 
-    expect(screen.getByRole("button", { name: /^Famine/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Dying worlds/ })).toBeInTheDocument();
   });
 });
 

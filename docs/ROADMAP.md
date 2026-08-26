@@ -16,19 +16,7 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-1. **[S] Abandonment warning for non-famine decline — a let-through bug, not a feature ask.**
-  Abandonment Rule 2 fires on below-floor population alone, but the player-facing countdown
-  (`lib/services/alerts.ts`, the famine branch) is famine-gated — a well-fed colony declining to
-  empty under unrest dies with no warning ever raised. Design settled: the trigger becomes the
-  decline RATE, not famine and not a time-to-abandonment horizon (decline is exponential toward a
-  floor of 1 and `declineRate` scales with growth, so the countdown is long even for a world
-  genuinely on its way out). The famine branch collapses into it — a famine world that is not yet
-  shrinking keeps only its Deprived worlds / Survival stock falling rows, and becomes critical the
-  moment it starts losing people. The trigger reads a new smoothed trend field that excludes
-  colony-founding transfers, because founding-era decline readings are dominated by donors handing
-  over settlers on purpose.
-  *Next step:* implement — new `World` field, alerts rewrite, doc lifecycle on the branch.
-2. **[M] Visual system view — bodies as a spatial layout inside the system detail panel.** A simple
+1. **[M] Visual system view — bodies as a spatial layout inside the system detail panel.** A simple
   2D/3D view alongside (not replacing) the body cards, so a system's bodies read as a place instead
   of a list — popovers on each body surface its score, lock state, occupancy and worked/total
   deposits. Consumes the engine's `workedByBody` read (`lib/engine/worked-deposits.ts`), which

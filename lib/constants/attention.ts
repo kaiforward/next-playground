@@ -25,7 +25,7 @@ import type { TrackerSections } from "@/lib/types/tracker";
  */
 export const DEFAULT_ALERT_CATEGORIES: AlertCategorySettings = {
   // ── critical — cannot be turned off ──────────────────────────
-  famine: true,
+  population_collapse: true,
   strike: true,
   maintenance_unfunded: true,
   crisis: true,

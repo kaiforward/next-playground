@@ -7,7 +7,7 @@
 // node tick harness). One authority either way — nothing in this file states a default.
 
 import {
-  WheatOff,
+  TrendingDown,
   Megaphone,
   BanknoteX,
   Siren,
@@ -33,12 +33,12 @@ import type { BuildDropReason } from "@/lib/engine/directed-build";
  */
 export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
   // ── critical — cannot be turned off ──────────────────────────
-  famine: {
+  population_collapse: {
     tier: "critical",
-    icon: WheatOff,
+    icon: TrendingDown,
     faulted: false,
-    label: "Famine",
-    conditionLine: "A world can't get enough food or water, and is losing population.",
+    label: "Dying worlds",
+    conditionLine: "A world is losing population fast enough to end it, famine or not.",
     destination: { kind: "system", tab: "population" },
     hideable: false,
     order: 0,

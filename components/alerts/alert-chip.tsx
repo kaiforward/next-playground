@@ -180,7 +180,7 @@ export const AlertChip = forwardRef<HTMLButtonElement, AlertChipProps>(function 
       </Icon>
       {/* The bare spaces between these spans are load-bearing, not formatting. An accessible name
           joins its children's text without a separator where they are laid out inline, so three
-          adjacent spans would read "Famine,3of 253 developed systems". A literal text node puts a
+          adjacent spans would read "Strike,3of 253 developed systems". A literal text node puts a
           real space in the DOM, which browsers and jsdom read alike — a whitespace-only run between
           flex items generates no flex item, so it costs no visible gap. A space typed across two
           JSX lines would be stripped, hence `{" "}`. */}

@@ -59,11 +59,11 @@ describe("setAlertCategory", () => {
   // renders no control for a critical category, so anything reaching here is already ignoring the
   // registry. Answering 200 would tell that caller its change took.
   it("refuses to hide a critical category rather than accepting a write that does nothing", () => {
-    const result = setAlertCategory({ categoryId: "famine", on: false });
+    const result = setAlertCategory({ categoryId: "population_collapse", on: false });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toMatch(/critical/i);
-    expect(getWorld().player?.alertCategories.famine).toBe(true);
+    expect(getWorld().player?.alertCategories.population_collapse).toBe(true);
   });
 
   it("refuses to re-affirm a critical category as on, too — the flag is not the caller's to set", () => {

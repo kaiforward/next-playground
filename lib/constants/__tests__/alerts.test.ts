@@ -33,7 +33,7 @@ describe("ALERT_CATEGORIES — destinations", () => {
   // ALERT_CATEGORIES — the same reason EXPECTED_OFF above is written out by hand. Encoded as
   // "kind:tab" so one table covers all three destination kinds; the system root is "system:".
   const EXPECTED_DESTINATION: Record<string, string> = {
-    famine: "system:population",
+    population_collapse: "system:population",
     strike: "system:population",
     maintenance_unfunded: "faction:",
     crisis: "events:",
