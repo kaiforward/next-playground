@@ -5,6 +5,16 @@ import { RESOURCE_TYPES } from "@/lib/engine/resources";
 
 export { RESOURCE_TYPES };
 
+/**
+ * The authored band `WorldBody.size` is drawn uniform-in-range from, at generation
+ * (`rollBody`, `lib/engine/body-gen.ts`). Display flavour only — decoupled from every budget — and
+ * fixed across the galaxy so the same body draws at the same relative size in every system; the
+ * system-view ring drawing (`components/system/ring-layout.ts`) maps a body's `size` onto a drawn
+ * pixel radius against this SAME band, never against only the bodies present in one system.
+ */
+export const DISPLAY_SIZE_MIN = 0.5;
+export const DISPLAY_SIZE_MAX = 1.5;
+
 // ── Body archetypes ───────────────────────────────────────────────
 // Each body is a climate class on a freezing→volcanic spectrum. Every row authors two
 // independent budgets — people land, per-resource deposit counts — plus a habitability

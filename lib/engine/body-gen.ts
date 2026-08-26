@@ -7,8 +7,8 @@ import type {
   BodyArchetypeId, ResourceVector, SunClass,
 } from "@/lib/types/game";
 import {
-  BODY_ARCHETYPES, HABITABILITY_THRESHOLD, HABITABLE_COUNT_LADDER, ORBIT_ROLL_SPREAD, SUN_CLASSES,
-  type SunClassDef,
+  BODY_ARCHETYPES, DISPLAY_SIZE_MAX, DISPLAY_SIZE_MIN, HABITABILITY_THRESHOLD,
+  HABITABLE_COUNT_LADDER, ORBIT_ROLL_SPREAD, SUN_CLASSES, type SunClassDef,
 } from "@/lib/constants/bodies";
 import { emptyResourceVector, sumResourceVectors, unitResourceVector, RESOURCE_TYPES, countWeightedMean } from "./resources";
 import type { RNG } from "./universe-gen";
@@ -16,10 +16,6 @@ import { randInt } from "./universe-gen";
 import { depositGradeVector } from "@/lib/engine/deposit-grade";
 import { rollQualityBand } from "./substrate-space";
 import { workedYieldVectors } from "@/lib/engine/worked-deposits";
-
-/** Body size is display flavour only — decoupled from every budget. */
-const DISPLAY_SIZE_MIN = 0.5;
-const DISPLAY_SIZE_MAX = 1.5;
 
 export interface GeneratedBody {
   bodyType: BodyArchetypeId;
