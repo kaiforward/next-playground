@@ -85,17 +85,20 @@ const TIER_RANK: Record<AlertTier, number> = { critical: 0, important: 1, info: 
 const SURVIVAL_STOCK_CYCLES_THRESHOLD = 3;
 
 /**
- * Population collapse's entry threshold: the smoothed, founding-excluded decline rate
- * (`WorldSystem.populationTrend`) must be at or above this fraction per reference cycle. Derived
- * from existing constants rather than authored as a magic number:
- * `POPULATION_PARAMS.declineRate × REFERENCE_INTERVAL × STRIKE_PARAMS.threshold` ≈ 0.0078
- * (~0.78%/cycle). Its authored meaning: the world is losing people at least as fast as the unrest
- * decline term alone would drain it at the unrest level where workers already walk out — a decline
- * rate a player would recognise as "genuinely dying", not ordinary noise. NOT a time-to-abandonment
- * horizon: decline is exponential toward the floor of 1, so `declineRate` scaling with growth makes
- * time-to-abandonment long even for a world genuinely on its way out — a horizon would fire far too
- * late or never, which is why the trigger is the RATE, read off `populationTrend`, while the
- * existing countdown below (read off `populationChange`) stays the sort/measure only.
+ * Population collapse's entry threshold — a MAGNITUDE, compared against `WorldSystem.populationTrend`
+ * (which is signed: negative means shrinking, positive means growing, the same polarity as
+ * `populationChange` right beside it). The condition is `populationTrend <= -THIS_CONSTANT`, never
+ * `>= +THIS_CONSTANT` — the sign is the whole gate, not a detail: a category meant to catch dying
+ * worlds that compares `>=` a positive threshold fires on the fastest-GROWING worlds and never on a
+ * declining one, which is exactly backwards. Derived from existing constants rather than authored as
+ * a magic number: `POPULATION_PARAMS.declineRate × REFERENCE_INTERVAL × STRIKE_PARAMS.threshold` ≈
+ * 0.0078 (~0.78%/cycle). Its authored meaning: the world is losing people at least as fast as the
+ * unrest decline term alone would drain it at the unrest level where workers already walk out — a
+ * decline rate a player would recognise as "genuinely dying", not ordinary noise. NOT a
+ * time-to-abandonment horizon: decline is exponential toward the floor of 1, so `declineRate` scaling
+ * with growth makes time-to-abandonment long even for a world genuinely on its way out — a horizon
+ * would fire far too late or never, which is why the trigger is the RATE, read off `populationTrend`,
+ * while the existing countdown below (read off `populationChange`) stays the sort/measure only.
  */
 const POPULATION_COLLAPSE_TREND_THRESHOLD =
   POPULATION_PARAMS.declineRate * REFERENCE_INTERVAL * STRIKE_PARAMS.threshold;
@@ -296,20 +299,33 @@ export function getAlertData(): AlertData {
 
   for (const system of developed) {
     // ── Population collapse: the smoothed, founding-excluded decline rate (`populationTrend`) is at
-    // or above POPULATION_COLLAPSE_TREND_THRESHOLD — famine or not (Abandonment Rule 2 fires on
-    // below-floor population alone). Two fields, two jobs: `populationTrend` GATES entry (a rate,
-    // read once per cycle, immune to the long-horizon problem a countdown would have); `populationChange`
-    // still drives the sort/measure countdown below, because it is the field authored for exactly
-    // that job and it orders worst-first correctly regardless of how long the absolute time reads. ──
-    if (system.populationTrend !== undefined && system.populationTrend >= POPULATION_COLLAPSE_TREND_THRESHOLD) {
-      // Countdown only when `populationChange` is present, negative, AND population is positive —
-      // the last guard keeps k = -delta/population from dividing by zero. A system can clear the
-      // trend gate (a smoothed reading) while this cycle's raw `populationChange` reads non-negative
-      // or absent — noisy but consistent with the two fields' different jobs — so this falls back to
-      // the trend rate itself for the countdown rather than leaving the row with no measure at all.
+    // or below −POPULATION_COLLAPSE_TREND_THRESHOLD — famine or not (Abandonment Rule 2 fires on
+    // below-floor population alone). `populationTrend` is SIGNED, same polarity as `populationChange`
+    // beside it: negative means shrinking, positive means growing — so the gate compares against a
+    // NEGATIVE bound, never the threshold's own positive magnitude. Two fields, two jobs:
+    // `populationTrend` GATES entry (a rate, read once per cycle, immune to the long-horizon problem
+    // a countdown would have); `populationChange` still drives the sort/measure countdown below,
+    // because it is the field authored for exactly that job and it orders worst-first correctly
+    // regardless of how long the absolute time reads. The `population > 0` guard covers BOTH the
+    // precise and the fallback rate below: without it, a degenerate (and here unreachable —
+    // Abandonment Rule 2 would already have reset a developed system reading population ≤ 0 the same
+    // cycle) `population` reaching 0 would send `Math.log(0 / floor)` to −Infinity, straight into a
+    // sortKey and a player-facing formatDuration string. ──
+    if (
+      system.populationTrend !== undefined &&
+      system.populationTrend <= -POPULATION_COLLAPSE_TREND_THRESHOLD &&
+      system.population > 0
+    ) {
+      // Countdown only when `populationChange` is present and negative — population is already
+      // guarded positive above, which is also what keeps k = -delta/population from dividing by
+      // zero. A system can clear the trend gate (a smoothed reading) while this cycle's raw
+      // `populationChange` reads non-negative or absent — noisy but consistent with the two fields'
+      // different jobs — so this falls back to the trend rate itself (negated, to read as the same
+      // positive fractional-decline-per-cycle `k` the precise branch produces) rather than leaving
+      // the row with no measure at all.
       const delta = system.populationChange;
-      const usePreciseRate = delta !== undefined && delta < 0 && system.population > 0;
-      const k = usePreciseRate ? -delta / system.population : system.populationTrend;
+      const usePreciseRate = delta !== undefined && delta < 0;
+      const k = usePreciseRate ? -delta / system.population : -system.populationTrend;
       // ln(population / floor) / k — the exponential time-to-abandonment, not the linear form that
       // was tried and rejected (it collapses to ordering by unrest, not by collapse speed).
       // Denominated per reference cycle, matching `populationChange`'s own

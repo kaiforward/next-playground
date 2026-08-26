@@ -182,7 +182,7 @@ describe("getAlertData", () => {
             {
               factionId: `not-${pid}`,
               control: "developed",
-              populationTrend: 0.05,
+              populationTrend: -0.05,
               populationChange: -5,
               population: 100,
             },
@@ -209,7 +209,7 @@ describe("getAlertData", () => {
             [
               assessed,
               developedPatch(pid, {
-                populationTrend: 0.05, // well above POPULATION_COLLAPSE_TREND_THRESHOLD (≈0.0078)
+                populationTrend: -0.05, // well past POPULATION_COLLAPSE_TREND_THRESHOLD (≈0.0078) in magnitude, negative = shrinking
                 populationChange: -5,
                 population: 100,
               }),
@@ -242,7 +242,7 @@ describe("getAlertData", () => {
               developedPatch(pid, {
                 supplyBand: "rationing",
                 provision: 0.9,
-                populationTrend: 0.05,
+                populationTrend: -0.05,
                 populationChange: -5,
                 population: 100,
               }),
@@ -253,6 +253,34 @@ describe("getAlertData", () => {
 
       const ids = category("population_collapse").instances.map((i) => i.systemId);
       expect(ids).toContain(target);
+    });
+
+    it("does not raise the alert for a GROWING world, however fast — the sign is the whole gate, not just the magnitude", () => {
+      // The regression this test exists to catch: a signed comparison inverted (e.g. `>=
+      // +threshold` instead of `<= -threshold`) fires on thriving worlds and stays silent on dying
+      // ones. A positive populationTrend of the same magnitude the shrinking tests use must never
+      // qualify, however far past the threshold's magnitude it sits.
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [target] = spareSystemIds(world, 1);
+      setWorld(
+        withSystems(
+          world,
+          new Map([
+            [
+              target,
+              developedPatch(pid, {
+                populationTrend: 0.05, // growing, well past the threshold's magnitude
+                populationChange: 5,
+                population: 100,
+              }),
+            ],
+          ]),
+        ),
+      );
+
+      const ids = category("population_collapse").instances.map((i) => i.systemId);
+      expect(ids).not.toContain(target);
     });
 
     it("does not raise the alert for a famine world whose trend hasn't crossed the threshold — the old non-shrinking branch is a deliberate demotion", () => {
@@ -268,7 +296,7 @@ describe("getAlertData", () => {
               developedPatch(pid, {
                 supplyBand: "famine",
                 provision: 0.1,
-                populationTrend: 0.001, // below POPULATION_COLLAPSE_TREND_THRESHOLD
+                populationTrend: -0.001, // below POPULATION_COLLAPSE_TREND_THRESHOLD in magnitude
                 populationChange: 0,
                 population: 100,
               }),
@@ -293,7 +321,7 @@ describe("getAlertData", () => {
               shrinking,
               developedPatch(pid, {
                 population: 100,
-                populationTrend: 0.05, // gates entry
+                populationTrend: -0.05, // gates entry (negative = shrinking)
                 populationChange: -5, // k = 0.05/cycle -> ln(100)/0.05 — drives the countdown
               }),
             ],
@@ -1289,7 +1317,7 @@ describe("getAlertData", () => {
       const [target] = spareSystemIds(world, 1);
       const withTarget = withSystems(
         world,
-        new Map([[target, developedPatch(pid, { populationTrend: 0.05, populationChange: -5, population: 100 })]]),
+        new Map([[target, developedPatch(pid, { populationTrend: -0.05, populationChange: -5, population: 100 })]]),
       );
       const withFixture = withEvents(withTarget, [
         fixtureEvent({

@@ -197,6 +197,11 @@ export interface WorldSystem {
    *  a 20-pop donor giving up `EXPANSION.COLONY_SEED_POP`, 2, reads as a 10% one-cycle drop) would
    *  trip a decline-rate alert for several cycles on a donor that isn't declining at all.
    *
+   *  SIGNED, same polarity as `populationChange` right beside it: negative means the world is
+   *  shrinking, positive means it is growing. A reader that wants "how fast is this world dying"
+   *  compares against a NEGATIVE bound (`trend <= -threshold`), never a positive one — the sign is
+   *  the whole gate, not a detail to get right incidentally.
+   *
    *  Stored as a fraction (not absolute), so it reads directly as a rate and stays scale-free across
    *  world sizes; guarded against population <= 0 at the write site rather than ever storing a
    *  non-finite value (`World` must stay JSON-serialisable). Seeded from the first sample rather
