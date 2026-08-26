@@ -29,9 +29,16 @@ form, inner to outer. Volcanic and arid worlds sit low, temperate and ocean worl
 frozen worlds high, gas giants highest. An asteroid belt sits between the rocky classes and the
 giants.
 
-Assignment is a **weighted draw, not a sort**. Each body takes a key of `bias + noise`, and the
-bodies are ordered by that key; ring 1 is the innermost. The noise spread is authored wide enough
-that exceptions genuinely happen — a frozen world does turn up close in, a warm one far out.
+Assignment is a **weighted draw, not a sort**. Each body takes a key of `bias + noise`, and the ring
+numbers are handed out in that key's order — ring 1 innermost. The noise spread is authored wide
+enough that exceptions genuinely happen: a frozen world does turn up close in, a warm one far out.
+
+**The roll assigns a field; it never reorders the bodies array.** A body's position in
+`world.bodies` is a live contract — `workedByBody` (`lib/engine/worked-deposits.ts`) is keyed by
+array index, and the substrate service resolves both worked counts and the potential-yield rows
+through that same position. Sorting the array into ring order would silently misalign every deposit
+reading in the system. Ring order lives in `orbitIndex` and nowhere else; the array stays as
+generated.
 
 That looseness is deliberate and is the design point, not a tolerance. Atmosphere, not distance,
 decides how warm a world is: a thick-aired world stays warm a long way out and a bare rock freezes
