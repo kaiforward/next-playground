@@ -33,6 +33,12 @@ Assignment is a **weighted draw, not a sort**. Each body takes a key of `bias + 
 numbers are handed out in that key's order — ring 1 innermost. The noise spread is authored wide
 enough that exceptions genuinely happen: a frozen world does turn up close in, a warm one far out.
 
+The spread also sets a ceiling on how far an exception reaches. Two classes swap only when the
+difference of their noise draws beats their bias gap, and that difference cannot exceed twice the
+spread — so classes far apart on the axis keep their order in every system. Volcanic worlds are
+always inward of frozen ones; a gas giant is never innermost. The looseness is real between
+neighbours and absent across the extremes, and that is the intended reading rather than a shortfall.
+
 **The roll assigns a field; it never reorders the bodies array.** A body's position in
 `world.bodies` is a live contract — `workedByBody` (`lib/engine/worked-deposits.ts`) is keyed by
 array index, and the substrate service resolves both worked counts and the potential-yield rows
