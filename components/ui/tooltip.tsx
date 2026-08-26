@@ -23,7 +23,7 @@ export const TooltipTrigger = TooltipPrimitive.Trigger;
  * Trigger for a plain-text label whose tooltip is the payload (good names,
  * building names, labour chips, prose keywords). Carries the app-wide
  * "tooltip here" affordance — dotted underline, solid on hover — baked in so
- * panels can't drift; pass `className` for layout only, never decoration.
+ * panels can't drift; pass `className` to override what a call site genuinely needs.
  * Controls with supplemental legend tooltips (checkboxes, segments, radios)
  * use the bare `TooltipTrigger` and stay unmarked — see theme.md.
  */
@@ -36,7 +36,13 @@ export function TooltipTriggerLabel({
       <button
         type="button"
         className={twMerge(
-          "text-left underline decoration-dotted decoration-1 decoration-text-tertiary/75 underline-offset-[3px] hover:decoration-solid hover:decoration-text-secondary",
+          // `[text-transform:inherit]` because a browser does not pass text-transform down into a
+          // form control: a trigger sitting inside an uppercased label (a `SectionHeader`, a
+          // table's `<th>`) would otherwise render mixed-case while the labels either side of it
+          // shout, which reads as a styling bug rather than as a link. Inheriting is the right
+          // default in every context — outside an uppercased one it resolves to none and changes
+          // nothing.
+          "text-left [text-transform:inherit] underline decoration-dotted decoration-1 decoration-text-tertiary/75 underline-offset-[3px] hover:decoration-solid hover:decoration-text-secondary",
           className,
         )}
         {...props}

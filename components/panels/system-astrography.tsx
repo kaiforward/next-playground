@@ -99,7 +99,9 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
           <div className="mt-4 border-t border-border pt-4">
             <SectionHeader className="mb-3">
               <Tooltip>
-                <TooltipTriggerLabel>Potential yield</TooltipTriggerLabel>
+                {/* A button does not inherit text-transform, so the header's own `uppercase`
+                    stops at the trigger — restated here to match the labels either side. */}
+                <TooltipTriggerLabel className="uppercase">Potential yield</TooltipTriggerLabel>
                 <TooltipContent className="w-64 text-xs">
                   What this system could produce if every body here were fully developed — not
                   what it produces today.
