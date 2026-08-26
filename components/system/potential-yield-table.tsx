@@ -12,10 +12,10 @@ import type { PotentialYieldRowView } from "@/lib/utils/substrate";
 export function PotentialYieldTooltipBody({ row }: { row: PotentialYieldRowView }) {
   return (
     <div className="space-y-1">
-      <p className="font-display text-[12px] font-semibold capitalize text-text-primary">{row.resource}</p>
+      <p className="font-display text-sm font-semibold capitalize text-text-primary">{row.resource}</p>
       <div className="space-y-1 border-t border-border/60 pt-1">
         {row.byBody.map((b, i) => (
-          <div key={`${b.bodyId}-${i}`} className="flex items-center justify-between gap-2 font-mono text-[10px]">
+          <div key={`${b.bodyId}-${i}`} className="flex items-center justify-between gap-2 font-mono text-xs">
             <span className="flex items-center gap-1.5 text-text-secondary">
               {b.archetypeName}
               {b.locked && <Badge color="slate" variant="outline">Locked</Badge>}
@@ -43,13 +43,13 @@ export function PotentialYieldTable({ rows }: { rows: PotentialYieldRowView[] })
     <table className="w-full border-collapse text-xs">
       <thead>
         <tr>
-          <th className="border-b border-border-strong px-1.5 py-1 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+          <th className="border-b border-border-strong px-1.5 py-1 text-left font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary">
             Resource
           </th>
-          <th className="border-b border-border-strong px-1.5 py-1 text-right font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+          <th className="border-b border-border-strong px-1.5 py-1 text-right font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary">
             Potential yield
           </th>
-          <th className="border-b border-border-strong px-1.5 py-1 text-right font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+          <th className="border-b border-border-strong px-1.5 py-1 text-right font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary">
             Slots
           </th>
         </tr>

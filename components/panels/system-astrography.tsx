@@ -6,9 +6,10 @@ import { Card } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StarGlyph } from "@/components/system/star-glyph";
-import { BodyCard } from "@/components/system/body-card";
+import { BodyReadout } from "@/components/system/body-readout";
 import { SystemRings } from "@/components/system/system-rings";
 import { PotentialYieldTable } from "@/components/system/potential-yield-table";
+import { Tooltip, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
 
 /** Moved from `app/(game)/@panel/system/[systemId]/astrography/page.tsx`. */
@@ -53,7 +54,7 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
               rather than a bare "87%". */}
           <dl className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
             <div className="flex items-baseline gap-1">
-              <dt className="text-text-tertiary">Bodies</dt>
+              <dt className="font-display text-text-tertiary">Bodies</dt>
               <dd className="font-mono text-text-primary">{bodies.length}</dd>
             </div>
             <span aria-hidden="true" className="text-text-tertiary">
@@ -63,7 +64,7 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
                 reading died with `availableSpace`; a zero-habitable-land system reads a bare "0", not a
                 share of anything). */}
             <div className="flex items-baseline gap-1">
-              <dt className="text-text-tertiary">Habitable land</dt>
+              <dt className="font-display text-text-tertiary">Habitable land</dt>
               <dd className="font-mono text-text-primary">{peopleLand.toFixed(0)}</dd>
             </div>
             {habitabilityPct !== undefined && (
@@ -72,7 +73,7 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
                   ·
                 </span>
                 <div className="flex items-baseline gap-1">
-                  <dt className="text-text-tertiary">Habitability</dt>
+                  <dt className="font-display text-text-tertiary">Habitability</dt>
                   <dd className="font-mono text-text-primary">{habitabilityPct}%</dd>
                 </div>
               </>
@@ -90,30 +91,44 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
         )}
 
         {/* Potential yield — what this system COULD produce, locked bodies included; never what its
-            extractors currently realise (that stays the industry panel's worked-prefix yield). */}
+            extractors currently realise (that stays the industry panel's worked-prefix yield). The
+            explanatory sentence lives in the header's tooltip rather than as inline prose — "Potential"
+            already carries the distinction in the label; the tooltip is the fuller version for anyone
+            who hovers. */}
         {potentialYields.length > 0 && (
           <div className="mt-4 border-t border-border pt-4">
-            <SectionHeader className="mb-1">Potential yield</SectionHeader>
-            <p className="mb-3 text-sm text-text-tertiary">
-              What this system could produce if every body here were fully developed — not what it
-              produces today.
-            </p>
+            <SectionHeader className="mb-3">
+              <Tooltip>
+                <TooltipTriggerLabel>Potential yield</TooltipTriggerLabel>
+                <TooltipContent className="w-64 text-xs">
+                  What this system could produce if every body here were fully developed — not
+                  what it produces today.
+                </TooltipContent>
+              </Tooltip>
+            </SectionHeader>
             <PotentialYieldTable rows={potentialYields} />
           </div>
         )}
       </Card>
 
-      {/* Bodies */}
+      {/* Bodies — one card, one row per body, separated by a hairline divider rather than each
+          body carrying its own left accent stripe (that stripe idiom is now reserved for the
+          section-level cards above). Occupancy still reads in words via BodyReadout's own
+          "Occupied" badge. */}
       <div>
         <SectionHeader className="mb-3">System Bodies · {bodies.length}</SectionHeader>
         {bodies.length === 0 ? (
           <EmptyState message="No charted bodies in this system." />
         ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {bodies.map((b) => (
-              <BodyCard key={b.id} body={b} />
-            ))}
-          </div>
+          <Card variant="bordered" padding="md">
+            <div className="divide-y divide-border">
+              {bodies.map((b) => (
+                <div key={b.id} className="py-3 first:pt-0 last:pb-0">
+                  <BodyReadout body={b} />
+                </div>
+              ))}
+            </div>
+          </Card>
         )}
       </div>
     </div>

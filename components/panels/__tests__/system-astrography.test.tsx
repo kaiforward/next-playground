@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { SystemAstrography } from "@/components/panels/system-astrography";
 import { PotentialYieldTooltipBody } from "@/components/system/potential-yield-table";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { emptyResourceVector } from "@/lib/engine/resources";
+import { emptyResourceVector, makeResourceVector } from "@/lib/engine/resources";
 import type { SystemPopulationData, SystemSubstrateData } from "@/lib/types/api";
 import type { PotentialYieldRowView } from "@/lib/utils/substrate";
 
@@ -140,6 +140,85 @@ describe("SystemAstrography — the ring diagram", () => {
     // No ring diagram at all — assert the SVG the diagram renders into is absent, not just one
     // body's trigger (there are no bodies to have one).
     expect(container.querySelector("svg")).not.toBeInTheDocument();
+  });
+});
+
+describe("SystemAstrography — the body list", () => {
+  it("renders every body once, with its name, occupied badge and deposit text, in one shared card", () => {
+    substrateValue = {
+      visibility: "visible", sunClass: "yellow", peopleLand: 780,
+      bodies: [
+        {
+          id: "b1", bodyType: "temperate_world", archetypeName: "Temperate World",
+          score: 1.0, locked: false,
+          counts: makeResourceVector({ ore: 2 }), quality: makeResourceVector({ ore: 0.8 }), workedCounts: makeResourceVector({ ore: 1 }),
+          peopleLand: 480, occupied: true, orbitIndex: 1, size: 1,
+        },
+        {
+          id: "b2", bodyType: "volcanic_world", archetypeName: "Volcanic World",
+          score: 0.4, locked: false,
+          counts: emptyResourceVector(), quality: emptyResourceVector(), workedCounts: emptyResourceVector(),
+          peopleLand: 300, occupied: false, orbitIndex: 2, size: 1,
+        },
+      ],
+      potentialYields: [],
+    };
+    popValue = { visibility: "unknown" };
+    renderPanel();
+
+    // Each body's own name heading — the list card renders one `BodyReadout` per row.
+    expect(screen.getByRole("heading", { name: "Temperate World" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Volcanic World" })).toBeInTheDocument();
+    // Only the occupied body carries the badge — a marking on both would fail this.
+    expect(screen.getAllByText("Occupied")).toHaveLength(1);
+    // The occupied body's own deposit text (worked/total slots), proving the row renders its
+    // full readout rather than a name-only summary.
+    expect(screen.getByText("1/2 worked")).toBeInTheDocument();
+  });
+
+  it("shows the zero-body empty state, not an empty card", () => {
+    substrateValue = { visibility: "visible", sunClass: "yellow", peopleLand: 0, bodies: [], potentialYields: [] };
+    popValue = { visibility: "unknown" };
+    renderPanel();
+    expect(screen.getByText("No charted bodies in this system.")).toBeInTheDocument();
+  });
+});
+
+describe("SystemAstrography — potential-yield header tooltip", () => {
+  it("keeps the yield explanation out of the layout and reachable only through the header's tooltip trigger", async () => {
+    // Radix's `Tooltip.Arrow` needs `ResizeObserver`, which jsdom doesn't provide — stubbed here,
+    // local to this test, so the tooltip can actually be driven open rather than only asserting the
+    // trigger exists (the convention elsewhere in this repo, e.g. `industry-panel.test.tsx`,
+    // `habitability-tooltip-content.test.tsx`, where the content is instead rendered directly).
+    class StubResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", StubResizeObserver);
+
+    const user = userEvent.setup({ delay: null });
+    substrateValue = {
+      visibility: "visible", sunClass: "yellow", peopleLand: 0, bodies: [],
+      potentialYields: [{ resource: "ore", yieldMult: 0.72, slotCount: 5, band: "average", byBody: [] }],
+    };
+    popValue = { visibility: "unknown" };
+    renderPanel();
+
+    const explanation = /What this system could produce if every body here were fully developed/;
+    // Not rendered as inline prose any more.
+    expect(screen.queryByText(explanation)).not.toBeInTheDocument();
+
+    // The "Potential yield" header is itself the tooltip's keyboard-reachable trigger — a real
+    // `<button>`, focusable and opened by Tab like any other control.
+    const trigger = screen.getByRole("button", { name: "Potential yield" });
+    await user.tab();
+    expect(trigger).toHaveFocus();
+    // Radix renders the tooltip's copy twice (a visible node plus a visually-hidden
+    // `role="tooltip"` one for screen readers) — assert on the accessible tooltip role rather than
+    // the text, which would otherwise match both.
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent(explanation);
   });
 });
 
