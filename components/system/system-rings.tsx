@@ -1,7 +1,7 @@
 "use client";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { BodyCard } from "@/components/system/body-card";
+import { BodyReadout } from "@/components/system/body-readout";
 import { ringLayout } from "@/components/system/ring-layout";
 import { SUN_CLASS_COLORS } from "@/lib/constants/ui";
 import type { BodyView } from "@/lib/types/api";
@@ -113,8 +113,11 @@ export function SystemRings({ bodies, sunClass }: { bodies: BodyView[]; sunClass
                 }}
               />
             </PopoverTrigger>
-            <PopoverContent aria-label={body.archetypeName}>
-              <BodyCard body={body} />
+            <PopoverContent
+              aria-label={body.archetypeName}
+              className={body.occupied ? "border-l-status-green" : undefined}
+            >
+              <BodyReadout body={body} />
             </PopoverContent>
           </Popover>
         );
