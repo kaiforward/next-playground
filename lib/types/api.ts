@@ -287,6 +287,15 @@ export interface BodyView {
    *  cached habitability quality fold, derived by the service via `occupiedBodyIds` — the component computes
    *  nothing). False for an unassessed system as well as for a body past the frontier. */
   occupied: boolean;
+  /** This body's ring, 1..n over the system's bodies (ring 1 innermost) — cosmetic, read only by
+   *  the system-view ring drawing, never by an engine term. Resolved from `WorldBody.orbitIndex`
+   *  where every body in the system carries one; where any is missing (a save predating the
+   *  field), the WHOLE system falls back to array position so the result is always a permutation
+   *  of `1..n` (`docs/active/gameplay/system-view.md` → "Save and generation"). */
+  orbitIndex: number;
+  /** Display flavour only — the ring-drawing's circle radius. Passed through from `WorldBody.size`
+   *  unchanged; carries no budget meaning and drives nothing else. */
+  size: number;
 }
 
 /**

@@ -134,6 +134,17 @@ export function getSystemSubstrate(systemId: string): SystemSubstrateData {
     systemBodies.map((b) => ({ id: b.id, archetypeName: BODY_ARCHETYPES[b.bodyType].name })),
   );
 
+  // Ring index for the system-view drawing (`docs/active/gameplay/system-view.md` → "Save and
+  // generation"). `WorldBody.orbitIndex` is additive-optional, so an old save may lack it. Resolved
+  // per SYSTEM, all-or-nothing: if every body here carries a stored value, use it; if even one is
+  // missing, the whole system falls back to array position instead. A per-body `?? i + 1` fallback
+  // would let a stored value collide with another body's fallback position — falling back for the
+  // whole system keeps the result a permutation of 1..n, no gap, no duplicate, every time.
+  const hasStoredOrbitIndex = systemBodies.every((b) => b.orbitIndex !== undefined);
+  const orbitIndices = hasStoredOrbitIndex
+    ? systemBodies.map((b, i) => b.orbitIndex ?? i + 1)
+    : systemBodies.map((_, i) => i + 1);
+
   const bodies: BodyView[] = systemBodies.map((b, i) => {
     const arch = BODY_ARCHETYPES[b.bodyType];
     const workedEntry = worked[i];
@@ -150,6 +161,8 @@ export function getSystemSubstrate(systemId: string): SystemSubstrateData {
       workedCounts,
       peopleLand: b.peopleLand,
       occupied: occupied.has(b.id),
+      orbitIndex: orbitIndices[i],
+      size: b.size,
     };
   });
 

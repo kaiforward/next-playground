@@ -84,6 +84,8 @@ const VISIBLE_SUBSTRATE: SystemSubstrateData = {
       workedCounts: ZERO_RESOURCES,
       peopleLand: 0,
       occupied: false,
+      orbitIndex: 1,
+      size: 1,
     },
   ],
   potentialYields: [],

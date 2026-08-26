@@ -22,6 +22,8 @@ function body(overrides: Partial<BodyView> = {}): BodyView {
     workedCounts: emptyResourceVector(),
     peopleLand: 480,
     occupied: false,
+    orbitIndex: 1,
+    size: 1,
     ...overrides,
   };
 }
