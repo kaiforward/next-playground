@@ -22,6 +22,18 @@ The attention layer — how the player finds what to do — is two surfaces, bot
 
 No order. Pull from here when the queue empties, or fold one in when a PR is already in the file.
 
+- **[S] Type audit across the panels — casing, size and font family.** `theme.md` now states the
+  size scale and that labels take `font-display`, but only the Astrography tab has been brought
+  onto it. Two known drifts to settle while sweeping: titles and section headers disagree on
+  casing (a `SectionHeader` is uppercase, a card title beside it is not, and the doc gives no
+  reason for the split), and arbitrary sizes survive elsewhere — `vital-tile.tsx` uses
+  `text-[9.5px]`, `ProgressBar` `sm` uses `text-[10px]`. 27 components use `font-display`, so
+  scope it by panel rather than repo-wide.
+  *Next step:* decide the casing rule first — whether a title uppercases like a label or stays
+  its own tier — since that decides most of the diff.
+  *Don't:* sweep every `text-[Npx]` out on sight. Some are load-bearing at their size; the rule
+  wants a stated reason at the point of use, not removal.
+
 **Packaging**
 - **[M] Desktop shell packaging (Tauri vs Electron)** — booked out of the client-runtime migration
   by explicit decision (2026-08-19, "we should do it at some point soon"). The client runtime has
