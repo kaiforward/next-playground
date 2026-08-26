@@ -977,6 +977,36 @@ describe("planFactionBundles — the spill nets against reachable rate spare", (
     );
     expect(oreProposal?.value).toBeCloseTo(rMetals, 6);
   });
+
+  // Proves 7: identical fixture to Proves 1 (donor D's rate spare would fully cover the 440 claim),
+  // but D is UNCLAIMED, not developed — mirrors `assessStructuralDeficits`' own isEconomicallyActive
+  // exporter gate (see that describe block above). A non-developed exporter's spare must not net a
+  // derived claim at all: the full 440 must spill onto ore, exactly the no-donor case (Proves 4).
+  it("Proves 7 — a non-developed exporter's spare does not net a derived claim (isEconomicallyActive gate)", () => {
+    const demandMetals = 1000;
+    const A: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "metals", stock: 1, demand: demandMetals, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const D: BuildSystemState = {
+      systemId: "D", factionId: "f1", population: 0, control: "unclaimed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "ore", stock: 0, demand: 100, production: 1000, capacityProduction: 1000 }],
+    };
+    const depositCounts = emptyResourceVector();
+    depositCounts.ore = 1_000_000;
+    const E: BuildSystemState = {
+      systemId: "E", factionId: "f1", population: 1_000_000, control: "developed", buildings: {},
+      depositCounts, peopleLand: 0, goods: [],
+    };
+    const plan = planFactionProposals([A, D, E], reachable, [], DEV_REFS);
+    const rMetals = (1 + DIRECTED_BUILD.PROVISION_MARGIN) * demandMetals * DIRECTED_BUILD.BUILD_RATE_CAP;
+    const oreProposal = plan.proposals.find(
+      (p): p is Extract<typeof p, { kind: "build" }> => p.kind === "build" && p.systemId === "E" && p.items.some((i) => i.buildingType === "ore"),
+    );
+    expect(oreProposal?.value).toBeCloseTo(rMetals, 6);
+  });
 });
 
 describe("planFactionBundles — survival band at the claim order (necessity weighting)", () => {
@@ -1101,6 +1131,41 @@ describe("planFactionBundles — survival band at the claim order (necessity wei
     if (bundle?.kind !== "build") throw new Error("expected a build proposal");
     expect(bundle.producedGood).toBe("electronics");
     expect(bundle.items[0]?.buildingType).not.toBe("electronics");
+  });
+
+  it("records the survival good's ranked drop over a higher-scored non-survival one at the same site (band beats score in ranked-drop bookkeeping too)", () => {
+    // Builder B has no spare labour at all (existing ore extractors already absorb its whole
+    // population, mirrors the "no-labour" fixture above) — any additional level of EITHER good
+    // fails the same binary search, so both food and ore are ranked-dropped for "no-labour" here.
+    const depositCounts = emptyResourceVector();
+    for (const k of RESOURCE_TYPES) depositCounts[k] = 10;
+    const deficit: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [
+        { goodId: "food", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 },
+        { goodId: "ore", stock: 1, demand: 5000, capacityProduction: 0, proposalCycles: 1 },
+      ],
+    };
+    const builder: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 4 * oreLabour, control: "developed",
+      buildings: { ore: 4 },
+      depositCounts, peopleLand: 0, goods: [],
+    };
+    const plan = planFactionProposals([deficit, builder], () => 1, [], DEV_REFS);
+    const blocked = plan.blockedBuilds.find((b) => b.systemId === "B");
+    expect(blocked?.reason).toBe("no-labour");
+
+    // ore's shortfall (5000) scores far above food's (5) alone at this same site — the higher score
+    // must not win the ranked-drop bookkeeping, because ranked drops are claimed in band-then-score
+    // order and food is the survival-serving good.
+    const foodOnly = planFactionProposals([{ ...deficit, goods: deficit.goods.slice(0, 1) }, builder], () => 1, [], DEV_REFS)
+      .blockedBuilds.find((b) => b.systemId === "B")?.droppedRoi;
+    const oreOnly = planFactionProposals([{ ...deficit, goods: deficit.goods.slice(1, 2) }, builder], () => 1, [], DEV_REFS)
+      .blockedBuilds.find((b) => b.systemId === "B")?.droppedRoi;
+    expect(foodOnly).toBeGreaterThan(0);
+    expect(oreOnly ?? 0).toBeGreaterThan(foodOnly ?? 0);
+    expect(blocked?.droppedRoi).toBeCloseTo(foodOnly ?? -1);
   });
 });
 

@@ -641,8 +641,9 @@ function inputsAvailable(
 /**
  * Net one input good's pooled raw derived claims (this planner run's spill onto `goodId`, keyed by
  * claiming systemId) against its reachable RATE spare — mirrors `assessStructuralDeficits`' own
- * flow-aware cancellation exactly (same reachability scan, same spare definition, same pooled
- * `coveredFraction`), scoped to one good instead of every good at once. Spare is a producer's
+ * flow-aware cancellation exactly (same `isEconomicallyActive` exporter gate, same reachability scan,
+ * same spare definition, same pooled `coveredFraction`), scoped to one good instead of every good at
+ * once. Spare is a producer's
  * sustainable export RATE (realised `production − demand`, never negative): a strike-suppressed
  * producer's `production` is already whatever the strike leaves it, so no separate suppression
  * check is needed (mirrors structural). A producer counts toward covering a claim only when
@@ -662,6 +663,7 @@ function netDerivedClaims(
 ): Map<string, number> {
   const exporters: Array<{ systemId: string; spare: number }> = [];
   for (const s of systems) {
+    if (!isEconomicallyActive(s.control)) continue;
     const good = s.goods.find((g) => g.goodId === goodId);
     if (!good) continue;
     const demand = Math.max(0, good.demand);
@@ -845,9 +847,12 @@ function planFactionBundles(
   // Per-system best-ranked dropped opportunity this run (BuildDropReport docstring above has the
   // full reasoning). A ranked drop always wins over an unranked one for the same system — a scored
   // candidate is strictly more informative than one that was never scored — and within one class the
-  // FIRST one recorded wins: for ranked drops that is the highest-scored, because `opportunities`
-  // (below) is iterated in descending-score order; for unranked drops there is no ranking to prefer
-  // among, so it is whichever the deterministic scan order reaches first.
+  // FIRST one recorded wins: for ranked drops that is the highest-BANDED, then highest-scored,
+  // because `opportunities` (below) is claimed in band-then-score order (survival-serving goods
+  // ahead of every other good, descending score within a band) — `recordRankedDrop` itself carries
+  // no band logic, it inherits correct ordering for free from the claim loop it runs inside; for
+  // unranked drops there is no ranking to prefer among, so it is whichever the deterministic scan
+  // order reaches first.
   const rankedBlockBySystem = new Map<string, BuildDropReport>();
   const unrankedBlockBySystem = new Map<string, BuildDropReport>();
   const recordUnrankedDrop = (systemId: string, reason: BuildDropReason): void => {
@@ -946,9 +951,11 @@ function planFactionBundles(
   if (remainingByGood.size === 0) return { bundles, blocked: [], topOpportunities: [] };
 
   // Derived demand (the spill): unmet tier-1+ shortfall demands its own recipe inputs too, netted
-  // against how much of that raw need reachable supply genuinely does NOT cover (`netDerivedClaims`
-  // — the 2026-08-26 amendment; the earlier all-or-nothing `inputMissingAt` test now gates only the
-  // proposal, never the spill). Walking `PRODUCTION_GOOD_ORDER` in REVERSE visits every consumer
+  // against how much of that raw need reachable supply genuinely does NOT cover (`netDerivedClaims`).
+  // `inputMissingAt` gates only the proposal (an all-or-nothing "could a factory here be fed at all"
+  // stock check); the spill is a separate, flow-aware netting against reachable rate spare, and the
+  // two are allowed to answer differently for the same input at the same site. Walking
+  // `PRODUCTION_GOOD_ORDER` in REVERSE visits every consumer
   // before its own inputs, so one pass cascades all the way down. Two-phase per good, in the SAME
   // walk: (1) every claim raw derived claim onto `goodId` lands in `rawClaims`, not yet netted,
   // while `goodId`'s consumers are visited (they all precede it in this reversed topological

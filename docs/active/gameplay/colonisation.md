@@ -263,10 +263,12 @@ Because a build and a colonisation both draw the shared pool, funding orders **b
 The unit that carries an ROI is the **proposal**: a `BuildProposal` bundles a production level-set with the
 academies/complex that gate it (scored at the bundle's ROI so an enabler raises cost without inverting the
 gate-first order), and a `ColonyProposal` is a single-item colony-establish carrying its `colonyValue` and
-`establishWork`. Funding orders all proposals by descending ROI and drains them front-first from the
-per-faction throughput pool (`fundQueue` stays the decision-free drainer; the ROI ordering is entirely a
-reorder of its input). In-flight projects from prior cycles finish before equal-ROI newcomers, so started work
-never starves.
+`establishWork`. Funding orders proposals in three bands — housing, then survival-serving industry (water, food) by
+descending ROI, then everything else (industry, colonies, centres) by descending ROI — and drains them
+front-first from the per-faction throughput pool (`fundQueue` stays the decision-free drainer; the band-then-ROI
+ordering is entirely a reorder of its input). The band rule itself is owned by
+[economy-autonomic-agency.md](./economy-autonomic-agency.md)'s "Survival first" section. In-flight projects from
+prior cycles finish before equal-ROI newcomers, so started work never starves.
 
 There is **no per-cycle develop cap**: every eligible, affordable controlled candidate above the ROI floor is
 proposed, and an autonomic proposal is persisted as an in-flight `colony_establish` only once it has either

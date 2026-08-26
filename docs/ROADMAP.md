@@ -472,10 +472,11 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   recut because it overlaps this pass's hub/chain design — pick it up here.
   **Carry necessity into the routing calculations too** (Kai, 2026-08-16). The same gap the build
   planner has: logistics decides what to haul from shortfall quantity and route cost, and a unit of
-  unmet food ranks alongside a unit of unmet luxuries. Sibling of the necessity-weighting row under
-  Economy — settle the two together so survival goods are not privileged in one pillar and not the
-  other. The concrete place it lands is the **good-allocation cliff** row above, which owns the
-  allocation policy; this line exists so the pillar pass does not design that policy necessity-blind.
+  unmet food ranks alongside a unit of unmet luxuries. The build side has shipped — the planner's
+  survival band (docs/active/gameplay/economy-autonomic-agency.md, "Survival first") — so this line
+  closes the remaining half. The concrete place it lands is the **good-allocation cliff** row above,
+  which owns the allocation policy; this line exists so the pillar pass does not design that policy
+  necessity-blind.
 - **[S] §3.5 player-directed colony founding** — the mechanism (`employedGradientThreshold` speed-dial)
   ships **inert but tested**. Wire it when the player-agency phase reaches it.
 
@@ -555,6 +556,13 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   is needed; it requires threading `foundedTick` onto `TickSystem` and world state (save-format).
 
 **Parked by an explicit decision — don't re-propose as new**
+- **Tier-0 yield-awareness in the build planner** — killed by owner decision 2026-08-26 after 24K
+  attribution runs. The planner's score is one shared scale across tiers: unclamped, rich ground
+  inflated the whole tier-0 band against tier-1+ (extraction out-claimed factories at the shared
+  labour pool); clamped at min(1, ground), poor-ground demotion starved exactly the extraction
+  that feeds the input gate. Owner's reason: "once you're on a system, demand is demand" — yield
+  preference is a colonisation-time concern (`colonyValue` already prices deposit richness), not a
+  build-ranking one. Don't rebuild it in either form.
 - **[S] Colony seed size scaled against the housing unit** — a 2-pop seed against a 20-pop housing level
   means no colony can open looking anything but empty. Variant on record: send what the founder can spare,
   up to a whole level. Changes colonisation pacing and the AI founding policy, which is why it parked.

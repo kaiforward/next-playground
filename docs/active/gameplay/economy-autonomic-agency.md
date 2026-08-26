@@ -288,12 +288,14 @@ the inputs instead. The assessment runs whether or not build automation is on (t
 proposal emission only), so a manual player's Build-opportunity chip surfaces the same
 derived-demand opportunities the automated planner acts on.
 
-**Queued inputs count as available — the chain builds ahead of itself.** Queued project levels fold
-into the buildings the input gate and the spill read, so the cycle after a spill-triggered input
-extractor is queued, the factory above it can be proposed while its supply is still under
-construction. Deliberate pipelining: the factory finishes soon after its input does rather than
-waiting serially, idling meanwhile only for the construction gap (the economy's `inputGate`
-throttles it until the input lands).
+**Queued inputs count as available — the chain builds ahead of itself.** The input gate and the spill
+read a queued project level differently. The gate reads it as a building — binary, so the cycle after
+a spill-triggered input extractor is queued, the factory above it can be proposed while its supply is
+still under construction. The spill reads it as capacity/production instead: a queued input suppresses
+further spill only in proportion to the coverage its capacity adds, not all-or-nothing. Deliberate
+pipelining either way: the factory finishes soon after its input does rather than waiting serially,
+idling meanwhile only for the construction gap (the economy's `inputGate` throttles it until the input
+lands).
 
 ### Survival first — the necessity band
 
