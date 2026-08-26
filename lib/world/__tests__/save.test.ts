@@ -56,6 +56,28 @@ describe("serialiseWorld / deserialiseWorld", () => {
     expect(result.world).toStrictEqual(world);
   });
 
+  it("round-trips every generated body's orbitIndex unchanged", () => {
+    expect(world.bodies.length).toBeGreaterThan(0); // non-vacuous
+    expect(world.bodies.every((b) => typeof b.orbitIndex === "number")).toBe(true);
+    const result = deserialiseWorld(serialiseWorld(world));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.bodies.map((b) => b.orbitIndex)).toEqual(
+      world.bodies.map((b) => b.orbitIndex),
+    );
+  });
+
+  it("accepts a body row with no orbitIndex — additive optional field, an old save loads without it", () => {
+    const stripped: World = {
+      ...world,
+      bodies: world.bodies.map(({ orbitIndex: _orbitIndex, ...rest }) => rest),
+    };
+    const result = deserialiseWorld(serialiseWorld(stripped));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.bodies[0].orbitIndex).toBeUndefined();
+  });
+
   it("rejects malformed JSON", () => {
     const result = deserialiseWorld("{ not valid json");
     expect(result.ok).toBe(false);

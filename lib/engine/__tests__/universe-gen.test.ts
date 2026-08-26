@@ -23,8 +23,9 @@ import {
   REGION_NAMES,
 } from "@/lib/constants/universe-gen";
 import { buildGenParams } from "@/lib/world/gen";
-import { SUN_CLASSES } from "@/lib/constants/bodies";
+import { SUN_CLASSES, BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import { generateSubstrate, type GeneratedBody } from "@/lib/engine/body-gen";
+import type { BodyArchetypeId } from "@/lib/types/game";
 import { depositSlotOrder, workedYieldFold, workedYieldVectors } from "@/lib/engine/worked-deposits";
 import { deriveEconomyTypeLabel } from "@/lib/engine/economy-type";
 
@@ -433,7 +434,7 @@ describe("stampHomeworldPrefabs", () => {
     ];
     const homeworldBodiesBefore = systems[0].bodies.length;
 
-    stampHomeworldPrefabs(systems, new Set([0]));
+    stampHomeworldPrefabs(systems, new Set([0]), mulberry32(1));
 
     // Homeworld: stamped with the prefab, on a prepended guaranteed temperate body.
     expect(systems[0].buildings).toEqual(HOME_SYSTEM_PREFAB.buildings);
@@ -451,6 +452,70 @@ describe("stampHomeworldPrefabs", () => {
   });
 });
 
+describe("stampHomeworldPrefabs — ring roll", () => {
+  /** A minimal procedural body of the given archetype, pre-stamp orbitIndex is irrelevant — the
+   *  stamp rolls a fresh one over the whole combined set. */
+  function procedural(archId: BodyArchetypeId, orbitIndex: number): GeneratedBody {
+    const arch = BODY_ARCHETYPES[archId];
+    return {
+      bodyType: archId,
+      size: 1,
+      peopleLand: arch.peopleLand.min,
+      counts: emptyResourceVector(),
+      quality: emptyResourceVector(),
+      orbitIndex,
+    };
+  }
+
+  function capitalWithNeighbours(rng: ReturnType<typeof mulberry32>): GeneratedSystem[] {
+    // jungle (0.34), ocean (0.46), boreal (0.58) sit within ORBIT_ROLL_SPREAD (0.25) of the garden's
+    // own temperate_world bias (0.40) — bias gaps of 0.06/0.06/0.18, all under the 2×spread = 0.5
+    // swap ceiling — so every one of them can land on either side of the garden across seeds.
+    const systems = [
+      mkSys({
+        index: 0, population: 0, buildings: {},
+        bodies: [
+          procedural("jungle_world", 1),
+          procedural("ocean_world", 2),
+          procedural("boreal_world", 3),
+        ],
+      }),
+    ];
+    stampHomeworldPrefabs(systems, new Set([0]), rng);
+    return systems;
+  }
+
+  it("the garden body rolls its ring like any other temperate world — not always seated innermost", () => {
+    // Derived from the authored bias arithmetic (system-view.md → "Which ring a body gets"), not
+    // from observed output: with every neighbour's bias gap to the garden's 0.40 under the 0.5 swap
+    // ceiling, the garden landing anywhere but ring 1 — and outward of at least one procedural body
+    // — must show up across a seed sample if the roll is real rather than a fixed ring-1 seat.
+    let sawGardenNotInnermost = false;
+    let sawGardenOutwardOfAProcedural = false;
+    const seenGardenRings = new Set<number>();
+    for (let seed = 0; seed < 300; seed++) {
+      const systems = capitalWithNeighbours(mulberry32(seed));
+      const garden = systems[0].bodies.find((b) => b.bodyType === "temperate_world")!;
+      seenGardenRings.add(garden.orbitIndex);
+      if (garden.orbitIndex !== 1) sawGardenNotInnermost = true;
+      if (systems[0].bodies.some((b) => b.bodyType !== "temperate_world" && b.orbitIndex < garden.orbitIndex)) {
+        sawGardenOutwardOfAProcedural = true;
+      }
+    }
+    expect(sawGardenNotInnermost).toBe(true);
+    expect(sawGardenOutwardOfAProcedural).toBe(true);
+    expect(seenGardenRings.size).toBeGreaterThan(1); // a real spread of rings, not one fixed alternate seat
+  });
+
+  it("orbitIndex over a capital's bodies is exactly a 1..n permutation — no gap, no duplicate", () => {
+    for (let seed = 0; seed < 100; seed++) {
+      const systems = capitalWithNeighbours(mulberry32(seed));
+      const indices = systems[0].bodies.map((b) => b.orbitIndex).sort((x, y) => x - y);
+      expect(indices).toEqual(Array.from({ length: systems[0].bodies.length }, (_, i) => i + 1));
+    }
+  });
+});
+
 // ── Generation switch: potential/worked separation ─────
 
 describe("generation switch — potential/worked separation", () => {
@@ -463,14 +528,16 @@ describe("generation switch — potential/worked separation", () => {
       bodyType: "temperate_world", size: 1, peopleLand: 0,
       counts: { ...emptyResourceVector(), ore: 3 },
       quality: { ...emptyResourceVector(), ore: 5 }, // groundValue 5.0 (modifier 1.0)
+      orbitIndex: 1,
     };
     const lowOre: GeneratedBody = {
       bodyType: "asteroid_belt", size: 1, peopleLand: 0,
       counts: { ...emptyResourceVector(), ore: 200 },
       quality: { ...emptyResourceVector(), ore: 1 }, // groundValue 0.6 (modifier 0.6)
+      orbitIndex: 2,
     };
     const systems = [mkSys({ index: 0, population: 0, buildings: {}, bodies: [highOre, lowOre] })];
-    stampHomeworldPrefabs(systems, new Set([0]));
+    stampHomeworldPrefabs(systems, new Set([0]), mulberry32(2));
     const stamped = systems[0];
 
     const foldAgainstReal = workedYieldVectors(stamped.bodies, stamped.buildings);
@@ -530,11 +597,12 @@ describe("generation switch — potential/worked separation", () => {
       bodyType: "volcanic_world", size: 1, peopleLand: 0,
       counts: { ...emptyResourceVector(), radioactive: 50 },
       quality: { ...emptyResourceVector(), radioactive: 1 },
+      orbitIndex: 1,
     };
     const withLocked = [mkSys({ index: 0, population: 0, buildings: {}, bodies: [lockedBody] })];
     const withoutLocked = [mkSys({ index: 0, population: 0, buildings: {}, bodies: [] })];
-    stampHomeworldPrefabs(withLocked, new Set([0]));
-    stampHomeworldPrefabs(withoutLocked, new Set([0]));
+    stampHomeworldPrefabs(withLocked, new Set([0]), mulberry32(4));
+    stampHomeworldPrefabs(withoutLocked, new Set([0]), mulberry32(5));
 
     expect(withLocked[0].depositCounts).toEqual(withoutLocked[0].depositCounts);
     expect(withLocked[0].potentialYieldMult).toEqual(withoutLocked[0].potentialYieldMult);

@@ -350,6 +350,12 @@ export interface WorldBody {
   qualArable: number;
   qualWater: number;
   qualRadioactive: number;
+  /**
+   * This body's ring, 1..n over the system's bodies (ring 1 innermost) — cosmetic only, read by
+   * nothing inside the tick, only the system-view ring drawing. Additive and optional: an old save
+   * loads without it, and a body with none is drawn in array order (`docs/active/gameplay/system-view.md`).
+   */
+  orbitIndex?: number;
 }
 
 // ── Buildings / connections ─────────────────────────────────────

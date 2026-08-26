@@ -7,7 +7,7 @@ import type {
   BodyArchetypeId, ResourceVector, SunClass,
 } from "@/lib/types/game";
 import {
-  BODY_ARCHETYPES, HABITABILITY_THRESHOLD, HABITABLE_COUNT_LADDER, SUN_CLASSES,
+  BODY_ARCHETYPES, HABITABILITY_THRESHOLD, HABITABLE_COUNT_LADDER, ORBIT_ROLL_SPREAD, SUN_CLASSES,
   type SunClassDef,
 } from "@/lib/constants/bodies";
 import { emptyResourceVector, sumResourceVectors, unitResourceVector, RESOURCE_TYPES, countWeightedMean } from "./resources";
@@ -32,7 +32,18 @@ export interface GeneratedBody {
   counts: ResourceVector;
   /** Quality-band multiplier per resource (0 for absent resources). */
   quality: ResourceVector;
+  /**
+   * This body's ring, 1..n over the system's bodies (ring 1 innermost) — a permutation, never a
+   * gap or a duplicate. Rolled once, after every body in the system has been generated, from a key
+   * of `orbitalBias + noise` (`ORBIT_ROLL_SPREAD`); handed out in ascending key order. Cosmetic only
+   * — read by nothing inside the tick, only the system-view ring drawing. The roll assigns this
+   * field; it never reorders `bodies` itself (`assignOrbitIndices`).
+   */
+  orbitIndex: number;
 }
+
+/** A rolled body before its ring assignment — `rollBody`'s return shape, prior to `assignOrbitIndices`. */
+export type RolledBody = Omit<GeneratedBody, "orbitIndex">;
 
 export interface GeneratedSubstrate {
   sunClass: SunClass;
@@ -116,7 +127,7 @@ function rollArchetype(rng: RNG, sun: SunClassDef, aboveThresholdCount: number):
 }
 
 /** Draws one body's budgets uniform-in-range from its archetype's authored bands; counts integer. */
-function rollBody(rng: RNG, archId: BodyArchetypeId): GeneratedBody {
+function rollBody(rng: RNG, archId: BodyArchetypeId): RolledBody {
   const arch = BODY_ARCHETYPES[archId];
   const size = DISPLAY_SIZE_MIN + rng() * (DISPLAY_SIZE_MAX - DISPLAY_SIZE_MIN);
   const peopleLand = arch.peopleLand.min + rng() * (arch.peopleLand.max - arch.peopleLand.min);
@@ -133,18 +144,44 @@ function rollBody(rng: RNG, archId: BodyArchetypeId): GeneratedBody {
   return { bodyType: archId, size, peopleLand, counts, quality };
 }
 
+/**
+ * Rolls the ring assignment over a system's already-generated bodies: a weighted draw, not a sort
+ * (`docs/active/gameplay/system-view.md` → "Which ring a body gets"). Each body's key is its
+ * archetype's `orbitalBias` plus one fresh `rng()` draw of noise, uniform on
+ * `[-ORBIT_ROLL_SPREAD, ORBIT_ROLL_SPREAD]` — one draw per body, in `rolled`'s order, off the same
+ * threaded RNG as everything else in generation. Ring numbers 1..n are handed out in ascending key
+ * order (ring 1 innermost); ties broken by array order (stable sort), so the roll never drops or
+ * duplicates a ring.
+ *
+ * Returns a NEW array built by mapping `rolled` at the SAME indices — `bodies[i]` always came from
+ * `rolled[i]`, so this function only ever adds the `orbitIndex` field; it never reorders the body
+ * list itself. That is what keeps `workedByBody`'s array-index contract intact (system-view.md →
+ * "The roll assigns a field; it never reorders the bodies array").
+ */
+export function assignOrbitIndices(rng: RNG, rolled: RolledBody[]): GeneratedBody[] {
+  const keys = rolled.map((b) => BODY_ARCHETYPES[b.bodyType].orbitalBias + (rng() * 2 - 1) * ORBIT_ROLL_SPREAD);
+  const order = keys.map((_, i) => i);
+  order.sort((a, b) => keys[a] - keys[b]);
+  const orbitIndex: number[] = new Array(rolled.length);
+  order.forEach((originalIndex, rank) => {
+    orbitIndex[originalIndex] = rank + 1;
+  });
+  return rolled.map((b, i) => ({ ...b, orbitIndex: orbitIndex[i] }));
+}
+
 export function generateSubstrate(rng: RNG): GeneratedSubstrate {
   const sunClass = rollSunClass(rng);
   const sun = SUN_CLASSES[sunClass];
 
   const bodyCount = randInt(rng, sun.bodyCount.min, sun.bodyCount.max);
-  const bodies: GeneratedBody[] = [];
+  const rolled: RolledBody[] = [];
   let aboveThresholdCount = 0;
   for (let i = 0; i < bodyCount; i++) {
     const archId = rollArchetype(rng, sun, aboveThresholdCount);
-    bodies.push(rollBody(rng, archId));
+    rolled.push(rollBody(rng, archId));
     if (BODY_ARCHETYPES[archId].scores.default >= HABITABILITY_THRESHOLD) aboveThresholdCount++;
   }
+  const bodies = assignOrbitIndices(rng, rolled);
 
   const agg = substrateAggregates(bodies);
   // Bare substrate has no built extractors: the worked fold reads n=0 on every resource, which

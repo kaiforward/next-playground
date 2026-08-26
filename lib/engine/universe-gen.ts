@@ -4,7 +4,10 @@
  */
 
 import type { EconomyType } from "@/lib/types/game";
-import { generateSubstrate, substrateAggregates, type GeneratedSubstrate } from "./body-gen";
+import {
+  generateSubstrate, substrateAggregates, assignOrbitIndices,
+  type GeneratedSubstrate,
+} from "./body-gen";
 import { deriveEconomyTypeLabel } from "./economy-type";
 import { workedYieldVectors } from "@/lib/engine/worked-deposits";
 import { computeHomeworldBuildings, HOME_SYSTEM_POP, homeworldGardenBody } from "./homeworld-prefab";
@@ -614,6 +617,7 @@ export function generateConnections(
 export function stampHomeworldPrefabs(
   systems: GeneratedSystem[],
   homeworldIndices: Set<number>,
+  rng: RNG,
 ): void {
   for (const s of systems) {
     if (!homeworldIndices.has(s.index)) {
@@ -622,7 +626,12 @@ export function stampHomeworldPrefabs(
       s.popCap = 0;
       continue;
     }
-    const bodies = [homeworldGardenBody(), ...s.bodies];
+    // The garden body is prepended to the procedural bodies (existing behaviour, unchanged —
+    // array order is a live contract, see body-gen.ts), then the WHOLE combined set is rolled for
+    // ring assignment exactly as a normal system is: the garden body is a temperate-class world and
+    // takes temperate_world's orbitalBias + noise like any other, so it lands where its key falls
+    // rather than always innermost.
+    const bodies = assignOrbitIndices(rng, [homeworldGardenBody(), ...s.bodies]);
     const agg = substrateAggregates(bodies);
     s.bodies = bodies;
     s.depositCounts = agg.depositCounts;
@@ -661,7 +670,7 @@ export function generateUniverse(
     playerFaction,
   });
 
-  stampHomeworldPrefabs(systems, new Set(factions.map((f) => f.homeworldSystemIndex)));
+  stampHomeworldPrefabs(systems, new Set(factions.map((f) => f.homeworldSystemIndex)), rng);
 
   const systemFactionAssignments = assignHomeworldOwnership(systems.length, factions);
 

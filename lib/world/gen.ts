@@ -153,6 +153,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
       peopleLand: b.peopleLand,
       ...countColumns(b.counts),
       ...qualColumns(b.quality),
+      orbitIndex: b.orbitIndex,
     })),
   );
 
