@@ -16,13 +16,28 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-1. **[M] Visual system view — bodies as a spatial layout inside the system detail panel.** A simple
-  2D/3D view alongside (not replacing) the body cards, so a system's bodies read as a place instead
-  of a list — popovers on each body surface its score, lock state, occupancy and worked/total
-  deposits. Consumes the engine's `workedByBody` read (`lib/engine/worked-deposits.ts`), which
-  already returns per-body, per-resource worked/total slot counts. UI-heavy: gets the
-  browser-viewable HTML prototype pass approved before implementation (AGENTS.md, UI/dataviz).
-  *Next step:* prototype pass.
+1. **[M] Visual system view — bodies as a spatial layout inside the system detail panel.** A
+  concentric-ring view alongside (not replacing) the body cards, so a system's bodies read as a place
+  instead of a list — hovering a body surfaces its score, lock state, occupancy and worked/total
+  deposits, the same content the body card already shows. Consumes the engine's `workedByBody` read
+  (`lib/engine/worked-deposits.ts`), which already returns per-body, per-resource worked/total slot
+  counts. Prototype pass approved, so the shape is settled:
+  - **Concentric rings, one body per ring**, drawn square to fit the 560px panel (`w-[560px]`,
+    `components/ui/detail-panel.tsx`) — horizontal layouts were rejected on space.
+  - **Which ring: a loose plausibility roll at generation.** One cosmetic integer per body, rolled
+    once, stored, read by nothing in the tick. A weighted draw (rocky inward, ice and gas outward),
+    NOT a sort — a hard temperature gradient would erase the atmosphere-driven exceptions that make
+    the arrangement believable. Accepted cost: fresh seeds.
+  - **Where on the ring: golden-angle stepping** by body index (137.5° per step). Deterministic, no
+    stored angle, no jitter, and bodies never bunch or collide.
+  - **Size from `size`**, the field already marked display-flavour-only — this is its first reader
+    and it drives nothing.
+  - **Plain coloured circles**, deliberately: no archetype iconography for now. The one exception is
+    the asteroid belt, drawn as its own dashed ring rather than a dot, because it is the one body
+    that was never a point.
+  *Next step:* write the spec, then build plan.
+  *Don't:* imply orbital distance is physical. Nothing reads the ring index, and archetype is rolled
+  from the sun class — a player must not be able to infer a causal inner-hot/outer-cold story.
 
 ---
 
