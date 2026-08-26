@@ -10,9 +10,9 @@ function AlertCountProbe() {
   return <div data-testid="alert-count">{alerts.categories.length}</div>;
 }
 
-function famineCategory(): AlertCategory {
+function populationCollapseCategory(): AlertCategory {
   return {
-    id: "famine",
+    id: "population_collapse",
     unit: "developed_systems",
     count: 2,
     denominator: 10,
@@ -37,7 +37,7 @@ describe("useAlerts — a store-backed component test, no QueryClientProvider", 
     render(<AlertCountProbe />);
     expect(screen.getByTestId("alert-count")).toHaveTextContent("0");
 
-    seedSlices({ alerts: { categories: [famineCategory()], categorySettings: DEFAULT_ALERT_CATEGORIES } });
+    seedSlices({ alerts: { categories: [populationCollapseCategory()], categorySettings: DEFAULT_ALERT_CATEGORIES } });
 
     expect(screen.getByTestId("alert-count")).toHaveTextContent("1");
   });

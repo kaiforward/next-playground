@@ -36,8 +36,8 @@ function instance(name: string, measure: string, systemId: string | null, sortKe
   return { systemId, name, measure, sortKey };
 }
 
-const famine: SystemScopedAlertCategory = {
-  id: "famine",
+const populationCollapse: SystemScopedAlertCategory = {
+  id: "population_collapse",
   unit: "developed_systems",
   count: 2,
   denominator: 253,
@@ -89,7 +89,7 @@ async function renderOpenFlyout(
 
 describe("resolveAlertTarget — the row's destination, resolved off the category and the instance", () => {
   it("a system-scoped category resolves to its authored tab, using the instance's own systemId", () => {
-    expect(resolveAlertTarget(famine, famine.instances[0])).toEqual({
+    expect(resolveAlertTarget(populationCollapse, populationCollapse.instances[0])).toEqual({
       kind: "system",
       systemId: "sys-a",
       tab: "population",
@@ -123,7 +123,7 @@ describe("resolveAlertTarget — the row's destination, resolved off the categor
 
 describe("alertFooterText — states the denominator for a system-scoped category, the unit otherwise, nothing for faction", () => {
   it("developed_systems states its denominator", () => {
-    expect(alertFooterText(famine)).toBe("2 of 253 developed systems");
+    expect(alertFooterText(populationCollapse)).toBe("2 of 253 developed systems");
   });
 
   it("controlled_systems states ITS OWN denominator, not the developed-systems one", () => {
@@ -145,7 +145,7 @@ describe("AlertFlyout — renders every instance, no cap", () => {
     // nothing truncates the list before it reaches the DOM. The scroll itself is a visual behaviour
     // (`overflow-y-auto` + a `max-height`) this test cannot see.
     const instances = manyInstances(40);
-    const category: SystemScopedAlertCategory = { ...famine, count: 40, instances };
+    const category: SystemScopedAlertCategory = { ...populationCollapse, count: 40, instances };
     await renderOpenFlyout(category);
 
     // The trigger button is a "button" too, hence 41 rather than 40.
@@ -185,7 +185,7 @@ describe("AlertFlyout — Maintenance unfunded's single faction-level row", () =
 describe("AlertFlyout — row activation", () => {
   it("clicking a row navigates and leaves the flyout open, without removing the row", async () => {
     const onNavigate = vi.fn();
-    const { user } = await renderOpenFlyout(famine, onNavigate);
+    const { user } = await renderOpenFlyout(populationCollapse, onNavigate);
 
     await user.click(screen.getByRole("button", { name: /Rigel/ }));
 

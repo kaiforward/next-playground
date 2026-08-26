@@ -172,7 +172,7 @@ describe("getAlertData", () => {
     const world = seatWorld();
     const pid = world.player!.controlledFactionId;
     const [target] = spareSystemIds(world, 1);
-    // Meets Famine's condition in every respect except ownership.
+    // Meets Population collapse's condition in every respect except ownership.
     setWorld(
       withSystems(
         world,
@@ -182,8 +182,7 @@ describe("getAlertData", () => {
             {
               factionId: `not-${pid}`,
               control: "developed",
-              supplyBand: "famine",
-              provision: 0.1,
+              populationTrend: -0.05,
               populationChange: -5,
               population: 100,
             },
@@ -198,8 +197,8 @@ describe("getAlertData", () => {
     }
   });
 
-  describe("Famine", () => {
-    it("excludes a never-assessed system (no supplyBand) while a sibling with supplyBand famine appears", () => {
+  describe("Population collapse", () => {
+    it("excludes a never-assessed system (no populationTrend) while a sibling above threshold appears", () => {
       const world = seatWorld();
       const pid = world.player!.controlledFactionId;
       const [assessed, neverAssessed] = spareSystemIds(world, 2);
@@ -210,29 +209,110 @@ describe("getAlertData", () => {
             [
               assessed,
               developedPatch(pid, {
-                supplyBand: "famine",
-                provision: 0.1,
+                populationTrend: -0.05, // well past POPULATION_COLLAPSE_TREND_THRESHOLD (≈0.0078) in magnitude, negative = shrinking
                 populationChange: -5,
                 population: 100,
               }),
             ],
-            // Never assessed: developed, owned, but the economy has not run on it yet — every
-            // absent-not-zero field left untouched.
+            // Never assessed: developed, owned, but the population processor has not run on it yet —
+            // every absent-not-zero field left untouched.
             [neverAssessed, developedPatch(pid)],
           ]),
         ),
       );
 
-      const famine = category("famine");
-      const ids = famine.instances.map((i) => i.systemId);
+      const populationCollapse = category("population_collapse");
+      const ids = populationCollapse.instances.map((i) => i.systemId);
       expect(ids).toContain(assessed);
       expect(ids).not.toContain(neverAssessed);
     });
 
-    it("sorts a shrinking world's time-to-abandonment ahead of a non-shrinking world's shortfall depth", () => {
+    it("raises the alert for a well-fed world losing population to unrest alone — not gated on famine", () => {
+      // The whole point of the trend gate: Abandonment Rule 2 fires on below-floor population alone,
+      // famine or not, so a world with a healthy supply band but a declining trend must still surface.
       const world = seatWorld();
       const pid = world.player!.controlledFactionId;
-      const [shrinking, steady] = spareSystemIds(world, 2);
+      const [target] = spareSystemIds(world, 1);
+      setWorld(
+        withSystems(
+          world,
+          new Map([
+            [
+              target,
+              developedPatch(pid, {
+                supplyBand: "rationing",
+                provision: 0.9,
+                populationTrend: -0.05,
+                populationChange: -5,
+                population: 100,
+              }),
+            ],
+          ]),
+        ),
+      );
+
+      const ids = category("population_collapse").instances.map((i) => i.systemId);
+      expect(ids).toContain(target);
+    });
+
+    it("does not raise the alert for a GROWING world, however fast — the sign is the whole gate, not just the magnitude", () => {
+      // The regression this test exists to catch: a signed comparison inverted (e.g. `>=
+      // +threshold` instead of `<= -threshold`) fires on thriving worlds and stays silent on dying
+      // ones. A positive populationTrend of the same magnitude the shrinking tests use must never
+      // qualify, however far past the threshold's magnitude it sits.
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [target] = spareSystemIds(world, 1);
+      setWorld(
+        withSystems(
+          world,
+          new Map([
+            [
+              target,
+              developedPatch(pid, {
+                populationTrend: 0.05, // growing, well past the threshold's magnitude
+                populationChange: 5,
+                population: 100,
+              }),
+            ],
+          ]),
+        ),
+      );
+
+      const ids = category("population_collapse").instances.map((i) => i.systemId);
+      expect(ids).not.toContain(target);
+    });
+
+    it("does not raise the alert for a famine world whose trend hasn't crossed the threshold — the old non-shrinking branch is a deliberate demotion", () => {
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [target] = spareSystemIds(world, 1);
+      setWorld(
+        withSystems(
+          world,
+          new Map([
+            [
+              target,
+              developedPatch(pid, {
+                supplyBand: "famine",
+                provision: 0.1,
+                populationTrend: -0.001, // below POPULATION_COLLAPSE_TREND_THRESHOLD in magnitude
+                populationChange: 0,
+                population: 100,
+              }),
+            ],
+          ]),
+        ),
+      );
+
+      const ids = category("population_collapse").instances.map((i) => i.systemId);
+      expect(ids).not.toContain(target);
+    });
+
+    it("reports the time-to-abandonment countdown off populationChange", () => {
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [shrinking] = spareSystemIds(world, 1);
       setWorld(
         withSystems(
           world,
@@ -240,31 +320,20 @@ describe("getAlertData", () => {
             [
               shrinking,
               developedPatch(pid, {
-                supplyBand: "famine",
-                provision: 0.2,
                 population: 100,
-                populationChange: -5, // k = 0.05/cycle -> ln(100)/0.05
-              }),
-            ],
-            [
-              steady,
-              developedPatch(pid, {
-                supplyBand: "famine",
-                provision: 0.1, // shortfall depth 0.9
-                population: 100,
-                populationChange: 0, // not shrinking: no countdown
+                populationTrend: -0.05, // gates entry (negative = shrinking)
+                populationChange: -5, // k = 0.05/cycle -> ln(100)/0.05 — drives the countdown
               }),
             ],
           ]),
         ),
       );
 
-      const famine = category("famine");
-      expect(famine.instances.map((i) => i.systemId)).toEqual([shrinking, steady]);
+      const populationCollapse = category("population_collapse");
+      expect(populationCollapse.instances.map((i) => i.systemId)).toEqual([shrinking]);
       // countdown = ln(100)/0.05 ≈ 92.1 cycles = 2210.48 ticks = 552.62 days = 1.535 years (360
       // days/year) — rounded to the nearest tenth of a year by formatDuration's years branch.
-      expect(famine.instances[0].measure).toBe("≈1.5 years to abandonment");
-      expect(famine.instances[1].measure).toBe("not shrinking — 90% short");
+      expect(populationCollapse.instances[0].measure).toBe("≈1.5 years to abandonment");
     });
   });
 
@@ -1107,9 +1176,9 @@ describe("getAlertData", () => {
       expect("denominator" in unfunded).toBe(false);
       // Non-vacuous: the shared denominator this category must NOT be carrying is a real, larger
       // number on the very same read.
-      const famine = category("famine");
-      if (famine.unit !== "developed_systems") throw new Error("Famine must count developed systems");
-      expect(famine.denominator).toBeGreaterThan(1);
+      const populationCollapse = category("population_collapse");
+      if (populationCollapse.unit !== "developed_systems") throw new Error("Population collapse must count developed systems");
+      expect(populationCollapse.denominator).toBeGreaterThan(1);
     });
 
     it("does not fire after the player raises the slider on a faction whose last settlement was solvent", () => {
@@ -1248,7 +1317,7 @@ describe("getAlertData", () => {
       const [target] = spareSystemIds(world, 1);
       const withTarget = withSystems(
         world,
-        new Map([[target, developedPatch(pid, { supplyBand: "famine", provision: 0.1, population: 100 })]]),
+        new Map([[target, developedPatch(pid, { populationTrend: -0.05, populationChange: -5, population: 100 })]]),
       );
       const withFixture = withEvents(withTarget, [
         fixtureEvent({
@@ -1262,10 +1331,10 @@ describe("getAlertData", () => {
         (s) => s.factionId === pid && s.control === "developed",
       ).length;
 
-      const famine = category("famine");
-      if (famine.unit !== "developed_systems") throw new Error("Famine must count developed systems");
-      expect(famine.count).toBe(1);
-      expect(famine.denominator).toBe(developedCount);
+      const populationCollapse = category("population_collapse");
+      if (populationCollapse.unit !== "developed_systems") throw new Error("Population collapse must count developed systems");
+      expect(populationCollapse.count).toBe(1);
+      expect(populationCollapse.denominator).toBe(developedCount);
 
       const windfall = category("windfall");
       expect(windfall.unit).toBe("events");
@@ -1656,9 +1725,9 @@ describe("getAlertData", () => {
       // category must not be carrying.
       expect(developedCount).toBe(4); // three patched here plus the faction's homeworld
       expect(colonyOpp.denominator).not.toBe(developedCount);
-      const famine = category("famine");
-      if (famine.unit !== "developed_systems") throw new Error("Famine must count developed systems");
-      expect(famine.denominator).toBe(developedCount);
+      const populationCollapse = category("population_collapse");
+      if (populationCollapse.unit !== "developed_systems") throw new Error("Population collapse must count developed systems");
+      expect(populationCollapse.denominator).toBe(developedCount);
       // What the mismatch actually breaks: a count that can exceed what it is rendered against.
       expect(colonyOpp.count).toBeLessThanOrEqual(colonyOpp.denominator);
     });
@@ -1671,7 +1740,7 @@ describe("getAlertData", () => {
 
       const ids = getAlertData().categories.map((c) => c.id);
       expect(ids).toEqual([
-        "famine", "strike", "maintenance_unfunded", "crisis",
+        "population_collapse", "strike", "maintenance_unfunded", "crisis",
         "deprived_worlds", "unrest_rising", "survival_stock_falling", "demand_unservable",
         "overcrowded", "no_housing_headroom", "build_blocked", "industry_idle", "disruption",
         "build_opportunity", "colony_opportunity", "windfall",

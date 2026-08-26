@@ -12,9 +12,9 @@ import type { World } from "@/lib/world/types";
  * adapter→`WorldSystem` merge silently dropping a field) would pass every existing test.
  *
  * Build opportunity is the category exercised in full — named system, named figure.
- * `populationChange` and `stockChange`, the two persisted signals Famine and Survival stock falling
- * rest on, get the weaker but still load-bearing check the same run can afford: that a real tick
- * chain leaves them on world state at all. `WorldSystem.buildOpportunity` is written
+ * `populationChange`, `populationTrend` and `stockChange` — the persisted signals Population
+ * collapse and Survival stock falling rest on — get the weaker but still load-bearing check the
+ * same run can afford: that a real tick chain leaves them on world state at all. `WorldSystem.buildOpportunity` is written
  * by the real directed-build processor's planner every cycle it runs — UNCONDITIONALLY, independent
  * of `automation.build` (lib/tick/processors/directed-build.ts:481-490: "the assessment above runs
  * unconditionally... every system in `group` is visited whether or not build automation is on") — so
@@ -83,11 +83,12 @@ describe("getAlertData reads state a real runWorldTick chain actually produced",
     expect(category.instances[0].measure).toContain(score.toFixed(2));
   }, 30_000);
 
-  it("leaves populationChange on a developed player system and stockChange on a market row — the two signals four categories read", async () => {
-    // Famine's countdown, Survival stock falling's whole condition, and the two categories that
-    // depend on them read `WorldSystem.populationChange` and `WorldMarket.stockChange`. Both are
-    // written every economy cycle for every visited system, so a processor that stopped writing
-    // either would leave its categories permanently silent in the shipped game — a failure no
+  it("leaves populationChange, populationTrend on a developed player system and stockChange on a market row — the signals behind Population collapse and Survival stock falling", async () => {
+    // Population collapse's gate (`populationTrend`) and countdown (`populationChange`), Survival
+    // stock falling's whole condition, and the two categories that depend on them read
+    // `WorldSystem.populationChange`/`populationTrend` and `WorldMarket.stockChange`. All are written
+    // every economy cycle for every visited system, so a processor that stopped writing any one of
+    // them would leave its categories permanently silent in the shipped game — a failure no
     // fixture-fed service test can see, because the fixture supplies the field itself. This asserts
     // only that a REAL tick chain leaves them there; what the categories do with them is pinned in
     // alerts.test.ts.
@@ -109,11 +110,64 @@ describe("getAlertData reads state a real runWorldTick chain actually produced",
     expect(assessed.map((s) => s.id).length).toBeGreaterThan(0);
     for (const s of assessed) expect(Number.isFinite(s.populationChange)).toBe(true);
 
+    const trendAssessed = developed.filter((s) => s.populationTrend !== undefined);
+    expect(trendAssessed.map((s) => s.id).length).toBeGreaterThan(0);
+    for (const s of trendAssessed) expect(Number.isFinite(s.populationTrend)).toBe(true);
+
     const developedIds = new Set(developed.map((s) => s.id));
     const withStockChange = world.markets.filter(
       (m) => developedIds.has(m.systemId) && m.stockChange !== undefined,
     );
     expect(withStockChange.map((m) => `${m.systemId}|${m.goodId}`).length).toBeGreaterThan(0);
     for (const m of withStockChange) expect(Number.isFinite(m.stockChange)).toBe(true);
+  }, 30_000);
+
+  it("populationTrend's sign agrees with the direction a system's population actually moved across the run", async () => {
+    // Crosses the exact seam a sign-inverted write (or a sign-inverted read) would break and a
+    // fixture-fed unit test cannot see, because a fixture supplies both sides of the comparison
+    // itself. This does NOT pin exact sign agreement for every system on every run — an EMA lags a
+    // direction reversal, and a colony-founding donor's exclusion can genuinely diverge the trend
+    // from the system's own raw net change for the cycle it founds. It also does not exercise the
+    // decline side: at 48 ticks (first colony completes ~tick 4,128 at default scale —
+    // docs/active/gameplay/colonisation.md) every faction's homeworld is still in its calm early
+    // growth phase, so this fixture never produces a genuinely shrinking developed system to check
+    // the other sign against. What it DOES pin, robustly, per the brief's own fallback: a system
+    // whose population demonstrably GREW across the window does not carry a negative trend — the
+    // exact case a naively-inverted comparison (this file's own regression) gets backwards.
+    //
+    // Every faction's homeworld, not just the player's — scoping to the player alone would leave
+    // exactly one developed system this early, a much weaker non-vacuity guarantee.
+    let world: World = generateWorld({
+      systemCount: 100,
+      seed: 42,
+      playerFaction: { name: "Integration Seat", governmentType: "federation", doctrine: "mercantile" },
+    });
+    const startPopulationById = new Map(world.systems.map((s) => [s.id, s.population]));
+
+    for (let i = 0; i < 48; i++) {
+      world = (await runWorldTick(world)).world;
+    }
+
+    const assessed = world.systems.filter(
+      (s) => s.control === "developed" && s.populationTrend !== undefined,
+    );
+    expect(assessed.length).toBeGreaterThan(0); // premise: something was actually assessed this run
+
+    let grew = 0;
+    for (const s of assessed) {
+      const startPopulation = startPopulationById.get(s.id);
+      if (startPopulation === undefined) continue; // a system that didn't exist as this shape at start
+      const netChange = s.population - startPopulation;
+      const trend = s.populationTrend;
+      if (trend === undefined) continue; // narrowed by the filter above; guards the type only
+      if (netChange > 0) {
+        grew++;
+        expect(trend, `system ${s.id} grew (${startPopulation} -> ${s.population}) but trend was ${trend}`)
+          .toBeGreaterThanOrEqual(0);
+      }
+    }
+    // Non-vacuous: real growth actually happened across this fixture, not zero systems agreeing on
+    // an empty set.
+    expect(grew).toBeGreaterThan(0);
   }, 30_000);
 });

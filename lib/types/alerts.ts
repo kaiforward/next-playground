@@ -23,7 +23,7 @@ export type AlertTier = "critical" | "important" | "info";
  * instead, so this array carries no second copy of the authored order to drift.
  */
 export const ALERT_CATEGORY_IDS = [
-  "famine",
+  "population_collapse",
   "strike",
   "maintenance_unfunded",
   "crisis",

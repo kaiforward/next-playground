@@ -178,11 +178,48 @@ export interface WorldSystem {
    *  processor visited this cycle (0 included, distinct from absent), untouched for one it did not,
    *  and cleared — not carried forward — on abandonment or redevelopment (`applyAbandonments`,
    *  `applyDevelopments`, both `lib/world/tick.ts`) so a re-founded colony never inherits its
-   *  predecessor's reading. Authored for one job — the Famine alert sorts by time to abandonment,
-   *  and this is the decay rate that countdown extrapolates from; a reader wanting a different shape
-   *  (a trailing average, a longer window) adds its own field rather than redefining this one.
+   *  predecessor's reading. Authored for one job — the Population collapse alert sorts by time to
+   *  abandonment, and this is the decay rate that countdown extrapolates from; a reader wanting a
+   *  different shape (a trailing average, a longer window) adds its own field rather than redefining
+   *  this one, which is exactly what `populationTrend` below is. Signed: negative means shrinking,
+   *  positive means growing — `populationTrend` carries the same polarity deliberately.
    *  Nothing inside the tick reads it. */
   populationChange?: number;
+  /** A smoothed, founding-excluded reading of whether a world is dying — an exponential moving
+   *  average (half-life ~3 reference cycles; `alpha = 1 − 2^(−1/3)`, derived from that half-life
+   *  rather than authored as a bare literal) over the FRACTIONAL population change per reference
+   *  cycle, EXCLUDING colony-founding transfers: `(delta_excluding_founding) / catchUpFactor) /
+   *  population_at_cycle_start` — denominated per reference cycle exactly like `populationChange`
+   *  (dividing by this cycle's own `catchUpFactor`), so the reading is unchanged if `CYCLE_LENGTH`
+   *  is retuned away from `REFERENCE_INTERVAL`, same as that field. `populationChange` deliberately includes the founding debit
+   *  because its job is realised change; this field's job is different — a donor handing settlers
+   *  to a colony on purpose is not dying, so the founding debit is added back out of the sample
+   *  before it feeds the average. Migration stays IN the sample: people leaving because a world is
+   *  bad is exactly what this field exists to catch. Without the exclusion, founding-era play (where
+   *  a 20-pop donor giving up `EXPANSION.COLONY_SEED_POP`, 2, reads as a 10% one-cycle drop) would
+   *  trip a decline-rate alert for several cycles on a donor that isn't declining at all.
+   *
+   *  SIGNED, same polarity as `populationChange` right beside it: negative means the world is
+   *  shrinking, positive means it is growing. A reader that wants "how fast is this world dying"
+   *  compares against a NEGATIVE bound (`trend <= -threshold`), never a positive one — the sign is
+   *  the whole gate, not a detail to get right incidentally.
+   *
+   *  Stored as a fraction (not absolute), so it reads directly as a rate and stays scale-free across
+   *  world sizes; guarded against population <= 0 at the write site rather than ever storing a
+   *  non-finite value (`World` must stay JSON-serialisable). Seeded from the first sample rather
+   *  than 0, so a newly assessed world doesn't read as "not declining" before it has one. Written by
+   *  the tick body (`lib/world/tick.ts`), alongside `populationChange`, AFTER the directed-build
+   *  stage — same reason `populationChange` is. Same absence convention as `populationChange`:
+   *  absent means never assessed, written for every system the population processor visited this
+   *  cycle, untouched for one it did not, and cleared — not carried forward — on abandonment or
+   *  redevelopment (`applyAbandonments`, `applyDevelopments`, both `lib/world/tick.ts`) so a
+   *  re-founded colony never inherits its predecessor's reading.
+   *
+   *  Authored for one job — gating entry into the alert bar's Population collapse category (a
+   *  well-fed, unrest-driven decline that `populationChange`'s per-cycle countdown alone would never
+   *  catch, since that countdown is only computed for famine systems). Nothing inside the tick reads
+   *  it. */
+  populationTrend?: number;
   /** This run's best-ranked dropped production opportunity from the directed-build planner — the
    *  alert bar's Build blocked category. See `BuildDropReport` (`lib/engine/directed-build.ts`) for
    *  the reasons and for what `droppedRoi` is (and is not) at each drop site. Written directly by
