@@ -120,4 +120,49 @@ describe("ringLayout", () => {
       expect(layout.bodies[`b${i + 1}`].ringRadius).toBeGreaterThan(layout.bodies[`b${i}`].ringRadius);
     }
   });
+
+  describe("hitRadius — the uniform interactive-area target", () => {
+    it("is never smaller than the body's own drawn circle, across the whole authored size band", () => {
+      const bodies = [
+        body({ id: "smallest", orbitIndex: 1, size: DISPLAY_SIZE_MIN }),
+        body({ id: "middle", orbitIndex: 2, size: 1 }),
+        body({ id: "largest", orbitIndex: 3, size: DISPLAY_SIZE_MAX }),
+      ];
+      const layout = ringLayout(bodies, PANEL_SIZE);
+      for (const rb of Object.values(layout.bodies)) {
+        expect(rb.hitRadius).toBeGreaterThanOrEqual(rb.radius);
+      }
+    });
+
+    it("gives every body the same hit target regardless of its own authored size", () => {
+      const bodies = [
+        body({ id: "smallest", orbitIndex: 1, size: DISPLAY_SIZE_MIN }),
+        body({ id: "middle", orbitIndex: 2, size: 1 }),
+        body({ id: "largest", orbitIndex: 3, size: DISPLAY_SIZE_MAX }),
+      ];
+      const layout = ringLayout(bodies, PANEL_SIZE);
+      const targets = Object.values(layout.bodies).map((rb) => rb.hitRadius);
+      expect(new Set(targets).size).toBe(1);
+    });
+
+    it("never lets the hit target on the outermost ring push a body past the panel", () => {
+      // Worst case for fit: eight bodies, all at maximum drawn size — the same fixture the
+      // drawn-radius fit test above uses, since hitRadius is now uniformly the same bound.
+      const layout = ringLayout(worstCaseEight(), PANEL_SIZE);
+      const budget = PANEL_SIZE / 2;
+      for (const rb of Object.values(layout.bodies)) {
+        expect(rb.ringRadius + rb.hitRadius).toBeLessThanOrEqual(budget + 1e-9);
+      }
+    });
+
+    it("never lets two adjacent hit targets overlap, even at the worst-case body count", () => {
+      const layout = ringLayout(worstCaseEight(), PANEL_SIZE);
+      for (let i = 1; i < 8; i++) {
+        const a = layout.bodies[`b${i}`];
+        const b = layout.bodies[`b${i + 1}`];
+        const gap = b.ringRadius - a.ringRadius;
+        expect(gap).toBeGreaterThanOrEqual(a.hitRadius + b.hitRadius);
+      }
+    });
+  });
 });

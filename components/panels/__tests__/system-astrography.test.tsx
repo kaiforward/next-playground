@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { SystemAstrography } from "@/components/panels/system-astrography";
 import { PotentialYieldTooltipBody } from "@/components/system/potential-yield-table";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -91,6 +92,40 @@ describe("SystemAstrography — the system-level habitable-land header, absolute
     popValue = { visibility: "unknown" };
     renderPanel();
     expect(screen.getByText(/Scan this system/)).toBeInTheDocument();
+  });
+});
+
+describe("SystemAstrography — the ring diagram", () => {
+  it("renders the System section, with the body reachable by keyboard, when the system has bodies", async () => {
+    const user = userEvent.setup({ delay: null });
+    substrateValue = {
+      visibility: "visible", sunClass: "yellow", peopleLand: 480,
+      bodies: [
+        {
+          id: "b1", bodyType: "temperate_world", archetypeName: "Temperate World",
+          score: 1.0, locked: false,
+          counts: emptyResourceVector(), quality: emptyResourceVector(), workedCounts: emptyResourceVector(),
+          peopleLand: 480, occupied: false, orbitIndex: 1, size: 1,
+        },
+      ],
+      potentialYields: [],
+    };
+    popValue = { visibility: "unknown" };
+    renderPanel();
+
+    expect(screen.getByRole("heading", { name: "System Map" })).toBeInTheDocument();
+    await user.tab();
+    // "Temperate World" also headlines the body card below — scoped to the opened popover's own
+    // dialog (its `aria-label`) so this asserts the diagram's OWN wiring, not the card grid's.
+    const dialog = await screen.findByRole("dialog", { name: "Temperate World" });
+    expect(within(dialog).getByRole("heading", { name: "Temperate World" })).toBeInTheDocument();
+  });
+
+  it("renders no System section when the system has no charted bodies", () => {
+    substrateValue = { visibility: "visible", sunClass: "yellow", peopleLand: 0, bodies: [], potentialYields: [] };
+    popValue = { visibility: "unknown" };
+    renderPanel();
+    expect(screen.queryByRole("heading", { name: "System Map" })).not.toBeInTheDocument();
   });
 });
 

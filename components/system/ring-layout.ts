@@ -41,6 +41,15 @@ export interface RingBody {
   cy: number;
   /** This body's drawn circle radius. */
   radius: number;
+  /**
+   * This body's interactive (pointer/touch) hit-target radius — never smaller than `radius`.
+   * The same value for every body in a system, regardless of its own drawn size: it is always
+   * `BODY_RADIUS_FRAC_MAX` of `size`, the largest radius any body ever draws. A small body is
+   * therefore no harder to hit than a large one, and the value is exactly the bound the ring
+   * spacing below already computes its fit and no-overlap budgets against, so no separate budget
+   * is needed for the hit target.
+   */
+  hitRadius: number;
 }
 
 export interface RingLayout {
@@ -71,6 +80,10 @@ function sizeFraction(bodySize: number): number {
  * outermost ring stays inside the square. That same equal spacing, divided across up to eight
  * rings, is kept wider than twice the maximum drawn radius, which is what guarantees two adjacent
  * rings' bodies never overlap regardless of the angle either lands at.
+ *
+ * Both guarantees extend to `hitRadius` for free: it is always exactly `BODY_RADIUS_FRAC_MAX` of
+ * `size` — the same bound `bodyRadiusMax` above already reserves from the fit and no-overlap
+ * budgets — so no separate budget is needed for the hit target.
  */
 export function ringLayout(bodies: BodyView[], size: number): RingLayout {
   // A degenerate `size` (zero, negative, non-finite) still resolves to a valid, non-negative
@@ -92,11 +105,13 @@ export function ringLayout(bodies: BodyView[], size: number): RingLayout {
     const radiusFrac = BODY_RADIUS_FRAC_MIN
       + sizeFraction(body.size) * (BODY_RADIUS_FRAC_MAX - BODY_RADIUS_FRAC_MIN);
 
+    const radius = s * radiusFrac;
     out[body.id] = {
       ringRadius,
       cx: cx + ringRadius * Math.cos(angleRad),
       cy: cy + ringRadius * Math.sin(angleRad),
-      radius: s * radiusFrac,
+      radius,
+      hitRadius: bodyRadiusMax,
     };
   }
 

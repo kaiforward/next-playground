@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatList, StatRow } from "@/components/ui/stat-row";
 import { StarGlyph } from "@/components/system/star-glyph";
 import { BodyCard } from "@/components/system/body-card";
+import { SystemRings } from "@/components/system/system-rings";
 import { PotentialYieldTable } from "@/components/system/potential-yield-table";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
 
@@ -57,6 +58,16 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
           )}
         </StatList>
       </Card>
+
+      {/* The system as a place: star centred, one ring per body. Renders nothing for a zero-body
+          system rather than adding a second empty state — the card grid's `EmptyState` below
+          already says so. */}
+      {bodies.length > 0 && (
+        <Card variant="bordered" padding="md">
+          <SectionHeader className="mb-3">System Map</SectionHeader>
+          <SystemRings bodies={bodies} sunClass={sunClass} />
+        </Card>
+      )}
 
       {/* Potential yield — what this system COULD produce, locked bodies included; never what its
           extractors currently realise (that stays the industry panel's worked-prefix yield). */}
