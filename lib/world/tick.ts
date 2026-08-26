@@ -242,6 +242,11 @@ export function toTickSystems(world: World): TickSystem[] {
       // writes it directly after the migration stage (see the field's own docstring,
       // lib/world/types.ts), so this row purely carries forward whatever the previous World held.
       populationChange: s.populationChange,
+      // Same pass-through-uncoerced treatment as populationChange just above: nothing in this join
+      // computes it, the tick body writes it directly alongside populationChange (see the field's
+      // own docstring, lib/world/types.ts), so this row purely carries forward whatever the
+      // previous World held.
+      populationTrend: s.populationTrend,
       // Same pass-through-uncoerced treatment: nothing in this join computes it, the directed-build
       // processor's world adapter writes it directly (see the field's own docstring,
       // lib/world/types.ts), so this row purely carries forward whatever the previous World held.
@@ -376,6 +381,11 @@ function mergeSystemsIntoWorld(worldSystems: WorldSystem[], tickSystems: TickSys
     // `undefined`.
     if (tickSystem.populationChange === undefined) delete merged.populationChange;
     else merged.populationChange = tickSystem.populationChange;
+    // Same delete/assign treatment, same reason: written directly onto `tickSystem` alongside
+    // `populationChange` above, never by a processor — a true absence (never assessed this cycle,
+    // or cleared by abandonment/redevelopment) must not become a present key holding `undefined`.
+    if (tickSystem.populationTrend === undefined) delete merged.populationTrend;
+    else merged.populationTrend = tickSystem.populationTrend;
     // Same delete/assign treatment, same reason: written directly onto `tickSystem` by
     // `applyBuildBlockedUpdates` below (the directed-build processor's world adapter), never by a
     // processor via the generic row-mutation path — a true absence (never assessed this run, or
@@ -788,7 +798,7 @@ function applyClaims(systems: TickSystem[], claims: SystemClaim[]): TickSystem[]
  * The resettlement rule, in one place: a reading from a system's PREVIOUS life must not survive into
  * its new one. Every optional per-life reading a system row carries clears together — the stored
  * Provision memory, this cycle's Provisioned reading, its band and its critical-good weight, the
- * realised population change, and directed-build's three planner readings. Only the expectation is a
+ * realised population change and its smoothed trend, and directed-build's three planner readings. Only the expectation is a
  * memory; the rest are fresh readings, but a stale reading from a previous life is exactly as false
  * as a stale expectation would be, so they clear the same way: absent reads as "not yet assessed in
  * this life", never as a lie.
@@ -804,6 +814,7 @@ function clearPreviousLifeReadings(next: TickSystem): void {
   delete next.supplyBand;
   delete next.criticalWeight;
   delete next.populationChange;
+  delete next.populationTrend;
   delete next.buildBlocked;
   delete next.buildOpportunity;
   delete next.colonyOpportunity;
@@ -826,10 +837,34 @@ function clearPreviousLifeReadings(next: TickSystem): void {
  * baseline from before — the mirror image of `addMarketsForSettledSystems`'s "keeps its warehouses"
  * below: the market rows survive redevelopment, the expectation memory deliberately does not.
  */
-export function applyDevelopments(systems: TickSystem[], developments: SystemDevelopment[]): TickSystem[] {
-  if (developments.length === 0) return systems;
+/** EMA smoothing factor for `WorldSystem.populationTrend` — half-life ~3 reference cycles (the
+ *  field's own authored meaning, `lib/world/types.ts`), derived here rather than authored as a bare
+ *  literal: `alpha = 1 − 2^(−1/3)`. */
+const POPULATION_TREND_ALPHA = 1 - 2 ** (-1 / 3);
+
+/** One development's population effect: `popDelta` is the net change `applyDevelopments` applies to
+ *  `population` (source debit combined with target credit); `sourceDebit` is the population moved
+ *  AWAY from each source alone (capped, shared-source aware — two developments off the same source
+ *  draw from the same shrinking balance, never each reading the original snapshot). Kept separate
+ *  from `popDelta` because a system could in principle be both a donor and, via a different
+ *  development, a target in the same cycle, and a reader of the founding debit alone (the
+ *  population-trend write below) only ever wants the donor side. */
+interface FoundingTransfers {
+  popDelta: Map<string, number>;
+  sourceDebit: Map<string, number>;
+  developed: Set<string>;
+  housingBySystem: Map<string, number>;
+}
+
+/** The one computation of this cycle's colony-founding transfers, shared by `applyDevelopments`
+ *  (which applies `popDelta`/`developed`/`housingBySystem`) and `foundingDebitsBySource` below
+ *  (which reads `sourceDebit` alone) — so the two can never compute a different moved amount for the
+ *  same development. Must run against systems as they stood BEFORE `applyDevelopments` mutates them:
+ *  the capping reads each source's population once, at the top of the loop. */
+function computeFoundingTransfers(systems: TickSystem[], developments: SystemDevelopment[]): FoundingTransfers {
   const bySystem = new Map(systems.map((s) => [s.id, s]));
   const popDelta = new Map<string, number>();
+  const sourceDebit = new Map<string, number>();
   const developed = new Set<string>();
   const housingBySystem = new Map<string, number>();
   const available = new Map<string, number>();
@@ -842,9 +877,27 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
     available.set(d.sourceSystemId, remaining - moved);
     popDelta.set(d.sourceSystemId, (popDelta.get(d.sourceSystemId) ?? 0) - moved);
     popDelta.set(d.systemId, (popDelta.get(d.systemId) ?? 0) + moved);
+    sourceDebit.set(d.sourceSystemId, (sourceDebit.get(d.sourceSystemId) ?? 0) + moved);
     developed.add(d.systemId);
     housingBySystem.set(d.systemId, (housingBySystem.get(d.systemId) ?? 0) + d.housingLevels);
   }
+  return { popDelta, sourceDebit, developed, housingBySystem };
+}
+
+/** This cycle's founding debit per source system — population moved away by colony founding, the
+ *  same `moved` figure `applyDevelopments` applies to `population`. Called against the SAME
+ *  pre-founding `systems` snapshot `applyDevelopments` is about to consume — see
+ *  `computeFoundingTransfers`'s own docstring for why order matters. The population-trend write
+ *  (`lib/world/tick.ts`, the "realised per-cycle population change" block) adds this back out of a
+ *  donor's raw realised change: a donor handing over settlers on purpose is not dying. */
+export function foundingDebitsBySource(systems: TickSystem[], developments: SystemDevelopment[]): Map<string, number> {
+  if (developments.length === 0) return new Map();
+  return computeFoundingTransfers(systems, developments).sourceDebit;
+}
+
+export function applyDevelopments(systems: TickSystem[], developments: SystemDevelopment[]): TickSystem[] {
+  if (developments.length === 0) return systems;
+  const { popDelta, developed, housingBySystem } = computeFoundingTransfers(systems, developments);
   return systems.map((s): TickSystem => {
     const delta = popDelta.get(s.id) ?? 0;
     const nowDeveloped = developed.has(s.id);
@@ -1483,6 +1536,11 @@ export async function runWorldTick(
   // it, because the treasury stage below reads them after the block closes.
   let constructionWorkByFaction: Map<string, number> | undefined;
   let foundingDebitsByFaction: Map<string, number> | undefined;
+  // This cycle's founding debit per SOURCE system (contrast foundingDebitsByFaction above, which is
+  // per-faction) — captured against systems as they stood immediately before applyDevelopments ran,
+  // for the population-trend write's founding exclusion below. Declared here (outside the block) for
+  // the same reason as the two work maps above: a later block reads it after this one closes.
+  let foundingDebitsBySourceSystem: Map<string, number> | undefined;
   let logisticsWorkByFaction: Map<string, number> | undefined;
   // Calibration-only: directed-build's per-cycle new autonomic production-good levels, by good.
   // Declared here (not a local inside the block) purely to survive past the block's close, mirroring
@@ -1775,6 +1833,9 @@ export async function runWorldTick(
       // so a system founded this very run clears rather than picking up a fresh reading.
       systems = applyBuildOpportunityUpdates(systems, dbWorld.buildOpportunityVisitedSystemIds, dbWorld.buildOpportunityUpdates);
       systems = applyColonyOpportunityUpdates(systems, dbWorld.colonyOpportunityVisitedSystemIds, dbWorld.colonyOpportunityUpdates);
+      // Captured against `systems` as they stood immediately before applyDevelopments mutates them —
+      // see `computeFoundingTransfers`'s own docstring for why order matters here.
+      foundingDebitsBySourceSystem = foundingDebitsBySource(systems, dbWorld.developments);
       systems = applyDevelopments(systems, dbWorld.developments);
       constructionProjects = dbWorld.constructionProjects;
       // Persist the construction proposal-pressure counters into the market rows (proposalCycles only —
@@ -1886,11 +1947,30 @@ export async function runWorldTick(
       const cycleCatchUp = catchUpFactor(cadence.cycle);
       const snapshot = populationAtCycleStart;
       const abandonedThisCycle = new Set(abandonedSystemIds);
+      const foundingDebits = foundingDebitsBySourceSystem ?? new Map<string, number>();
       systems = systems.map((s): TickSystem => {
         if (abandonedThisCycle.has(s.id)) return s;
         const before = snapshot.get(s.id);
         if (before === undefined) return s;
-        return { ...s, populationChange: (s.population - before) / cycleCatchUp };
+        const realisedChange = s.population - before;
+        const next: TickSystem = { ...s, populationChange: realisedChange / cycleCatchUp };
+        // `WorldSystem.populationTrend` (see its own docstring, lib/world/types.ts): the same
+        // realised change, denominated per reference cycle exactly like `populationChange` above
+        // (`cycleCatchUp`), but with this cycle's founding debit added back out before it feeds the
+        // average — a donor handing settlers to a colony on purpose is not dying. The founding debit
+        // is a raw population count for this one actual cycle, so it is scaled by the same
+        // `cycleCatchUp` before it is read as a fraction of `before`, exactly as the realised change
+        // already is. Guarded against `before <= 0` rather than storing a non-finite value; a
+        // developed system reading 0 population at cycle start is a degenerate state Rule 2 would
+        // already have abandoned this same cycle, so this guard is defensive, not a live branch.
+        if (before > 0) {
+          const foundingMoved = foundingDebits.get(s.id) ?? 0;
+          const sample = (realisedChange + foundingMoved) / cycleCatchUp / before;
+          const prevTrend = s.populationTrend;
+          next.populationTrend =
+            prevTrend === undefined ? sample : prevTrend + POPULATION_TREND_ALPHA * (sample - prevTrend);
+        }
+        return next;
       });
     }
 

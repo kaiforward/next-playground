@@ -69,6 +69,13 @@ export interface TickSystem {
    *  round-trips through the join/merge and survives untouched for a system this economy cycle did
    *  not visit. */
   populationChange?: number;
+  /** The smoothed, founding-excluded population trend, optional — the `toTickSystems` join passes
+   *  `WorldSystem.populationTrend` through UNCOERCED, same absence convention as `populationChange`
+   *  above. No processor writes this field via the row-mutation path: the tick body computes and
+   *  writes it directly, alongside `populationChange`, from this row's own population and the
+   *  cycle's founding transfers — the field lives on the row purely so it round-trips through the
+   *  join/merge and survives untouched for a system this economy cycle did not visit. */
+  populationTrend?: number;
   /** This run's best-ranked dropped production opportunity, optional — the `toTickSystems` join
    *  passes `WorldSystem.buildBlocked` through UNCOERCED, same absence convention as `provision`/
    *  `supplyBand`/`criticalWeight`/`populationChange` above. No processor writes this field via the

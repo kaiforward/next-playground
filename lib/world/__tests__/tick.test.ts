@@ -42,6 +42,21 @@ async function runTicks(world: World, count: number, cadence?: TickCadence) {
   return w;
 }
 
+/** Runs `count` ticks and returns the LAST tick's full result (world + instrumentation) — unlike
+ *  `runTicks` above, which only carries the world forward. Shared by every "poisoning the input
+ *  changes no other output" test in this file: each needs the final tick's instrumentation to
+ *  compare, not just its world. */
+async function runTicksCapturingLast(world: World, count: number) {
+  let w = world;
+  let last: Awaited<ReturnType<typeof runWorldTick>> | undefined;
+  for (let i = 0; i < count; i++) {
+    last = await runWorldTick(w);
+    w = last.world;
+  }
+  if (!last) throw new Error("count must be > 0");
+  return last;
+}
+
 describe("runWorldTick", () => {
   it("advances meta.currentTick by exactly one per call", async () => {
     const world = generateWorld({ systemCount: 100, seed: 42 });
@@ -1526,17 +1541,6 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
       systems: base.systems.map((s): WorldSystem => ({ ...s, populationChange: -999_999 })),
     };
 
-    async function runTicksCapturingLast(world: World, count: number) {
-      let w = world;
-      let last: Awaited<ReturnType<typeof runWorldTick>> | undefined;
-      for (let i = 0; i < count; i++) {
-        last = await runWorldTick(w);
-        w = last.world;
-      }
-      if (!last) throw new Error("count must be > 0");
-      return last;
-    }
-
     const clean = await runTicksCapturingLast(base, 50);
     const dirty = await runTicksCapturingLast(poisoned, 50);
 
@@ -1705,6 +1709,151 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
     expect(refounded.habitabilityQuality).toBeUndefined();
     expect("habitabilityQuality" in refounded).toBe(false);
   }, 300_000);
+});
+
+// ── the smoothed, founding-excluded population trend ──────────────────
+// `WorldSystem.populationTrend` is written by the tick body alongside `populationChange`, at the
+// same write site — an EMA over the fractional realised change per reference cycle, with this
+// cycle's founding debit added back out before it feeds the average. These pin the founding
+// exclusion (the premise the whole alert-bar change rests on), the EMA update itself, and the same
+// absence/clear contract `populationChange` already carries.
+
+/** Reads `populationTrend` off a system row, failing with a clear message rather than silently
+ *  treating an unassessed system as 0 — the exact distinction these tests exist to pin. */
+function requirePopulationTrend(world: World, systemId: string): number {
+  const value = fixtureSystem(world, systemId).populationTrend;
+  if (value === undefined) throw new Error(`expected populationTrend to be assessed for ${systemId}`);
+  return value;
+}
+
+describe("runWorldTick — the smoothed population trend (WorldSystem.populationTrend)", () => {
+  it("excludes a colony-founding donation: the donor's trend is NOT dragged down by the seed it gave away", async () => {
+    // Same fixture and same-tick counterfactual technique as populationChange's own founding test
+    // above — two clones of the identical pre-tick world diverge ONLY in whether directed-build
+    // resolves this tick, isolating the donation's contribution.
+    const { sourceSystemId, completionPreWorld: preWorld } = await foundingFixture();
+
+    const withDonation = (await runWorldTick(preWorld)).world;
+    const withoutDonation = (await runWorldTick(preWorld, {
+      cadence: { cycle: CYCLE_LENGTH, logistics: LOGISTICS_INTERVAL, construction: NEVER },
+    })).world;
+
+    // populationChange still shows the donation (the founding debit is real realised change) — the
+    // premise that the two branches genuinely diverge on the donor's raw figure.
+    const changeWithDonation = requirePopulationChange(withDonation, sourceSystemId);
+    const changeWithoutDonation = requirePopulationChange(withoutDonation, sourceSystemId);
+    expect(changeWithDonation).toBeLessThan(changeWithoutDonation);
+
+    // populationTrend, by contrast, must read the SAME (within floating-point tolerance) whether or
+    // not the donation happened this cycle — the founding exclusion's whole point.
+    const trendWithDonation = requirePopulationTrend(withDonation, sourceSystemId);
+    const trendWithoutDonation = requirePopulationTrend(withoutDonation, sourceSystemId);
+    expect(trendWithDonation).toBeCloseTo(trendWithoutDonation, 9);
+  }, 120_000);
+
+  it("IS the founding-excluded fractional change on first assessment: with no prior trend, it equals the sample exactly, at both cadences", async () => {
+    // No prior populationTrend means the EMA seeds from the first sample (prevTrend undefined), so
+    // this pins the sample's own formula: (realisedChange ÷ catchUpFactor) ÷ population-at-cycle-start,
+    // with no founding this cycle to back out. Both cadences, like populationChange's own definitional
+    // test above — CYCLE_LENGTH alone can't tell a `÷ cycleCatchUp` mistake apart from a correct
+    // formula, since catchUpFactor(CYCLE_LENGTH) is 1.
+    for (const cycle of [CYCLE_LENGTH, CYCLE_LENGTH * 2]) {
+      const { world, systemId } = populationFixture(0.5, 0);
+      const before = fixtureSystem(world, systemId).population;
+      const cadence: TickCadence = { cycle, construction: NEVER, logistics: NEVER };
+      const atBoundary: World = { ...world, meta: { ...world.meta, currentTick: cycle - 1 } };
+      const after = (await runWorldTick(atBoundary, { cadence })).world;
+
+      const realisedChange = fixtureSystem(after, systemId).population - before;
+      const expectedSample = realisedChange / catchUpFactor(cycle) / before;
+      expect(requirePopulationTrend(after, systemId), `cycle ${cycle}`).toBeCloseTo(expectedSample, 9);
+      // Non-vacuous: growth actually moved population, so the sample isn't 0 ÷ before.
+      expect(Math.abs(realisedChange), `cycle ${cycle}`).toBeGreaterThan(0);
+    }
+  });
+
+  it("smooths a second cycle's sample toward it by the authored EMA weight — half-life ~3 reference cycles", async () => {
+    // alpha = 1 − 2^(−1/3), the exact derivation the write site uses — restated here, not imported,
+    // so this test would fail if the write site's formula ever silently drifted from its own
+    // docstring.
+    const alpha = 1 - 2 ** (-1 / 3);
+    const { world, systemId } = populationFixture(0.5, 0);
+
+    const afterFirstCycle = await runTicks(world, CYCLE_LENGTH, POPULATION_CADENCE);
+    const firstTrend = requirePopulationTrend(afterFirstCycle, systemId);
+
+    const beforeSecond = fixtureSystem(afterFirstCycle, systemId).population;
+    const afterSecondCycle = await runTicks(afterFirstCycle, CYCLE_LENGTH, POPULATION_CADENCE);
+    const realisedSecond = fixtureSystem(afterSecondCycle, systemId).population - beforeSecond;
+    const secondSample = realisedSecond / catchUpFactor(CYCLE_LENGTH) / beforeSecond;
+
+    const expectedSecondTrend = firstTrend + alpha * (secondSample - firstTrend);
+    expect(requirePopulationTrend(afterSecondCycle, systemId)).toBeCloseTo(expectedSecondTrend, 9);
+    // Non-vacuous: the second trend actually moved from the first, i.e. the sample and the prior
+    // trend genuinely differ enough for the EMA weighting to be visible.
+    expect(Math.abs(secondSample - firstTrend)).toBeGreaterThan(1e-6);
+  });
+
+  it("clears on abandonment and again on redevelopment, so a re-founded colony never inherits its predecessor's reading", () => {
+    const base = toTickSystems(generateWorld({ systemCount: 100, seed: 42 }))[0];
+    const stale: TickSystem = { ...base, populationTrend: -0.42 };
+
+    const [abandoned] = applyAbandonments([stale], [stale.id]);
+    expect(abandoned.populationTrend).toBeUndefined();
+
+    const restaled: TickSystem = { ...abandoned, populationTrend: -0.09 };
+    const donor: TickSystem = {
+      ...abandoned, id: `${abandoned.id}-donor`, population: 1000, populationTrend: -0.01,
+    };
+    const development: SystemDevelopment = {
+      systemId: restaled.id, sourceSystemId: donor.id, seedPop: 10, housingLevels: 1, stockManifest: [],
+    };
+    const [redeveloped] = applyDevelopments([restaled, donor], [development]);
+    expect(redeveloped.populationTrend).toBeUndefined();
+  });
+
+  it("a never-assessed system reports populationTrend absent, and it survives a save round-trip as absent, not 0", async () => {
+    const generated = generateWorld({ systemCount: 100, seed: 42 });
+    const developed = generated.systems.find((s) => s.control === "developed");
+    if (!developed) throw new Error("expected at least one developed system in a freshly generated world");
+    expect(developed.populationTrend).toBeUndefined();
+    expect("populationTrend" in developed).toBe(false);
+
+    // One real tick — day 1, not a cycle boundary — so the population processor never resolves and
+    // this system is never assessed, but the join/merge pair still runs unconditionally every tick.
+    const after = (await runWorldTick(generated)).world;
+    const untouched = after.systems.find((s) => s.id === developed.id);
+    if (!untouched) throw new Error("expected the ticked world to still carry this system");
+    expect(untouched.populationTrend).toBeUndefined();
+    expect("populationTrend" in untouched).toBe(false);
+
+    const result = deserialiseWorld(serialiseWorld(after));
+    if (!result.ok) throw new Error(`expected the save round-trip to succeed: ${result.error}`);
+    const reloaded = result.world.systems.find((s) => s.id === developed.id);
+    if (!reloaded) throw new Error("expected the reloaded world to still carry this system");
+    expect(reloaded.populationTrend).toBeUndefined();
+    expect("populationTrend" in reloaded).toBe(false);
+  });
+
+  it("nothing inside the tick reads populationTrend — poisoning the input changes no other output", async () => {
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const poisoned: World = {
+      ...base,
+      systems: base.systems.map((s): WorldSystem => ({ ...s, populationTrend: 999 })),
+    };
+
+    const clean = await runTicksCapturingLast(base, 50);
+    const dirty = await runTicksCapturingLast(poisoned, 50);
+
+    const strip = (w: World): World => ({
+      ...w,
+      systems: w.systems.map((s): WorldSystem => ({ ...s, populationTrend: undefined })),
+    });
+    expect(strip(dirty.world)).toEqual(strip(clean.world));
+    expect(dirty.markets).toEqual(clean.markets);
+    expect(dirty.events).toEqual(clean.events);
+    expect(dirty.instrumentation).toEqual(clean.instrumentation);
+  }, 30_000);
 });
 
 // ── the realised per-cycle survival-good stock change ─────────────────
@@ -1984,17 +2133,6 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
       ...base,
       markets: base.markets.map((m): WorldMarket => ({ ...m, stockChange: -999_999 })),
     };
-
-    async function runTicksCapturingLast(world: World, count: number) {
-      let w = world;
-      let last: Awaited<ReturnType<typeof runWorldTick>> | undefined;
-      for (let i = 0; i < count; i++) {
-        last = await runWorldTick(w);
-        w = last.world;
-      }
-      if (!last) throw new Error("count must be > 0");
-      return last;
-    }
 
     const clean = await runTicksCapturingLast(base, 50);
     const dirty = await runTicksCapturingLast(poisoned, 50);
@@ -2351,17 +2489,6 @@ describe("runWorldTick — nothing inside the tick reads buildBlocked back", () 
       })),
     };
 
-    async function runTicksCapturingLast(world: World, count: number) {
-      let w = world;
-      let last: Awaited<ReturnType<typeof runWorldTick>> | undefined;
-      for (let i = 0; i < count; i++) {
-        last = await runWorldTick(w);
-        w = last.world;
-      }
-      if (!last) throw new Error("count must be > 0");
-      return last;
-    }
-
     const clean = await runTicksCapturingLast(base, 50);
     const dirty = await runTicksCapturingLast(poisoned, 50);
 
@@ -2485,17 +2612,6 @@ describe("runWorldTick — nothing inside the tick reads buildOpportunity or col
         colonyOpportunity: { value: -999_999, work: -999_999 },
       })),
     };
-
-    async function runTicksCapturingLast(world: World, count: number) {
-      let w = world;
-      let last: Awaited<ReturnType<typeof runWorldTick>> | undefined;
-      for (let i = 0; i < count; i++) {
-        last = await runWorldTick(w);
-        w = last.world;
-      }
-      if (!last) throw new Error("count must be > 0");
-      return last;
-    }
 
     const clean = await runTicksCapturingLast(base, 50);
     const dirty = await runTicksCapturingLast(poisoned, 50);
