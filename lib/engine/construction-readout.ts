@@ -189,10 +189,11 @@ function progressOf(p: WorldConstructionProject): number {
   return unit > 0 && Number.isFinite(unit) ? Math.min(1, Math.max(0, p.workDone / unit)) : 0;
 }
 
-/** A work amount as a share of the project's total work, in [0,1] — `progress`'s units. A
- *  zero-work project reads 0 rather than dividing, matching `progressOf`. */
-export function workShareOf(work: number, workTotal: number): number {
-  return workTotal > 0 ? Math.min(1, Math.max(0, work / workTotal)) : 0;
+/** A work amount as a share of a row's work unit (`workUnit`), in [0,1] — `progress`'s units, so
+ *  the two can be drawn adjacently. A zero-work unit reads 0 rather than dividing, matching
+ *  `progressOf`. */
+export function workShareOf(work: number, unit: number): number {
+  return unit > 0 ? Math.min(1, Math.max(0, work / unit)) : 0;
 }
 
 /** Soonest-ETA first; stalled (null) last; ties by system name — a total, deterministic order. */

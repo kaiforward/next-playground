@@ -393,7 +393,7 @@ function fundsNothing(pool: number, cap: number): boolean {
  * completes, or `null` when it never will at this rate ("stalled" — a zero/invalid pool, or the
  * guard cap hit). Coarse by design: the real pool grows with population and is shared across the
  * queue, so this is an estimate at the current rate, not a countdown. The progress bar
- * (`workDone/workTotal`) is exact; only the ETA is approximate.
+ * (`workDone` over the row's work unit) is exact; only the ETA is approximate.
  *
  * A `kind: "build"` project that lands levels incrementally records `landedAt` only on the FIRST
  * cycle one of its levels lands — `etaCycles` means the cycle the NEXT level completes, matching
