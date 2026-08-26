@@ -709,9 +709,12 @@ describe("TrackerPanel — a build or colony row shows its time remaining on the
 
     // Read off the row's accessible name rather than a standalone text query: that is what proves
     // the figure rendered inside the row it describes, and it carries the sr-only label with it.
+    // A build row's figure is labelled "Next level" — its etaCycles reads the next level's landing,
+    // not the whole order's, so it must not reuse "Time remaining" (that stays the colony's label,
+    // whose etaCycles is still the whole founding — foundings never split).
     expect(
       screen.getByRole("button", {
-        name: (name) => name.includes("Rigel Yards") && name.includes("≈24 days"),
+        name: (name) => name.includes("Rigel Yards") && name.includes("Next level") && name.includes("≈24 days"),
       }),
     ).toBeInTheDocument();
     expect(
@@ -736,10 +739,11 @@ describe("TrackerPanel — a project row's card ETA matches the row's own coarse
     await user.tab(); // the row (Pinned and Colonising are empty — nothing else tabbable ahead of it)
     await screen.findByText("Rigel Yards", { selector: "h3" });
 
-    // Scoped to the card's own ETA line — the row's OWN figure carries the identical text
-    // ("≈24 days", etaCycles 4 through the same formatEta), so an unscoped text query would
-    // match both and fail on ambiguity.
-    const eta = screen.getByText("ETA").closest("div");
+    // Scoped to the card's own "Level ETA" line (a build row's card — plain "ETA" would misread as
+    // the whole order's completion, when etaCycles means the next level's landing) — the row's OWN
+    // figure carries the identical text ("≈24 days", etaCycles 4 through the same formatEta), so an
+    // unscoped text query would match both and fail on ambiguity.
+    const eta = screen.getByText("Level ETA").closest("div");
     expect(eta).toHaveTextContent("≈24 days");
   });
 });

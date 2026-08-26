@@ -262,8 +262,10 @@ auto queue policy proposes whole-level projects toward these ceilings — aware 
 flight, so it never double-commits — and the **per-faction construction pool** (`factionConstructionPool`,
 `lib/engine/construction.ts`) funds the front-first queue at a **per-build absorption cap**. A level is
 *under construction* (contributing nothing) until its accumulated work reaches its cost, then it **lands**
-as a full staffable level; build duration is therefore *emergent* (`work ÷ absorbed`, a floor wealth cannot
-buy past) and a larger pool spreads across more parallel fronts rather than finishing any one build faster.
+as a full staffable level — a multi-level bundle lands each level individually, the moment its own share
+of the work completes, rather than waiting for the whole bundle; build duration is therefore *emergent*
+(`work ÷ absorbed`, a floor wealth cannot buy past) and a larger pool spreads across more parallel fronts
+rather than finishing any one build faster.
 The gates sequence the work on their own: a system with no spare labour queues only housing (and only if
 `fed()` passes — survival satisfaction only, no unrest input), and industry is queued only where spare labour already exists.
 

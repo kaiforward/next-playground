@@ -934,9 +934,12 @@ describe("runDirectedBuildProcessor — interval invariance", () => {
   it("interval scaling preserves wall-clock minimum build time", async () => {
     // One in-flight project whose work is exactly 2 × the reference cap, pool ample (cap binds). At
     // interval 24 (catchUp 1) it lands after 2 cycles; at interval 12 (catchUp 0.5) the effective cap
-    // halves, so it needs 4 cycles — 2×24 = 4×12 = 48 wall-clock ticks either way.
+    // halves, so it needs 4 cycles — 2×24 = 4×12 = 48 wall-clock ticks either way. Single-level: a
+    // multi-level project here would land its first level (a real `buildingUpdates` write) the moment
+    // work crosses that level's own boundary, which is a different — also correct — invariant this
+    // case isn't testing.
     const project = (): WorldConstructionProject => ({
-      id: "e", kind: "build", origin: "auto", factionId: "f1", systemId: "B", buildingType: HOUSING_TYPE, levels: 5, workTotal: 2 * CAP, workDone: 0,
+      id: "e", kind: "build", origin: "auto", factionId: "f1", systemId: "B", buildingType: HOUSING_TYPE, levels: 1, workTotal: 2 * CAP, workDone: 0,
     });
     const landingCycle = async (interval: number): Promise<number> => {
       let rows: SystemBuildRow[] = [idleBuilder(5000)];
@@ -2462,6 +2465,27 @@ describe("runDirectedBuildProcessor — landing writes", () => {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(1000, 1),
     });
     expect(w.buildingUpdates).toContainEqual({ systemId: "s9", buildingType: "metals", count: 2 });
+  });
+
+  it("lands one level of a multi-level project and persists the rest as an open remainder", async () => {
+    // A build that crosses a level boundary without completing appears in the SAME cycle as both a
+    // landed row and an open row under one id. The two write paths must each take their own half:
+    // the count write adds only the levels that landed, and the persisted queue keeps the remainder
+    // (same id, the levels that did not) rather than dropping it or re-landing the whole bundle.
+    const split: WorldConstructionProject = {
+      kind: "build", id: "split", origin: "auto", factionId: "f1", systemId: "s9",
+      buildingType: "metals", levels: 2, workTotal: 4, workDone: 0,
+    };
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0), [split]);
+    // cap 2 = exactly one level's work (workTotal 4 ÷ 2 levels), so the project absorbs its first
+    // level this cycle and nothing more.
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(2, 1),
+    });
+    expect(w.buildingUpdates).toContainEqual({ systemId: "s9", buildingType: "metals", count: 1 });
+    const remainder = w.constructionProjects.filter((p) => p.id === "split");
+    expect(remainder).toHaveLength(1);
+    expect(remainder[0]).toMatchObject({ id: "split", levels: 1, workTotal: 2, workDone: 0 });
   });
 
   it("writes no building update for a landing that adds no levels", async () => {

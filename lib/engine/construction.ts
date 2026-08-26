@@ -72,14 +72,82 @@ export interface FundQueueResult {
   /** Still-open projects with advanced workDone (landed projects removed). Same order as the input. */
   projects: WorldConstructionProject[];
   /**
-   * Projects that COMPLETED this cycle (workDone reached workTotal), in the order they landed — full
-   * discriminated rows, so the caller applies each by its `kind` (a build increments counts; a
-   * colony-establish develops + seeds + houses). fundQueue stays decision-free: it moves rows between
-   * open and landed by work alone, never interpreting the kind.
+   * Projects that landed a level this cycle, in the order they landed — full discriminated rows, so
+   * the caller applies each by its `kind` (a build increments counts by `levels`; a colony-establish
+   * develops + seeds + houses). A `kind: "build"` row lands EITHER on full completion (workDone
+   * reaches workTotal) OR incrementally, the moment its workDone crosses a `workTotal ÷ levels`
+   * boundary: such a row SPLITS into a landed part (the whole levels just reached, its own
+   * workTotal/workDone shrunk to match) and an open remainder carrying the SAME id with the rest of
+   * the work — so a caller keying off id must expect up to one landed row and one open row sharing an
+   * id in the same result, and must sum across both to recover a project's total absorbed work this
+   * cycle. `colony_establish` rows never split — they land only whole, on full completion. fundQueue
+   * stays decision-free otherwise: it moves rows between open and landed by work alone, never
+   * interpreting the kind.
    */
   landed: WorldConstructionProject[];
   /** Total construction points actually consumed this cycle (Σ per-project take). */
   absorbed: number;
+}
+
+/**
+ * Split a `kind: "build"` row that absorbed work this cycle but did not complete, into a landed part
+ * carrying the whole levels its workDone now covers and an open remainder — same id — carrying the
+ * rest. `perLevelWork = workTotal ÷ levels` is invariant across repeated splits (both shrink by the
+ * same amount each time a level lands), so it can be recomputed from whatever the row currently
+ * carries. `k = floor(workDone ÷ perLevelWork)` uses a small tolerance on the ratio so a workDone that
+ * lands exactly on a level boundary, up to float error, still counts that level rather than rounding
+ * down and stranding it a cycle. `k` is capped at `levels − 1`: this is only ever called on a row
+ * already known not to have completed (workDone < workTotal), so a remainder always survives — this
+ * also keeps a single-level project from ever splitting (levels − 1 = 0), matching its old
+ * lands-whole-or-not-at-all behaviour. Returns null when nothing lands (`colony_establish` rows, or
+ * `k <= 0`) — the caller keeps such a row on its own open/landed decision unchanged.
+ *
+ * The remainder's workDone is floored at 0: when the tolerance rounds a just-short workDone UP to a
+ * boundary, the landed part claims a hair more work than was actually paid for, which would otherwise
+ * leave the remainder holding a negative epsilon.
+ */
+function splitLandedLevels(
+  p: WorldConstructionProject,
+): { landed: WorldConstructionProject; open: WorldConstructionProject } | null {
+  if (p.kind !== "build") return null;
+  const perLevelWork = p.levels > 0 ? p.workTotal / p.levels : 0;
+  if (!(perLevelWork > 0)) return null;
+  const ratio = p.workDone / perLevelWork;
+  const rounded = Math.round(ratio);
+  const raw = Math.abs(ratio - rounded) < 1e-9 ? rounded : Math.floor(ratio);
+  const k = Math.min(Math.max(0, raw), p.levels - 1);
+  if (k <= 0) return null;
+  const landedWork = k * perLevelWork;
+  return {
+    landed: { ...p, levels: k, workTotal: landedWork, workDone: landedWork },
+    open: {
+      ...p,
+      levels: p.levels - k,
+      workTotal: p.workTotal - landedWork,
+      workDone: Math.max(0, p.workDone - landedWork),
+    },
+  };
+}
+
+/** Land a stepped project (post-absorption workDone already applied) onto the open/landed split,
+ *  splitting a build row that crossed a level boundary without completing. Shared by `fundQueue` and
+ *  `fundQueueWithFloor`'s pass-B landing so the tick and every forecast agree on when a level lands. */
+function settleProject(
+  p: WorldConstructionProject,
+  open: WorldConstructionProject[],
+  landed: WorldConstructionProject[],
+): void {
+  if (p.workDone >= p.workTotal) {
+    landed.push(p);
+    return;
+  }
+  const split = splitLandedLevels(p);
+  if (split) {
+    landed.push(split.landed);
+    open.push(split.open);
+  } else {
+    open.push(p);
+  }
 }
 
 /**
@@ -89,7 +157,8 @@ export interface FundQueueResult {
  * `min(cap, its remaining work, pool left)` — the per-build cap sets a minimum build time
  * (`workTotal ÷ cap` cycles) that extra pool cannot bypass, and leftover pool cascades to the next
  * build so a large pool spreads across parallel fronts. A project whose accumulated work reaches its
- * total lands its whole `levels` and drops out of the returned queue.
+ * total lands its whole `levels`; a `kind: "build"` row that crosses a level boundary without
+ * completing lands that level and keeps the rest open under the same id (see `FundQueueResult.landed`).
  *
  * Pure and deterministic: returns fresh project rows, never mutates the inputs.
  */
@@ -113,12 +182,7 @@ export function fundQueue(
     poolLeft -= absorbed;
     absorbedTotal += absorbed;
     const workDone = p.workDone + absorbed;
-
-    if (workDone >= p.workTotal) {
-      landed.push({ ...p, workDone });
-    } else {
-      open.push({ ...p, workDone });
-    }
+    settleProject({ ...p, workDone }, open, landed);
   }
 
   return { projects: open, landed, absorbed: absorbedTotal };
@@ -232,8 +296,7 @@ export function fundQueueWithFloor(
     generalLeft -= take;
     absorbedTotal += take;
     const workDone = p.workDone + already + take;
-    if (workDone >= p.workTotal) landed.push({ ...p, workDone });
-    else open.push({ ...p, workDone });
+    settleProject({ ...p, workDone }, open, landed);
   }
   return { projects: open, landed, absorbed: absorbedTotal };
 }
@@ -330,7 +393,13 @@ function fundsNothing(pool: number, cap: number): boolean {
  * completes, or `null` when it never will at this rate ("stalled" — a zero/invalid pool, or the
  * guard cap hit). Coarse by design: the real pool grows with population and is shared across the
  * queue, so this is an estimate at the current rate, not a countdown. The progress bar
- * (`workDone/workTotal`) is exact; only the ETA is approximate.
+ * (`workDone` over the row's work unit) is exact; only the ETA is approximate.
+ *
+ * A `kind: "build"` project that lands levels incrementally records `landedAt` only on the FIRST
+ * cycle one of its levels lands — `etaCycles` means the cycle the NEXT level completes, matching
+ * what the progress bar and next-cycle-gain readout both describe (the building currently being
+ * worked on, not the whole multi-level order). A project that only ever lands once is unaffected:
+ * its first landing is its only one.
  */
 export function forecastEtaCycles(
   projects: WorldConstructionProject[],
@@ -349,7 +418,7 @@ export function forecastEtaCycles(
   let queue = projects.map((p) => ({ ...p }));
   for (let cycle = 1; cycle <= maxCycles && queue.length > 0; cycle++) {
     const { projects: open, landed } = fundCycle(queue, pool, cap, capFor);
-    for (const l of landed) landedAt.set(l.id, cycle);
+    for (const l of landed) if (!landedAt.has(l.id)) landedAt.set(l.id, cycle);
     queue = open;
   }
   return projects.map((p) => landedAt.get(p.id) ?? null);
@@ -394,11 +463,18 @@ export function forecastIndependentEtaCycles(
     let leftover = pool;
     if (queue.length > 0) {
       // fundQueue doesn't expose its internal leftover pool, so derive it from the work each
-      // committed project actually absorbed this cycle (new workDone − old workDone).
+      // committed project actually absorbed this cycle (new workDone − old workDone). A split build
+      // row leaves its landed part and open remainder sharing one id in [open, landed] — sum each
+      // id's post-step workDone across every row bearing it FIRST, then subtract that id's single
+      // pre-step workDone once, or a split id would have its prior workDone subtracted twice.
       const before = new Map(queue.map((p) => [p.id, p.workDone]));
       const { projects: open, landed } = fundCycle(queue, pool, cap, capFor);
+      const totalDoneById = new Map<string, number>();
+      for (const p of [...open, ...landed]) {
+        totalDoneById.set(p.id, (totalDoneById.get(p.id) ?? 0) + p.workDone);
+      }
       let absorbedByCommitted = 0;
-      for (const p of [...open, ...landed]) absorbedByCommitted += p.workDone - (before.get(p.id) ?? p.workDone);
+      for (const [id, totalDone] of totalDoneById) absorbedByCommitted += totalDone - (before.get(id) ?? totalDone);
       leftover = pool - absorbedByCommitted;
       queue = open;
     }

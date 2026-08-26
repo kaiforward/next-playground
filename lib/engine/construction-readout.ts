@@ -37,10 +37,16 @@ interface ConstructionRowBase {
   systemName: string;
   /** Who committed this row: the autonomic planner, or a player order (display + cancel-permission). */
   origin: "auto" | "player";
-  /** Exact workDone/workTotal in [0,1]. */
+  /** Exact workDone/workUnit in [0,1] — the level currently being built for a `kind: "build"` row,
+   *  the whole founding for a `colony_establish` row (see `workUnit`). */
   progress: number;
   workDone: number;
   workTotal: number;
+  /** The denominator `progress` and `nextCycleGain`'s bar-fill share both divide by: one level's
+   *  work (`workTotal / levels`) for a build row, `workTotal` for a colony row. Exposed so a
+   *  consumer drawing its own bar (raw value/max, not the precomputed `progress` fraction) uses the
+   *  same unit rather than re-deriving it and risking drift. */
+  workUnit: number;
   /** Coarse ≈cycles to completion at the current rate; null = stalled. */
   etaCycles: number | null;
   /** Construction points this project will absorb on the next funded cycle (0 = starved/"waiting"). Exact for the
@@ -115,9 +121,9 @@ export interface FundedFrontRow {
    *  row's own title convention (`components/construction/construction-row.tsx`). */
   label: string;
   progress: number;
-  /** Next funded cycle's gain as a share of total work, in [0,1] — `nextCycleGain / workTotal`,
-   *  the same quantity in the same units as `progress` so a consumer can draw the two adjacently
-   *  without holding the project's work totals. */
+  /** Next funded cycle's gain as a share of the row's work unit, in [0,1] — the same denominator
+   *  `progress` divides by (one level's work for a build row, the whole project's work for a
+   *  colony), so a consumer can draw the two adjacently without holding the project's work totals. */
   nextCycleProgress: number;
   etaCycles: number | null;
 }
@@ -166,14 +172,28 @@ export function describeBuildProject(buildingType: string): string {
   return `industry · produces ${GOODS[buildingType]?.name ?? buildingType}`;
 }
 
-function progressOf(p: WorldConstructionProject): number {
-  return p.workTotal > 0 ? Math.min(1, Math.max(0, p.workDone / p.workTotal)) : 0;
+/**
+ * The work unit a project's bar is measured in — one level's work for a `kind: "build"` row (it
+ * splits and lands level-by-level, so its bar and ETA both describe the level currently being
+ * built, not the whole multi-level order), the whole project's work for `colony_establish` (a
+ * founding never splits, so its bar means the whole founding). Falls back to `workTotal` when
+ * `levels` is unusable (`<= 0` or non-finite), matching how a zero `workTotal` is already guarded.
+ */
+function workUnitOf(p: WorldConstructionProject): number {
+  if (p.kind !== "build") return p.workTotal;
+  return p.levels > 0 && Number.isFinite(p.levels) ? p.workTotal / p.levels : p.workTotal;
 }
 
-/** A work amount as a share of the project's total work, in [0,1] — `progress`'s units. A
- *  zero-work project reads 0 rather than dividing, matching `progressOf`. */
-export function workShareOf(work: number, workTotal: number): number {
-  return workTotal > 0 ? Math.min(1, Math.max(0, work / workTotal)) : 0;
+function progressOf(p: WorldConstructionProject): number {
+  const unit = workUnitOf(p);
+  return unit > 0 && Number.isFinite(unit) ? Math.min(1, Math.max(0, p.workDone / unit)) : 0;
+}
+
+/** A work amount as a share of a row's work unit (`workUnit`), in [0,1] — `progress`'s units, so
+ *  the two can be drawn adjacently. A zero-work unit reads 0 rather than dividing, matching
+ *  `progressOf`. */
+export function workShareOf(work: number, unit: number): number {
+  return unit > 0 ? Math.min(1, Math.max(0, work / unit)) : 0;
 }
 
 /** Soonest-ETA first; stalled (null) last; ties by system name — a total, deterministic order. */
@@ -197,12 +217,14 @@ export function nextCycleGains(
   capFor?: ProjectCap,
 ): number[] {
   const { projects: open, landed } = fundCycle(projects, pool, cap, capFor);
-  // Keyed by project id — unique per queue (minted from the world's nextId counter), so each project
-  // reads back its own post-step workDone; a duplicate id would cross-wire two projects' gains.
-  const doneById = new Map<string, number>();
-  for (const p of open) doneById.set(p.id, p.workDone);
-  for (const p of landed) doneById.set(p.id, p.workDone);
-  return projects.map((p) => Math.max(0, (doneById.get(p.id) ?? p.workDone) - p.workDone));
+  // Keyed by project id and SUMMED, not overwritten: a build that crosses a level boundary without
+  // completing splits into a landed part and an open remainder sharing one id (`FundQueueResult.landed`),
+  // so a project's true absorbed work is the sum of post-step workDone across every row bearing its id,
+  // not whichever of open/landed happened to be written last.
+  const totalDoneById = new Map<string, number>();
+  for (const p of open) totalDoneById.set(p.id, (totalDoneById.get(p.id) ?? 0) + p.workDone);
+  for (const p of landed) totalDoneById.set(p.id, (totalDoneById.get(p.id) ?? 0) + p.workDone);
+  return projects.map((p) => Math.max(0, (totalDoneById.get(p.id) ?? p.workDone) - p.workDone));
 }
 
 /** One colony's staging position for the coming cycle, as the tick's own plan would resolve it. */
@@ -367,6 +389,7 @@ export function computeFactionConstruction(
       progress: progressOf(p),
       workDone: p.workDone,
       workTotal: p.workTotal,
+      workUnit: workUnitOf(p),
       etaCycles: etas[i],
       nextCycleGain: gains[i],
     };
@@ -378,7 +401,7 @@ export function computeFactionConstruction(
         kind: p.kind,
         label: p.kind === "colony_establish" ? "Establish Colony" : `${buildingLabel(p.buildingType)} ×${p.levels}`,
         progress: base.progress,
-        nextCycleProgress: workShareOf(gains[i], p.workTotal),
+        nextCycleProgress: workShareOf(gains[i], workUnitOf(p)),
         etaCycles: base.etaCycles,
       });
     }

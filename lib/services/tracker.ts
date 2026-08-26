@@ -100,7 +100,7 @@ export function getTrackerData(): TrackerData {
       systemName: row.systemName,
       label: "Establish Colony",
       progress: row.progress,
-      nextCycleProgress: workShareOf(row.nextCycleGain, row.workTotal),
+      nextCycleProgress: workShareOf(row.nextCycleGain, row.workUnit),
       etaCycles: row.etaCycles,
     }));
 

@@ -341,9 +341,12 @@ interface WorldConstructionProjectBase {
 }
 
 /**
- * A queued order to build `levels` whole levels of `buildingType` at `systemId`. Contributes zero
- * capacity until `workDone` reaches `workTotal`, then lands all `levels` at once. Duration is emergent
- * (work ÷ funded points), never a stored timer.
+ * A queued order to build `levels` whole levels of `buildingType` at `systemId`. Levels land
+ * incrementally as work accrues: each time `workDone` crosses a `workTotal ÷ levels` boundary, the
+ * funding step lands that level immediately (a real building-count increase) and this row's own
+ * `levels`/`workTotal`/`workDone` shrink to the remaining, still-open levels — so a project's stored
+ * row always describes only what has NOT yet landed. Duration is emergent (work ÷ funded points),
+ * never a stored timer.
  */
 export interface WorldBuildProject extends WorldConstructionProjectBase {
   kind: "build";

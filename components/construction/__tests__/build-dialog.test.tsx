@@ -67,4 +67,19 @@ describe("BuildDialog — feasibility readout", () => {
     expect(screen.getByText("7")).toBeInTheDocument();
     expect(screen.queryByText("No ceiling")).not.toBeInTheDocument();
   });
+
+  it("labels the ETA readout 'First level', not 'ETA' — the probe is always a one-level order", () => {
+    render(
+      <BuildDialog
+        systemId="s-1"
+        systemName="Sol"
+        options={[option({ buildingType: "metals", label: "Metals", etaCycles: 3 })]}
+        open
+        onClose={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("First level")).toBeInTheDocument();
+    expect(screen.queryByText("ETA")).not.toBeInTheDocument();
+  });
 });

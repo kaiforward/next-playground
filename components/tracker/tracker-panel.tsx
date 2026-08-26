@@ -204,7 +204,7 @@ function TrackerPanelContent({
                 key={row.projectId}
                 systemId={row.systemId}
                 name={`${row.systemName} · ${row.label}`}
-                figures={etaFigures(row)}
+                figures={etaFigures(row, "Building")}
                 progress={row.progress}
                 nextCycleProgress={row.nextCycleProgress}
                 tone="build"
@@ -228,7 +228,7 @@ function TrackerPanelContent({
                 key={row.systemId}
                 systemId={row.systemId}
                 name={row.systemName}
-                figures={etaFigures(row)}
+                figures={etaFigures(row, "Colonising")}
                 progress={row.progress}
                 nextCycleProgress={row.nextCycleProgress}
                 tone="colony"
@@ -287,11 +287,13 @@ function pinnedFigures(row: TrackerPinnedRow): TrackerFigure[] {
  *  in the row's ordinary grey: the Tracker is a quiet list, and calling out trouble is the alert
  *  bar's job, not a colour on every stalled row.
  *
- *  Typed on `TrackerRowBase` rather than `TrackerBuildRow | TrackerColonyRow`: this only ever reads
- *  base fields, and `TrackerColonyRow` is itself a bare alias of `TrackerRowBase`, so the union
- *  constrained nothing a caller could rely on. */
-function etaFigures(row: TrackerRowBase): TrackerFigure[] {
-  return [{ label: "Time remaining", value: formatEta(row.etaCycles) }];
+ *  The label differs by kind because `etaCycles` no longer means the same thing for both: a build
+ *  row's title already reads "×N" for levels still to build, so its ETA — the next level's landing —
+ *  needs "Next level" to avoid reading as the whole order's completion. A colony never splits, so
+ *  its ETA is still the whole founding and keeps "Time remaining". */
+function etaFigures(row: TrackerRowBase, kind: "Building" | "Colonising"): TrackerFigure[] {
+  const label = kind === "Building" ? "Next level" : "Time remaining";
+  return [{ label, value: formatEta(row.etaCycles) }];
 }
 
 /** A project card's accessible name. A card is a `dialog` to a screen reader, and an unnamed
@@ -370,7 +372,7 @@ function ProjectCard({ row, kind }: { row: TrackerRowBase; kind: "Building" | "C
               card's number and the bar it describes can never drift apart or repeat the units bug. */}
           <span className="font-mono text-text-primary">{Math.round(barWidthPct(row.progress))}%</span>
         </StatRow>
-        <StatRow label="ETA">
+        <StatRow label={kind === "Building" ? "Level ETA" : "ETA"}>
           <span className="font-mono text-text-primary">{formatEta(row.etaCycles)}</span>
         </StatRow>
       </StatList>
