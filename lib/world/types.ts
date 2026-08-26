@@ -178,9 +178,11 @@ export interface WorldSystem {
    *  processor visited this cycle (0 included, distinct from absent), untouched for one it did not,
    *  and cleared — not carried forward — on abandonment or redevelopment (`applyAbandonments`,
    *  `applyDevelopments`, both `lib/world/tick.ts`) so a re-founded colony never inherits its
-   *  predecessor's reading. Authored for one job — the Famine alert sorts by time to abandonment,
-   *  and this is the decay rate that countdown extrapolates from; a reader wanting a different shape
-   *  (a trailing average, a longer window) adds its own field rather than redefining this one.
+   *  predecessor's reading. Authored for one job — the Population collapse alert sorts by time to
+   *  abandonment, and this is the decay rate that countdown extrapolates from; a reader wanting a
+   *  different shape (a trailing average, a longer window) adds its own field rather than redefining
+   *  this one, which is exactly what `populationTrend` below is. Signed: negative means shrinking,
+   *  positive means growing — `populationTrend` carries the same polarity deliberately.
    *  Nothing inside the tick reads it. */
   populationChange?: number;
   /** A smoothed, founding-excluded reading of whether a world is dying — an exponential moving
