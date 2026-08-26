@@ -111,6 +111,14 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   First pressure has arrived: derived demand shipped and the harness calm-regime pins were
   re-derived against it (BUSY fixture now pins 18 suppressed pairs and 7 teardown levels, up from
   0/0) — mild, not the full re-read; the both-scales re-read below still stands.
+  Riding on the same re-read: the alert bar's **Dying worlds** entry threshold
+  (`POPULATION_COLLAPSE_TREND_THRESHOLD`, `lib/services/alerts.ts`) is authored from meaning —
+  `declineRate × REFERENCE_INTERVAL × STRIKE_PARAMS.threshold`, ~0.78%/cycle, about 65% of the
+  model's own decline ceiling — and has never been validated against a real dying world, because
+  this galaxy produces none (abandonment 0/0/0 at both horizons; the steepest decliner at
+  equilibrium reads −0.15%/cycle, roughly 5× shallower than the bar). Silence is the correct output
+  today, but "correctly quiet" and "set too high to ever fire" are indistinguishable until a world
+  actually dies. Re-read it against the first genuine decline case.
   *Next step:* when a mechanic that applies real pressure ships (war, events split, disasters
   pass, monetary demand), re-read both scales and re-derive the harness bands against it.
   *Don't:* re-tune the thresholds (0.65 / 0.75 / 120 cycles) downward to make the mechanics
