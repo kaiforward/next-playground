@@ -317,9 +317,10 @@ describe("runTickHarness: the per-tick instrumentation", () => {
     // horizon), falling to 0.324 by 20,000 — an accepted calm regime (Kai, 2026-08-24), not a
     // broken wire, with a roadmap row owning re-arming strikes once adversarial mechanics ship.
     // Derived demand (the planner's spill of unmet tier-1+ shortfall onto uncovered inputs)
-    // applies the first real pressure this fixture has seen: 18 of the eligible pairs read
-    // suppressed on BUSY's horizon. Pinned exactly, as the regime's signature — a drift in either
-    // direction is a mechanics change to re-read, not noise. The accounting mechanism this
+    // applies the first real pressure this fixture has seen, and per-level project landing (levels
+    // land as work accrues, so capacity arrives earlier) shifts when that pressure meets built
+    // capacity: 19 of the eligible pairs read suppressed on BUSY's horizon. Pinned exactly, as the
+    // regime's signature — a drift in either direction is a mechanics change to re-read, not noise. The accounting mechanism this
     // number depends on — a live pair actually incrementing `suppressed` — is proven where it can
     // be constructed directly, not on this dormant galaxy: lib/engine/__tests__/directed-build.test.ts
     // "planFactionProposals: strikeSuppressedProposals — per-eligible-pair suppression count" and
@@ -330,7 +331,7 @@ describe("runTickHarness: the per-tick instrumentation", () => {
     const s = results.strikeSuppression;
 
     expect(s.eligible).toBeGreaterThan(0);
-    expect(s.suppressed).toBe(18);
+    expect(s.suppressed).toBe(19);
     expect(s.suppressed).toBeLessThanOrEqual(s.eligible);
     expect(s.ratePerEligible).toBeCloseTo(s.suppressed / s.eligible, 12);
     expect(s.ratePerEligible).toBeGreaterThan(0);
@@ -472,8 +473,9 @@ describe("runTickHarness: episode costs, founding trajectory, the ratchet check"
     //
     // totalTeardownLevels is deliberately pinned rather than dropped: derived demand (the
     // planner's spill of unmet tier-1+ shortfall onto uncovered inputs) applies enough pressure
-    // on BUSY's horizon for the decay channels to shed 7 levels — the first nonzero this fixture
-    // has read. Pinned exactly as the regime's signature; a drift in either direction is a
+    // on BUSY's horizon for the decay channels to shed levels, and per-level project landing puts
+    // capacity on the ground earlier — earlier-landed levels sit exposed to idle-decay longer, so
+    // the run sheds 11. Pinned exactly as the regime's signature; a drift in either direction is a
     // mechanics change to re-read, not a regression in this instrument. The counter's own wiring
     // — that a torn-down level actually reaches
     // `totalTeardownLevels` — is proven at unit level where it can be forced to fire:
@@ -484,7 +486,7 @@ describe("runTickHarness: episode costs, founding trajectory, the ratchet check"
     // `totalTeardownLevels` and asserts the total. Together they cover both hops of the wire this
     // test cannot exercise on a dormant galaxy.
     const results = await runBusy();
-    expect(results.episodeCosts.totalTeardownLevels).toBe(7);
+    expect(results.episodeCosts.totalTeardownLevels).toBe(11);
     expect(results.foundingTrajectory.buckets[0].n).toBeGreaterThan(0); // colonies founded in-window
     expect(results.provisionRatchet.buckets.length).toBeGreaterThan(0);
 

@@ -177,6 +177,41 @@ describe("fundQueue", () => {
   });
 });
 
+describe("fundQueue — per-level landing (split)", () => {
+  it("lands 1 of 2 levels when funded to exactly half its work, keeping the remainder open under the same id", () => {
+    // The roadmap's canonical case: a 2-level build, workTotal 20 (perLevelWork 10), funded exactly
+    // to 10 — one whole level's worth.
+    const r = fundQueue([project("p", HOUSING_TYPE, 2, 0, 20)], 10, 10);
+    expect(r.landed).toHaveLength(1);
+    expect(r.landed[0]).toMatchObject({ id: "p", levels: 1, workTotal: 10, workDone: 10 });
+    expect(r.projects).toHaveLength(1);
+    expect(r.projects[0]).toMatchObject({ id: "p", levels: 1, workTotal: 10, workDone: 0 });
+  });
+
+  it("counts a level whose workDone lands exactly on its boundary despite float imprecision", () => {
+    // workTotal 1 over 3 levels gives a perLevelWork of 1/3, which is not exactly representable —
+    // two levels' worth of work computed the same way the engine would accumulate it must still
+    // floor to k=2, not 1.
+    const perLevelWork = 1 / 3;
+    const twoLevelsWorth = perLevelWork + perLevelWork; // 0.6666666666666666
+    const r = fundQueue([project("p", HOUSING_TYPE, 3, twoLevelsWorth, 1)], 0, 10);
+    // Zero pool: workDone is exactly the pre-funded boundary value, so this only exercises the split
+    // math on the boundary, not the absorption step.
+    expect(r.projects).toHaveLength(1);
+    expect(r.projects[0]).toMatchObject({ id: "p", levels: 1 });
+    expect(r.landed).toHaveLength(1);
+    expect(r.landed[0]).toMatchObject({ id: "p", levels: 2 });
+  });
+
+  it("does not split a single-level project — it lands whole on completion exactly as before", () => {
+    const cap = 10;
+    const r = fundQueue([project("p", HOUSING_TYPE, 1, 0, 15)], cap, cap);
+    expect(r.landed).toHaveLength(0);
+    expect(r.projects).toHaveLength(1);
+    expect(r.projects[0]).toMatchObject({ levels: 1, workDone: 10 });
+  });
+});
+
 /** Build an open project at an explicit system (the floor gates on which system a build targets). */
 function projectAt(
   id: string,
@@ -348,6 +383,17 @@ describe("fundQueueWithFloor", () => {
     const ordered = [projectAt("c", "colony", "food", 1, 0, 1000)];
     const raised = fundQueueWithFloor(ordered, 500, cap, 0, () => false, () => cap * 5);
     expect(raised.projects[0].workDone).toBe(cap);
+  });
+
+  it("splits a build row that crosses a level boundary without completing, across the reserve + general passes", () => {
+    // 2-level build, workTotal 20 (perLevelWork 10): the reserve funds 6, the general pass tops it up
+    // to 10 — exactly a level's worth — so it splits identically to the plain fundQueue case.
+    const twoLevel = projectAt("p", "colony", "food", 2, 0, 20);
+    const r = fundQueueWithFloor([twoLevel], 10, 10, 6, () => true);
+    expect(r.landed).toHaveLength(1);
+    expect(r.landed[0]).toMatchObject({ id: "p", levels: 1, workTotal: 10, workDone: 10 });
+    expect(r.projects).toHaveLength(1);
+    expect(r.projects[0]).toMatchObject({ id: "p", levels: 1, workTotal: 10, workDone: 0 });
   });
 });
 
@@ -638,6 +684,12 @@ describe("forecastEtaCycles — the stall guard and the cycle horizon", () => {
     expect(forecastEtaCycles([project("p", HOUSING_TYPE, 1, 0, 30)], 10, 10, 3)).toEqual([3]);
     expect(forecastEtaCycles([project("p", HOUSING_TYPE, 1, 0, 40)], 10, 10, 3)).toEqual([null]);
   });
+
+  it("reports the LAST level's landing cycle for a project that lands levels incrementally", () => {
+    // 2-level build, workTotal 20 (perLevelWork 10), cap/pool 5: level 1 lands on cycle 2, level 2
+    // (the whole project) on cycle 4 — etaCycles must read 4, not the first partial landing.
+    expect(forecastEtaCycles([project("p", HOUSING_TYPE, 2, 0, 20)], 5, 5)).toEqual([4]);
+  });
 });
 
 describe("forecastIndependentEtaCycles — the stall guard, remaining work and the horizon", () => {
@@ -661,6 +713,21 @@ describe("forecastIndependentEtaCycles — the stall guard, remaining work and t
 
   it("still reports a hypothetical that lands on the very last cycle of the horizon", () => {
     expect(forecastIndependentEtaCycles([], [project("h", HOUSING_TYPE, 1, 0, 30)], 100, 10, 3)).toEqual([3]);
+  });
+
+  it("computes the correct leftover pool when a committed row splits mid-cycle", () => {
+    // Committed: a 2-level build, perLevelWork 1000 (workTotal 2000), poised 10 short of the first
+    // level boundary. pool 12, cap 10: cycle 1 absorbs exactly 10, landing level 1 (workDone hits the
+    // 1000 boundary) and leaving level 2 open under the same id at workDone 0 — the row SPLITS this
+    // cycle. A naive per-row diff (each of the split's landed/open halves diffed against the row's one
+    // prior workDone, then summed) double-subtracts that prior workDone and computes a nonsense
+    // leftover; the correct absorption is the cap (10), so leftover for the hypothetical is 12 − 10 = 2.
+    const committed = [project("c", HOUSING_TYPE, 2, 990, 2000)];
+    // Level 2 (workTotal 1000, far beyond what 12/cycle can drain in 50 cycles) never completes, so the
+    // committed row keeps absorbing exactly cap (10) every cycle after the split too — leftover stays
+    // pinned at 2 for the whole run, making the hypothetical's landing cycle an exact, unambiguous check.
+    const hypothetical = project("h", HOUSING_TYPE, 1, 0, 100);
+    expect(forecastIndependentEtaCycles(committed, [hypothetical], 12, 10, 50)).toEqual([50]);
   });
 });
 

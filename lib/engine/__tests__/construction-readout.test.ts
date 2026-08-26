@@ -123,6 +123,19 @@ describe("nextCycleGains", () => {
   it("returns 0 for every project when the pool is zero", () => {
     expect(nextCycleGains([build("a", 8, 0)], 0, 4)).toEqual([0]);
   });
+
+  it("returns the true absorbed points for a project that splits into a landed part + open remainder this cycle", () => {
+    // 2-level build, workTotal 20 (perLevelWork 10), funded past the boundary (15 of 20) — it splits
+    // into a landed level-1 row (workDone 10) AND an open remainder that itself carries 5 more work
+    // (workDone 5), both id "a". The true absorbed total is 15, not 10: keying a single doneById entry
+    // per id (open written, then landed overwriting it, last-write-wins) would read only the landed
+    // half's workDone (10) and silently drop the 5 points the open remainder also advanced.
+    const twoLevel: WorldConstructionProject = {
+      kind: "build", id: "a", origin: "auto", factionId: "f1", systemId: "s1",
+      buildingType: "housing", levels: 2, workTotal: 20, workDone: 0,
+    };
+    expect(nextCycleGains([twoLevel], 15, 20)).toEqual([15]);
+  });
 });
 
 describe("buildingLabel / describeBuildProject", () => {

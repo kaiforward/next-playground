@@ -934,9 +934,12 @@ describe("runDirectedBuildProcessor — interval invariance", () => {
   it("interval scaling preserves wall-clock minimum build time", async () => {
     // One in-flight project whose work is exactly 2 × the reference cap, pool ample (cap binds). At
     // interval 24 (catchUp 1) it lands after 2 cycles; at interval 12 (catchUp 0.5) the effective cap
-    // halves, so it needs 4 cycles — 2×24 = 4×12 = 48 wall-clock ticks either way.
+    // halves, so it needs 4 cycles — 2×24 = 4×12 = 48 wall-clock ticks either way. Single-level: a
+    // multi-level project here would land its first level (a real `buildingUpdates` write) the moment
+    // work crosses that level's own boundary, which is a different — also correct — invariant this
+    // case isn't testing.
     const project = (): WorldConstructionProject => ({
-      id: "e", kind: "build", origin: "auto", factionId: "f1", systemId: "B", buildingType: HOUSING_TYPE, levels: 5, workTotal: 2 * CAP, workDone: 0,
+      id: "e", kind: "build", origin: "auto", factionId: "f1", systemId: "B", buildingType: HOUSING_TYPE, levels: 1, workTotal: 2 * CAP, workDone: 0,
     });
     const landingCycle = async (interval: number): Promise<number> => {
       let rows: SystemBuildRow[] = [idleBuilder(5000)];

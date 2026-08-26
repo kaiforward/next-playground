@@ -197,12 +197,14 @@ export function nextCycleGains(
   capFor?: ProjectCap,
 ): number[] {
   const { projects: open, landed } = fundCycle(projects, pool, cap, capFor);
-  // Keyed by project id — unique per queue (minted from the world's nextId counter), so each project
-  // reads back its own post-step workDone; a duplicate id would cross-wire two projects' gains.
-  const doneById = new Map<string, number>();
-  for (const p of open) doneById.set(p.id, p.workDone);
-  for (const p of landed) doneById.set(p.id, p.workDone);
-  return projects.map((p) => Math.max(0, (doneById.get(p.id) ?? p.workDone) - p.workDone));
+  // Keyed by project id and SUMMED, not overwritten: a build that crosses a level boundary without
+  // completing splits into a landed part and an open remainder sharing one id (`FundQueueResult.landed`),
+  // so a project's true absorbed work is the sum of post-step workDone across every row bearing its id,
+  // not whichever of open/landed happened to be written last.
+  const totalDoneById = new Map<string, number>();
+  for (const p of open) totalDoneById.set(p.id, (totalDoneById.get(p.id) ?? 0) + p.workDone);
+  for (const p of landed) totalDoneById.set(p.id, (totalDoneById.get(p.id) ?? 0) + p.workDone);
+  return projects.map((p) => Math.max(0, (totalDoneById.get(p.id) ?? p.workDone) - p.workDone));
 }
 
 /** One colony's staging position for the coming cycle, as the tick's own plan would resolve it. */
