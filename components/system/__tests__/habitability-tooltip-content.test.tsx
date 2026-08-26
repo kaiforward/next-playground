@@ -7,33 +7,37 @@ import type { FillOrderRow } from "@/lib/utils/substrate";
 // without an open interaction jsdom can't reliably drive) so the list itself is asserted against
 // accessible text, exactly what a reader of the real tooltip sees.
 
-describe("HabitabilityTooltipContent — headline stat, growth modifier, every habitable-land body in score order, marginal body marked", () => {
-  it("renders the headline habitability stat and its population-growth modifier from growthMultiplier alone", () => {
+describe("HabitabilityTooltipContent — headline stat, every habitable-land body in score order, marginal body marked", () => {
+  it("renders the headline habitability stat from growthMultiplier alone", () => {
     const fillOrder: FillOrderRow[] = [
       { className: "Jungle World", score: 0.7, occupied: true, frontier: true, partial: true },
     ];
     const { container } = render(<HabitabilityTooltipContent growthMultiplier={0.85} fillOrder={fillOrder} />);
     expect(container.textContent).toContain("Habitability: 85%");
-    expect(container.textContent).toContain("Population growth: −15%");
   });
 
-  it("a neutral growthMultiplier (1.0 — the ceiling, never a midpoint) reads 0%, never a signed value", () => {
+  it("a neutral growthMultiplier (1.0 — the ceiling, never a midpoint) reads 100%, never 0%", () => {
     const fillOrder: FillOrderRow[] = [
       { className: "Gaia World", score: 1.0, occupied: true, frontier: true, partial: false },
     ];
     const { container } = render(<HabitabilityTooltipContent growthMultiplier={1} fillOrder={fillOrder} />);
+    // The unpenalised case is the one a wrong scale reads backwards: a perfectly habitable system
+    // is at FULL growth, and anything phrased as a modifier renders it "0%", which reads as no
+    // growth at all.
     expect(container.textContent).toContain("Habitability: 100%");
-    expect(container.textContent).toContain("Population growth: 0%");
-    expect(container.textContent).not.toContain("+");
+    expect(container.textContent).not.toContain("Habitability: 0%");
+    expect(container.textContent).not.toContain("Population growth");
   });
 
-  it("the penalty-only scale never renders a plus sign, whatever the modifier's magnitude", () => {
+  it("states the multiplier once, as habitability — never also as a separate growth modifier", () => {
     const fillOrder: FillOrderRow[] = [
       { className: "Gaia World", score: 1.0, occupied: true, frontier: true, partial: false },
     ];
     const { container } = render(<HabitabilityTooltipContent growthMultiplier={0.5} fillOrder={fillOrder} />);
-    expect(container.textContent).toContain("Population growth: −50%");
-    expect(container.textContent).not.toContain("+");
+    expect(container.textContent).toContain("Habitability: 50%");
+    // The same number written twice — once as 50%, once as "−50%" — is what this guards against.
+    expect(container.textContent).not.toContain("Population growth");
+    expect(container.textContent).not.toContain("−50%");
   });
 
   it("lists every body in the order it was handed, as a percentage, marking only the genuinely partial (mid-fill) body", () => {

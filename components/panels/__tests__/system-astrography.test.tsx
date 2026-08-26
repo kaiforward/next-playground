@@ -131,7 +131,7 @@ describe("SystemAstrography — the system-level habitable-land header, absolute
     expect(trigger).toHaveFocus();
     const tooltip = await screen.findByRole("tooltip");
     expect(tooltip).toHaveTextContent("Temperate World");
-    expect(tooltip).toHaveTextContent("Population growth");
+    expect(tooltip).toHaveTextContent("Habitability");
   });
 
   it("omits the habitability stat (never N/A, never a fabricated 100%) when the system has no assessment yet", () => {
