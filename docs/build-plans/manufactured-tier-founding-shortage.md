@@ -339,6 +339,26 @@ the consuming system s in `remainingByGood`, so any site reachable to s (includi
 which wins on `selfCost`) scores an opportunity to serve it, extraction sites included. No new
 proposal kind, no new gate.
 
+**Amendment — the spill nets against reachable supply instead of the binary missing test (Kai,
+2026-08-26).** The shipped first cut spilled all-or-nothing per input via `inputMissingAt` (no
+donor at all → full spill; any donor → none). Owner call, quoted: "we already do the same for
+ordinary deficits… it wouldnt ever make sense to build stuff without actually getting the
+resources if they are using imports." The spill now mirrors the structural pass's flow-aware
+cancellation (`assessStructuralDeficits`'s `coveredFraction = min(1, Σ spare ÷ Σ reachable
+gaps)`, `lib/engine/directed-build.ts:390-400` docstring): per input i, the raw derived need
+`N(i,s) = R(g,s) × ratio` is netted to `D(i,s) = N(i,s) × (1 − coveredFraction_i)`, where
+coverage pools the RATE spare (realised `production − demand`, strike-idled capacity excluded —
+the structural pass's own spare definition, :448) of reachable producers of i across ALL of this
+run's derived claims on i, exactly as structural gaps share exporter spare. No donors → full
+spill (unchanged); full coverage → zero spill; partial coverage → proportional. The cascade
+consumes NETTED amounts (a lower hop sees what its consumer genuinely cannot import, not the raw
+chain). Two deliberate simplifications, stated: spare is not decremented for its structural-gap
+use first (mild over-netting, conservative — errs toward building less); and the GATE keeps its
+own stock-based binary predicate unchanged — the gate asks "could a factory here be fed at all",
+the spill now asks "how much flow do imports genuinely not cover", and they are allowed to
+answer differently. B1's earlier "spill condition ≡ gate-fail condition" identity is superseded
+by this amendment.
+
 **Queued inputs count as available — accepted, deliberate (spec-review F2, owner call).**
 `effectiveBuildSystems` folds queued project levels into `buildings`
 (`lib/engine/directed-build.ts:351-354`) before planning, and the missingness/gate test reads
@@ -544,7 +564,27 @@ Interface:  `marginalGroundVector(bodies: SlottedBody[], workedOf: (r: ResourceT
 Proves:     two sites with equal shortfall service and unequal next-slot ground rank rich-first; the multiplier reads the NEXT unworked slot, not the worked average (a site whose worked prefix is rich but next slot poor ranks by the poor slot); neutral 1.0 when no unworked slot remains (and such a site is already capUnits-gated); take/served arithmetic and realised production unchanged (score-only); omitting the field in a fixture is a compile error, not a silent neutral.
 Consumes:   nothing (independent of Tasks 1-3 except shared-file serialisation).
 
-### Gate — sim verification (after Task 4)
+### Task 5 — net the spill against reachable rate spare (the 2026-08-26 amendment)
+
+Files:      lib/engine/directed-build.ts
+Interface:  the spill loop's per-input arm replaces its `inputMissingAt` test with proportional
+            netting: per input good i, one per-run `coveredFraction_i = min(1, Σ reachable rate
+            spare of i ÷ Σ this run's raw derived claims on i)` mirroring the structural pass's
+            formula and spare definition (realised production − demand, suppressed excluded);
+            `D(i,s) = R(g,s) × ratio × (1 − coveredFraction_i)`. Reverse-topological cascade
+            unchanged but consumes netted amounts. `inputMissingAt` stays gate-only.
+Proves:     (1) full rate coverage → zero spill even though the OLD binary test would have
+            spilled (a donor with ample spare); (2) partial coverage nets proportionally (spare
+            = half the pooled claims → half the raw need spills); (3) spare is POOLED across
+            claimants — two colonies claiming one donor's spare are both netted by the shared
+            fraction, never each by the full spare; (4) no reachable spare → full spill
+            (unchanged); (5) the cascade propagates netted, not raw, amounts down a 2-hop
+            chain; (6) a strike-suppressed producer's idle capacity is not spare (mirrors
+            structural).
+Consumes:   Task 2 (the spill loop), Task 1 (reachability via routeCost; `inputMissingAt`
+            untouched).
+
+### Gate — sim verification (after Task 5)
 
 Arms: `npm run build`; `npx vitest run`; `npm run simulate` (both horizons) plus the 16K config used for R1-R5 (seed 42, 600 systems); re-patch the PLANNER_DIAG hook and re-run `temp/planner-competition-diag.ts` (same windows).
 Reads: colony-site tier-1+ input-gate failure share vs 69.4%/79.1% baseline (16K/10K windows); electronics/machinery producing-market counts vs baseline 20 (colonies must gain producers); manufactured-tier consumer cover at 16K vs 0.00 — all cohorted; survival guard: food/water consumer cover at 1K/10K/16K not below baseline; conservation identities green.
