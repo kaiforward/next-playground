@@ -101,6 +101,10 @@ export interface FundQueueResult {
  * also keeps a single-level project from ever splitting (levels − 1 = 0), matching its old
  * lands-whole-or-not-at-all behaviour. Returns null when nothing lands (`colony_establish` rows, or
  * `k <= 0`) — the caller keeps such a row on its own open/landed decision unchanged.
+ *
+ * The remainder's workDone is floored at 0: when the tolerance rounds a just-short workDone UP to a
+ * boundary, the landed part claims a hair more work than was actually paid for, which would otherwise
+ * leave the remainder holding a negative epsilon.
  */
 function splitLandedLevels(
   p: WorldConstructionProject,
@@ -116,7 +120,12 @@ function splitLandedLevels(
   const landedWork = k * perLevelWork;
   return {
     landed: { ...p, levels: k, workTotal: landedWork, workDone: landedWork },
-    open: { ...p, levels: p.levels - k, workTotal: p.workTotal - landedWork, workDone: p.workDone - landedWork },
+    open: {
+      ...p,
+      levels: p.levels - k,
+      workTotal: p.workTotal - landedWork,
+      workDone: Math.max(0, p.workDone - landedWork),
+    },
   };
 }
 

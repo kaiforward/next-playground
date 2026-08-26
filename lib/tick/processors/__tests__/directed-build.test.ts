@@ -2467,6 +2467,27 @@ describe("runDirectedBuildProcessor — landing writes", () => {
     expect(w.buildingUpdates).toContainEqual({ systemId: "s9", buildingType: "metals", count: 2 });
   });
 
+  it("lands one level of a multi-level project and persists the rest as an open remainder", async () => {
+    // A build that crosses a level boundary without completing appears in the SAME cycle as both a
+    // landed row and an open row under one id. The two write paths must each take their own half:
+    // the count write adds only the levels that landed, and the persisted queue keeps the remainder
+    // (same id, the levels that did not) rather than dropping it or re-landing the whole bundle.
+    const split: WorldConstructionProject = {
+      kind: "build", id: "split", origin: "auto", factionId: "f1", systemId: "s9",
+      buildingType: "metals", levels: 2, workTotal: 4, workDone: 0,
+    };
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0), [split]);
+    // cap 2 = exactly one level's work (workTotal 4 ÷ 2 levels), so the project absorbs its first
+    // level this cycle and nothing more.
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(2, 1),
+    });
+    expect(w.buildingUpdates).toContainEqual({ systemId: "s9", buildingType: "metals", count: 1 });
+    const remainder = w.constructionProjects.filter((p) => p.id === "split");
+    expect(remainder).toHaveLength(1);
+    expect(remainder[0]).toMatchObject({ id: "split", levels: 1, workTotal: 2, workDone: 0 });
+  });
+
   it("writes no building update for a landing that adds no levels", async () => {
     // A zero-level landing is not a count change; emitting it would rewrite the system's current
     // count for no reason, and the write path is absolute, not incremental.
