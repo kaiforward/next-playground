@@ -58,10 +58,6 @@ temp/
 # cocoindex code search index
 .cocoindex_code/
 
-# stryker mutation-testing scratch + reports
-.stryker-tmp/
-/reports
-
 # MCP server config (local tooling)
 .mcp.json
 .claude/reviews/
