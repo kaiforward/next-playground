@@ -42,15 +42,24 @@ wrong answer, not an obviously broken one.
 - **Striking count is a churn metric, not a health metric.** 50 systems striking at one frame
   contained 26 chronic cases and 30 crossing the line in either direction. Judge over a trailing
   window (striking at both ends AND population flat), or a recovering galaxy reads as a sick one.
+- **A single-seed point A/B on a trajectory-sensitive count is unreadable inside its noise band.**
+  The colonies-with-tier-1+-industry count at 24K swings ~±10 under ANY planner perturbation on one
+  seed — every perturbed variant of one feature read 77-89 while only the byte-identical control
+  matched the baseline's 100, and a half-strength variant read *worse* than full strength (no
+  dose-response, the tell). A one-seed gap on such a metric is a point estimate inside that band,
+  not a finding. Replicate across seeds (e.g. 43/44/45) and read the cross-seed pattern; treat as
+  real only what holds a consistent sign or shape on every seed.
 
 ## The horizon
 
-- **The 10,000-tick "equilibrium" horizon sits inside the startup transient for late-recovering
-  metrics.** High-tier consumer cover recovers only at the very end of the run: baseline electronics
-  crosses 0.7 at t≈9,700 and luxuries hits 0.81 at t=10,000 exactly (0.34 at t=9,500); both keep
-  improving to ~0.90 by t=16,000. Any A/B comparison of such a metric at 10k measures *recovery
-  timing*, not equilibrium level. Before reading a 10k number as an equilibrium level, check the
-  metric's own trajectory is flat there — or read at 12k+.
+- **The 10,000-tick "equilibrium" horizon sits inside the founding transient for late-moving
+  metrics — and the metric can be mid-collapse, not mid-recovery.** Under current timescales the
+  first colony completes ~t=4,128, so 1K is pre-founding and 10K is founding era (~in-world year 7).
+  The manufactured tier reads mid-collapse at 10K on any branch: baseline electronics cover 0.54 at
+  10K is a transient peak, 0.00 by 16K on main too. Any A/B of such a metric at 10K measures
+  *trajectory position*, not an equilibrium level, and can point in the opposite direction to the
+  metric's own end state. Before reading a 10K number as a level, check the metric's own trajectory
+  is flat there — or read at 16K+ and still call it founding era.
 
 ## The inference
 

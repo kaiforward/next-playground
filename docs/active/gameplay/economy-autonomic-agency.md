@@ -267,6 +267,44 @@ buy past) and a larger pool spreads across more parallel fronts rather than fini
 The gates sequence the work on their own: a system with no spare labour queues only housing (and only if
 `fed()` passes — survival satisfaction only, no unrest input), and industry is queued only where spare labour already exists.
 
+### Derived demand — unmet higher-tier shortfall spills down the recipe chain
+
+A tier-1+ factory is only proposed where every recipe input is already produced locally or held in
+surplus by a reachable system (`inputsAvailable`) — so in a deficit-everywhere galaxy the chain must
+be stood up bottom-up, and colonies start building the supply chains for goods they cannot yet make.
+After the structural pass and the speculative floor have written the run's per-good shortfalls, the
+planner walks goods consumers-first (reverse recipe-topological order over `PRODUCTION_GOOD_ORDER`)
+and, for each remaining tier-1+ shortfall, adds a **derived shortfall** onto each recipe input the
+site cannot genuinely cover by imports. The raw derived need (parent shortfall × recipe ratio) is
+netted against the pooled **rate spare** of reachable producers of that input, exactly as structural
+gaps share exporter spare (`coveredFraction = min(1, Σ spare ÷ Σ this run's claims)`; realised
+production minus demand, a strike-idled producer's capacity is not spare): no reachable spare → the
+full need spills; full coverage → nothing; partial → proportional. The cascade consumes netted
+amounts — a lower hop sees only what its consumer genuinely cannot import — and terminates at tier-0
+extraction, which can always be built. Derived demand is never persisted: recomputed from live
+shortfalls every planner run, it vanishes by construction the run its parent shortfall closes. It
+never changes the input gate itself — nothing is proposed where inputs are missing; the spill builds
+the inputs instead. The assessment runs whether or not build automation is on (the switch gates
+proposal emission only), so a manual player's Build-opportunity chip surfaces the same
+derived-demand opportunities the automated planner acts on.
+
+**Queued inputs count as available — the chain builds ahead of itself.** Queued project levels fold
+into the buildings the input gate and the spill read, so the cycle after a spill-triggered input
+extractor is queued, the factory above it can be proposed while its supply is still under
+construction. Deliberate pipelining: the factory finishes soon after its input does rather than
+waiting serially, idling meanwhile only for the construction gap (the economy's `inputGate`
+throttles it until the input lands).
+
+### Survival first — the necessity band
+
+Two ordering points read `SURVIVAL_GOODS` (water, food); no score formula changes. Opportunities are
+claimed **band-then-score** — survival-serving builds above all others, score order within each
+band, the same rule the alert bar's Build-opportunity chip applies on read — and the funding order
+runs housing → survival-serving industry by descending ROI → everything else (industry, colonies,
+centres) by descending ROI, tiebreaks unchanged within bands. Banding is by the good being *built*;
+derived demand never changes a good's band. The band's effect is claim/funding order, not rescue —
+survival builds mostly land anyway because take is shortfall-bounded.
+
 ### The pool — eligible heads, substituted by Construction Centres
 
 The pool is not raw population — it is **eligible heads**: population minus the heads actually *employed*
