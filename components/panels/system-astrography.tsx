@@ -11,6 +11,7 @@ import { SystemRings } from "@/components/system/system-rings";
 import { PotentialYieldTable } from "@/components/system/potential-yield-table";
 import { Tooltip, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
+import { splitBracketedName } from "@/lib/utils/format";
 
 /** Moved from `app/(game)/@panel/system/[systemId]/astrography/page.tsx`. */
 export function SystemAstrography({ systemId }: { systemId: string }) {
@@ -30,6 +31,12 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
 
   const { sunClass, peopleLand, bodies, potentialYields } = substrate;
   const habitabilityPct = pop.visibility === "visible" ? Math.round(pop.growthMultiplier * 100) : undefined;
+  // The sun-class name is uppercased to match the labels either side of it, but its bracketed
+  // temperature descriptor ("Sol-like", "hot", …) is left as authored — a bracket is a gloss on the
+  // name, and shouting it flattens the hierarchy it exists to create. Split here, cased in CSS on
+  // the first part only: uppercasing the STRING would put "BLUE–WHITE" in the DOM, which a screen
+  // reader may read out letter by letter.
+  const sunClassName = splitBracketedName(SUN_CLASSES[sunClass].name);
 
   return (
     <div className="space-y-6">
@@ -42,7 +49,8 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
           <div className="flex items-center gap-3">
             <StarGlyph sunClass={sunClass} />
             <h3 className="font-display text-lg font-semibold text-text-primary">
-              {SUN_CLASSES[sunClass].name}
+              <span className="uppercase">{sunClassName.primary}</span>
+              {sunClassName.suffix ? ` ${sunClassName.suffix}` : ""}
             </h3>
           </div>
           {/* Inline `<dl>` rather than the stacked `StatList`/`StatRow` pair: those lay out a

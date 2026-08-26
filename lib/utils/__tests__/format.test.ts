@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatNumber, formatHeadcount, formatMagnitude, formatPeople, formatUnitsShort, splitCompactNumber } from "../format";
+import { formatNumber, formatHeadcount, formatMagnitude, formatPeople, formatUnitsShort, splitCompactNumber, splitBracketedName } from "../format";
 
 describe("formatNumber", () => {
   it("rounds to the nearest integer", () => {
@@ -95,5 +95,27 @@ describe("splitCompactNumber", () => {
   });
   it("returns the raw string unsplit when the input doesn't match the magnitude shape", () => {
     expect(splitCompactNumber("N/A")).toEqual({ value: "N/A" });
+  });
+});
+
+describe("splitBracketedName", () => {
+  it("splits each authored sun-class name into its headline and bracketed descriptor", () => {
+    expect(splitBracketedName("Yellow (Sol-like)")).toEqual({ primary: "Yellow", suffix: "(Sol-like)" });
+    // The en dash (U+2013) in "Blue–white" must survive untouched — not normalised to a hyphen.
+    expect(splitBracketedName("Blue–white (hot)")).toEqual({ primary: "Blue–white", suffix: "(hot)" });
+    expect(splitBracketedName("Orange dwarf (cool)")).toEqual({ primary: "Orange dwarf", suffix: "(cool)" });
+    expect(splitBracketedName("Red dwarf (cold)")).toEqual({ primary: "Red dwarf", suffix: "(cold)" });
+  });
+
+  it("returns the whole name as primary, with no suffix, when there is no bracket at all", () => {
+    expect(splitBracketedName("Neutron Star")).toEqual({ primary: "Neutron Star" });
+  });
+
+  it("keeps text after the closing bracket inside suffix, untouched", () => {
+    expect(splitBracketedName("Foo (bar) baz")).toEqual({ primary: "Foo", suffix: "(bar) baz" });
+  });
+
+  it("trims the whitespace between the two parts, however wide", () => {
+    expect(splitBracketedName("Foo   (bar)")).toEqual({ primary: "Foo", suffix: "(bar)" });
   });
 });

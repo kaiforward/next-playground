@@ -105,6 +105,22 @@ describe("SystemAstrography — the system-level habitable-land header, absolute
   });
 });
 
+describe("SystemAstrography — the sun-class heading", () => {
+  it("uppercases the sun-class name but leaves its bracketed descriptor as authored", () => {
+    substrateValue = { visibility: "visible", sunClass: "blue_white", peopleLand: 0, bodies: [], potentialYields: [] };
+    popValue = { visibility: "unknown" };
+    renderPanel();
+    // The casing is applied in CSS to the name only, so the DOM text — and therefore the
+    // accessible name — stays exactly as authored: "Blue–white (hot)"
+    // (`SUN_CLASSES.blue_white.name`). What this pins is the SPLIT: the bracket must be a separate
+    // text node from the uppercased span, which is what lets CSS case one and not the other.
+    const heading = screen.getByRole("heading", { name: "Blue–white (hot)" });
+    expect(heading).toBeInTheDocument();
+    expect(heading.querySelector("span")).toHaveTextContent("Blue–white");
+    expect(heading.querySelector("span")).not.toHaveTextContent("(hot)");
+  });
+});
+
 describe("SystemAstrography — the ring diagram", () => {
   it("renders the System section, with the body reachable by keyboard, when the system has bodies", async () => {
     const user = userEvent.setup({ delay: null });

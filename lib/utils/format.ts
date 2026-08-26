@@ -109,3 +109,17 @@ export function splitCompactNumber(formatted: string): { value: string; unit?: s
   const [, value, unit] = match;
   return { value, unit: unit || undefined };
 }
+
+/**
+ * Splits an authored "name (bracketed descriptor)" string — the sun-class names in
+ * `SUN_CLASSES` ("Yellow (Sol-like)", "Blue–white (hot)") — into the headline name and the
+ * bracket, so a caller can uppercase the name while leaving the bracket as authored. A name with
+ * no bracket returns just `primary` (the whole string), which a caller uppercases in full. Any
+ * text from the first `(` onward — including a closing `)` and whatever follows it — rides in
+ * `suffix` untouched; only whitespace directly before the bracket is trimmed away.
+ */
+export function splitBracketedName(name: string): { primary: string; suffix?: string } {
+  const idx = name.indexOf("(");
+  if (idx === -1) return { primary: name };
+  return { primary: name.slice(0, idx).trimEnd(), suffix: name.slice(idx) };
+}
