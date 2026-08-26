@@ -119,7 +119,7 @@ export function ConstructionRow({
       <ProgressBar
         label={rateText}
         value={row.workDone}
-        max={row.workTotal}
+        max={row.workUnit}
         valueText={`${Math.round(row.progress * 100)}%`}
         projected={row.nextCycleGain}
         color={stalled ? "amber" : "copper"}

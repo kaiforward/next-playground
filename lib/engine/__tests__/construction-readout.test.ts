@@ -173,7 +173,9 @@ describe("computeFactionConstruction", () => {
   ];
   const projects: WorldConstructionProject[] = [
     { kind: "colony_establish", id: "c1", origin: "auto", factionId: "f1", systemId: "ctrl", sourceSystemId: "dev1", seedPop: 340, housingLevels: 3, workTotal: 100, workDone: 62, stagedManifest: [], charterPaid: true, stalledCycles: 0 },
-    { kind: "build", id: "b1", origin: "auto", factionId: "f1", systemId: "dev1", buildingType: "housing", levels: 4, workTotal: 40, workDone: 32 },
+    // levels 4, workTotal 16 → per-level work 4; workDone 2 exercises a PARTIAL level (progress 0.5),
+    // not the whole 4-level order — a build row's progress is measured against one level's work.
+    { kind: "build", id: "b1", origin: "auto", factionId: "f1", systemId: "dev1", buildingType: "housing", levels: 4, workTotal: 16, workDone: 2 },
   ];
 
   it("pools only economically-active systems and splits expansion vs build-out", () => {
@@ -186,7 +188,8 @@ describe("computeFactionConstruction", () => {
     expect(r.expansion[0].systemName).toBe("Kepler Reach");
     expect(r.expansion[0].progress).toBeCloseTo(0.62, 6);
     expect(r.buildOut[0].buildingLabel).toBe("Housing");
-    expect(r.buildOut[0].progress).toBeCloseTo(0.8, 6);
+    // Progress divides by one level's work (16 / 4 levels = 4), not the whole order's total: 2 of 4 = 0.5.
+    expect(r.buildOut[0].progress).toBeCloseTo(0.5, 6);
     expect(r.buildOut[0].etaCycles === null || typeof r.buildOut[0].etaCycles === "number").toBe(true);
   });
 
@@ -686,5 +689,46 @@ describe("computeFactionConstruction — fundedFront / waitingCount", () => {
     };
     const r = computeFactionConstruction([build], oneSystem, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4, founded());
     expect(r.fundedFront[0]?.label).toBe("Housing ×3");
+  });
+
+  it("shares one denominator between progress and nextCycleProgress on a multi-level build row", () => {
+    // levels 4, workTotal 40 → per-level work 10. Pool 2 (population 40 × throughputPerPop 0.05) and
+    // cap 2 keep the next cycle's gain inside the current level (2 of 10 remaining), so the two
+    // figures can be checked against each other without a level boundary complicating the sum.
+    const smallSystem: ConstructionSystemInfo[] = [
+      { id: "dev1", name: "Vela Prime", control: "developed", population: 40, buildings: {} },
+    ];
+    const build: WorldConstructionProject = {
+      kind: "build", id: "m", origin: "auto", factionId: "f1", systemId: "dev1",
+      buildingType: "housing", levels: 4, workTotal: 40, workDone: 2,
+    };
+    const r = computeFactionConstruction([build], smallSystem, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 2, founded());
+    const row = r.buildOut[0]!;
+    expect(row.progress).toBeCloseTo(0.2, 10); // 2 of 10 per-level work
+    const front = r.fundedFront[0]!;
+    expect(front.nextCycleProgress).toBeCloseTo(0.2, 10); // gain 2 of the same per-level work
+    // progress + nextCycleProgress must land exactly on the progress the row reads after that gain is
+    // applied (workDone 4 of 10) — dividing the two by different denominators (workTotal 40 for the
+    // gain, workUnit 10 for progress) would break this by a factor of 4.
+    expect(row.progress + front.nextCycleProgress).toBeCloseTo(0.4, 10);
+  });
+
+  it("still divides a colony row's progress and nextCycleProgress by its whole workTotal (foundings never split)", () => {
+    const colonySystems: ConstructionSystemInfo[] = [
+      { id: "src", name: "Vela Prime", control: "developed", population: 40, buildings: {} },
+      { id: "ctrl", name: "Kepler Reach", control: "controlled", population: 0, buildings: {} },
+    ];
+    const colony: WorldColonyEstablishProject = {
+      kind: "colony_establish", id: "c1", origin: "auto", factionId: "f1", systemId: "ctrl",
+      sourceSystemId: "src", seedPop: 2, housingLevels: 1, workTotal: 40, workDone: 2,
+      stagedManifest: [], charterPaid: true, stalledCycles: 0,
+    };
+    const r = computeFactionConstruction(
+      [colony], colonySystems, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 2,
+      founded({ supplyBySource: new Map([["src", supply(1000)]]) }),
+    );
+    const row = r.expansion[0]!;
+    expect(row.progress).toBeCloseTo(0.05, 10); // 2 of the whole 40, not levels
+    expect(r.fundedFront[0]?.nextCycleProgress).toBeCloseTo(0.05, 10); // gain 2 of the same 40
   });
 });

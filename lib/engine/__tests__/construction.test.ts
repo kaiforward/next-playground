@@ -685,10 +685,11 @@ describe("forecastEtaCycles — the stall guard and the cycle horizon", () => {
     expect(forecastEtaCycles([project("p", HOUSING_TYPE, 1, 0, 40)], 10, 10, 3)).toEqual([null]);
   });
 
-  it("reports the LAST level's landing cycle for a project that lands levels incrementally", () => {
+  it("reports the FIRST level's landing cycle for a project that lands levels incrementally", () => {
     // 2-level build, workTotal 20 (perLevelWork 10), cap/pool 5: level 1 lands on cycle 2, level 2
-    // (the whole project) on cycle 4 — etaCycles must read 4, not the first partial landing.
-    expect(forecastEtaCycles([project("p", HOUSING_TYPE, 2, 0, 20)], 5, 5)).toEqual([4]);
+    // (the whole project) on cycle 4 — etaCycles must read 2, the next level's landing, not the
+    // whole project's.
+    expect(forecastEtaCycles([project("p", HOUSING_TYPE, 2, 0, 20)], 5, 5)).toEqual([2]);
   });
 });
 

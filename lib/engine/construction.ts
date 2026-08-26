@@ -395,10 +395,11 @@ function fundsNothing(pool: number, cap: number): boolean {
  * queue, so this is an estimate at the current rate, not a countdown. The progress bar
  * (`workDone/workTotal`) is exact; only the ETA is approximate.
  *
- * A `kind: "build"` project that lands levels incrementally records `landedAt` on EVERY cycle one of
- * its levels lands, so the last write (the highest cycle number reached before the id drops out of
- * the queue entirely) wins — `etaCycles` means the cycle the WHOLE project (its last level)
- * completes, exactly as it does for a project that only ever lands once.
+ * A `kind: "build"` project that lands levels incrementally records `landedAt` only on the FIRST
+ * cycle one of its levels lands — `etaCycles` means the cycle the NEXT level completes, matching
+ * what the progress bar and next-cycle-gain readout both describe (the building currently being
+ * worked on, not the whole multi-level order). A project that only ever lands once is unaffected:
+ * its first landing is its only one.
  */
 export function forecastEtaCycles(
   projects: WorldConstructionProject[],
@@ -417,7 +418,7 @@ export function forecastEtaCycles(
   let queue = projects.map((p) => ({ ...p }));
   for (let cycle = 1; cycle <= maxCycles && queue.length > 0; cycle++) {
     const { projects: open, landed } = fundCycle(queue, pool, cap, capFor);
-    for (const l of landed) landedAt.set(l.id, cycle);
+    for (const l of landed) if (!landedAt.has(l.id)) landedAt.set(l.id, cycle);
     queue = open;
   }
   return projects.map((p) => landedAt.get(p.id) ?? null);
