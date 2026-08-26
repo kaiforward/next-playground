@@ -16,29 +16,6 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-1. **[M] Visual system view — bodies as a spatial layout inside the system detail panel.** A
-  concentric-ring view alongside (not replacing) the body cards, so a system's bodies read as a place
-  instead of a list — hovering a body surfaces its score, lock state, occupancy and worked/total
-  deposits, the same content the body card already shows. Consumes the engine's `workedByBody` read
-  (`lib/engine/worked-deposits.ts`), which already returns per-body, per-resource worked/total slot
-  counts. Prototype pass approved, so the shape is settled:
-  - **Concentric rings, one body per ring**, drawn square to fit the 560px panel (`w-[560px]`,
-    `components/ui/detail-panel.tsx`) — horizontal layouts were rejected on space.
-  - **Which ring: a loose plausibility roll at generation.** One cosmetic integer per body, rolled
-    once, stored, read by nothing in the tick. A weighted draw (rocky inward, ice and gas outward),
-    NOT a sort — a hard temperature gradient would erase the atmosphere-driven exceptions that make
-    the arrangement believable. Accepted cost: fresh seeds.
-  - **Where on the ring: golden-angle stepping** by body index (137.5° per step). Deterministic, no
-    stored angle, no jitter, and bodies never bunch or collide.
-  - **Size from `size`**, the field already marked display-flavour-only — this is its first reader
-    and it drives nothing.
-  - **Plain coloured circles**, deliberately: no archetype iconography for now. The one exception is
-    the asteroid belt, drawn as its own dashed ring rather than a dot, because it is the one body
-    that was never a point.
-  *Next step:* write the spec, then build plan.
-  *Don't:* imply orbital distance is physical. Nothing reads the ring index, and archetype is rolled
-  from the sun class — a player must not be able to infer a causal inner-hot/outer-cold story.
-
 ---
 
 ## Unqueued
@@ -375,6 +352,9 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   *Next step:* decide whether it is a faction-panel tab or its own route before any layout work.
   *Don't:* rebuild it as a second Tracker. The Tracker answers "where is my pool going right now";
   this answers "show me everything", and the two want different orderings and different densities.
+  *Also decide here:* whether a body gets a destination of its own. The system view's ring diagram
+  has no click-to-select because there is nothing to select into — bodies carry no panel. This is
+  the first row that would give them one.
 - **[S] Funding sliders: show the set value immediately, shorted-only exception** — today's "set X% · runs Y%"
   duplicates the number in steady state and conflates the one-cycle latch lag with genuine insolvency.
   *Next step:* needs the settlement snapshot to persist the slider values used at settlement — a
