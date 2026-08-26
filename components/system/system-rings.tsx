@@ -103,7 +103,7 @@ export function SystemRings({ bodies, sunClass }: { bodies: BodyView[]; sunClass
               <button
                 type="button"
                 aria-label={body.archetypeName}
-                className="absolute"
+                className="absolute cursor-pointer rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 style={{
                   left: `${(rb.cx / VIEW_SIZE) * 100}%`,
                   top: `${(rb.cy / VIEW_SIZE) * 100}%`,
