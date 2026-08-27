@@ -266,9 +266,11 @@ export interface BodyView {
   id: string;
   bodyType: BodyArchetypeId;
   archetypeName: string;
-  /** This body's default-pop habitability score — the archetype's static rating. Presented as a
-   *  BAND (`habitabilityScoreBand`, `lib/utils/substrate.ts`), never a bare number or the retired
-   *  per-body `habitable: boolean`. */
+  /** This body's default-pop habitability score — the archetype's static rating in [0, 1].
+   *  Presented as a labelled percentage under "Habitability" (`body-readout.tsx`), never the
+   *  deposit-quality band vocabulary (Poor/Average/Good/Rich), which grades extraction yield. The
+   *  system-level figure of the same name is a different quantity — a fold across occupied bodies,
+   *  not an average of this one. */
   score: number;
   /** True when this body's archetype is tech-locked (contributes no land or counts yet). */
   locked: boolean;
@@ -287,6 +289,15 @@ export interface BodyView {
    *  cached habitability quality fold, derived by the service via `occupiedBodyIds` — the component computes
    *  nothing). False for an unassessed system as well as for a body past the frontier. */
   occupied: boolean;
+  /** This body's ring, 1..n over the system's bodies (ring 1 innermost) — cosmetic, read only by
+   *  the system-view ring drawing, never by an engine term. Resolved from `WorldBody.orbitIndex`
+   *  where every body in the system carries one; where any is missing (a save predating the
+   *  field), the WHOLE system falls back to array position so the result is always a permutation
+   *  of `1..n` (`docs/active/gameplay/system-view.md` → "Save and generation"). */
+  orbitIndex: number;
+  /** Display flavour only — the ring-drawing's circle radius. Passed through from `WorldBody.size`
+   *  unchanged; carries no budget meaning and drives nothing else. */
+  size: number;
 }
 
 /**

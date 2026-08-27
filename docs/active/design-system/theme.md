@@ -72,9 +72,9 @@ Three font families, each with a specific role:
 
 | Token | Font | Role |
 |-------|------|------|
-| `font-sans` | **Geist** | Body text — all regular content, labels, descriptions |
+| `font-sans` | **Geist** | Body text — regular content, prose, descriptions |
 | `font-mono` | **Geist Mono** | Numeric values, credit amounts, coordinates, code |
-| `font-display` | **Chakra Petch** | Headings, card titles, section headers — industrial/techy feel |
+| `font-display` | **Chakra Petch** | Headings, card titles, section headers, labels — industrial/techy feel |
 
 ### Usage Rules
 
@@ -83,6 +83,28 @@ Three font families, each with a specific role:
 - Detail panel titles: `font-display font-bold`
 - Body text: inherits `font-sans` from body
 - Credit values / tick counts: `font-mono`
+- **Any label takes `font-display`, never the inherited `font-sans`** — a label heading a whole
+  block (`SectionHeader`, a table's `<th>`) additionally goes uppercase with `tracking-wider`; a
+  label sitting inline beside its own value (a stat's `<dt>` — "Bodies", "Habitable land",
+  "Habitability") takes `font-display` alone, at the surrounding text's own size, with no uppercase
+  and no tracking. The plain-body-font `<dt>` is the easy way this slips: a label is a role, not a
+  spot in the layout, and every one of them gets the display font whatever else it does or doesn't
+  also get.
+
+### Size Scale
+
+Sizes come from Tailwind's scale (`text-xs`, `text-sm`, `text-lg`, and so on) — never an arbitrary
+`text-[Npx]` unless the element states a reason at the point of use for why the scale doesn't work
+for it. A panel typically needs three:
+
+- `text-lg` — the panel's own heading (a card title standing in for a missing section label).
+  One per panel.
+- `text-sm` — content and values: body text, stat figures, a card's inline title-level name.
+- `text-xs` — labels: `SectionHeader`, `Badge`, table column headers, secondary annotations.
+
+`ProgressBar`'s `sm` size (above) is a standing exception: `text-[10px]` for its label, predating
+this rule and out of scope to change. A new exception needs the same kind of stated reason, not a
+silent copy of that one.
 
 ---
 
@@ -93,6 +115,9 @@ Three font families, each with a specific role:
 - **DetailPanel** modal wrapper: `rounded-lg` — the floating panel itself is the one element that gets subtle rounding to feel like a window/viewport
 - **FilterBar chips**: `rounded-full` — intentional pill shape for toggle chips
 - **Loading spinner**: `rounded-full` — circular spinner element
+- **System-view body hit targets** (`components/system/system-rings.tsx`): `rounded-full` — the
+  invisible buttons over the ring diagram's bodies. Nothing of them is drawn except a focus ring,
+  and the body underneath is a circle, so a square one would box a round mark
 
 Everything else: **square corners**. This is the defining visual characteristic of Foundry.
 

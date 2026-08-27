@@ -15,8 +15,12 @@ line stays a stat line even when a flavor sentence sits under it.
 **1. Stat register** — anything that describes a mechanic: headline stats, modifier lines,
 bar labels, badges, table cells. The genre grammar (EU5/Stellaris): a game noun plus a number.
 
-- Form: `Habitability: 85%` · `Population growth: −15%` · `Deposits: 3 worked / 5` ·
+- Form: `Habitability: 85%` · `Unrest: +12%` · `Deposits: 3 worked / 5` ·
   `Habitable land: 220 free`.
+- **A signed modifier is only honest alongside the others it competes with.** Where a figure is
+  the sole input to an outcome, stating it twice — once as the level, once as the modifier it
+  implies — reads as two facts and misleads at the neutral end: an unpenalised system rendered
+  "0%" looks like it has none of the thing, not full measure of it. State it once, as the level.
 - No verbs, no metaphors, no sentences. The noun is a game term of art; the number is a
   percentage of normal, a signed modifier, or a plain quantity with its unit visible in the
   label.
@@ -78,6 +82,6 @@ are not shown.
 | Was (code-speak) | Is (register) |
 |---|---|
 | `Extraction ×0.85 contribution weight` | `Yield: 85%` (stat, system-level — extraction pools per-system, so this never shows per body) |
-| `Growth ×0.85 — habitability` | `Habitability: 85%`, tooltip line `Population growth: −15%` (stat) |
+| `Growth ×0.85 — habitability` | `Habitability: 85%` (stat) — the level only; the derived `−15%` is the same number again |
 | `size 1.20` | *(deleted — the land and deposit numbers already say it)* |
 | "the quality fold's frontier index" | *(keyword register, no internals)* "settlers fill the best ground first…" |

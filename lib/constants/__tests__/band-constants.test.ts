@@ -18,6 +18,7 @@ import { GOOD_NECESSITY, SURVIVAL_GOODS } from "@/lib/constants/physical-economy
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
+import { BODY_ARCHETYPES, ORBIT_ROLL_SPREAD } from "@/lib/constants/bodies";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import {
   supplyUnrestTerm,
@@ -524,6 +525,67 @@ describe("housing containment — both directed-build sizing sites land inside t
     // The trigger/target pair is a hysteresis band: a target at or above the trigger would make the
     // sized want non-positive at the moment the valve opens, silently disabling relief entirely.
     expect(DIRECTED_BUILD.RELIEF_TRIGGER).toBeGreaterThan(DIRECTED_BUILD.RELIEF_TARGET);
+  });
+});
+
+describe("orbital bias — ring-roll authoring (docs/active/gameplay/system-view.md)", () => {
+  const ARCHETYPE_IDS = [
+    "temperate_world", "gaia_world", "jungle_world", "ocean_world", "boreal_world",
+    "arid_world", "tundra_world", "frozen_world", "volcanic_world", "barren_rock",
+    "asteroid_belt", "gas_giant",
+  ] as const;
+  const bias = (id: typeof ARCHETYPE_IDS[number]) => BODY_ARCHETYPES[id].orbitalBias;
+
+  it("keeps every archetype's bias inside [0, 1] — the type alone does not catch an out-of-range value", () => {
+    for (const id of ARCHETYPE_IDS) {
+      expect(bias(id), id).toBeGreaterThanOrEqual(0);
+      expect(bias(id), id).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("authors a bias on every one of the twelve archetypes — the record's totality is a runtime fact, not just a type-checked one", () => {
+    // Object.keys, not the BodyArchetypeId union, so a mismatch between the two would also show up
+    // here rather than only at compile time.
+    expect(Object.keys(BODY_ARCHETYPES)).toHaveLength(ARCHETYPE_IDS.length);
+    for (const id of ARCHETYPE_IDS) {
+      expect(typeof bias(id), id).toBe("number");
+    }
+  });
+
+  it("holds the spec's authored ordering: volcanic/arid low, temperate/ocean mid, tundra/frozen high, gas giant highest, asteroid belt between every rocky class and the giant", () => {
+    for (const low of ["volcanic_world", "arid_world"] as const) {
+      for (const mid of ["temperate_world", "ocean_world"] as const) {
+        expect(bias(low), `${low} < ${mid}`).toBeLessThan(bias(mid));
+      }
+    }
+    for (const mid of ["temperate_world", "ocean_world"] as const) {
+      for (const high of ["tundra_world", "frozen_world"] as const) {
+        expect(bias(mid), `${mid} < ${high}`).toBeLessThan(bias(high));
+      }
+    }
+    // Gas giant sits highest of all twelve archetypes.
+    for (const id of ARCHETYPE_IDS) {
+      if (id === "gas_giant") continue;
+      expect(bias("gas_giant"), id).toBeGreaterThan(bias(id));
+    }
+    // Asteroid belt sits between every rocky class (everything but the giant itself) and the giant.
+    for (const id of ARCHETYPE_IDS) {
+      if (id === "asteroid_belt" || id === "gas_giant") continue;
+      expect(bias("asteroid_belt"), id).toBeGreaterThan(bias(id));
+    }
+    expect(bias("asteroid_belt")).toBeLessThan(bias("gas_giant"));
+  });
+
+  it("keeps ORBIT_ROLL_SPREAD a real fraction of the bias range, not a value that erases the noise", () => {
+    // At 0, `bias + noise` degenerates to `bias` alone and the weighted draw becomes a hard sort —
+    // exactly what the spec forbids ("a frozen world does turn up close in, a warm one far out").
+    // The bound is reasoned from that requirement, not backed off from the shipped 0.25: a
+    // half-width below a tenth of the [0, 1] axis (noise span under a fifth of the range) would
+    // leave even immediately-adjacent archetypes in the table above — several sit under 0.1 apart
+    // — unable to swap often enough for "exceptions genuinely happen" to hold across a galaxy.
+    expect(ORBIT_ROLL_SPREAD).toBeGreaterThanOrEqual(0.1);
+    // And the noise must not be so wide it dominates every comparison outright.
+    expect(ORBIT_ROLL_SPREAD).toBeLessThanOrEqual(1);
   });
 });
 

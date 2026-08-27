@@ -191,8 +191,11 @@ quality-blind — a low-quality world still fills to its built housing, and bein
 **Surfaces:** the Population tab's growth line reads "Habitability: N%" (`growthMultiplier`,
 `components/system/population-panel.tsx`) with a fill-order decomposition tooltip
 (`HabitabilityTooltipContent`) listing every habitable-land body in score order with the
-settlement frontier marked. Astrography shows each body's own score band, lock state, occupancy and
-deposits (`components/system/body-card.tsx`).
+settlement frontier marked. The Astrography header's own "Habitability" figure is the same
+`growthMultiplier` read, behind the same tooltip. Astrography's per-body list shows each body's own
+score as a labelled percentage under "Habitability" — the same word as the header figure, which is
+a different quantity rather than an average of these — plus lock state, occupancy and deposits
+(`components/system/body-readout.tsx`).
 
 ---
 

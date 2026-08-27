@@ -16,19 +16,71 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-1. **[M] Visual system view — bodies as a spatial layout inside the system detail panel.** A simple
-  2D/3D view alongside (not replacing) the body cards, so a system's bodies read as a place instead
-  of a list — popovers on each body surface its score, lock state, occupancy and worked/total
-  deposits. Consumes the engine's `workedByBody` read (`lib/engine/worked-deposits.ts`), which
-  already returns per-body, per-resource worked/total slot counts. UI-heavy: gets the
-  browser-viewable HTML prototype pass approved before implementation (AGENTS.md, UI/dataviz).
-  *Next step:* prototype pass.
+1. **[L] The tooltip system — nesting and pinning, carrying a language and glossary pass on the same
+  refactor.** Three strands that were separate rows and are not separable work: the deep-tooltip
+  system migrates every plain Radix tooltip onto the popover, which means every tooltip surface is
+  opened and edited once. Rewording and glossary-linking as each one is touched costs almost
+  nothing; doing them as their own later sweeps means opening all of them a second and third time.
+  Start from the glossary's key agreed terms, so the migration has something to link to.
+
+  - **The system.** Tooltips whose terms are themselves hoverable, pinnable for comparison, backed
+    by a cross-linking concept glossary. Needs a design doc + collaborative HTML-prototype pass.
+    Core genre UI post-pivot, not polish. The theme already reserves a copper treatment as this
+    system's second tier. **The primitive shipped with the Tracker** (`Popover`,
+    `components/ui/popover.tsx`) — hover-to-open, keyboard access and a safe transit area, scoped to
+    one level. What is left: **nesting** (a parent popover must not close while a child is open —
+    neither Radix primitive gives this, so it is custom either way), pinning, the glossary, and
+    **migrating the existing plain Radix tooltips** onto the popover.
+    Design input worth not losing: Paradox tooltips **follow the cursor until you hold still, then
+    latch** so you can move onto them. A legitimate alternative to a grace-area polygon and arguably
+    simpler; decide between them at the prototype pass.
+    *Don't:* design the nesting model before there is a real chain of descriptions to design
+    against — the shape follows the content, and the Tracker needed only one level.
+
+  - **The language.** Apply `/game-copy` to every tooltip and label surface as the migration reaches
+    it — three registers, game vocabulary only. The skill shipped with habitability seeding and that
+    branch's surfaces conform; the rest of the UI has not been swept. Fold the two near-duplicate
+    bodies (`NeedTooltip` in `population-panel.tsx`, `PopShortTooltipBody` in `industry-panel.tsx`)
+    into a shared shell while there. **Settle the number conventions here** — when a quantity reads
+    as a percentage, when as a multiplier, when as a signed modifier. The rule the Astrography tab
+    arrived at: a quantity genuinely bounded 0–1 reads as a percentage; a multiplier that can exceed
+    1 keeps its own words or its `×`, because a percentage would imply a ceiling it does not have.
+
+    **A worked case to settle first, because it misled the owner in play.** The Industry tab's
+    housing row reads "379 / 379" — completely full — on a system whose population fills 345.6 of
+    those 379. The staffed figure is `min(count, housingUsed(population) × (1 + VACANCY_SLACK))`
+    (`lib/engine/industry.ts:395`), and `VACANCY_SLACK` is 0.10, so a 10% vacancy is counted as
+    healthy and the row saturates at 91% real occupancy. Astrography's per-body occupancy uses the
+    raw `population / POP_CENTRE_DENSITY` instead. Both are correct by their own definitions and
+    cannot be reconciled by reading them, because one silently contains an allowance. Decide when
+    an allowance may be folded into a displayed figure at all, and how a saturated-with-slack
+    reading says so.
+
+  - **The glossary.** One doc defining the game's terms of art in plain language (pop = 1 million
+    people; tick/cycle; Provision; bands; cover; unrest/strike; control ladder…), written as the
+    single source tooltips and tutorials quote from. Start it flat; it grows hyperlinks as the
+    cross-linking system lands. The time-anchoring counterpart already shipped — SPEC.md's Calendar
+    section anchors ticks to in-world time; this covers vocabulary instead.
+
+  *Next step:* agree the glossary's key terms, then the design doc + prototype pass for nesting.
 
 ---
 
 ## Unqueued
 
 No order. Pull from here when the queue empties, or fold one in when a PR is already in the file.
+
+- **[S] Type audit across the panels — casing, size and font family.** `theme.md` now states the
+  size scale and that labels take `font-display`, but only the Astrography tab has been brought
+  onto it. Two known drifts to settle while sweeping: titles and section headers disagree on
+  casing (a `SectionHeader` is uppercase, a card title beside it is not, and the doc gives no
+  reason for the split), and arbitrary sizes survive elsewhere — `vital-tile.tsx` uses
+  `text-[9.5px]`, `ProgressBar` `sm` uses `text-[10px]`. 27 components use `font-display`, so
+  scope it by panel rather than repo-wide.
+  *Next step:* decide the casing rule first — whether a title uppercases like a label or stays
+  its own tier — since that decides most of the diff.
+  *Don't:* sweep every `text-[Npx]` out on sight. Some are load-bearing at their size; the rule
+  wants a stated reason at the point of use, not removal.
 
 **Packaging**
 - **[M] Desktop shell packaging (Tauri vs Electron)** — booked out of the client-runtime migration
@@ -360,6 +412,9 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   *Next step:* decide whether it is a faction-panel tab or its own route before any layout work.
   *Don't:* rebuild it as a second Tracker. The Tracker answers "where is my pool going right now";
   this answers "show me everything", and the two want different orderings and different densities.
+  *Also decide here:* whether a body gets a destination of its own. The system view's ring diagram
+  has no click-to-select because there is nothing to select into — bodies carry no panel. This is
+  the first row that would give them one.
 - **[S] Funding sliders: show the set value immediately, shorted-only exception** — today's "set X% · runs Y%"
   duplicates the number in steady state and conflates the one-cycle latch lag with genuine insolvency.
   *Next step:* needs the settlement snapshot to persist the slider values used at settlement — a
@@ -368,33 +423,6 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
 - **[M] Faction-screen colonise verb with map target selection** — the construction command card gets a
   colonise action entering a map target-selection mode (eligible systems highlighted, click to direct),
   explicitly not a dropdown. Needs a short interaction design pass first.
-- **[S] Needs-tooltip language pass** — the needs-ledger / pop-short tooltips ship with figures plus one
-  placeholder sentence, pending a nested-tooltip pass. Fold the two near-duplicate bodies (`NeedTooltip` in
-  `population-panel.tsx`, `PopShortTooltipBody` in `industry-panel.tsx`) into a shared shell then.
-  **Widened (2026-08-24): apply `/game-copy` to every pre-existing tooltip/label surface** — the
-  skill (three registers, additive-percentage modifiers, game vocabulary only) shipped with
-  habitability seeding and that branch's own surfaces conform; the rest of the UI has not been
-  swept. Do it while the surface count is small; every new UI task already falls under the skill.
-- **[L] Paradox-style nested/pinnable deep tooltips** — tooltips whose terms are themselves hoverable,
-  pinnable for comparison, backed by a cross-linking concept glossary. Needs a design doc + collaborative
-  HTML-prototype pass. Core genre UI post-pivot, not polish. The theme already reserves a copper treatment
-  as this system's second tier.
-  **The primitive shipped with the Tracker** (`Popover`, `components/ui/popover.tsx`) — a Radix-Popover-based
-  popover with hover-to-open, keyboard access and a safe transit area, scoped to one level. What stays here:
-  **nesting** (a parent popover must not close while a child is open — neither Radix primitive gives this,
-  so it is custom either way), pinning, the glossary, and **migrating the existing plain Radix tooltips**
-  onto the popover, which is deliberately deferred rather than done alongside the Tracker.
-  Design input worth not losing: Paradox tooltips **follow the cursor until you hold still, then latch**
-  so you can move onto them. That is a legitimate alternative to a grace-area polygon and arguably
-  simpler; decide between them at the prototype pass.
-  *Don't:* design the nesting model before there is a real chain of descriptions to design against —
-  the shape follows the content, and the Tracker needed only one level.
-- **[S] Game-term glossary** — one doc defining the game's terms of art in plain language (pop = 1
-  million people; tick/cycle; Provision; bands; cover; unrest/strike; control ladder…), written as
-  the single source tooltips and tutorials quote from. The nested-tooltips row's "cross-linking
-  concept glossary" is this doc grown hyperlinks — start it flat, don't wait for that system.
-  The time-anchoring counterpart already shipped — SPEC.md's Calendar section anchors ticks to
-  in-world time; this row anchors vocabulary instead.
 - **[S] Move the dev cheat-panel button to the header** — the map sidebar and other floating elements block it.
 - **[S] Standardise main content panel size** — system detail should be smaller than command center.
 - **[S] Unrest history / recovery forecast** — a per-system chart of unrest over time and a forecast

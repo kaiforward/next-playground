@@ -308,4 +308,91 @@ describe("getSystemSubstrate", () => {
       expect(error).toMatchObject({ kind: "not_found" });
     }
   });
+
+  it("falls back to array position when a system's bodies carry no stored orbitIndex, stable across repeated reads", () => {
+    const system = world.systems.find((s) => world.bodies.filter((b) => b.systemId === s.id).length >= 2)!;
+    expect(system).toBeDefined();
+    const patched: World = {
+      ...world,
+      bodies: world.bodies.map((b) => (b.systemId === system.id ? { ...b, orbitIndex: undefined } : b)),
+    };
+    setWorld(patched);
+
+    const systemBodyIds = world.bodies.filter((b) => b.systemId === system.id).map((b) => b.id);
+
+    const first = getSystemSubstrate(system.id);
+    if (first.visibility !== "visible") throw new Error("expected visible");
+    for (const [i, id] of systemBodyIds.entries()) {
+      expect(first.bodies.find((b) => b.id === id)!.orbitIndex).toBe(i + 1);
+    }
+
+    const second = getSystemSubstrate(system.id);
+    if (second.visibility !== "visible") throw new Error("expected visible");
+    expect(second.bodies.map((b) => b.orbitIndex)).toEqual(first.bodies.map((b) => b.orbitIndex));
+  });
+
+  it("falls back for the WHOLE system, never per body, when only some bodies carry a stored orbitIndex", () => {
+    const system = world.systems.find((s) => world.bodies.filter((b) => b.systemId === s.id).length >= 2)!;
+    expect(system).toBeDefined();
+    const systemBodies = world.bodies.filter((b) => b.systemId === system.id);
+    const [first, second, ...rest] = systemBodies;
+    const mixed = [
+      { ...first, orbitIndex: undefined },
+      { ...second, orbitIndex: 1 },
+      ...rest,
+    ];
+    const patched: World = {
+      ...world,
+      bodies: world.bodies.map((b) => {
+        if (b.systemId !== system.id) return b;
+        const replacement = mixed.find((m) => m.id === b.id);
+        return replacement ?? b;
+      }),
+    };
+    setWorld(patched);
+
+    const data = getSystemSubstrate(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    const indices = data.bodies.map((b) => b.orbitIndex).sort((a, b) => a - b);
+    const expectedPermutation = systemBodies.map((_, i) => i + 1);
+    expect(indices).toEqual(expectedPermutation);
+    for (const [i, b] of systemBodies.entries()) {
+      expect(data.bodies.find((row) => row.id === b.id)!.orbitIndex).toBe(i + 1);
+    }
+  });
+
+  it("keeps workedCounts aligned with its own body when the orbitIndex absence fallback is taken", () => {
+    const system = [...world.systems].sort((a, b) => b.population - a.population)[0];
+    expect(system.population).toBeGreaterThan(0);
+
+    const before = getSystemSubstrate(system.id);
+    if (before.visibility !== "visible") throw new Error("expected visible");
+    const beforeById = new Map(before.bodies.map((b) => [b.id, b.workedCounts]));
+    expect(before.bodies.some((b) => RESOURCE_TYPES.some((r) => b.workedCounts[r] > 0))).toBe(true);
+
+    const patched: World = {
+      ...world,
+      bodies: world.bodies.map((b) => (b.systemId === system.id ? { ...b, orbitIndex: undefined } : b)),
+    };
+    setWorld(patched);
+
+    const after = getSystemSubstrate(system.id);
+    if (after.visibility !== "visible") throw new Error("expected visible");
+    for (const b of after.bodies) {
+      expect(b.workedCounts).toEqual(beforeById.get(b.id));
+    }
+  });
+
+  it("passes size through unchanged from WorldBody.size — never defaulted or rounded", () => {
+    const body = world.bodies[0];
+    const patched: World = {
+      ...world,
+      bodies: world.bodies.map((b) => (b.id === body.id ? { ...b, size: 1.23456 } : b)),
+    };
+    setWorld(patched);
+
+    const data = getSystemSubstrate(body.systemId);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    expect(data.bodies.find((b) => b.id === body.id)!.size).toBe(1.23456);
+  });
 });

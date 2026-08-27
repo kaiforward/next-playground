@@ -29,7 +29,7 @@ import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { labourDemand, skill1Demand, skill2Demand } from "@/lib/engine/industry";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import { RESOURCE_TYPES, emptyResourceVector } from "@/lib/engine/resources";
-import type { GeneratedBody } from "@/lib/engine/body-gen";
+import type { RolledBody } from "@/lib/engine/body-gen";
 
 /** Resident population of a faction capital — a large established core (~5 B people at 1 pop = 1 M). */
 export const HOME_SYSTEM_POP = 5000;
@@ -141,7 +141,7 @@ const GARDEN_DISPLAY_SIZE = 1.0;
  * homeworld's procedural bodies (which stay as varied scenery + extra deposits). Temperate class,
  * score 1.0 — authored directly, never back-solved from buildings.
  */
-export function homeworldGardenBody(): GeneratedBody {
+export function homeworldGardenBody(): RolledBody {
   const b = computeHomeworldBuildings(HOME_SYSTEM_POP);
   const counts = emptyResourceVector();
   let housingPeopleLand = 0;

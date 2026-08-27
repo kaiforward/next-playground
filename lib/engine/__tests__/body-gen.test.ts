@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mulberry32 } from "../universe-gen";
+import { mulberry32, type RNG } from "../universe-gen";
 import { generateSubstrate, substrateAggregates, type GeneratedBody } from "../body-gen";
 import {
   SUN_CLASSES, BODY_ARCHETYPES, HABITABILITY_THRESHOLD, HABITABLE_COUNT_LADDER,
@@ -10,6 +10,26 @@ import type { BodyArchetypeId } from "@/lib/types/game";
 function sample(n: number) {
   const rng = mulberry32(42);
   return Array.from({ length: n }, () => generateSubstrate(rng));
+}
+
+/**
+ * Draws `n` systems off one continuous seeded stream and, for every system where both archetypes
+ * co-occur, records whether `typeB` landed outward of `typeA` (higher orbitIndex). Used to check
+ * the ring roll's bias tendency in aggregate, never per-instance.
+ */
+function collectPairOutcomes(rng: RNG, n: number, typeA: BodyArchetypeId, typeB: BodyArchetypeId) {
+  let coOccurrences = 0;
+  let bOutward = 0;
+  for (let i = 0; i < n; i++) {
+    const s = generateSubstrate(rng);
+    const a = s.bodies.find((b) => b.bodyType === typeA);
+    const b = s.bodies.find((b) => b.bodyType === typeB);
+    if (a !== undefined && b !== undefined) {
+      coOccurrences++;
+      if (b.orbitIndex > a.orbitIndex) bOutward++;
+    }
+  }
+  return { coOccurrences, bOutward };
 }
 
 describe("generateSubstrate", () => {
@@ -52,6 +72,70 @@ describe("generateSubstrate", () => {
     const a = generateSubstrate(mulberry32(7));
     const b = generateSubstrate(mulberry32(7));
     expect(a).toEqual(b);
+  });
+
+  it("rolls the same orbitIndex sequence on a second run with an identical seed", () => {
+    // A dedicated pin on the ring roll specifically (rather than generateSubstrate as a whole):
+    // this fails if the roll ever drew from anything other than the threaded seeded RNG.
+    const a = generateSubstrate(mulberry32(2024));
+    const b = generateSubstrate(mulberry32(2024));
+    expect(b.bodies.map((x) => x.orbitIndex)).toEqual(a.bodies.map((x) => x.orbitIndex));
+  });
+});
+
+describe("generateSubstrate — orbital ring roll", () => {
+  it("assigns orbitIndex as a permutation of 1..n over each system's bodies — no gap, no duplicate", () => {
+    for (const s of sample(500)) {
+      const indices = s.bodies.map((b) => b.orbitIndex).sort((x, y) => x - y);
+      expect(indices).toEqual(Array.from({ length: s.bodies.length }, (_, i) => i + 1));
+    }
+  });
+
+  it("never reorders the bodies array — most multi-body systems are NOT already in ascending orbitIndex order", () => {
+    const systems = sample(500).filter((s) => s.bodies.length >= 2);
+    let notMonotonic = 0;
+    for (const s of systems) {
+      const alreadyRingOrdered = s.bodies.every(
+        (b, i) => i === 0 || s.bodies[i - 1].orbitIndex < b.orbitIndex,
+      );
+      if (!alreadyRingOrdered) notMonotonic++;
+    }
+    // orbitIndex is rolled from bias+noise, independent of a body's position in the array, so a
+    // system's array is already in ring order only by chance: P(sorted) = 1/n! for n bodies (worst
+    // case n=2 gives 1/2! = 0.5; every larger n is far below that). Across a mixed sample of n=2..8
+    // systems the true sorted share sits well under 0.3. An implementation that actually SORTS
+    // bodies into ring order would instead make every system monotonic (notMonotonic === 0), so
+    // this bound is unreachable by a real sort and comfortably clears the worst-case chance rate.
+    expect(systems.length).toBeGreaterThan(50); // non-vacuous
+    expect(notMonotonic).toBeGreaterThan(systems.length * 0.5);
+  });
+
+  it("a near-bias-gap pair (gap < 2×ORBIT_ROLL_SPREAD) lands outward more often than not, but not always", () => {
+    // arid_world (orbitalBias 0.14) vs barren_rock (0.22): gap 0.08, well inside the swappable
+    // zone (2×ORBIT_ROLL_SPREAD = 0.5). Key difference D = noiseB − noiseA is Triangular(−2s, 2s, 0)
+    // for half-width s = ORBIT_ROLL_SPREAD = 0.25; for a gap Δ in [0, 2s],
+    // P(barren outward of arid) = P(D > −Δ) = 1/2 + Δ/(2s) − Δ²/(8s²) = 0.5 + 0.16 − 0.0128 ≈ 0.647.
+    // A real majority, nowhere near the 1.0 a hard sort (or Δ ≥ 2s) would force, and nowhere near
+    // 0.5, which is what a bias-blind (pure-random) roll would produce.
+    const { coOccurrences, bOutward } = collectPairOutcomes(
+      mulberry32(90210), 20000, "arid_world", "barren_rock",
+    );
+    expect(coOccurrences).toBeGreaterThan(200); // non-vacuous
+    const p = bOutward / coOccurrences;
+    expect(p).toBeGreaterThan(0.55);
+    expect(p).toBeLessThan(0.9);
+  });
+
+  it("a far-bias-gap pair (gap ≥ 2×ORBIT_ROLL_SPREAD) never swaps — the hard bound the noise can't cross", () => {
+    // arid_world (0.14) vs asteroid_belt (0.88): gap 0.74. |noiseB − noiseA| can never exceed
+    // 2×ORBIT_ROLL_SPREAD = 0.5 (the sum of two independent ±0.25 draws), so 0.74 > 0.5 makes a
+    // swap mathematically impossible, not merely statistically rare — the hard-sort guarantee the
+    // spec makes for classes far apart on the axis.
+    const { coOccurrences, bOutward } = collectPairOutcomes(
+      mulberry32(778899), 20000, "arid_world", "asteroid_belt",
+    );
+    expect(coOccurrences).toBeGreaterThan(200); // non-vacuous
+    expect(bOutward).toBe(coOccurrences); // absolute — zero exceptions
   });
 });
 
@@ -115,6 +199,7 @@ describe("substrateAggregates — Proves (1): tech-locked classes contribute zer
       peopleLand: 0,
       counts: { gas: 5, minerals: 5, ore: 5, biomass: 0, arable: 0, water: 0, radioactive: 5 },
       quality: { gas: 1, minerals: 1, ore: 1, biomass: 0, arable: 0, water: 0, radioactive: 1 },
+      orbitIndex: 1,
     };
     const agg = substrateAggregates([locked]);
     expect(agg.depositCounts.gas).toBe(0);
@@ -137,6 +222,7 @@ describe("substrateAggregates — Proves (2): arid/tundra dark land", () => {
       peopleLand: 200, // authored, dark — below threshold, never reaches peopleLand
       counts: { gas: 0, minerals: 3, ore: 3, biomass: 0, arable: 8, water: 0, radioactive: 3 },
       quality: { gas: 0, minerals: 1, ore: 1, biomass: 0, arable: 1, water: 0, radioactive: 1 },
+      orbitIndex: 1,
     };
     expect(BODY_ARCHETYPES.arid_world.scores.default).toBeLessThan(HABITABILITY_THRESHOLD);
     // Per-body value stays visible — the budget was authored, never deleted.
@@ -157,6 +243,7 @@ describe("substrateAggregates — Proves (4): potentialExtractionEfficiency defa
       peopleLand: 500,
       counts: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 10, water: 0, radioactive: 0 },
       quality: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 1, water: 0, radioactive: 0 },
+      orbitIndex: 1,
     };
     const agg = substrateAggregates([noWater]);
     expect(agg.potentialExtractionEfficiency.water).toBe(1);
@@ -168,11 +255,13 @@ describe("substrateAggregates — Proves (4): potentialExtractionEfficiency defa
       bodyType: "temperate_world", // extractionModifier 1.0
       size: 1, peopleLand: 0,      counts: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 6, radioactive: 0 },
       quality: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 1, radioactive: 0 },
+      orbitIndex: 1,
     };
     const b: GeneratedBody = {
       bodyType: "frozen_world", // extractionModifier 0.6
       size: 1, peopleLand: 0,      counts: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 2, radioactive: 0 },
       quality: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 1, radioactive: 0 },
+      orbitIndex: 2,
     };
     // (6*1.0 + 2*0.6) / 8 = 0.9
     const agg = substrateAggregates([a, b]);
