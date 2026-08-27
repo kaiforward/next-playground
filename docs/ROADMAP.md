@@ -58,12 +58,11 @@ The attention layer — how the player finds what to do — is two surfaces, bot
   - **The glossary.** [`docs/planned/glossary.md`](./planned/glossary.md) — the single source
     tooltips and tutorials quote from. Scope, writing rules, the qualifier-not-rename resolutions
     (settled habitability, potential vs realised yield), the engine-only word list and the term
-    inventory are agreed and written down there. What is left: sweep the demand cluster for
-    overloads, collapse duplicate terms in the inventory, and write the definitions. Flat for now;
+    inventory are agreed and written down there. What is left: collapse duplicate terms in the
+    inventory and write the definitions. Flat for now;
     it grows hyperlinks as the cross-linking system lands.
 
-  *Next step:* finish the demand-cluster overload sweep and write the definitions, then the design
-  doc + prototype pass for nesting.
+  *Next step:* write the definitions, then the design doc + prototype pass for nesting.
 
 ---
 
