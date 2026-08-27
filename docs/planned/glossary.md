@@ -46,6 +46,13 @@ becomes the reason the qualifier exists.
 - **Development is not overloaded.** Development points and a developed system share a root but
   follow from each other — a developed system is the only way development increases, so a developed
   system always carries some. No rename.
+- **Demand and staffing are separate words, not two senses of one.** Demand is goods: how much of
+  a good a world wants per cycle, its people and its factories together. The labour side is
+  *staffing*, which is already the word for it everywhere else. Two screens currently blur them —
+  the skilled-basket tooltip's "adds demand for: <goods>" reads as consumption and becomes
+  "consumes", and the build dialog's "adds labour demand" sits one clause after "Staffing
+  shortfall" and becomes "adds jobs your population can't fill". Neither needs a qualifier once
+  the words don't overlap.
 - **Band** keeps its word. Provision bands, deposit quality bands and budget bands never appear on
   the same screen, and each carries a visible qualifier already. The price band and logistics'
   dead-band are engine-side.
@@ -96,7 +103,7 @@ ring, star class, danger.
 **Industry** — building, level, count, built / in-use / available, decay, idle reason, recipe, input
 gate, tier (raw / processed / advanced), family, specialisation complex, the four health states.
 
-**Trade and money** — stock, price, surplus, deficit, haul, route cost, treasury, tax level, budget
+**Trade and money** — stock, price, demand, surplus, deficit, haul, route cost, treasury, tax level, budget
 band, funded fraction, charter fee, manifest.
 
 **Territory and politics** — unclaimed / controlled / developed, claim, develop, found, faction,
@@ -108,7 +115,5 @@ tiers, funded front, ghost row.
 
 ## Still open
 
-- The rest of the overload audit: the demand cluster (civilian demand, `demandRate`, the use figure,
-  the draw figure, derived demand) has not been swept.
 - Whether any inventory term is a second name for one already listed.
 - Writing the definitions themselves.
