@@ -46,6 +46,16 @@ The attention layer — how the player finds what to do — is two surfaces, bot
     arrived at: a quantity genuinely bounded 0–1 reads as a percentage; a multiplier that can exceed
     1 keeps its own words or its `×`, because a percentage would imply a ceiling it does not have.
 
+    **A worked case to settle first, because it misled the owner in play.** The Industry tab's
+    housing row reads "379 / 379" — completely full — on a system whose population fills 345.6 of
+    those 379. The staffed figure is `min(count, housingUsed(population) × (1 + VACANCY_SLACK))`
+    (`lib/engine/industry.ts:395`), and `VACANCY_SLACK` is 0.10, so a 10% vacancy is counted as
+    healthy and the row saturates at 91% real occupancy. Astrography's per-body occupancy uses the
+    raw `population / POP_CENTRE_DENSITY` instead. Both are correct by their own definitions and
+    cannot be reconciled by reading them, because one silently contains an allowance. Decide when
+    an allowance may be folded into a displayed figure at all, and how a saturated-with-slack
+    reading says so.
+
   - **The glossary.** One doc defining the game's terms of art in plain language (pop = 1 million
     people; tick/cycle; Provision; bands; cover; unrest/strike; control ladder…), written as the
     single source tooltips and tutorials quote from. Start it flat; it grows hyperlinks as the
