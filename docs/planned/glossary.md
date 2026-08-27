@@ -19,7 +19,8 @@ Engine vocabulary does not earn an entry — see *Words that stay inside the eng
 
 ## How an entry is written
 
-- **One concept per entry, in one self-contained sentence.** An entry never explains a second term
+- **One concept per entry, kept as short as it will go** — one self-contained sentence where that
+  works, two where the second genuinely earns its place. An entry never explains a second term
   inline; it names it and leaves it to that term's own entry.
 - **Named, not explained.** This is what makes term-linking possible later without rewriting
   entries: "how habitable this system is to your *pops*" links *pops* rather than defining it.
@@ -100,7 +101,7 @@ whether decay is eroding the level. The allowance stays inside decay, invisible.
 
 Real concepts the tick needs, that teach a player nothing and must never reach a tooltip: eligible
 heads, work budget, cover (and every `*_COVER` threshold), the use figure vs the draw figure,
-frontier index, dead-band. Where a player needs the idea behind one of these, it is expressed in the
+frontier index, dead-band, tick. Where a player needs the idea behind one of these, it is expressed in the
 player's own terms on that surface, not by exposing the engine's word.
 
 ## Term inventory
@@ -108,7 +109,7 @@ player's own terms on that surface, not by exposing the engine's word.
 Candidates, grouped by where a player meets them. Many will collapse — two names for one concept is
 itself a finding, and anything on the engine-only list above drops out.
 
-**Time and scale** — tick, cycle, day / month / year, development points.
+**Time and scale** — cycle, day / month / year, UST, development points.
 
 **People** — population, pop cap, housing, occupancy, habitable land, workforce, unskilled /
 technician / engineer, skill ceiling, academy licence, staffing, unemployment, migration, colonist
@@ -134,6 +135,33 @@ gateway, jump lane, fuel cost.
 **The player's layer** — automation switch, pin, tracker section, alert category and its three
 tiers, funded front, ghost row.
 
+## Definitions
+
+### Time and scale
+
+The calendar keeps real-world unit names because it very nearly keeps their lengths — a 30-day
+month and a 360-day year are within 1.5% of real, so the player's own intuition about how long a
+year feels is free and correct. The one unit that does deviate is the six-day week, and it is
+already called a cycle rather than a week. Tick is engine-only: everything a player reads is
+denominated per cycle.
+
+**Cycle** — Six days, and the span everything slow is measured over: goods bought and sold, people
+born and moved, buildings worn down. Any rate written "per cycle" is measured against this.
+
+**Day, month, year** — The date on screen: thirty days to a month, twelve months to a year,
+counted from 2350.
+
+**UST** — Universal Standard Time, the clock every world keeps regardless of how fast its own
+planet turns, and the reason a day means the same thing across the galaxy. Dates read
+`2350.04.12 UST`.
+
+**Development points** — How built up a system is: its people, the skilled work its academies
+license, and the industry it actually keeps staffed, with advanced industry counting for more than
+raw.
+
 ## Still open
 
-- Writing the definitions themselves.
+- Writing the remaining seven groups of definitions.
+- Rendering dates with the `UST` stamp — decoration over the existing calendar
+  (`lib/constants/calendar.ts` is display-only), so it rides the language pass, and it is cheap to
+  drop again if it does not land.
