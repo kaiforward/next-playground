@@ -106,16 +106,24 @@ A displayed figure shows the real quantity. Where a mechanic works against a tol
 tolerance stays inside that mechanic and surfaces through the state it already drives — never by
 inflating the number the player reads.
 
-The case this rule comes from: the Industry ledger's in-use column is not occupancy or staffing. It
-is `buildingUsed` (`lib/engine/industry.ts`), the decay engine's keep-or-shed verdict, and it folds a
-10% vacancy allowance for housing (`VACANCY_SLACK`) and a 15% selling allowance for production rows
-(`USED_SLACK`, `lib/constants/infrastructure.ts`). Every row in that ledger therefore saturates
-before the thing is actually full — housing reads 379 / 379 at 91% real occupancy.
+The case this rule comes from is the Industry ledger, which used to show `buildingUsed`
+(`lib/engine/industry.ts`) — the decay engine's keep-or-shed verdict, folding a 15% selling
+allowance for production rows and a 10% vacancy allowance for housing (`USED_SLACK`,
+`VACANCY_SLACK`, `lib/constants/infrastructure.ts`). Every row saturated before the thing was
+actually full: housing read 379 / 379 at 91% real occupancy.
 
-The fix is not to remove the allowance and not to rename the column. The panel **already** carries
-decay's verdict as the row's health colouring (stable / idle / contracting / collapsing), so the
-in-use number is a second, worse copy of it. The column shows the true figure; the colour says
-whether decay is eroding the level. The allowance stays inside decay, invisible.
+The allowance is not removed and the column is not renamed. The panel **already** carries decay's
+verdict as the row's health colouring (stable / idle / contracting / collapsing), so a padded number
+is a second, worse copy of it. The column shows the true figure; the colour says whether decay is
+eroding the level. The allowance stays inside decay, invisible.
+
+Production rows now obey this: the Staffed column reads `staffedLevels`
+(`components/system/industry-rows.ts`), pure staffed labour with no selling allowance. **Housing
+does not yet.** For those rows `staffedLevels` returns `used`, which is
+`housingUsed(population) × (1 + VACANCY_SLACK)` capped at the level count, and the code defends it
+on the grounds that the obvious alternative (`staffedFraction × count`) can read past the count on
+an overcrowded system. That defends against overshoot rather than for the allowance, and it skips a
+third figure that is both true and bounded: `min(count, housingUsed(population))`.
 
 ## Words that stay inside the engine
 
@@ -443,6 +451,9 @@ once it is finished, with its progress and an estimated finish.
 
 ## Still open
 
+- Showing housing occupancy honestly in the Industry ledger — `min(count, housingUsed(population))`
+  in place of the vacancy-padded `used` (`components/system/industry-rows.ts`), with `VACANCY_SLACK`
+  staying inside decay. Rides the tooltip migration, which opens that panel anyway.
 - Rendering dates with the `UST` stamp — decoration over the existing calendar
   (`lib/constants/calendar.ts` is display-only), so it rides the language pass, and it is cheap to
   drop again if it does not land.
