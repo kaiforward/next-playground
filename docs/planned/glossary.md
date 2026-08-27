@@ -19,9 +19,14 @@ Engine vocabulary does not earn an entry — see *Words that stay inside the eng
 
 ## How an entry is written
 
+- **These are dictionary entries, not prose. Define, don't sell.** No sentence whose job is to
+  reassure the player or set a mood — mood belongs to events, missions and story text, where it
+  does real work. Context appears only where the definition genuinely needs it, and usually by
+  naming another term rather than explaining one.
 - **One concept per entry, kept as short as it will go** — one self-contained sentence where that
-  works, two where the second genuinely earns its place. An entry never explains a second term
-  inline; it names it and leaves it to that term's own entry.
+  works. An entry earns a second only when the first leaves a real question about what the thing
+  is. An entry never explains a second term inline; it names it and leaves it to that term's own
+  entry.
 - **Named, not explained.** This is what makes term-linking possible later without rewriting
   entries: "how habitable this system is to your *pops*" links *pops* rather than defining it.
 - **The tooltip either explains the term's relevance in that context, or shows this definition
@@ -145,19 +150,15 @@ year feels is free and correct. The one unit that does deviate is the six-day we
 already called a cycle rather than a week. Tick is engine-only: everything a player reads is
 denominated per cycle.
 
-**Cycle** — Six days, and the span everything slow is measured over: goods bought and sold, people
-born and moved, buildings worn down. Any rate written "per cycle" is measured against this.
+**Cycle** — Six days. The period all slow change is measured over, and the basis of any rate
+written "per cycle".
 
-**Day, month, year** — The date on screen: thirty days to a month, twelve months to a year,
-counted from 2350.
+**Day, month, year** — Thirty days to a month, twelve months to a year. Dates count from 2350.
 
-**UST** — Universal Standard Time, the clock every world keeps regardless of how fast its own
-planet turns, and the reason a day means the same thing across the galaxy. Dates read
-`2350.04.12 UST`.
+**UST** — Universal Standard Time. The time standard kept across every world.
 
-**Development points** — How built up a system is: its people, the skilled work its academies
-license, and the industry it actually keeps staffed, with advanced industry counting for more than
-raw.
+**Development points** — A measure of how built up a system is, counting population, licensed
+skilled work and staffed industry, weighted toward advanced industry.
 
 ## Still open
 
