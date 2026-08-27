@@ -57,6 +57,19 @@ becomes the reason the qualifier exists.
   the same screen, and each carries a visible qualifier already. The price band and logistics'
   dead-band are engine-side.
 
+### Terms that collapsed
+
+Two names for one concept is a finding, and the loser does not come back.
+
+- **Pop is not a unit; population is the term.** There is no discrete pop anywhere — `population`
+  is a plain number (`lib/types/game.ts`), and "pops" in code means per-system population rows.
+  "Pop" survives as informal English for people, with no entry of its own.
+- **A building's count is its number of levels** — the Industry ledger renders staffed levels over
+  `count` in one cell (`components/system/industry-panel.tsx`). One entry, not two.
+- **Shortfall is plain English, not a defined term.** The measure is *satisfaction*, the fraction
+  of a need met (`components/system/needs-view.ts`); a shortfall is just what is missing from it,
+  and the screen already words the satisfaction number that way ("pops short 42%").
+
 ### An allowance never goes inside a displayed number
 
 A displayed figure shows the real quantity. Where a mechanic works against a tolerance, the
@@ -86,21 +99,20 @@ player's own terms on that surface, not by exposing the engine's word.
 Candidates, grouped by where a player meets them. Many will collapse — two names for one concept is
 itself a finding, and anything on the engine-only list above drops out.
 
-**Time and scale** — tick, cycle, day / month / year, pop, development points.
+**Time and scale** — tick, cycle, day / month / year, development points.
 
 **People** — population, pop cap, housing, occupancy, habitable land, workforce, unskilled /
 technician / engineer, skill ceiling, academy licence, staffing, unemployment, migration, colonist
 delivery, abandonment.
 
 **Wellbeing** — Provision, expectation, grievance, the four Provision bands (Supplied / Strained /
-Rationing / Deprived) and Famine, unrest, stability, strike, survival goods, need, satisfaction,
-shortfall.
+Rationing / Deprived) and Famine, unrest, stability, strike, survival goods, need, satisfaction.
 
 **Ground** — body, archetype, habitability, settled habitability, deposit, deposit count, quality
 band (poor / average / good / rich), potential yield, realised yield, worked slots, locked, orbit
 ring, star class, danger.
 
-**Industry** — building, level, count, built / in-use / available, decay, idle reason, recipe, input
+**Industry** — building, level count, built / in-use / available, decay, idle reason, recipe, input
 gate, tier (raw / processed / advanced), family, specialisation complex, the four health states.
 
 **Trade and money** — stock, price, demand, surplus, deficit, haul, route cost, treasury, tax level, budget
