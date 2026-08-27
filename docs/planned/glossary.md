@@ -53,6 +53,15 @@ becomes the reason the qualifier exists.
   "consumes", and the build dialog's "adds labour demand" sits one clause after "Staffing
   shortfall" and becomes "adds jobs your population can't fill". Neither needs a qualifier once
   the words don't overlap.
+- **Occupancy is fullness; a body is settled.** Occupancy keeps the fill meaning — how full a
+  system's housing is, population against pop cap (the population-summary occupancy bar). The
+  body-level badge for "people live here" is a different fact and reads **Settled**
+  (`components/system/body-readout.tsx`), which also puts the badge and *settled habitability* on
+  the same word: that figure is the mean across exactly the bodies the badge marks.
+- **Workforce means people, not buildings.** The construction readout labels schools and institutes
+  as the "workforce" family (`lib/engine/construction-readout.ts`), which collides with the labour
+  pool. The family is renamed **licensing** — what both of its lines already say it does — and
+  workforce is the people.
 - **Band** keeps its word. Provision bands, deposit quality bands and budget bands never appear on
   the same screen, and each carries a visible qualifier already. The price band and logistics'
   dead-band are engine-side.
@@ -108,7 +117,7 @@ delivery, abandonment.
 **Wellbeing** — Provision, expectation, grievance, the four Provision bands (Supplied / Strained /
 Rationing / Deprived) and Famine, unrest, stability, strike, survival goods, need, satisfaction.
 
-**Ground** — body, archetype, habitability, settled habitability, deposit, deposit count, quality
+**Ground** — body, archetype, settled, habitability, settled habitability, deposit, deposit count, quality
 band (poor / average / good / rich), potential yield, realised yield, worked slots, locked, orbit
 ring, star class, danger.
 
