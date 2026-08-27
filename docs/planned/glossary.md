@@ -1,0 +1,114 @@
+# Glossary — the game's vocabulary
+
+One definition per term, in plain language, written once and quoted everywhere. Tooltips, popovers
+and tutorials all draw from here; nothing defines a term a second time in its own words.
+
+This doc is the reference the player can open directly, and it is also the source the tooltip
+migration links to. It is written before the deep-tooltip system so that migration has something to
+point at.
+
+## What earns an entry
+
+**Every quantity that has a name on screen** — not only the strange words. The exotic terms
+(Provision, cover, control ladder) are not where players get misled; the overloaded ordinary ones
+are. A word like "occupancy" reads as obvious, which is exactly why two tabs meaning different
+things by it goes unnoticed. Under this test each such word gets one definition, and any surface
+that departs from it has to say so on the surface.
+
+Engine vocabulary does not earn an entry — see *Words that stay inside the engine* below.
+
+## How an entry is written
+
+- **One concept per entry, in one self-contained sentence.** An entry never explains a second term
+  inline; it names it and leaves it to that term's own entry.
+- **Named, not explained.** This is what makes term-linking possible later without rewriting
+  entries: "how habitable this system is to your *pops*" links *pops* rather than defining it.
+- **The tooltip either explains the term's relevance in that context, or shows this definition
+  directly.** Context-specific meaning is the only reason a tooltip writes its own words.
+
+## Rules the vocabulary is held to
+
+### Qualifiers, not renames
+
+Where one word carries two meanings, the fix is almost always the qualifier that is currently
+living in a code docstring, moved onto the screen. The word survives; the thing that was invisible
+becomes the reason the qualifier exists.
+
+- **Habitability.** A body's habitability is its archetype's static rating. The system-level figure
+  is a different quantity — the land-weighted mean score across the bodies the population *actually
+  occupies*, best world first (`lib/engine/habitability.ts`). It is a property of where people are
+  sitting, not of the system's ground, and it moves as population spreads onto worse worlds. It
+  reads as **settled habitability**; the plain word stays with the body.
+- **Yield.** Potential yield covers every deposit slot, quality-weighted. Realised yield covers only
+  the worked prefix (`lib/engine/body-gen.ts`). The adjective is mandatory on screen wherever both
+  can be met. A specialisation complex's family yield multiplier and the Industry tab's realised
+  output units are separate readings that keep their own words.
+- **Development is not overloaded.** Development points and a developed system share a root but
+  follow from each other — a developed system is the only way development increases, so a developed
+  system always carries some. No rename.
+- **Band** keeps its word. Provision bands, deposit quality bands and budget bands never appear on
+  the same screen, and each carries a visible qualifier already. The price band and logistics'
+  dead-band are engine-side.
+
+### An allowance never goes inside a displayed number
+
+A displayed figure shows the real quantity. Where a mechanic works against a tolerance, the
+tolerance stays inside that mechanic and surfaces through the state it already drives — never by
+inflating the number the player reads.
+
+The case this rule comes from: the Industry ledger's in-use column is not occupancy or staffing. It
+is `buildingUsed` (`lib/engine/industry.ts`), the decay engine's keep-or-shed verdict, and it folds a
+10% vacancy allowance for housing (`VACANCY_SLACK`) and a 15% selling allowance for production rows
+(`USED_SLACK`, `lib/constants/infrastructure.ts`). Every row in that ledger therefore saturates
+before the thing is actually full — housing reads 379 / 379 at 91% real occupancy.
+
+The fix is not to remove the allowance and not to rename the column. The panel **already** carries
+decay's verdict as the row's health colouring (stable / idle / contracting / collapsing), so the
+in-use number is a second, worse copy of it. The column shows the true figure; the colour says
+whether decay is eroding the level. The allowance stays inside decay, invisible.
+
+## Words that stay inside the engine
+
+Real concepts the tick needs, that teach a player nothing and must never reach a tooltip: eligible
+heads, work budget, cover (and every `*_COVER` threshold), the use figure vs the draw figure,
+frontier index, dead-band. Where a player needs the idea behind one of these, it is expressed in the
+player's own terms on that surface, not by exposing the engine's word.
+
+## Term inventory
+
+Candidates, grouped by where a player meets them. Many will collapse — two names for one concept is
+itself a finding, and anything on the engine-only list above drops out.
+
+**Time and scale** — tick, cycle, day / month / year, pop, development points.
+
+**People** — population, pop cap, housing, occupancy, habitable land, workforce, unskilled /
+technician / engineer, skill ceiling, academy licence, staffing, unemployment, migration, colonist
+delivery, abandonment.
+
+**Wellbeing** — Provision, expectation, grievance, the four Provision bands (Supplied / Strained /
+Rationing / Deprived) and Famine, unrest, stability, strike, survival goods, need, satisfaction,
+shortfall.
+
+**Ground** — body, archetype, habitability, settled habitability, deposit, deposit count, quality
+band (poor / average / good / rich), potential yield, realised yield, worked slots, locked, orbit
+ring, star class, danger.
+
+**Industry** — building, level, count, built / in-use / available, decay, idle reason, recipe, input
+gate, tier (raw / processed / advanced), family, specialisation complex, the four health states.
+
+**Trade and money** — stock, price, surplus, deficit, haul, route cost, treasury, tax level, budget
+band, funded fraction, charter fee, manifest.
+
+**Territory and politics** — unclaimed / controlled / developed, claim, develop, found, faction,
+government, doctrine, faction status, relation score and its five tiers, alliance, pact, region,
+gateway, jump lane, fuel cost.
+
+**The player's layer** — automation switch, pin, tracker section, alert category and its three
+tiers, funded front, ghost row.
+
+## Still open
+
+- The rest of the overload audit: the demand cluster (civilian demand, `demandRate`, the use figure,
+  the draw figure, derived demand) has not been swept.
+- Whether any inventory term is a second name for one already listed.
+- Writing the definitions themselves.
