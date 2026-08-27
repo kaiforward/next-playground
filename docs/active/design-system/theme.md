@@ -115,6 +115,9 @@ silent copy of that one.
 - **DetailPanel** modal wrapper: `rounded-lg` — the floating panel itself is the one element that gets subtle rounding to feel like a window/viewport
 - **FilterBar chips**: `rounded-full` — intentional pill shape for toggle chips
 - **Loading spinner**: `rounded-full` — circular spinner element
+- **System-view body hit targets** (`components/system/system-rings.tsx`): `rounded-full` — the
+  invisible buttons over the ring diagram's bodies. Nothing of them is drawn except a focus ring,
+  and the body underneath is a circle, so a square one would box a round mark
 
 Everything else: **square corners**. This is the defining visual characteristic of Foundry.
 
