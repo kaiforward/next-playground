@@ -81,6 +81,15 @@ Two names for one concept is a finding, and the loser does not come back.
   "Pop" survives as informal English for people, with no entry of its own.
 - **A building's count is its number of levels** — the Industry ledger renders staffed levels over
   `count` in one cell (`components/system/industry-panel.tsx`). One entry, not two.
+- **The ownership ladder has three states and two verbs, and they do not collapse.** Unclaimed,
+  controlled and developed are distinct system states (`lib/engine/directed-build.ts` calls it a
+  three-state ownership ladder; a controlled system has population 0 and hosts no builds). *Claim*
+  takes unclaimed to controlled; *colonise* takes controlled to developed. **Colony** names the
+  span between them, and it has a mechanical end rather than a judgement call: `colonyForming` is
+  true only while a colony-establish project is open and is explicitly disjoint from `developed`
+  (`lib/types/game.ts`), so a colony stops being one the moment the project completes. "Found" and
+  the button's "Establish colony" both retire. *Develop* and *development points* keep the root for
+  the state and its measure, unchanged.
 - **Deposit retires; the words are resource and slot.** The Industry ledger's own header row ran
   `Deposit | Staffed | Slots | Yield | Out/cyc` (`components/system/industry-panel.tsx`) — two words
   for one thing, six characters apart. A *resource* is one of the seven kinds a body's ground holds
@@ -123,7 +132,7 @@ itself a finding, and anything on the engine-only list above drops out.
 **Time and scale** — cycle, day / month / year, UST, development points.
 
 **People** — population, pop cap, housing, occupancy, habitable land, workforce, unskilled /
-technician / engineer, skill ceiling, academy licence, staffing, unemployment, migration, colonist
+technician / engineer, skill ceiling, academy, staffing, unemployment, migration, colonist
 delivery, abandonment.
 
 **Wellbeing** — Provision, expectation, grievance, the four Provision bands (Supplied / Strained /
@@ -139,7 +148,7 @@ gate, tier (raw / processed / advanced), family, specialisation complex, the fou
 **Trade and money** — stock, price, demand, surplus, deficit, haul, route cost, treasury, tax level, budget
 band, funded fraction, charter fee, manifest.
 
-**Territory and politics** — unclaimed / controlled / developed, claim, develop, found, faction,
+**Territory and politics** — unclaimed / controlled / developed, claim, colonise, colony, faction,
 government, doctrine, faction status, relation score and its five tiers, alliance, pact, region,
 gateway, jump lane, fuel cost.
 
@@ -203,9 +212,9 @@ because no skill ceiling licenses them for it.
 emptier and more job-rich ones. Nobody moves toward a world in Famine.
 
 **Colonist delivery** — Spare population routed from established systems out to a faction's
-emptiest colonies, and the main way a new colony fills.
+emptiest systems, and the main way a newly developed system fills.
 
-**Abandonment** — The end of a colony whose population falls below one pop, famine or not. Its
+**Abandonment** — The end of a developed system whose population falls below one pop, famine or not. Its
 buildings are lost and the system reverts to unclaimed frontier, claimable again.
 
 ### Wellbeing
@@ -353,23 +362,26 @@ pay, and the three are settled in that order with nothing on credit.
 band's work runs the following cycle: money is fuel, so it can starve a band but never push one
 past what it could physically do.
 
-**Charter fee** — The one-off price of committing to a colony, taken off the treasury before the
+**Charter fee** — The one-off price of committing to a colonisation, taken off the treasury before the
 budget bands divide anything.
 
-**Manifest** — The goods a colony is stocked with while it is being founded, staged and paid for
+**Manifest** — The goods a colony is stocked with while it is being colonised, staged and paid for
 cycle by cycle and credited to its market when it opens.
 
 ### Territory and politics
 
 **Unclaimed, controlled, developed** — The three states a system can be in. Unclaimed is open
-frontier, controlled is claimed but unsettled, and developed is a live colony — only a developed
+frontier, controlled is claimed but unsettled, and developed is settled and live. Only a developed
 system has population, a market or industry.
 
 **Claim** — Stake an unclaimed system as controlled. A claim is cheap and near-instant, and it
 takes the ground without settling it.
 
-**Found** — Settle a controlled system into a live colony, turning it developed. It is paid for
-with a charter fee, a manifest and construction work, and it takes time to finish.
+**Colonise** — Settle a controlled system, turning it developed. It is paid for with a charter fee,
+a manifest and construction work, and it takes time to finish.
+
+**Colony** — A controlled system with a colonisation under way, from the moment the work is
+commissioned to the moment it completes and the system turns developed.
 
 **Faction** — One of the powers dividing the galaxy, the player's own included. Each holds
 territory, runs a treasury, and expands and builds by the same rules as the rest.

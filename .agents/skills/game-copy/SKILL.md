@@ -56,7 +56,7 @@ into the prose.
 Copy is built from the game's own terms of art — this jargon is sanctioned and *should* be
 used consistently: **habitability, pop, population growth, unrest, strike, land, habitable
 land, resource, resource slot, worked, yield, provision, rationing, famine, colony, homeworld,
-founding, claim, growth, decay, upkeep, treasury**. One concept, one word, everywhere — if two surfaces
+colonise, claim, growth, decay, upkeep, treasury**. One concept, one word, everywhere — if two surfaces
 call the same thing a "deposit" and a "slot", one of them is wrong.
 
 The test for every other word: **does it describe the world, or the code?** If a word
