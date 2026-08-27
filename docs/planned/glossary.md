@@ -136,5 +136,4 @@ tiers, funded front, ghost row.
 
 ## Still open
 
-- Whether any inventory term is a second name for one already listed.
 - Writing the definitions themselves.
