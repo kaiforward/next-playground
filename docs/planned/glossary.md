@@ -129,8 +129,9 @@ third figure that is both true and bounded: `min(count, housingUsed(population))
 
 Real concepts the tick needs, that teach a player nothing and must never reach a tooltip: eligible
 heads, work budget, cover (and every `*_COVER` threshold), the use figure vs the draw figure,
-frontier index, dead-band, tick. Where a player needs the idea behind one of these, it is expressed in the
-player's own terms on that surface, not by exposing the engine's word.
+frontier index, dead-band, tick, route cost (the player meets distance as fuel cost). Where a
+player needs the idea behind one of these, it is expressed in the player's own terms on that
+surface, not by exposing the engine's word.
 
 ## Term inventory
 
@@ -140,7 +141,7 @@ itself a finding, and anything on the engine-only list above drops out.
 **Time and scale** — cycle, day / month / year, UST, development points.
 
 **People** — population, pop cap, housing, occupancy, habitable land, workforce, unskilled /
-technician / engineer, skill ceiling, academy, staffing, unemployment, migration, colonist
+technician / engineer, skill ceiling, academy, staffing, unemployed, migration, colonist
 delivery, abandonment.
 
 **Wellbeing** — Provision, expectation, grievance, the four Provision bands (Supplied / Strained /
@@ -150,14 +151,14 @@ Rationing / Deprived) and Famine, unrest, stability, strike, survival goods, nee
 band (poor / average / good / rich), potential yield, realised yield, worked, locked, orbit
 ring, star class, danger.
 
-**Industry** — building, level count, built / in-use / available, decay, idle reason, recipe, input
+**Industry** — building, built / staffed / free, decay, idle reason, recipe, input
 gate, tier (raw / processed / advanced), family, specialisation complex, the four health states.
 
-**Trade and money** — stock, price, demand, surplus, deficit, haul, route cost, treasury, tax level, budget
+**Trade and money** — stock, price, demand, surplus, deficit, haul, treasury, tax level, budget
 band, funded fraction, charter fee, manifest.
 
 **Territory and politics** — unclaimed / controlled / developed, claim, colonise, colony, faction,
-government, doctrine, faction status, relation score and its five tiers, alliance, pact, region,
+government, doctrine, faction status, relation score and its five tiers, alliance, region,
 gateway, jump lane, fuel cost.
 
 **The player's layer** — automation switch, pin, tracker section, alert category and its three
@@ -181,7 +182,7 @@ written "per cycle".
 **UST** — Universal Standard Time. The time standard kept across every world.
 
 **Development points** — A measure of how built up a system is, counting population, licensed
-skilled work and staffed industry, weighted toward advanced industry.
+skilled work, staffed industry and a specialisation complex, weighted toward advanced industry.
 
 ### People
 
@@ -198,7 +199,7 @@ and the only thing that raises pop cap.
 **Habitable land** — The ground a body offers for settlement, and the budget housing is built
 against. Only bodies habitable enough to settle carry any.
 
-**Workforce** — A system's population counted as labour — everyone available to work, at any grade.
+**Workforce** — A system's population counted as labour, at any grade.
 
 **Unskilled, technician, engineer** — The three grades of work a job can call for. A building's
 staffing is a fixed split across the three, and the same people fill whichever grade they are
@@ -213,16 +214,16 @@ skill ceiling, and together they are the licensing family in the industry and co
 **Staffing** — The people a building needs to run. A building whose jobs are half filled produces
 half as much.
 
-**Unemployment** — People housed and fed but working no job, either because none is built or
+**Unemployed** — People housed and fed but working no job, either because none is built or
 because no skill ceiling licenses them for it.
 
 **Migration** — Population moving between a faction's own developed systems, toward the calmer,
 emptier and more job-rich ones. Nobody moves toward a world in Famine.
 
-**Colonist delivery** — Spare population routed from established systems out to a faction's
-emptiest systems, and the main way a newly developed system fills.
+**Colonist delivery** — Spare population routed from a faction's developed systems out to its
+emptiest ones, and the main way a newly developed system fills.
 
-**Abandonment** — The end of a developed system whose population falls below one pop, famine or not. Its
+**Abandonment** — The end of a developed system whose population runs out, famine or not. Its
 buildings are lost and the system reverts to unclaimed frontier, claimable again.
 
 ### Wellbeing
@@ -230,17 +231,15 @@ buildings are lost and the system reverts to unclaimed frontier, claimable again
 **Provision** — The share of what a world needs that actually arrives, weighted by how badly it
 needs each good.
 
-**Expectation** — The Provision a world's population has grown accustomed to. Standards rise
-quickly in good times and resign slowly in bad ones.
+**Expectation** — The Provision a world's population has grown accustomed to.
 
-**Grievance** — How far a world's Provision falls short of its own expectation, which is what
-unrest answers to rather than the distance from perfection.
+**Grievance** — How far a world's Provision falls short of its own expectation.
 
 **Supplied, Strained, Rationing, Deprived** — The four bands a world's Provision falls into, best
 to worst. They are description only: no rate or effect keys off the band.
 
-**Famine** — Water or food below the survival line. It reads in place of the four bands at any
-Provision, and it is the one supply state severe enough to collapse a world on its own.
+**Famine** — Water or food arriving far short of what a world needs. It reads in place of the four
+bands at any Provision, and it drives unrest at the steepest rate any shortage can.
 
 **Unrest** — How angry a world is. It climbs and falls gradually toward the level its causes
 justify: grievance, tax pressure and crowding.
@@ -283,12 +282,13 @@ resource is how many it holds, and one extractor level works one slot.
 **Quality band** — How rich a body's slots of a resource are: poor, average, good or rich. It
 multiplies what an extractor working them yields.
 
-**Potential yield** — What a system's ground is worth with every slot of a resource worked,
-locked bodies included.
+**Potential yield** — The multiplier a resource's ground would give with every slot in the system
+worked, locked bodies included.
 
-**Realised yield** — What the slots a system's extractors actually sit on are yielding.
-Extractors take the best ground first, so realised yield opens above potential yield and falls
-toward it as the field fills.
+**Realised yield** — The multiplier a system's extractors actually get, across the slots they sit
+on. Extractors take the best ground first, so it sits above potential yield while only the best
+ground is worked and moves toward it as more slots are worked. Locked slots count toward potential
+yield and can never be worked, so it need never arrive.
 
 **Worked** — Marks the slots a system's built extractor levels are on, best ground first.
 
@@ -307,12 +307,13 @@ readout only; nothing acts on it yet.
 ### Industry
 
 **Building** — One kind of works a system has put up: an extractor, a factory, housing, an academy,
-a specialisation complex or a construction centre. A building's count is its number of levels, and
-every figure on its row scales with them.
+a specialisation complex or a construction centre. A building's count is its number of levels.
 
-**Built, staffed, free** — The three readings on an industry row: levels standing, levels actually
-worked, and the room left to build into. For housing the middle reading is occupancy; for academies
-and complexes it is how much of what they license or buff is drawn on.
+**Built, staffed, free** — Built is the levels a building has standing, staffed the levels actually
+worked; an industry row reads staffed over built. Free is the room left to build into, and it sits
+on the panel's land cards rather than on a row. For housing the staffed figure is occupancy carrying
+decay's vacancy allowance; for academies and complexes it is the draw on the skill ceiling or family
+yield they provide.
 
 **Decay** — The steady loss of building levels a system is not using. It only ever removes levels,
 and high unrest tears them down even while they are in use.
@@ -330,7 +331,7 @@ processed goods are made from raw ones, advanced goods from processed. Everythin
 skilled work.
 
 **Family** — One of the five groups the processed and advanced goods fall into: heavy industry,
-chemicals, electronics, armaments and consumer goods. Each has its own specialisation complex.
+chemicals, electronics, armaments and consumer works. Each has its own specialisation complex.
 
 **Specialisation complex** — A building that produces nothing and raises the yield of every good in
 its family made in that system. A system may hold one complex, of one family.
@@ -366,9 +367,8 @@ collects more from the same activity and raises unrest on every world the factio
 construction. Each has a slider setting what share of that band's bill the faction is willing to
 pay, and the three are settled in that order with nothing on credit.
 
-**Funded fraction** — The share of a band's bill that was actually paid. It sets how much of that
-band's work runs the following cycle: money is fuel, so it can starve a band but never push one
-past what it could physically do.
+**Funded fraction** — The share of a band's bill that was actually paid, and the share of that
+band's work that runs the following cycle.
 
 **Charter fee** — The one-off price of committing to a colonisation, taken off the treasury before the
 budget bands divide anything.
@@ -379,20 +379,20 @@ cycle by cycle and credited to its market when it opens.
 ### Territory and politics
 
 **Unclaimed, controlled, developed** — The three states a system can be in. Unclaimed is open
-frontier, controlled is claimed but unsettled, and developed is settled and live. Only a developed
-system has population, a market or industry.
+frontier, controlled is claimed ground with nobody on it, and developed is a working system. Only a
+developed system has population, a market or industry.
 
 **Claim** — Stake an unclaimed system as controlled. A claim is cheap and near-instant, and it
-takes the ground without settling it.
+takes the ground without putting anyone on it.
 
-**Colonise** — Settle a controlled system, turning it developed. It is paid for with a charter fee,
-a manifest and construction work, and it takes time to finish.
+**Colonise** — Take a controlled system to developed, bringing its first population. It is paid for
+with a charter fee, a manifest and construction work, and it takes time to finish.
 
 **Colony** — A controlled system with a colonisation under way, from the moment the work is
 commissioned to the moment it completes and the system turns developed.
 
 **Faction** — One of the powers dividing the galaxy, the player's own included. Each holds
-territory, runs a treasury, and expands and builds by the same rules as the rest.
+territory and runs a treasury.
 
 **Government** — A faction's form of rule, one of eight. It shapes the faction's economic
 character, its default tax level and which events find it.
@@ -401,7 +401,7 @@ character, its default tax level and which events find it.
 with and how readily it reaches for force.
 
 **Faction status** — How large a faction stands against every other: dominant, major, regional or
-minor. It follows from expansion and is never assigned.
+minor. It follows from expansion.
 
 **Relation score** — How two factions regard each other, from -100 to +100. It drifts on shared
 borders, doctrine, government, trade and standing alliances, and peace left unmaintained drifts
@@ -411,8 +411,8 @@ downward on its own.
 Dropping to unfriendly opens border conflicts; holding high enough for long enough allows an
 alliance.
 
-**Alliance** — A standing pact between two factions, formed after a period of negotiation at a high
-relation score and dissolved when the score falls back.
+**Alliance** — A standing agreement between two factions, formed after a period of negotiation at a
+high relation score and dissolved when the score falls back.
 
 **Region** — A named division of the map that a system belongs to. It orients the player and
 carries a dominant-economy label; it does not bound anyone's territory.
