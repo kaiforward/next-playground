@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger, usePopoverDepth } from "@/components/ui/popover";
 
 // Rendered in jsdom, driven with user-event (real pointer/keyboard event
 // sequences, not fire-and-hope) and queried by role/accessible name/focus —
@@ -858,5 +858,364 @@ describe("Popover — openDelay guards against a passing pointer", () => {
     // never appeared.
     await wait(OPEN_DELAY + 60);
     expect(screen.queryByRole("button", { name: "Unpin" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Popover — usePopoverDepth", () => {
+  function DepthProbe({ label }: { label: string }) {
+    const depth = usePopoverDepth();
+    return <p>{label} would-be depth {depth}</p>;
+  }
+
+  it("reports 0 with no open ancestor and one more than the ancestor's own depth when nested", async () => {
+    const { user } = setup();
+    render(
+      <>
+        <DepthProbe label="top-level" />
+        <Popover openDelay={0}>
+          <PopoverTrigger>
+            <button type="button">Row A</button>
+          </PopoverTrigger>
+          <PopoverContent>
+            <DepthProbe label="inside A" />
+          </PopoverContent>
+        </Popover>
+      </>,
+    );
+
+    expect(screen.getByText("top-level would-be depth 0")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Row A" }));
+    expect(await screen.findByText("inside A would-be depth 1")).toBeInTheDocument();
+  });
+});
+
+describe("Popover — the exclusivity stack is ancestor-aware, not a single incumbent", () => {
+  it("a popover opening at depth 0 while another depth-0 popover is open closes it — today's exclusivity, unchanged", async () => {
+    // Mirrors the pre-existing depth-0 exclusivity coverage exactly, as this task's own vacuity
+    // check: the stack has to reproduce the single-pointer behaviour before any nested case matters.
+    const { user } = setup();
+    render(
+      <>
+        <Popover openDelay={OPEN_DELAY}>
+          <PopoverTrigger>
+            <button type="button">Row A</button>
+          </PopoverTrigger>
+          <PopoverContent>
+            <p>Vitals for A</p>
+          </PopoverContent>
+        </Popover>
+        <Popover openDelay={0}>
+          <PopoverTrigger>
+            <button type="button">Row B</button>
+          </PopoverTrigger>
+          <PopoverContent>
+            <p>Vitals for B</p>
+          </PopoverContent>
+        </Popover>
+      </>,
+    );
+
+    await user.hover(screen.getByRole("button", { name: "Row A" }));
+    expect(await screen.findByText("Vitals for A")).toBeInTheDocument();
+
+    await user.hover(screen.getByRole("button", { name: "Row B" }));
+    expect(await screen.findByText("Vitals for B")).toBeInTheDocument();
+    expect(screen.queryByText("Vitals for A")).not.toBeInTheDocument();
+  });
+
+  function NestedPopovers({ withSecondChild = false }: { withSecondChild?: boolean }) {
+    return (
+      <>
+        <button type="button">Elsewhere</button>
+        <Popover openDelay={0}>
+          <PopoverTrigger>
+            <button type="button">Row A</button>
+          </PopoverTrigger>
+          <PopoverContent>
+            <p>Vitals for A</p>
+            <Popover openDelay={0}>
+              <PopoverTrigger>
+                <button type="button">Child A1</button>
+              </PopoverTrigger>
+              <PopoverContent>
+                <p>Vitals for A1</p>
+              </PopoverContent>
+            </Popover>
+            {withSecondChild && (
+              <Popover openDelay={0}>
+                <PopoverTrigger>
+                  <button type="button">Child B1</button>
+                </PopoverTrigger>
+                <PopoverContent>
+                  <p>Vitals for B1</p>
+                </PopoverContent>
+              </Popover>
+            )}
+          </PopoverContent>
+        </Popover>
+      </>
+    );
+  }
+
+  it("opening a depth-1 popover leaves its depth-0 ancestor open", async () => {
+    const { user } = setup();
+    render(<NestedPopovers />);
+
+    await user.click(screen.getByRole("button", { name: "Row A" }));
+    expect(await screen.findByText("Vitals for A")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Child A1" }));
+    expect(await screen.findByText("Vitals for A1")).toBeInTheDocument();
+    expect(screen.getByText("Vitals for A")).toBeInTheDocument();
+  });
+
+  it("a second depth-1 popover opening closes the first depth-1 popover and still leaves depth 0 open", async () => {
+    // Hover throughout, not click: clicking Child B1 is a pointerdown outside Child A1's own
+    // Radix layer, which Radix would dismiss A1 for on its own — masking whether OUR registry is
+    // what closed it. Hover never triggers that outside-dismiss, so a synchronous check right after
+    // hovering B1 (well inside A1's own 150ms close grace) attributes the close to the claim alone.
+    const { user } = setup();
+    render(<NestedPopovers withSecondChild />);
+
+    await user.hover(screen.getByRole("button", { name: "Row A" }));
+    await screen.findByText("Vitals for A");
+    await user.hover(screen.getByRole("button", { name: "Child A1" }));
+    await screen.findByText("Vitals for A1");
+
+    await user.hover(screen.getByRole("button", { name: "Child B1" }));
+    expect(await screen.findByText("Vitals for B1")).toBeInTheDocument();
+    expect(screen.queryByText("Vitals for A1")).not.toBeInTheDocument();
+    expect(screen.getByText("Vitals for A")).toBeInTheDocument();
+  });
+
+  it("closing a depth-0 popover closes its depth-1 descendant with it, rather than stranding it", async () => {
+    // A1 is deliberately rendered as a SIBLING of A's own PopoverContent — still inside A's
+    // Popover, so it still reads A's context and is depth 1 — rather than nested INSIDE A's
+    // content the way a real term trigger would be. A depth-1 popover nested in A's content
+    // unmounts along with A's content the instant A closes regardless of anything this test
+    // exercises (React tearing the tree down, not our registry), which would make "Vitals for A1"
+    // disappear either way and mask exactly the cascade this test exists to pin. Keeping A1
+    // outside that Presence-controlled subtree means the ONLY thing that can close it is the
+    // registry cascade in `releaseOpen`.
+    //
+    // Hover throughout for the same reason as the test above: A's own pointer-leave grace timer,
+    // untouched by any outside pointerdown, is what closes A here — the cascade this pins is then
+    // the only thing that could close A1 too.
+    const { user } = setup();
+    render(
+      <Popover openDelay={0}>
+        <PopoverTrigger>
+          <button type="button">Row A</button>
+        </PopoverTrigger>
+        <PopoverContent>
+          <p>Vitals for A</p>
+        </PopoverContent>
+        <Popover openDelay={0}>
+          <PopoverTrigger>
+            <button type="button">Child A1</button>
+          </PopoverTrigger>
+          <PopoverContent>
+            <p>Vitals for A1</p>
+          </PopoverContent>
+        </Popover>
+      </Popover>,
+    );
+
+    await user.hover(screen.getByRole("button", { name: "Row A" }));
+    await screen.findByText("Vitals for A");
+    await user.hover(screen.getByRole("button", { name: "Child A1" }));
+    await screen.findByText("Vitals for A1");
+
+    // No further interaction: Row A's own pointer-leave grace (150ms, fired when the pointer moved
+    // onto Child A1 above) is what closes A on its own.
+    await waitFor(
+      () => {
+        expect(screen.queryByText("Vitals for A")).not.toBeInTheDocument();
+      },
+      { timeout: 1000 },
+    );
+    expect(screen.queryByText("Vitals for A1")).not.toBeInTheDocument();
+  });
+
+  it("a depth-1 popover unmounting under a live pointer releases only its own stack entry, never entries below it", async () => {
+    const { user } = setup();
+    function Scene({ showA1 }: { showA1: boolean }) {
+      return (
+        <Popover openDelay={0}>
+          <PopoverTrigger>
+            <button type="button">Row A</button>
+          </PopoverTrigger>
+          <PopoverContent>
+            <p>Vitals for A</p>
+            {showA1 && (
+              <Popover openDelay={0}>
+                <PopoverTrigger>
+                  <button type="button">Child A1</button>
+                </PopoverTrigger>
+                <PopoverContent>
+                  <p>Vitals for A1</p>
+                </PopoverContent>
+              </Popover>
+            )}
+            <Popover openDelay={0}>
+              <PopoverTrigger>
+                <button type="button">Child B1</button>
+              </PopoverTrigger>
+              <PopoverContent>
+                <p>Vitals for B1</p>
+              </PopoverContent>
+            </Popover>
+          </PopoverContent>
+        </Popover>
+      );
+    }
+    const { rerender } = render(
+      <>
+        <Scene showA1 />
+        <Popover openDelay={0}>
+          <PopoverTrigger>
+            <button type="button">Row C</button>
+          </PopoverTrigger>
+          <PopoverContent>
+            <p>Vitals for C</p>
+          </PopoverContent>
+        </Popover>
+      </>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Row A" }));
+    await screen.findByText("Vitals for A");
+    await user.click(screen.getByRole("button", { name: "Child A1" }));
+    await screen.findByText("Vitals for A1");
+
+    // B1 claims A1's depth-1 slot, closing A1 through the normal claim path — A1 no longer holds
+    // any stack entry from here on.
+    await user.click(screen.getByRole("button", { name: "Child B1" }));
+    expect(await screen.findByText("Vitals for B1")).toBeInTheDocument();
+    expect(screen.queryByText("Vitals for A1")).not.toBeInTheDocument();
+
+    // A1's row unmounts entirely, exactly as a Tracker row does under a live pointer, with no
+    // proper close in between. Its cleanup releases nothing, because it no longer holds the
+    // depth-1 slot — this must not touch A (depth 0, below it) or B1 (the popover that now holds
+    // the depth-1 slot A1 used to).
+    rerender(
+      <>
+        <Scene showA1={false} />
+        <Popover openDelay={0}>
+          <PopoverTrigger>
+            <button type="button">Row C</button>
+          </PopoverTrigger>
+          <PopoverContent>
+            <p>Vitals for C</p>
+          </PopoverContent>
+        </Popover>
+      </>,
+    );
+    expect(screen.getByText("Vitals for A")).toBeInTheDocument();
+    expect(screen.getByText("Vitals for B1")).toBeInTheDocument();
+
+    // The registry-only assertions above can't tell a correct release apart from one that silently
+    // corrupts the whole stack, since neither calls a `close()` — nothing about A's or B1's own
+    // React state would change either way. Forcing a fresh depth-0 claim is what makes the
+    // registry's actual contents observable: A is still the depth-0 incumbent, so opening C must
+    // still close it (and B1 cascades with it), exactly as exclusivity always has.
+    await user.click(screen.getByRole("button", { name: "Row C" }));
+    expect(await screen.findByText("Vitals for C")).toBeInTheDocument();
+    expect(screen.queryByText("Vitals for A")).not.toBeInTheDocument();
+    expect(screen.queryByText("Vitals for B1")).not.toBeInTheDocument();
+  });
+
+  it("takeover is recorded true for a depth-1 popover closed by a claim at its own depth", async () => {
+    // The single-level takeover test already pins that a claimed-over popover must not hand focus
+    // back to its own trigger. This generalises it to depth 1: the ancestor (A) stays open
+    // throughout, and B1 claims A1's depth-1 slot directly — A's content, and so A1's trigger,
+    // stays mounted the whole time, which is what makes the focus outcome observable at all. (If A
+    // closed too, A1's trigger would unmount along with it regardless of the takeover flag's value,
+    // masking exactly what this test exists to pin — the cascaded case from proof 4 verifies the
+    // close itself happens, but not this flag independently, for that same reason.)
+    //
+    // B1 claims by HOVER, not click or focus: either of those would land outside A1's own Radix
+    // layer and dismiss A1 through Radix's own outside-interaction handling before our registry
+    // ever runs, the same confound the earlier depth-1 exclusivity test hit.
+    const { user } = setup();
+    render(
+      <Popover openDelay={OPEN_DELAY}>
+        <PopoverTrigger>
+          <button type="button">Row A</button>
+        </PopoverTrigger>
+        <PopoverContent>
+          <p>Vitals for A</p>
+          <Popover openDelay={OPEN_DELAY}>
+            <PopoverTrigger>
+              <button type="button">Child A1</button>
+            </PopoverTrigger>
+            <PopoverContent>
+              <button type="button">Unpin A1</button>
+            </PopoverContent>
+          </Popover>
+          <Popover openDelay={0}>
+            <PopoverTrigger>
+              <button type="button">Child B1</button>
+            </PopoverTrigger>
+            <PopoverContent>
+              <p>Vitals for B1</p>
+            </PopoverContent>
+          </Popover>
+        </PopoverContent>
+      </Popover>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Row A" }));
+    await screen.findByText("Vitals for A");
+    const childA1 = screen.getByRole("button", { name: "Child A1" });
+    act(() => childA1.focus());
+    await screen.findByRole("button", { name: "Unpin A1" });
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("button", { name: "Unpin A1" })).toHaveFocus();
+
+    await user.hover(screen.getByRole("button", { name: "Child B1" }));
+    expect(await screen.findByText("Vitals for B1")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Unpin A1" })).not.toBeInTheDocument();
+    expect(childA1).not.toHaveFocus();
+    expect(document.body).toHaveFocus();
+  });
+
+  it("Escape on a depth-1 popover records no takeover and returns focus to its own trigger", async () => {
+    // The counterpart of the cascade test above: a depth-1 popover closing on its own, not through
+    // any claim, still gets the ordinary focus hand-back — depth alone must not read as a takeover.
+    const { user } = setup();
+    render(
+      <Popover openDelay={OPEN_DELAY}>
+        <PopoverTrigger>
+          <button type="button">Row A</button>
+        </PopoverTrigger>
+        <PopoverContent>
+          <p>Vitals for A</p>
+          <Popover openDelay={OPEN_DELAY}>
+            <PopoverTrigger>
+              <button type="button">Child A1</button>
+            </PopoverTrigger>
+            <PopoverContent>
+              <button type="button">Unpin A1</button>
+            </PopoverContent>
+          </Popover>
+        </PopoverContent>
+      </Popover>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Row A" }));
+    await screen.findByText("Vitals for A");
+    const childA1 = screen.getByRole("button", { name: "Child A1" });
+    act(() => childA1.focus());
+    await screen.findByRole("button", { name: "Unpin A1" });
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("button", { name: "Unpin A1" })).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Unpin A1" })).not.toBeInTheDocument();
+    });
+    expect(childA1).toHaveFocus();
   });
 });

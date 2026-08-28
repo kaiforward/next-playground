@@ -36,9 +36,11 @@ import { twMerge } from "tailwind-merge";
  * - A grace period on pointer-leave (of either trigger or content) before
  *   closing, so the pointer can cross the gap between them without the
  *   popover closing under it.
- * - Global exclusivity: opening one popover closes any other that is open,
- *   via a module-level "who's open" pointer — there is exactly one of
- *   these on screen at a time.
+ * - Exclusivity by depth: opening a popover closes whatever was open at its own depth or deeper, via
+ *   a module-level stack of `closeSelf` closures keyed by depth (`usePopoverDepth`). A popover with
+ *   no open ancestor is depth 0, so two depth-0 popovers stay exactly as mutually exclusive as they
+ *   always were; one nested inside another's content claims a deeper slot instead of contesting its
+ *   ancestor's, so opening it leaves the ancestor open.
  * - `clickInert` on the root: takes the click out of the open/close gesture
  *   set entirely, for a consumer whose trigger's click already does
  *   something else (e.g. a Tracker row, which navigates on click). It calls
@@ -86,11 +88,11 @@ import { twMerge } from "tailwind-merge";
  *   return read, so neither depends on how the popover was opened.
  *
  * A popover whose content itself contains a popover trigger inherits all of
- * this recursively, one level per ArrowDown and one per Escape. The one
- * thing that does not yet fit is the exclusivity registry, which would
- * close the outer popover as the inner one opened; nesting is out of scope
- * (docs/active/design-system/detail-panels.md) and the registry is where it
- * would start.
+ * this recursively, one level per ArrowDown and one per Escape, including
+ * the exclusivity registry: opening a nested popover claims its own depth
+ * in the stack (`usePopoverDepth`) rather than the one its ancestor holds,
+ * so the ancestor stays open and only entries at or above the nested
+ * popover's own depth are displaced.
  *
  * Escape-to-close is Radix's own default (non-modal) Popover behaviour and
  * is not reimplemented here. Returning focus to the trigger on close is
@@ -114,33 +116,60 @@ import { twMerge } from "tailwind-merge";
 const DEFAULT_OPEN_DELAY_MS = 300;
 const CLOSE_GRACE_MS = 150;
 
-// Module-level "which popover is open" pointer. Not React state — it is only
-// ever read at the moment a NEW popover opens, to close whichever one (if
-// any) was already open. Nothing renders off it.
-let openPopover: (() => void) | null = null;
+// Module-level "which popovers are open" stack, indexed by depth
+// (`usePopoverDepth`). Not React state — it is only ever read at the moment
+// a popover opens or closes. Nothing renders off it. A popover with no open
+// ancestor claims index 0, exactly the single incumbent the old bare
+// pointer held; a popover nested inside another's content claims the next
+// index instead of contesting its ancestor's, so opening it displaces only
+// entries at its own depth or deeper.
+let openStack: Array<() => void> = [];
 
-// True only for the instant `claimOpen` spends closing the popover that was
-// already open. The popover being closed runs its own `setOpen(false)` inside
-// that call, synchronously, which is the one moment it can tell "another
-// popover is taking over" apart from every other reason it might be closing —
-// and the difference decides whether it hands focus back to its trigger,
-// because a focus landing outside the incoming popover dismisses it on sight.
+// True only for the instants `claimOpen` spends closing whatever it
+// displaces at a depth — the incumbent already there, and, via
+// `releaseOpen`'s own cascade, every descendant it was holding above that
+// depth. Each popover being closed runs its own `setOpen(false)` inside
+// that call, synchronously, which is the one moment it can tell "a claim at
+// or below my depth took over" apart from every other reason it might be
+// closing — and the difference decides whether it hands focus back to its
+// trigger, because a focus landing outside the incoming popover dismisses
+// it on sight.
 let takeoverInProgress = false;
 
-function claimOpen(closeSelf: () => void) {
-  if (openPopover && openPopover !== closeSelf) {
+function claimOpen(closeSelf: () => void, depth: number) {
+  const incumbent = openStack[depth];
+  if (incumbent && incumbent !== closeSelf) {
     takeoverInProgress = true;
     try {
-      openPopover();
+      // Closes the incumbent. Its own `releaseOpen` call below cascades to
+      // close everything it was holding above `depth` too, so a claim at
+      // depth d never strands a depth d+1 descendant.
+      incumbent();
     } finally {
       takeoverInProgress = false;
     }
   }
-  openPopover = closeSelf;
+  openStack[depth] = closeSelf;
+  openStack.length = depth + 1;
 }
 
 function releaseOpen(closeSelf: () => void) {
-  if (openPopover === closeSelf) openPopover = null;
+  const index = openStack.indexOf(closeSelf);
+  // Reference-guarded: a popover that never claimed its depth, or was
+  // already displaced from it, must not touch the stack — the unmount
+  // cleanup below exists entirely to lean on this guard, so it never blanks
+  // a claim another popover now holds.
+  if (index === -1) return;
+  const descendants = openStack.slice(index + 1);
+  openStack.length = index;
+  // Deepest first: each closes itself, and the `releaseOpen` re-entry that
+  // triggers is now a no-op — the truncation above already dropped it — so
+  // this single pass closes every depth above `index` in one go, however
+  // many levels deep, rather than stranding a descendant when its ancestor
+  // closes.
+  for (let i = descendants.length - 1; i >= 0; i--) {
+    descendants[i]();
+  }
 }
 
 // Focusable-in-a-popover selector. Deliberately attribute-based (`:not([disabled])` rather than
@@ -182,7 +211,9 @@ function composeHandlers<E>(
 interface CloseReason {
   /** The keyboard had been driven into this popover — the only case where there is focus to hand back. */
   entered: boolean;
-  /** Another popover claimed the exclusivity registry; this one is closing to make room for it. */
+  /** A claim at or below this popover's own depth took over the stack; this one is closing to make
+   *  room for it — whether it was the claim's direct incumbent or a descendant swept up in the
+   *  cascade that claim triggered. */
   takeover: boolean;
 }
 
@@ -191,6 +222,10 @@ interface PopoverContextValue {
   side: PopoverPrimitive.PopoverContentProps["side"];
   align: PopoverPrimitive.PopoverContentProps["align"];
   clickInert: boolean;
+  /** This popover's own index in the open stack — 0 for one with no open ancestor, one more than
+   *  the enclosing `Popover`'s own depth otherwise. What a nested popover reads off this (via
+   *  `usePopoverDepth`) to compute its own. */
+  depth: number;
   /** Written by the root as the popover closes, read by `PopoverContent`'s close-side focus
    *  handling. The live flags behind it stay private to the root — this is the one thing the
    *  content needs off them, and only after the decision has already been made. */
@@ -218,6 +253,18 @@ function usePopoverContext(component: string): PopoverContextValue {
     throw new Error(`${component} must be rendered inside <Popover>.`);
   }
   return context;
+}
+
+/**
+ * A popover's own index in the open stack: 0 for one with no open ancestor, one more than the
+ * enclosing `Popover`'s own depth otherwise. A deliberately non-throwing read — `usePopoverContext`
+ * throws outside a `Popover`, which is right for `PopoverTrigger`/`PopoverContent` but wrong here: a
+ * popover computing its OWN depth reads its ANCESTOR's context, which is absent for the ordinary
+ * case of no ancestor at all, and absent is exactly what makes it depth 0.
+ */
+export function usePopoverDepth(): number {
+  const ambient = useContext(PopoverContext);
+  return ambient ? ambient.depth + 1 : 0;
 }
 
 export interface PopoverProps {
@@ -261,6 +308,10 @@ export function Popover({
   pointerInert = false,
   children,
 }: PopoverProps) {
+  // This popover's own slot in the exclusivity stack — computed once per render from the ANCESTOR's
+  // context (see `usePopoverDepth`), not from the context this component is about to provide, which
+  // does not exist yet.
+  const depth = usePopoverDepth();
   const [open, setOpenState] = useState(false);
   /** Raised by `enterPopover` and lowered as the popover closes: the keyboard is being driven inside
    *  this popover. Deliberately not "is focus in the content" — a mouse click on a control in the
@@ -300,7 +351,7 @@ export function Popover({
     clearOpenTimer();
     clearCloseTimer();
     if (next) {
-      claimOpen(closeSelf);
+      claimOpen(closeSelf, depth);
       // A fresh session records nothing yet, so a content unmount partway through one — a Tracker
       // row dropping out of the list under an open popover — can never replay the previous close's
       // decision and pull focus onto a trigger that is going away too.
@@ -407,6 +458,7 @@ export function Popover({
     side,
     align,
     clickInert,
+    depth,
     closeReasonRef,
     suppressNextTriggerFocusRef,
     contentRef,
