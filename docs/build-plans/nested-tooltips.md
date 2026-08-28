@@ -168,7 +168,7 @@ state; pinning is a property of a locked tooltip, not a state of its own.
 |---|---|---|
 | Open grace | 200 ms | The pointer must rest on a term this long before anything opens. Sweeping across a dense table opens nothing. |
 | Dwell | 550 ms | How long the bar takes to fill. Until it does, the tooltip cannot be entered. |
-| Return grace | 140 ms | How long a child survives after the pointer returns to its parent. |
+| Return grace | 140 ms | How long a child survives after the pointer returns to its parent. **Fixed, not tunable** — it is our workaround for a mechanical artifact (N2), not observed behaviour, and a player setting for it would expose the workaround as a preference. Owner decision: "Let's just leave it fixed for now". |
 | Leave grace | 90 ms | How long the whole stack survives after the pointer leaves all of it. |
 
 Dwell is deliberately far below CK3's ~2 s: their hover targets are provinces, ours are single words,
