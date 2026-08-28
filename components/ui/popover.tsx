@@ -10,11 +10,13 @@ import {
   useRef,
   useState,
   type ComponentPropsWithoutRef,
+  type CSSProperties,
   type ForwardedRef,
   type MutableRefObject,
   type ReactNode,
 } from "react";
 import { twMerge } from "tailwind-merge";
+import { placeAtCursor } from "./dwell-placement";
 
 /**
  * The richer of the two hover surfaces — the second tier beside the plain
@@ -57,6 +59,16 @@ import { twMerge } from "tailwind-merge";
  *   can open but any pointer drift dismisses. Click and keyboard focus still
  *   open, and Escape, an outside click and the exclusivity registry still
  *   close, so nothing below changes.
+ * - `dwell` on the root: the cursor-anchored dwell-to-lock mode the term/glossary popovers use
+ *   instead of plain hover. Ignores `openDelay` in favour of the fixed `DWELL_OPEN_DELAY_MS`, and
+ *   opens into a `filling` state — positioned at the pointer, following it, pointer events off —
+ *   before locking after `DWELL_MS`: position freezes and the popover starts taking the pointer.
+ *   A thin `DwellBar` renders across the top while filling and is gone once locked. Position is
+ *   set on the content element directly (`placeAtCursor`, `components/ui/dwell-placement.ts`)
+ *   rather than through Radix's anchor, since the anchor is the trigger and dwell mode anchors to
+ *   the cursor instead. `dwellState` on the context is `null` whenever `dwell` is not set, which
+ *   is how `PopoverContent` knows not to render the bar or touch pointer-events for the five
+ *   existing hover-mode consumers.
  * - The keyboard enter/exit convention below.
  *
  * ## The keyboard convention — every popover in the game obeys it
@@ -115,6 +127,13 @@ import { twMerge } from "tailwind-merge";
 
 const DEFAULT_OPEN_DELAY_MS = 300;
 const CLOSE_GRACE_MS = 150;
+/** Hover-open delay for a `dwell` popover — replaces `openDelay` entirely, since dwell mode is
+ *  tuned as a unit (see `docs/build-plans/nested-tooltips.md` → the four durations). */
+export const DWELL_OPEN_DELAY_MS = 200;
+/** How long a `dwell` popover spends `filling` before it `locked`s — the single constant that
+ *  drives both the lock timer below and the `DwellBar`'s fill duration, so the two can never
+ *  promise a lock at different moments. */
+export const DWELL_MS = 550;
 
 // Module-level "which popovers are open" stack, indexed by depth
 // (`usePopoverDepth`). Not React state — it is only ever read at the moment
@@ -226,6 +245,14 @@ interface PopoverContextValue {
    *  the enclosing `Popover`'s own depth otherwise. What a nested popover reads off this (via
    *  `usePopoverDepth`) to compute its own. */
   depth: number;
+  /** `null` when `dwell` is not set on this popover — the mode is off and `PopoverContent`
+   *  renders no bar and leaves pointer-events alone. `"filling"` while the lock timer is running,
+   *  `"locked"` once it has fired. */
+  dwellState: "filling" | "locked" | null;
+  /** The most recent pointer position over the trigger, written by `PopoverTrigger`. The only
+   *  thing `PopoverContent` has to go on for where to place itself the instant a `dwell` popover
+   *  opens, before any `pointermove` of its own has fired. */
+  dwellPointerRef: MutableRefObject<{ x: number; y: number } | null>;
   /** Written by the root as the popover closes, read by `PopoverContent`'s close-side focus
    *  handling. The live flags behind it stay private to the root — this is the one thing the
    *  content needs off them, and only after the decision has already been made. */
@@ -297,6 +324,12 @@ export interface PopoverProps {
    * reachable and dismissable by every route that is not the pointer drifting.
    */
   pointerInert?: boolean;
+  /**
+   * The cursor-anchored dwell-to-lock mode (see the docblock above). `openDelay` is ignored in
+   * favour of the fixed `DWELL_OPEN_DELAY_MS` when set. Defaults to `false`, so every existing
+   * hover-mode consumer is untouched.
+   */
+  dwell?: boolean;
   children: ReactNode;
 }
 
@@ -306,6 +339,7 @@ export function Popover({
   align = "center",
   clickInert = false,
   pointerInert = false,
+  dwell = false,
   children,
 }: PopoverProps) {
   // This popover's own slot in the exclusivity stack — computed once per render from the ANCESTOR's
@@ -324,6 +358,16 @@ export function Popover({
   const pendingEnterRef = useRef(false);
   const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [dwellState, setDwellState] = useState<"filling" | "locked" | null>(null);
+  const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dwellPointerRef = useRef<{ x: number; y: number } | null>(null);
+
+  function clearDwellTimer() {
+    if (dwellTimerRef.current !== null) {
+      clearTimeout(dwellTimerRef.current);
+      dwellTimerRef.current = null;
+    }
+  }
 
   // `closeSelf` needs a stable identity for the whole component's
   // lifetime — the exclusivity registry above compares it by reference,
@@ -356,8 +400,20 @@ export function Popover({
       // row dropping out of the list under an open popover — can never replay the previous close's
       // decision and pull focus onto a trigger that is going away too.
       closeReasonRef.current = { entered: false, takeover: false };
+      if (dwell) {
+        clearDwellTimer();
+        setDwellState("filling");
+        dwellTimerRef.current = setTimeout(() => {
+          dwellTimerRef.current = null;
+          setDwellState("locked");
+        }, DWELL_MS);
+      }
     } else {
       releaseOpen(closeSelf);
+      if (dwell) {
+        clearDwellTimer();
+        setDwellState(null);
+      }
       // Every close funnels through here (Radix's `onOpenChange` included), so this is the one
       // place both facts are still true: `takeoverInProgress` is only set for the duration of the
       // `claimOpen` call this may be running inside, and the entered flag has to be cleared now so
@@ -382,6 +438,7 @@ export function Popover({
     () => () => {
       if (openTimerRef.current !== null) clearTimeout(openTimerRef.current);
       if (closeTimerRef.current !== null) clearTimeout(closeTimerRef.current);
+      clearDwellTimer();
       releaseOpen(closeSelf);
     },
     [closeSelf],
@@ -394,7 +451,9 @@ export function Popover({
     if (open) return;
     clearCloseTimer();
     clearOpenTimer();
-    openTimerRef.current = setTimeout(() => setOpen(true), openDelay);
+    // `dwell` ignores the caller's `openDelay` entirely — the mode is tuned as a unit, and a
+    // consumer opting into it has no reason to independently tune the grace before it starts.
+    openTimerRef.current = setTimeout(() => setOpen(true), dwell ? DWELL_OPEN_DELAY_MS : openDelay);
   }
 
   function cancelScheduledOpen() {
@@ -459,6 +518,8 @@ export function Popover({
     align,
     clickInert,
     depth,
+    dwellState,
+    dwellPointerRef,
     closeReasonRef,
     suppressNextTriggerFocusRef,
     contentRef,
@@ -492,6 +553,7 @@ export const PopoverTrigger = forwardRef<
   (
     {
       onPointerEnter,
+      onPointerMove,
       onPointerLeave,
       onPointerDown,
       onPointerUp,
@@ -522,9 +584,19 @@ export const PopoverTrigger = forwardRef<
         aria-keyshortcuts="ArrowDown"
         onPointerEnter={composeHandlers<React.PointerEvent<HTMLButtonElement>>(
           onPointerEnter,
-          () => {
+          (event) => {
+            // The starting position a `dwell` popover's content places itself at — recorded
+            // regardless of mode, since it's cheap and harmless for a hover-mode popover that
+            // never reads it.
+            popover.dwellPointerRef.current = { x: event.clientX, y: event.clientY };
             popover.cancelScheduledClose();
             popover.scheduleOpen();
+          },
+        )}
+        onPointerMove={composeHandlers<React.PointerEvent<HTMLButtonElement>>(
+          onPointerMove,
+          (event) => {
+            popover.dwellPointerRef.current = { x: event.clientX, y: event.clientY };
           },
         )}
         onPointerLeave={composeHandlers<React.PointerEvent<HTMLButtonElement>>(
@@ -578,6 +650,36 @@ export const PopoverTrigger = forwardRef<
 );
 PopoverTrigger.displayName = "PopoverTrigger";
 
+/**
+ * The hairline fill bar `PopoverContent` renders across its top while a `dwell` popover is
+ * `filling` — an element of the popover rather than a free-standing component (`ProgressBar`
+ * doesn't fit: it's a labelled data readout with a `progressbar` role and an `aria-valuenow`,
+ * and this bar has no value, no label and nothing worth announcing — see the build plan's Reuse
+ * note). Renders at 0% width and flips to 100% a commit after mount so the transition actually
+ * plays, over `durationMs` — always `DWELL_MS`, the same constant that drives the lock timer in
+ * `Popover`, so the bar can never promise a lock at a different moment than the one that arrives.
+ * The duration lives only in the inline `transitionDuration` style below, which is real DOM state
+ * this component itself sets (readable via `el.style.transitionDuration`, with no stylesheet
+ * involved) rather than a bespoke test-only attribute.
+ */
+function DwellBar({ durationMs }: { durationMs: number }) {
+  const [filled, setFilled] = useState(false);
+  useEffect(() => {
+    setFilled(true);
+  }, []);
+  return (
+    <div aria-hidden="true" className="absolute inset-x-0 top-0 h-px overflow-hidden bg-border">
+      <div
+        className={twMerge(
+          "h-full bg-accent transition-[width] ease-linear",
+          filled ? "w-full" : "w-0",
+        )}
+        style={{ transitionDuration: `${durationMs}ms` }}
+      />
+    </div>
+  );
+}
+
 interface PopoverContentProps
   extends Omit<PopoverPrimitive.PopoverContentProps, "side" | "align"> {}
 
@@ -593,6 +695,7 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
     {
       className = "",
       sideOffset = 8,
+      style,
       onPointerEnter,
       onPointerLeave,
       onOpenAutoFocus,
@@ -603,7 +706,50 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
     ref,
   ) => {
     const popover = usePopoverContext("PopoverContent");
-    const { contentRef, pendingEnterRef } = popover;
+    const { contentRef, pendingEnterRef, dwellState, dwellPointerRef } = popover;
+
+    // Cursor-anchored placement while `filling`: seeded from the last position `PopoverTrigger`
+    // recorded, then kept live off a document-level `pointermove` listener — document-level, not
+    // the trigger's own, because the cursor travels well past the trigger's bounds on its way to
+    // a content box that (while filling) doesn't receive the pointer at all. Frozen at whatever it
+    // last was once `locked` — that's what "stops following" means — and cleared entirely once the
+    // popover closes, so a later reopen never starts from a stale position.
+    const [fillingPosition, setFillingPosition] = useState<{ top: number; left: number } | null>(
+      null,
+    );
+
+    useEffect(() => {
+      if (dwellState !== "filling") return;
+      const applyPosition = (clientX: number, clientY: number) => {
+        const node = contentRef.current;
+        const size = node
+          ? { width: node.offsetWidth, height: node.offsetHeight }
+          : { width: 0, height: 0 };
+        const viewport = { width: window.innerWidth, height: window.innerHeight };
+        setFillingPosition(placeAtCursor({ x: clientX, y: clientY }, size, viewport));
+      };
+      const initial = dwellPointerRef.current;
+      if (initial) applyPosition(initial.x, initial.y);
+      const handlePointerMove = (event: PointerEvent) => {
+        applyPosition(event.clientX, event.clientY);
+      };
+      document.addEventListener("pointermove", handlePointerMove);
+      return () => document.removeEventListener("pointermove", handlePointerMove);
+    }, [dwellState, contentRef, dwellPointerRef]);
+
+    useEffect(() => {
+      if (dwellState === null) setFillingPosition(null);
+    }, [dwellState]);
+
+    const dwellStyle: CSSProperties | undefined =
+      dwellState === null
+        ? undefined
+        : {
+            ...(fillingPosition
+              ? { position: "fixed", top: fillingPosition.top, left: fillingPosition.left, transform: "none" }
+              : null),
+            pointerEvents: dwellState === "filling" ? "none" : undefined,
+          };
 
     // Attaching the content element is also where an enter that had to open the popover first gets
     // paid off — this is the first instant the content exists. Deliberately not an effect keyed
@@ -628,6 +774,7 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
           side={popover.side}
           align={popover.align}
           sideOffset={sideOffset}
+          style={{ ...style, ...dwellStyle }}
           onPointerEnter={composeHandlers<React.PointerEvent<HTMLDivElement>>(onPointerEnter, () => {
             popover.cancelScheduledClose();
           })}
@@ -690,6 +837,7 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
           )}
           {...props}
         >
+          {dwellState === "filling" && <DwellBar durationMs={DWELL_MS} />}
           {children}
         </PopoverPrimitive.Content>
       </PopoverPrimitive.Portal>

@@ -1,7 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Popover, PopoverContent, PopoverTrigger, usePopoverDepth } from "@/components/ui/popover";
+import {
+  DWELL_MS,
+  DWELL_OPEN_DELAY_MS,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  usePopoverDepth,
+} from "@/components/ui/popover";
 
 // Rendered in jsdom, driven with user-event (real pointer/keyboard event
 // sequences, not fire-and-hope) and queried by role/accessible name/focus —
@@ -1217,5 +1224,192 @@ describe("Popover — the exclusivity stack is ancestor-aware, not a single incu
       expect(screen.queryByRole("button", { name: "Unpin A1" })).not.toBeInTheDocument();
     });
     expect(childA1).toHaveFocus();
+  });
+});
+
+describe("Popover — dwell mode", () => {
+  // Real timers throughout, per this file's own header comment — Radix's FocusScope/Presence
+  // machinery is fragile under fake timers, and `dwell` mode still renders through
+  // `PopoverPrimitive.Content`. `DWELL_OPEN_DELAY_MS` and `DWELL_MS` are fixed module constants
+  // (not props, per the build plan — the mode is tuned as a unit), so these waits are the real
+  // durations rather than a shortened test double.
+  //
+  // "Does not receive the pointer" / "receives the pointer" (entries 2 and 3) are asserted via
+  // `@testing-library/user-event`'s own pointer-events check: by default (`PointerEventsCheckLevel
+  // .EachApiCall`) it reads the element's *computed* `pointer-events` — inherited from the content
+  // element's own inline style, which is real DOM state our code sets, not a Tailwind class that
+  // depends on a stylesheet jsdom never loads — and refuses to dispatch the interaction, throwing
+  // rather than silently no-op'ing. That is the actual browser-observable difference a
+  // `pointer-events: none` element makes: a real pointer over it hits whatever is behind it
+  // instead. What this can't honestly show is *which* element the browser reports underneath —
+  // that needs real hit-test geometry jsdom does not have, the same limitation this file's header
+  // comment already names for pointer-transit.
+  function renderDwellPopover(onNestedClick?: () => void) {
+    render(
+      <Popover dwell>
+        <PopoverTrigger>
+          <button type="button">Term</button>
+        </PopoverTrigger>
+        <PopoverContent>
+          <button type="button" onClick={onNestedClick}>
+            Nested control
+          </button>
+        </PopoverContent>
+      </Popover>,
+    );
+  }
+
+  it("a pointer that enters and leaves faster than the open grace opens nothing", async () => {
+    const { user } = setup();
+    renderDwellPopover();
+    const trigger = screen.getByRole("button", { name: "Term" });
+
+    await user.hover(trigger);
+    await user.unhover(trigger); // leaves well before DWELL_OPEN_DELAY_MS with delay:null
+
+    // Checked immediately, not only after a long wait: an implementation that opened synchronously
+    // (skipping the grace entirely) and only closed later on the ordinary pointer-leave grace would
+    // still read "absent" by the time a long wait elapses, masking exactly the bug this pins.
+    expect(screen.queryByRole("button", { name: "Nested control" })).not.toBeInTheDocument();
+
+    await wait(DWELL_OPEN_DELAY_MS + 100);
+    expect(screen.queryByRole("button", { name: "Nested control" })).not.toBeInTheDocument();
+  });
+
+  it("a popover in filling does not receive the pointer", async () => {
+    const { user } = setup();
+    renderDwellPopover();
+
+    await user.hover(screen.getByRole("button", { name: "Term" }));
+    const nested = await screen.findByRole("button", { name: "Nested control" });
+
+    // Well inside DWELL_MS — still filling.
+    await expect(user.click(nested)).rejects.toThrow(/pointer-events: none/);
+  });
+
+  it("a popover reaching locked receives the pointer and holds its position when the cursor moves on", async () => {
+    // A separate render from the "does not receive the pointer" case above, deliberately: a click
+    // user-event rejects for the pointer-events check still moves its virtual pointer through the
+    // trigger on the way to the target, which schedules the ordinary hover-leave close — mixing
+    // that into this test would make it a close-grace test wearing this one's name.
+    const { user } = setup();
+    const onNestedClick = vi.fn();
+    renderDwellPopover(onNestedClick);
+
+    await user.hover(screen.getByRole("button", { name: "Term" }));
+    const nested = await screen.findByRole("button", { name: "Nested control" });
+
+    // Past DWELL_MS: locked, and a real pointer now reaches it.
+    await wait(DWELL_MS + 50);
+    await user.click(nested);
+    expect(onNestedClick).toHaveBeenCalledTimes(1);
+
+    // The cursor moving on afterwards (simulated here, since the content no longer follows once
+    // locked) must not tear the popover down or leave it unclickable — "stops following" means the
+    // position freezes, not that the popover breaks.
+    await act(async () => {
+      document.dispatchEvent(
+        new window.PointerEvent("pointermove", { clientX: 999, clientY: 999, bubbles: true }),
+      );
+    });
+    await user.click(nested);
+    expect(onNestedClick).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaving the trigger before dwell completes closes the popover and no locked state is ever reached", async () => {
+    const { user } = setup();
+    renderDwellPopover();
+    const trigger = screen.getByRole("button", { name: "Term" });
+
+    await user.hover(trigger);
+    await screen.findByRole("button", { name: "Nested control" });
+
+    // Still filling — leave well before DWELL_MS elapses.
+    await user.unhover(trigger);
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Nested control" })).not.toBeInTheDocument();
+    });
+
+    // Past the moment DWELL_MS would have elapsed had the popover survived — a stray lock timer
+    // that outlived the close would show up here as the content reappearing or the registry
+    // getting corrupted; neither happens.
+    await wait(DWELL_MS);
+    expect(screen.queryByRole("button", { name: "Nested control" })).not.toBeInTheDocument();
+  });
+
+  it("without dwell set, opens on the existing 300ms delay, never enters either state, and renders no bar", async () => {
+    const { user } = setup();
+    const onClick = vi.fn();
+    render(
+      <Popover>
+        <PopoverTrigger>
+          <button type="button">Row</button>
+        </PopoverTrigger>
+        <PopoverContent>
+          <button type="button" onClick={onClick}>
+            Vitals
+          </button>
+        </PopoverContent>
+      </Popover>,
+    );
+
+    await user.hover(screen.getByRole("button", { name: "Row" }));
+    // Not yet — the default 300ms hover-open delay hasn't elapsed (no openDelay override, so this
+    // is the real regression arm for the five existing consumers, all of which rely on the default).
+    await wait(150);
+    expect(screen.queryByRole("button", { name: "Vitals" })).not.toBeInTheDocument();
+
+    const vitals = await screen.findByRole("button", { name: "Vitals" }, { timeout: 500 });
+
+    // No bar — only a `dwell` popover sets an inline transition-duration on a fill element; a
+    // plain popover's content carries no such style anywhere in its subtree.
+    expect(document.querySelector('[style*="transition-duration"]')).toBeNull();
+
+    // Pointer events were never touched: the click reaches it immediately, no throw.
+    await user.click(vitals);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  describe("the lock arrives at the same instant the bar's own declared duration promises", () => {
+    // `DwellBar`'s fill duration lives only in its inline `transitionDuration` style — real DOM
+    // state the component itself sets, not a bespoke test attribute, and readable in jsdom without
+    // any stylesheet (`el.style.transitionDuration`). Reading it back, rather than importing
+    // `DWELL_MS` and feeding it into the wait below, is what makes these tests fail if the LOCK
+    // timer alone drifts from what the bar promises: entries 1/3/4 above already pin the lock
+    // arriving at `DWELL_MS`, but none of them ever look at the bar, so a second literal hardcoded
+    // on the lock timer alone (leaving the bar at `DWELL_MS`) is invisible to all three.
+    //
+    // Two separate renders, not one interaction sequence, for the same reason as the "reaching
+    // locked" test above: a click user-event rejects for the pointer-events check still moves its
+    // virtual pointer through the trigger, which schedules the ordinary hover-leave close — mixing
+    // that into a single test would make the second assertion a close-grace test wearing this
+    // one's name.
+    async function openAndReadBarDuration(onNestedClick?: () => void) {
+      renderDwellPopover(onNestedClick);
+      const user = userEvent.setup({ delay: null });
+      await user.hover(screen.getByRole("button", { name: "Term" }));
+      const nested = await screen.findByRole("button", { name: "Nested control" });
+      const dialog = nested.closest('[role="dialog"]');
+      const bar = dialog?.querySelector<HTMLElement>('div[style*="transition-duration"]');
+      if (!bar) throw new Error("expected the dwell bar to be present while filling");
+      const durationMs = Number.parseInt(bar.style.transitionDuration, 10);
+      return { user, nested, durationMs };
+    }
+
+    it("still refuses the pointer just before the bar's declared duration elapses", async () => {
+      const { user, nested, durationMs } = await openAndReadBarDuration();
+
+      await wait(durationMs - 100);
+      await expect(user.click(nested)).rejects.toThrow(/pointer-events: none/);
+    });
+
+    it("accepts the pointer once the bar's declared duration has elapsed", async () => {
+      const onNestedClick = vi.fn();
+      const { user, nested, durationMs } = await openAndReadBarDuration(onNestedClick);
+
+      await wait(durationMs + 100);
+      await user.click(nested);
+      expect(onNestedClick).toHaveBeenCalledTimes(1);
+    });
   });
 });
