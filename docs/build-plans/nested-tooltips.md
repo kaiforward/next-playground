@@ -478,10 +478,20 @@ Reuse: composes the existing focus machinery — `focusIntoContent` (`components
 
 ### Task 6 — pinning a chain
 
-Files: `components/ui/popover.tsx`, `components/ui/__tests__/popover.test.tsx`
+Files: `components/ui/popover.tsx`, `components/ui/icons.tsx`,
+`components/ui/__tests__/popover.test.tsx`
+
+Kept deliberately, against the case for cutting it. After the dwell model landed, pinning's original
+job — surviving the trip from a term to its own popover — was gone, and its only remaining job is
+holding a chain while the pointer goes elsewhere, which no present surface needs. The owner kept it
+for what is coming rather than what is here: "technically in the future its quite likely we will have
+larger provincal style popovers, maybe that makes it worth keeping". Recorded so the same case for
+cutting is not made again from the same evidence.
 
 Interface: context gains `pinChain(): void`, exposed through a pin control `PopoverContent` renders
-in `dwell` mode. Pinning detaches every entry of the current stack from the registry: the entries
+in `dwell` mode as an icon-only button — the owner's call, "we can just use a small pin icon instead
+of text though so it doesnt take up a lot of visual space" — carrying an accessible name rather than
+a visible label. Pinning detaches every entry of the current stack from the registry: the entries
 stop responding to the return and leave graces, hold full opacity, and survive until dismissed. A
 term inside a pinned popover reports depth 0 from `usePopoverDepth`, so it starts a fresh chain
 rather than extending the pinned one.
@@ -493,11 +503,14 @@ Proves:
 - A pinned chain holds full opacity while an unpinned stack beside it fades by depth.
 - Dismissing a pinned chain releases its registry entries, so a later chain is not offset by ghosts —
   the leak the reference-guarded release at `components/ui/popover.tsx:142` exists to prevent.
+- The pin control is reachable and operable by its accessible name, not by its glyph — an icon-only
+  button with no name is the failure this whole feature's accessibility line exists to avoid.
 
 Consumes: Tasks 1, 2, 3.
 
-Reuse: `Button` (`components/ui/button.tsx`) for the pin control — props read this session. No new
-piece.
+Reuse: `Button` (`components/ui/button.tsx`) for the pin control — props read this session.
+`components/ui/icons.tsx` is a single re-export line from `lucide-react`; the pin glyph joins it the
+same way, so no icon is hand-drawn. No new component.
 
 ### Task 7 — convert the industry panel
 
@@ -625,7 +638,9 @@ For the owner, before `/implement-plan` starts:
    on every underlined word.
 2. **The dwell bar** — an element inside `PopoverContent` in `dwell` mode, not a free-standing
    component. The hairline between the header and the content in the prototype.
-3. **The pin control** — a `Button` in `PopoverContent`'s header in `dwell` mode. Composed rather than
-   new, but it is a control players have not seen before.
+3. **The pin control** — an icon-only `Button` in `PopoverContent`'s header in `dwell` mode, using a
+   pin glyph re-exported from `lucide-react` through `components/ui/icons.tsx`. Composed rather than
+   new, but it is a control players have not seen before, and it is the one piece the prototype shows
+   as a text button rather than an icon.
 
 Everything else composes existing pieces. The approved prototype shows exactly these three.
