@@ -331,7 +331,7 @@ processed goods are made from raw ones, advanced goods from processed. Everythin
 skilled work.
 
 **Family** — One of the five groups the processed and advanced goods fall into: heavy industry,
-chemicals, electronics, armaments and consumer works. Each has its own specialisation complex.
+chemicals, electronics, armaments and consumer. Each has its own specialisation complex.
 
 **Specialisation complex** — A building that produces nothing and raises the yield of every good in
 its family made in that system. A system may hold one complex, of one family.
