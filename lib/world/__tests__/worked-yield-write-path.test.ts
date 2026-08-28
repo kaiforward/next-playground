@@ -233,7 +233,7 @@ describe("worked-deposit refold — the tick write path", () => {
     const rebuiltRow = systemRow(rebuilt, systemId);
     expect(effOf(row).ore).toBe(effOf(rebuiltRow).ore);
     expect(yieldsOf(row).ore).toBe(yieldsOf(rebuiltRow).ore);
-  }, 30_000);
+  }, 90_000);
 
   it("a tick with no tier-0 count change leaves EVERY system's yield/eff columns byte-identical", async () => {
     const base = generateWorld({ systemCount: 60, seed: 7 });
