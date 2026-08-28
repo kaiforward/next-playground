@@ -4,9 +4,11 @@ import userEvent from "@testing-library/user-event";
 import {
   DWELL_MS,
   DWELL_OPEN_DELAY_MS,
+  LEAVE_GRACE_MS,
   Popover,
   PopoverContent,
   PopoverTrigger,
+  RETURN_GRACE_MS,
   usePopoverDepth,
 } from "@/components/ui/popover";
 
@@ -1411,5 +1413,149 @@ describe("Popover — dwell mode", () => {
       await user.click(nested);
       expect(onNestedClick).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe("Popover — the dwell stack lifecycle (return grace, leave grace, depth cue)", () => {
+  // Real timers throughout, per this file's own header comment and Task 2's own precedent — Radix's
+  // FocusScope/Presence machinery is fragile under fake timers, and a locked `dwell` popover still
+  // renders through `PopoverPrimitive.Content`. `RETURN_GRACE_MS` (140) and `LEAVE_GRACE_MS` (90) are
+  // real fixed module constants, so the waits below are the real durations.
+  //
+  // A two-level real dwell chain: term A's popover contains term A1's own trigger, so reaching A1's
+  // popover from A1's trigger genuinely crosses A's content in the DOM the way the spec describes —
+  // A1's trigger is a descendant of A's content, and A1's own content is a SEPARATE portalled
+  // element overlapping it on screen, exactly as two real chained TermLabels would be.
+  function renderChain() {
+    render(
+      <Popover dwell>
+        <PopoverTrigger>
+          <button type="button">Term A</button>
+        </PopoverTrigger>
+        <PopoverContent>
+          <p>Definition A</p>
+          <Popover dwell>
+            <PopoverTrigger>
+              <button type="button">Term A1</button>
+            </PopoverTrigger>
+            <PopoverContent>
+              <p>Definition A1</p>
+            </PopoverContent>
+          </Popover>
+        </PopoverContent>
+      </Popover>,
+    );
+  }
+
+  // Hovers `triggerName` and waits past the open grace and the dwell, so the popover it belongs to
+  // is `locked` by the time this resolves.
+  async function openLocked(user: ReturnType<typeof userEvent.setup>, triggerName: string) {
+    await user.hover(screen.getByRole("button", { name: triggerName }));
+    await wait(DWELL_OPEN_DELAY_MS + DWELL_MS + 80);
+  }
+
+  it("moving from a term to its own child popover does not close that child, though the path crosses the parent", async () => {
+    const { user } = setup();
+    renderChain();
+
+    await openLocked(user, "Term A");
+    expect(await screen.findByText("Definition A")).toBeInTheDocument();
+    await openLocked(user, "Term A1");
+    expect(await screen.findByText("Definition A1")).toBeInTheDocument();
+    // A first genuine visit to the child's own content, so the return trip below is a real
+    // re-entry of the parent rather than a first-ever arrival.
+    await user.hover(screen.getByText("Definition A1"));
+
+    // The trip back for another look at the child crosses the parent's body on the way — resting
+    // briefly on A (genuinely re-entering its content, having just been on A1's) before reaching
+    // A1 again. This is the transit the return grace exists to survive: reach the child again
+    // before the grace elapses and it must still be there.
+    await user.hover(screen.getByText("Definition A"));
+    await user.hover(screen.getByText("Definition A1"));
+
+    await wait(RETURN_GRACE_MS + 150);
+    expect(screen.getByText("Definition A1")).toBeInTheDocument();
+    expect(screen.getByText("Definition A")).toBeInTheDocument();
+  });
+
+  it("resting on a parent for longer than the return grace does close its children", async () => {
+    const { user } = setup();
+    renderChain();
+
+    await openLocked(user, "Term A");
+    await openLocked(user, "Term A1");
+    await user.hover(screen.getByText("Definition A1"));
+    expect(screen.getByText("Definition A1")).toBeInTheDocument();
+
+    // Away from the child and onto the parent's own content, deliberately not moving again — this
+    // is "resting", not transit.
+    await user.hover(screen.getByText("Definition A"));
+
+    await waitFor(
+      () => {
+        expect(screen.queryByText("Definition A1")).not.toBeInTheDocument();
+      },
+      { timeout: RETURN_GRACE_MS + 500 },
+    );
+    expect(screen.getByText("Definition A")).toBeInTheDocument();
+  });
+
+  it("re-entering a child within the return grace cancels the pending close", async () => {
+    const { user } = setup();
+    renderChain();
+
+    await openLocked(user, "Term A");
+    await openLocked(user, "Term A1");
+    await user.hover(screen.getByText("Definition A1"));
+
+    // Rest on the parent long enough to schedule the child's close, but return to the child before
+    // the grace elapses.
+    await user.hover(screen.getByText("Definition A"));
+    await wait(RETURN_GRACE_MS - 70);
+    await user.hover(screen.getByText("Definition A1"));
+
+    // Past the moment the original close would have fired, had it not been cancelled.
+    await wait(RETURN_GRACE_MS);
+    expect(screen.getByText("Definition A1")).toBeInTheDocument();
+  });
+
+  it("leaving the whole stack closes every depth, not only the top", async () => {
+    const { user } = setup();
+    renderChain();
+
+    await openLocked(user, "Term A");
+    await openLocked(user, "Term A1");
+    await user.hover(screen.getByText("Definition A1"));
+
+    // Off the entire stack — nowhere else is hovered.
+    await user.unhover(screen.getByText("Definition A1"));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Definition A1")).not.toBeInTheDocument();
+    });
+    // The parent, not only the child that was actually under the pointer, is also gone.
+    expect(screen.queryByText("Definition A")).not.toBeInTheDocument();
+  });
+
+  it("re-entering any popover within the leave grace cancels the pending dismissal of all of them", async () => {
+    const { user } = setup();
+    renderChain();
+
+    await openLocked(user, "Term A");
+    await openLocked(user, "Term A1");
+    await user.hover(screen.getByText("Definition A1"));
+
+    await user.unhover(screen.getByText("Definition A1"));
+    await wait(LEAVE_GRACE_MS - 40);
+    // Reaching back into the stack — the parent's own content, not the child that was left —
+    // before the leave grace elapses.
+    await user.hover(screen.getByText("Definition A"));
+
+    // Comfortably past the leave grace's original mark (~40ms after resuming) and comfortably short
+    // of the fresh return grace that re-entering the parent itself schedules (RETURN_GRACE_MS further
+    // out from here), so this reads the leave-dismissal outcome specifically.
+    await wait(80);
+    expect(screen.getByText("Definition A")).toBeInTheDocument();
+    expect(screen.getByText("Definition A1")).toBeInTheDocument();
   });
 });

@@ -9,6 +9,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ComponentPropsWithoutRef,
   type CSSProperties,
   type ForwardedRef,
@@ -16,6 +17,7 @@ import {
   type ReactNode,
 } from "react";
 import { twMerge } from "tailwind-merge";
+import { opacityForDepth } from "./depth-opacity";
 import { placeAtCursor } from "./dwell-placement";
 
 /**
@@ -69,6 +71,22 @@ import { placeAtCursor } from "./dwell-placement";
  *   the cursor instead. `dwellState` on the context is `null` whenever `dwell` is not set, which
  *   is how `PopoverContent` knows not to render the bar or touch pointer-events for the five
  *   existing hover-mode consumers.
+ * - The dwell stack's own lifecycle, layered on top of `dwellState` rather than the plain
+ *   `CLOSE_GRACE_MS` a hover-mode popover uses: the pointer entering a `locked` popover at depth
+ *   *d* schedules the close of everything deeper than *d* after `RETURN_GRACE_MS`, replaced (not
+ *   raced) by reaching any still-deeper popover — the workaround for a mechanical artifact
+ *   (`docs/build-plans/nested-tooltips.md` -> N2), not observed behaviour: a child opens offset
+ *   from the cursor, so the trip from a term to its own popover crosses the parent's body for a
+ *   few pixels, indistinguishable from a genuine return without a time window. The pointer resting
+ *   on neither a trigger nor a live `dwell` popover anywhere in the stack closes the whole stack
+ *   after `LEAVE_GRACE_MS`. Both timers are module-level, like `openStack` itself: they govern the
+ *   whole stack, not any one popover's own lifecycle, and a `dwell` popover never runs the plain
+ *   `CLOSE_GRACE_MS` pointer-leave close at all — only the five existing non-`dwell` consumers do.
+ * - The depth cue: `PopoverContent` renders at `opacityForDepth` (`components/ui/depth-opacity.ts`)
+ *   of its distance from the top of the stack, recomputed whenever the stack's length changes via
+ *   a small module-level subscription (`subscribeStackLength`) — `openStack` itself is deliberately
+ *   not React state, so this is the one place a length change is broadcast to whatever renders off
+ *   it. Harmless for a single-level stack: depth-from-top is always 0 there, which is full opacity.
  * - The keyboard enter/exit convention below.
  *
  * ## The keyboard convention — every popover in the game obeys it
@@ -134,6 +152,14 @@ export const DWELL_OPEN_DELAY_MS = 200;
  *  drives both the lock timer below and the `DwellBar`'s fill duration, so the two can never
  *  promise a lock at different moments. */
 export const DWELL_MS = 550;
+/** How long a locked popover survives once the pointer returns to an ancestor — see the docblock's
+ *  "dwell stack's own lifecycle" bullet for why it exists. Fixed as a module constant rather than a
+ *  prop: the owner's call, "Let's just leave it fixed for now" — a player setting would expose a
+ *  workaround for a mechanical artifact as though it were a tunable preference. */
+export const RETURN_GRACE_MS = 140;
+/** How long the whole open stack survives once the pointer rests on neither a trigger nor a live
+ *  `dwell` popover anywhere in it. */
+export const LEAVE_GRACE_MS = 90;
 
 // Module-level "which popovers are open" stack, indexed by depth
 // (`usePopoverDepth`). Not React state — it is only ever read at the moment
@@ -170,6 +196,7 @@ function claimOpen(closeSelf: () => void, depth: number) {
   }
   openStack[depth] = closeSelf;
   openStack.length = depth + 1;
+  notifyStackLengthChange();
 }
 
 function releaseOpen(closeSelf: () => void) {
@@ -181,14 +208,95 @@ function releaseOpen(closeSelf: () => void) {
   if (index === -1) return;
   const descendants = openStack.slice(index + 1);
   openStack.length = index;
+  notifyStackLengthChange();
   // Deepest first: each closes itself, and the `releaseOpen` re-entry that
   // triggers is now a no-op — the truncation above already dropped it — so
   // this single pass closes every depth above `index` in one go, however
   // many levels deep, rather than stranding a descendant when its ancestor
-  // closes.
+  // closes. Each of those re-entrant calls finds `index === -1` and returns
+  // before it would call `notifyStackLengthChange()` again, so a multi-level
+  // cascade still notifies exactly once.
   for (let i = descendants.length - 1; i >= 0; i--) {
     descendants[i]();
   }
+}
+
+// Reactive mirror of `openStack.length`. The stack itself is deliberately not React state (see its
+// own comment above) — read only at the moment a popover opens or closes — so this is the one place
+// a change to it is broadcast to whatever is rendering off it (the depth-cue opacity below).
+const stackLengthListeners = new Set<() => void>();
+
+function notifyStackLengthChange() {
+  for (const listener of stackLengthListeners) listener();
+}
+
+function subscribeStackLength(listener: () => void): () => void {
+  stackLengthListeners.add(listener);
+  return () => stackLengthListeners.delete(listener);
+}
+
+function getStackLength(): number {
+  return openStack.length;
+}
+
+// The dwell stack's own lifecycle timers — module-level like `openStack` itself, because the return
+// and leave graces govern the WHOLE stack rather than any one popover: reaching a still-deeper
+// popover has to be able to replace a grace an ancestor just started, and leaving the entire stack
+// has to close every depth, not only the one the pointer happened to leave last.
+let returnCloseTimer: ReturnType<typeof setTimeout> | null = null;
+let leaveCloseTimer: ReturnType<typeof setTimeout> | null = null;
+
+function cancelReturnClose() {
+  if (returnCloseTimer !== null) {
+    clearTimeout(returnCloseTimer);
+    returnCloseTimer = null;
+  }
+}
+
+function cancelLeaveClose() {
+  if (leaveCloseTimer !== null) {
+    clearTimeout(leaveCloseTimer);
+    leaveCloseTimer = null;
+  }
+}
+
+/**
+ * Closes everything deeper than `depth` (or the whole stack, for `depth === -1`), by closing only
+ * the immediate entry above it — `releaseOpen`'s own cascade, triggered from that popover's
+ * `setOpen(false)`, does the rest. Reads `openStack` live at call time rather than a depth captured
+ * when the timer was scheduled, so a stack that has already changed shape by the time the timer
+ * fires is acted on as it now is, not as it was.
+ */
+function closeFromDepth(depth: number) {
+  const closeDeepest = openStack[depth + 1];
+  closeDeepest?.();
+}
+
+/**
+ * The pointer entering a `locked` popover at `depth`: schedules the close of every popover deeper
+ * than it once `RETURN_GRACE_MS` passes with the pointer resting there. Replaces whatever grace was
+ * already pending rather than racing it — reaching a still-deeper popover calls this again with its
+ * own (deeper) depth, which cancels-and-reschedules a close that would otherwise have removed it.
+ */
+function scheduleReturnClose(depth: number) {
+  cancelReturnClose();
+  returnCloseTimer = setTimeout(() => {
+    returnCloseTimer = null;
+    closeFromDepth(depth);
+  }, RETURN_GRACE_MS);
+}
+
+/**
+ * The pointer resting on neither a trigger nor a live `dwell` popover: schedules the whole stack's
+ * close after `LEAVE_GRACE_MS`, cancelled by the pointer reaching any trigger or locked popover
+ * belonging to a `dwell` popover anywhere in it.
+ */
+function scheduleLeaveClose() {
+  cancelLeaveClose();
+  leaveCloseTimer = setTimeout(() => {
+    leaveCloseTimer = null;
+    closeFromDepth(-1);
+  }, LEAVE_GRACE_MS);
 }
 
 // Focusable-in-a-popover selector. Deliberately attribute-based (`:not([disabled])` rather than
@@ -245,6 +353,11 @@ interface PopoverContextValue {
    *  the enclosing `Popover`'s own depth otherwise. What a nested popover reads off this (via
    *  `usePopoverDepth`) to compute its own. */
   depth: number;
+  /** Whether this popover was created with `dwell` set — read independently of `dwellState`, which
+   *  is `null` whenever the popover is closed even in `dwell` mode. `PopoverTrigger` needs this at
+   *  moments `dwellState` can't answer: a `dwell` trigger still counts as "resting on the stack" for
+   *  the leave grace before its own popover has opened at all. */
+  dwell: boolean;
   /** `null` when `dwell` is not set on this popover — the mode is off and `PopoverContent`
    *  renders no bar and leaves pointer-events alone. `"filling"` while the lock timer is running,
    *  `"locked"` once it has fired. */
@@ -440,6 +553,14 @@ export function Popover({
       if (closeTimerRef.current !== null) clearTimeout(closeTimerRef.current);
       clearDwellTimer();
       releaseOpen(closeSelf);
+      // The dwell stack's return/leave timers are module-level (see their own comments) rather than
+      // owned by any one popover, so there is no single instance whose unmount alone should clear
+      // them — but clearing them on every popover's unmount is the safe direction to over-apply:
+      // the worst case is a pending grace not firing, which leaves something open a little longer,
+      // never something closing that shouldn't. That is strictly better than the alternative of a
+      // timer surviving a test or a row's unmount and firing into a stack that has since moved on.
+      cancelReturnClose();
+      cancelLeaveClose();
     },
     [closeSelf],
   );
@@ -518,6 +639,7 @@ export function Popover({
     align,
     clickInert,
     depth,
+    dwell,
     dwellState,
     dwellPointerRef,
     closeReasonRef,
@@ -591,6 +713,10 @@ export const PopoverTrigger = forwardRef<
             popover.dwellPointerRef.current = { x: event.clientX, y: event.clientY };
             popover.cancelScheduledClose();
             popover.scheduleOpen();
+            // A `dwell` trigger counts as "resting on the stack" for the leave grace even before
+            // its own popover has opened — `dwellState` can't answer that (it is null until open),
+            // which is exactly why `dwell` is on the context independently of it.
+            if (popover.dwell) cancelLeaveClose();
           },
         )}
         onPointerMove={composeHandlers<React.PointerEvent<HTMLButtonElement>>(
@@ -604,7 +730,15 @@ export const PopoverTrigger = forwardRef<
           () => {
             pointerActiveRef.current = false;
             popover.cancelScheduledOpen();
-            if (popover.open) popover.scheduleClose();
+            if (!popover.open) return;
+            // A `dwell` popover never runs the plain `CLOSE_GRACE_MS` pointer-leave close — only
+            // the whole-stack leave grace applies to it. Every other (non-`dwell`) consumer keeps
+            // exactly its existing `scheduleClose` behaviour, untouched.
+            if (popover.dwell) {
+              scheduleLeaveClose();
+            } else {
+              popover.scheduleClose();
+            }
           },
         )}
         onPointerDown={composeHandlers<React.PointerEvent<HTMLButtonElement>>(onPointerDown, () => {
@@ -708,6 +842,14 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
     const popover = usePopoverContext("PopoverContent");
     const { contentRef, pendingEnterRef, dwellState, dwellPointerRef } = popover;
 
+    // The depth cue: how far this popover sits from the top of the CURRENT stack, recomputed
+    // whenever the stack's length changes (`subscribeStackLength`) rather than only on this
+    // popover's own open/close. For a single-level stack (every existing non-`dwell` consumer)
+    // `stackLength` is always 1 when open, so `depthFromTop` is always 0 — full opacity, no change.
+    const stackLength = useSyncExternalStore(subscribeStackLength, getStackLength, getStackLength);
+    const depthFromTop = Math.max(0, stackLength - 1 - popover.depth);
+    const opacity = opacityForDepth(depthFromTop);
+
     // Cursor-anchored placement while `filling`: seeded from the last position `PopoverTrigger`
     // recorded, then kept live off a document-level `pointermove` listener — document-level, not
     // the trigger's own, because the cursor travels well past the trigger's bounds on its way to
@@ -774,12 +916,27 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
           side={popover.side}
           align={popover.align}
           sideOffset={sideOffset}
-          style={{ ...style, ...dwellStyle }}
+          style={{ ...style, ...dwellStyle, opacity }}
           onPointerEnter={composeHandlers<React.PointerEvent<HTMLDivElement>>(onPointerEnter, () => {
             popover.cancelScheduledClose();
+            if (!popover.dwell) return;
+            // Resting on any `dwell` popover in the stack means the pointer is not off it, whatever
+            // depth it is at.
+            cancelLeaveClose();
+            // Only a `locked` popover schedules the return-close of what's deeper than it — a
+            // `filling` one has `pointer-events: none` in a real browser and would never dispatch
+            // this in the first place; the check is defensive rather than load-bearing there.
+            if (dwellState === "locked") scheduleReturnClose(popover.depth);
           })}
           onPointerLeave={composeHandlers<React.PointerEvent<HTMLDivElement>>(onPointerLeave, () => {
-            popover.scheduleClose();
+            // A `dwell` popover never runs the plain `CLOSE_GRACE_MS` pointer-leave close — only the
+            // whole-stack leave grace applies to it. Every other (non-`dwell`) consumer keeps
+            // exactly its existing `scheduleClose` behaviour, untouched.
+            if (popover.dwell) {
+              if (dwellState === "locked") scheduleLeaveClose();
+            } else {
+              popover.scheduleClose();
+            }
           })}
           onOpenAutoFocus={composeHandlers<Event>(onOpenAutoFocus, (event) => {
             // The popover NEVER takes focus, however it was opened. A popover describes the thing
