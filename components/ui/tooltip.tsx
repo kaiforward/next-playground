@@ -26,8 +26,13 @@ export const TooltipTrigger = TooltipPrimitive.Trigger;
  * panels can't drift; pass `className` to override what a call site genuinely needs.
  * Controls with supplemental legend tooltips (checkboxes, segments, radios)
  * use the bare `TooltipTrigger` and stay unmarked — see theme.md.
+ *
+ * `triggerLabelStyles` is exported so `TermLabel` (`components/ui/term-label.tsx`) shares this
+ * one definition of the dotted-grey affordance rather than a second copy — it layers its own
+ * copper decoration on top, for the tier `theme.md` reserves for a term that opens its own
+ * definition.
  */
-const triggerLabelStyles = tv({
+export const triggerLabelStyles = tv({
   // `[text-transform:inherit]` because a browser does not pass text-transform down into a
   // form control: a trigger sitting inside an uppercased label (a `SectionHeader`, a
   // table's `<th>`) would otherwise render mixed-case while the labels either side of it

@@ -221,10 +221,12 @@ Filter chips use `rounded-full` (pill shape) with accent tint when active. This 
 
 Any plain text whose tooltip is the payload — good names, building names, labour chips, keywords in descriptions — is marked with a **dotted underline** (`decoration-text-tertiary/75`, offset 3px) that turns solid on hover. Text colour stays untouched, so panel colour-coding (chip grades, yield gold) survives. Use `TooltipTriggerLabel`, which bakes the affordance in; pass `className` for layout only, never decoration.
 
+A second, copper tier marks a word that opens its own definition rather than a plain description: **`TermLabel`** (`components/ui/term-label.tsx`), for a glossary term whose definition may itself name further terms, chaining as deep as the player follows it. It shares `TooltipTriggerLabel`'s dotted-underline shape (`triggerLabelStyles`, exported from `components/ui/tooltip.tsx`) but renders it in the accent colour, so the two tiers read as distinct at a glance: dotted grey is "explanation, not navigation" (the web `<abbr>` convention), copper is "this word has its own entry." Behind it, `TermLabel` opens a `Popover` in `dwell` mode rather than a `Tooltip` — a term's definition is a thing in the game, reachable and enterable, not a control's description.
+
 Two deliberate boundaries:
 
 - **Controls stay unmarked.** Checkboxes, segmented controls, radio rows, bars, and icon buttons whose tooltips are supplemental legends use the bare `TooltipTrigger` — they already read as interactive, and a dotted underline would misread.
-- **Copper is reserved.** Dotted grey means "explanation, not navigation" (the web `<abbr>` convention); coloured/underlined text in a browser promises a link. A copper treatment is deliberately held back as the future second tier for glossary-backed concept links (the planned deep-tooltip system).
+- **A surface becomes a `TermLabel`/`Popover` when it describes a thing in the game; it stays a `Tooltip` when it describes a control.** This is an accessibility line, not a preference: a tooltip's content is the control's `aria-describedby` description, announced with the control, while a popover is a separate region a person can enter and read. Converting control help would make its text unreachable to a screen reader at the moment it is needed.
 
 ---
 
@@ -249,4 +251,4 @@ Lucide icons default to 24x24. Size them explicitly for context:
 - **No raw `<input>` or `<select>`** — use form components from `components/form/`
 - **No inline progress bars** — use `ProgressBar` component with appropriate color/size
 - **No unsized lucide icons in buttons** — always set explicit `w-*` / `h-*` classes
-- **No unmarked text tooltips, no ad-hoc trigger styling** — text labels carrying a tooltip use `TooltipTriggerLabel` (dotted-underline affordance), never a hand-styled `TooltipTrigger` + `hover:underline`
+- **No unmarked text tooltips, no ad-hoc trigger styling** — text labels carrying a tooltip use `TooltipTriggerLabel` (dotted-underline affordance) or, for a glossary term, `TermLabel` (the copper tier) — never a hand-styled `TooltipTrigger`/`PopoverTrigger` + `hover:underline`
