@@ -46,23 +46,25 @@ The attention layer — how the player finds what to do — is two surfaces, bot
     arrived at: a quantity genuinely bounded 0–1 reads as a percentage; a multiplier that can exceed
     1 keeps its own words or its `×`, because a percentage would imply a ceiling it does not have.
 
-    **A worked case to settle first, because it misled the owner in play.** The Industry tab's
-    housing row reads "379 / 379" — completely full — on a system whose population fills 345.6 of
-    those 379. The staffed figure is `min(count, housingUsed(population) × (1 + VACANCY_SLACK))`
-    (`lib/engine/industry.ts:395`), and `VACANCY_SLACK` is 0.10, so a 10% vacancy is counted as
-    healthy and the row saturates at 91% real occupancy. Astrography's per-body occupancy uses the
-    raw `population / POP_CENTRE_DENSITY` instead. Both are correct by their own definitions and
-    cannot be reconciled by reading them, because one silently contains an allowance. Decide when
-    an allowance may be folded into a displayed figure at all, and how a saturated-with-slack
-    reading says so.
+    **The allowance rule, settled:** an allowance never goes inside a displayed number. The
+    Industry ledger's in-use column is `buildingUsed` (`lib/engine/industry.ts`) — the decay
+    engine's keep-or-shed verdict, folding a 10% vacancy allowance for housing (`VACANCY_SLACK`)
+    and a 15% selling allowance for production rows (`USED_SLACK`) — so every row saturates before
+    the thing is full, and housing reads "379 / 379" at 91% real occupancy. The column shows the
+    true figure instead; decay's verdict already has a channel in the row's health colouring
+    (stable / idle / contracting / collapsing), and the allowance stays inside decay, invisible.
+    Rationale and the rest of the vocabulary rules: [glossary](./planned/glossary.md).
 
-  - **The glossary.** One doc defining the game's terms of art in plain language (pop = 1 million
-    people; tick/cycle; Provision; bands; cover; unrest/strike; control ladder…), written as the
-    single source tooltips and tutorials quote from. Start it flat; it grows hyperlinks as the
-    cross-linking system lands. The time-anchoring counterpart already shipped — SPEC.md's Calendar
-    section anchors ticks to in-world time; this covers vocabulary instead.
+  - **The glossary.** [`docs/planned/glossary.md`](./planned/glossary.md) — the single source
+    tooltips and tutorials quote from, and it is **written**: eight groups of definitions, the
+    vocabulary rules that produced them, the collapses, and the engine-only word list. Flat for
+    now; it grows hyperlinks as the cross-linking system lands. Three implementation items are
+    booked in its own "Still open" section and ride this migration, since it opens those surfaces
+    anyway: the `UST` date stamp, honest housing occupancy in the Industry ledger, and the panel
+    renames that retiring "deposit" for **resource** / **resource slot** implies.
 
-  *Next step:* agree the glossary's key terms, then the design doc + prototype pass for nesting.
+  *Next step:* the design doc + prototype pass for nesting, starting from which tooltips must
+  become popovers at all — a plain label on a control gains nothing from one.
 
 ---
 
