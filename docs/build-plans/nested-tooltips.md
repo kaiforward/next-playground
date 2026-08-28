@@ -258,9 +258,14 @@ are authored here, and this note is the provenance.
   pointer from a term to its own locked tooltip fires an intervening term's tooltip, then the dwell is
   not doing the second job E1 claims for it, and the model needs a separate transit guard after all.
   Checkable by hand on the industry panel once converted, and the failure the first prototype showed.
-- **F2 — the return grace is doing harm.** If setting the return grace to 0 is indistinguishable in use
-  from 140 ms, then N2 is a mechanism invented for a problem the overlap already solved, and it should
-  be deleted rather than carried as a constant nobody can explain.
+- **F2 — the return grace is doing harm. Run, and it survived.** The test was: if setting the return
+  grace to 0 is indistinguishable in use from 140 ms, then N2 is a mechanism invented for a problem the
+  overlap already solved and should be deleted. At 0 ms the child closes before it can be reached —
+  owner, operating the prototype: "If i set it to 0, the child tooltip closes before I can even hover
+  it". The grace is load-bearing, and the reason is mechanical: the child opens offset from the cursor,
+  so reaching it means stepping off the term onto the parent's body for a few pixels, which is
+  indistinguishable from a genuine return without a time window. The constant stays and this is the
+  explanation it carries.
 - **F3 — a five-deep chain is unreachable in the real panel.** The prototype's chains are five deep on
   a full-width page. If the real panel, docked over the map at its real width, cannot show three levels
   without the third being clamped to a screen edge and overlapping its own trigger, then cursor
@@ -272,11 +277,11 @@ are authored here, and this note is the provenance.
 ### Notes on what is ours, not observed
 
 - **N1 — keyboard access.** Wholly ours. The reference implementation is pointer-only.
-- **N2 — the return grace.** Ours. The owner observed that returning to a parent closes its child and
-  that dismissal is "pretty instant […] maybe a tiny grace period"; taken literally, an instant return
-  rule also fires during the few pixels between a term and its child. Either the reference
-  implementation's overlap is tight enough that those pixels never register, or it has a grace of its
-  own. F2 is the falsifier.
+- **N2 — the return grace.** Ours, and confirmed necessary by F2. The owner observed that returning to
+  a parent closes its child and that dismissal is "pretty instant […] maybe a tiny grace period"; taken
+  literally, an instant return rule also fires during the few pixels between a term and its child. The
+  reference implementation must therefore have either an overlap tight enough that those pixels never
+  register or a grace of its own — we could not observe which, and 140 ms is ours.
 - **N3 — the opacity thresholds.** 0.5 and 0.28 are a reading of "25-50% roughly" for the fourth and
   older, not an observed pair.
 
