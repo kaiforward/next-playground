@@ -291,3 +291,341 @@ are authored here, and this note is the provenance.
 
 `/build-plan`. Spec review is skipped under its own rule: this is a pure-UI change — it adds no
 processor, reads no shared constant, and touches no world state, as row 3 records line by line.
+
+---
+
+## Build plan
+
+Spec review skipped under its own rule (pure UI). One branch, one PR, with a single check-in gate
+after the first converted panel.
+
+### Resolution — every measure the spec promises
+
+| Measure | State | Producer |
+|---|---|---|
+| Open grace, 200 ms | new | Task 1 — `DWELL_OPEN_DELAY_MS` |
+| Dwell, 550 ms | new | Task 2 — `DWELL_MS` |
+| Return grace, 140 ms | new | Task 3 — `RETURN_GRACE_MS`, fixed, not a prop |
+| Leave grace, 90 ms | new | Task 3 — `LEAVE_GRACE_MS` |
+| Depth of a tooltip | new | Task 1 — the stack index from `usePopoverDepth()` |
+| Opacity tiers, 1 / 0.5 / 0.28 | new | Task 3 — `DEPTH_OPACITY` |
+| "Top three at full opacity" | new | Task 3 — `FULL_OPACITY_DEPTH = 3` |
+| Existing hover-open delay, 300 ms | exists | `components/ui/popover.tsx:114` — unchanged; the five existing consumers keep it |
+| Existing close grace, 150 ms | exists | `components/ui/popover.tsx:115` — unchanged, same reason |
+| A term's definition body | new | Task 4 — `TERMS` record |
+| The dotted-underline trigger affordance | exists | `components/ui/tooltip.tsx:30` (`triggerLabelStyles`, module-private) — Task 4 extracts it |
+| The copper second-tier affordance | exists | `docs/active/design-system/theme.md:227` reserves copper for "glossary-backed concept links (the planned deep-tooltip system)" — Task 4 spends it |
+
+The two existing constants are the reason the dwell model is **opt-in per popover** rather than a
+replacement: the spec requires the five existing consumers to come through behaving as they do now,
+and they are built on 300/150.
+
+### Task 1 — replace the exclusivity pointer with an ancestor stack
+
+Files: `components/ui/popover.tsx`, `components/ui/__tests__/popover.test.tsx`
+
+Interface: `usePopoverDepth(): number` — a popover's index in the open stack, 0 for one with no open
+ancestor. Internally the module-level `openPopover: (() => void) | null`
+(`components/ui/popover.tsx:120`) and its `claimOpen`/`releaseOpen` pair (`:130`, `:142`) become a
+stack of the same `closeSelf` closures; `claimOpen(closeSelf, depth)` closes every entry from `depth`
+upward instead of the single incumbent. `takeoverInProgress` (`:128`) keeps its meaning and its role
+in `CloseReason` (`:179`) — a takeover is now "an entry at or below my depth claimed", not "the one
+incumbent claimed". A popover with no open ancestor is depth 0, which is the whole of today's
+behaviour.
+
+Proves:
+- A popover opening at depth 0 while another depth-0 popover is open closes it — today's exclusivity,
+  unchanged, and the vacuity check for the whole task.
+- A popover opening at depth 1 leaves its depth-0 ancestor open.
+- A second depth-1 popover opening closes the first depth-1 popover and still leaves depth 0 open.
+- Closing a depth-0 popover closes its depth-1 descendant with it, rather than stranding it.
+- A popover unmounting under a live pointer releases only its own stack entry and never truncates
+  entries below it — the reference-guarded release at `:142` generalised, and the failure mode its
+  own comment already names.
+- `takeover` is recorded true for a popover closed by a claim at or below its depth, and false for
+  one closed by Escape or a pointer leave — the flag the close-side focus decision reads.
+
+Consumes: nothing.
+
+Reuse: composes the existing `Popover` internals only. No `components/ui` piece is added.
+
+### Task 2 — the dwell-to-lock mode
+
+Files: `components/ui/popover.tsx`, `components/ui/__tests__/popover.test.tsx`
+
+Interface: `PopoverProps` gains `dwell?: boolean` (default `false`, so every existing consumer is
+untouched). With `dwell` set: `openDelay` is ignored in favour of `DWELL_OPEN_DELAY_MS = 200`; the
+popover opens into a `filling` state, positioned at the pointer and following it, with pointer events
+off; after `DWELL_MS = 550` it enters `locked`, stops following and takes pointer events. Context
+gains `dwellState: "filling" | "locked" | null` (null when the mode is off) so `PopoverContent` can
+render the bar and set its own pointer-events. Position while filling is set on the content element
+directly rather than through Radix's anchor, since the anchor is the trigger and the spec anchors to
+the cursor.
+
+Proves:
+- Sweeping the pointer across a trigger faster than the open grace opens nothing.
+- A popover in `filling` does not receive the pointer — a pointer over its area still reports the
+  element beneath it.
+- A popover reaching `locked` receives the pointer and holds its position when the cursor moves on.
+- Leaving the trigger before the dwell completes closes the popover and no `locked` state is ever
+  reached.
+- A `Popover` without `dwell` set opens on the existing 300 ms delay, never enters either state, and
+  renders no bar — the regression arm for the five existing consumers.
+- The dwell bar's fill duration equals `DWELL_MS`, so the bar cannot promise a lock at a different
+  moment than the one that arrives.
+
+Consumes: Task 1 (`usePopoverDepth` — a filling popover still claims its depth on open).
+
+Reuse: `New: DwellBar — components/ui/popover.tsx`, an element of the popover rather than a
+free-standing component. Searched for an existing time-fill indicator by behaviour ("progress",
+"bar", "fill", "timer") across `components/ui`: `ProgressBar` (`components/ui/progress-bar.tsx`) is
+the only candidate and does not fit — it is a labelled data readout that requires `label`, `value`
+and `max`, renders a value/max label row, and exposes `role="progressbar"` with an `aria-valuenow`.
+The dwell indicator has no data value, no label, and nothing worth announcing; reusing it would mean
+inventing a label and a value and then suppressing the row that displays them.
+
+### Task 3 — the stack lifecycle and the depth cue
+
+Files: `components/ui/popover.tsx`, `components/ui/__tests__/popover.test.tsx`
+
+Interface: `RETURN_GRACE_MS = 140` (module constant, deliberately not a prop — see the spec's
+durations table), `LEAVE_GRACE_MS = 90`, `FULL_OPACITY_DEPTH = 3`, and
+`DEPTH_OPACITY: readonly number[]` giving 1 for the newest three, then 0.5, then 0.28 for anything
+older. The pointer entering a `locked` popover at depth *d* schedules the close of everything above
+*d* after `RETURN_GRACE_MS`, cancelled by the pointer reaching any deeper popover. The pointer
+resting on neither a trigger nor a live popover closes the whole stack after `LEAVE_GRACE_MS`.
+Opacity is applied by depth-from-top, recomputed whenever the stack's length changes.
+
+Proves:
+- Moving from a term to its own child popover does not close that child, though the path crosses the
+  parent — the behaviour the return grace exists for, and the one that failed at 0 ms.
+- Resting on a parent for longer than the return grace does close its children.
+- Re-entering a child within the return grace cancels the pending close.
+- Leaving the whole stack closes every depth, not only the top.
+- Re-entering any popover within the leave grace cancels the pending dismissal of all of them.
+- The fourth-newest popover renders below full opacity while the newest three do not — the boundary
+  at `FULL_OPACITY_DEPTH`, which an off-by-one would put in the wrong place without failing anything
+  else.
+
+Consumes: Tasks 1 and 2.
+
+Reuse: composes Task 2's states. No `components/ui` piece is added.
+
+### Task 4 — term definitions as data, and the term trigger
+
+Files: `lib/glossary/terms.tsx` (new), `lib/glossary/__tests__/terms.test.tsx` (new),
+`components/ui/tooltip.tsx`, `components/ui/term-label.tsx` (new),
+`components/ui/__tests__/term-label.test.tsx` (new), `docs/active/design-system/theme.md`
+
+Interface: `TermId` (a union of the defined term ids) and
+`TERMS: Readonly<Record<TermId, { term: string; body: ReactNode }>>` in `lib/glossary/terms.tsx`,
+holding the minimum set the industry panel's own chains need — realised yield, potential yield,
+resource slot, worked, locked, body, archetype, quality band, resource, building. A definition body
+may itself contain `<TermLabel>` children, which is what makes a chain. `TermLabel` in
+`components/ui/term-label.tsx` takes `{ id: TermId; children?: ReactNode }` and renders the trigger
+plus its `Popover` in `dwell` mode, defaulting its label to `TERMS[id].term`. The dotted-underline
+affordance currently private to `components/ui/tooltip.tsx:30` (`triggerLabelStyles`) is exported so
+both triggers share one definition; `TermLabel` renders it in the copper treatment `theme.md:227`
+reserves for exactly this.
+
+Proves:
+- Every `TermId` in the union has an entry, and every entry's id is in the union — the two cannot
+  drift apart silently.
+- A definition body containing a `TermLabel` renders a working trigger, so a chain is possible at
+  all; a body containing none renders a leaf that opens nothing further.
+- A term whose body references itself, directly or through another term, opens without recursing at
+  render time — the glossary contains a real cycle (`family` and `specialisation complex` define each
+  other), so this is a live case and not a hypothetical.
+- `TooltipTriggerLabel` renders exactly the decoration it does today after the style is extracted —
+  the vacuity check on the extraction, which would otherwise silently restyle 17 existing triggers.
+- `TermLabel` and `TooltipTriggerLabel` are distinguishable in the rendered output, since the design
+  system assigns them different tiers.
+
+Consumes: Task 2 (the `dwell` prop), Task 1 (depth).
+
+Reuse: `triggerLabelStyles` (`components/ui/tooltip.tsx:30`) — read this session; a `tv()` slot with
+a single `base` string, extracted rather than copied per the second-occurrence rule.
+`Popover`/`PopoverTrigger`/`PopoverContent` (`components/ui/popover.tsx:256,436,539`) — props read
+this session. `New: TermLabel` — searched for an existing "word that opens its own definition" by
+behaviour ("term", "concept", "definition", "glossary") across `components/`, `lib/` and `client/`:
+nothing exists, and no glossary data module exists either.
+
+### Task 5 — keyboard access in the dwell mode
+
+Files: `components/ui/popover.tsx`, `components/ui/term-label.tsx`,
+`components/ui/__tests__/popover.test.tsx`
+
+Interface: no new exported surface. In `dwell` mode, a keyboard open (Enter on the trigger, and the
+existing `openViaFocus` path in `components/ui/popover.tsx`) skips both the open grace and the dwell,
+entering `locked` immediately and anchoring to the trigger's own rect rather than the pointer. Escape
+closes the innermost open popover and returns focus to its trigger, which is the existing close-side
+focus decision (`CloseReason`, `components/ui/popover.tsx:179`) applied at the top of the stack
+rather than to the single incumbent.
+
+Proves:
+- Enter on a term trigger opens its popover already locked and enterable, with no dwell elapsed.
+- A keyboard-opened popover anchors to its trigger, not to wherever the pointer happens to be.
+- Escape with a three-deep stack closes only the innermost, and a second Escape closes the next.
+- Escape returns focus to the trigger of the popover it closed, not to the outermost trigger.
+- A popover the pointer opened and the keyboard then entered still closes when the pointer leaves —
+  the distinction `keyboardInsideRef` already draws in `components/ui/popover.tsx`, which the stack
+  must not blur.
+
+Consumes: Tasks 1, 2, 3, 4.
+
+Reuse: composes the existing focus machinery — `focusIntoContent` (`components/ui/popover.tsx:166`),
+`CloseReason` (`:179`), `suppressNextTriggerFocusRef`. No new piece.
+
+### Task 6 — pinning a chain
+
+Files: `components/ui/popover.tsx`, `components/ui/__tests__/popover.test.tsx`
+
+Interface: context gains `pinChain(): void`, exposed through a pin control `PopoverContent` renders
+in `dwell` mode. Pinning detaches every entry of the current stack from the registry: the entries
+stop responding to the return and leave graces, hold full opacity, and survive until dismissed. A
+term inside a pinned popover reports depth 0 from `usePopoverDepth`, so it starts a fresh chain
+rather than extending the pinned one.
+
+Proves:
+- A pinned chain survives the pointer leaving it entirely.
+- A term inside a pinned popover opens at depth 0, leaving the pinned chain untouched.
+- A fresh chain opened after pinning does not close the pinned one, at any depth.
+- A pinned chain holds full opacity while an unpinned stack beside it fades by depth.
+- Dismissing a pinned chain releases its registry entries, so a later chain is not offset by ghosts —
+  the leak the reference-guarded release at `components/ui/popover.tsx:142` exists to prevent.
+
+Consumes: Tasks 1, 2, 3.
+
+Reuse: `Button` (`components/ui/button.tsx`) for the pin control — props read this session. No new
+piece.
+
+### Task 7 — convert the industry panel
+
+Files: `components/system/industry-panel.tsx`,
+`components/system/__tests__/industry-panel.test.tsx`
+
+Interface: no new exported surface. The 9 `TooltipTriggerLabel` term triggers in
+`components/system/industry-panel.tsx` become `TermLabel`, and the row-triggered content-rich body at
+`:726` becomes a `dwell` popover. `YieldTooltipBody` (`components/system/industry-panel.tsx:176`)
+keeps its shape and gains `TermLabel` markup on the terms it already names — combined yield, the body
+archetypes, slots, the quality-band percentages — which is what makes the panel's first real chain.
+The remaining `<Tooltip>` roots in the file that describe controls are left alone.
+
+Proves:
+- The yield cell's tooltip is reachable and readable, and a term inside it opens its own definition —
+  the first end-to-end chain on a real panel.
+- Passing the pointer over an intervening term on the way from a term to its own popover does not
+  open the intervening term's popover — falsifier F1, run where it actually matters.
+- Every trigger that converted is a term and every one left behind is control help, checked against
+  the spec's rule rather than against the count.
+- The panel renders with no popover open, so nothing about the conversion makes a tooltip appear
+  unbidden.
+
+Consumes: Tasks 1-6.
+
+Reuse: `TermLabel` (Task 4), the `Popover` family. No new piece.
+
+### Gate — owner smoke on the industry panel
+
+Arms: Tasks 1-7 complete, `npm run build` clean, `npx vitest run` clean.
+
+Reads: the industry panel in the browser at its real docked width, over the map. Falsifiers F1 and F3
+are run here by hand, because jsdom has no layout and neither is observable in a Node test.
+
+Merge condition: F1 shows no intervening term firing on the path from a term to its own popover; F3
+shows a three-deep chain readable at the panel's real width without the third level being clamped to
+a screen edge and covering its own trigger. If F3 fails, cursor anchoring is insufficient on a docked
+panel and placement goes back to the spec — it is not patched here. The `docs/planned/glossary.md`
+"Still open" item for housing occupancy in the Industry ledger is confirmed still booked at this
+gate, since this is the PR that opens that panel.
+
+### Task 8 — convert the remaining three panels
+
+Files: `components/panels/system-astrography.tsx`,
+`components/panels/__tests__/system-astrography.test.tsx`,
+`components/system/population-panel.tsx`, `components/system/potential-yield-table.tsx`,
+`components/system/provision-block.tsx`, `components/system/logistics-panel.tsx`
+
+Interface: no new exported surface. The remaining 8 term triggers convert to `TermLabel`
+(`system-astrography.tsx` 3, `population-panel.tsx` 3, `potential-yield-table.tsx` 2), and the two
+remaining row-triggered content-rich bodies (`provision-block.tsx:19`, `logistics-panel.tsx:141`)
+become `dwell` popovers. `quick-add-button.tsx:24`, `form/checkbox-input.tsx`,
+`form/radio-option-group.tsx` and `map/map-overlay-controls.tsx` are deliberately untouched.
+
+Proves:
+- Each converted panel opens a term's definition and, where the body names another term, a second
+  level from it.
+- The four deliberate non-conversions still render a plain tooltip whose text is the control's
+  accessible description — the accessibility line the spec draws, asserted rather than assumed.
+- A chain opened in one panel closes when the pointer leaves it, rather than surviving into another
+  panel's hover.
+
+Consumes: Tasks 1-7.
+
+Reuse: `TermLabel` (Task 4). No new piece.
+
+### Verification
+
+- **`npm run build`** (`tsc && vite build`) — the build gate.
+- **`npx vitest run`** — both projects; `components/**` renders in jsdom, so every task above lands in
+  the `.test.tsx` project, `lib/glossary` included since its bodies are JSX.
+- **No `npm run simulate` quote.** This PR adds no processor, reads no shared constant and touches no
+  world state — hazard row 3 records that line by line — so it is not game logic under
+  `feature-process.md` gate 4. Stating this is the claim the review checks, not an omission.
+- **A browser smoke is required, not optional.** jsdom has no layout, and the two falsifiers this
+  feature most needs (F1, F3) are both layout-and-pointer behaviours. The gate above is where it
+  happens; the alignment class of bug this project has already shipped was invisible to every Node
+  test.
+- **F4 is read off the existing suite.** If any of the 53 cases in
+  `components/ui/__tests__/popover.test.tsx` needs its expectation changed to pass, the stack is not a
+  faithful generalisation of the pointer, and that is a finding rather than a fixup.
+
+### Doc fold
+
+Runs on this branch, before the final review.
+
+- `docs/active/design-system/theme.md` — the copper second tier at `:227` is reserved for "the planned
+  deep-tooltip system"; it ships here, so that line becomes a description of the shipped affordance,
+  and the tooltip-affordance section at `:220` gains the term-trigger tier beside it. The rule at
+  `:252` extends to cover `TermLabel`.
+- `docs/planned/glossary.md` — the glossary stays planned, since this PR wires only the terms the
+  industry chains need. Its "Still open" list keeps both items; neither ships here.
+- `docs/SPEC.md` — the tooltip system becomes a described surface rather than a planned one.
+- `docs/ROADMAP.md` — the nesting-and-pinning strand is done; the row itself stays for the language
+  and glossary strands, with its next-step line rewritten to name them.
+- No `docs/active/` doc is created. The behaviour lives in `components/ui/popover.tsx`'s own
+  docstring, which already carries this file's design rationale and gains the dwell model.
+- This working file is deleted on this PR.
+
+### Not covered
+
+- **The language pass and the full glossary wiring** — booked: `docs/ROADMAP.md` row 1 keeps its other
+  two strands, and the fold above rewrites its next-step line to name them. Task 4 wires only the
+  terms the industry panel's own chains need.
+- **Map hovers** — dropped: no map surface has a term trigger today, and the spec's cursor anchoring
+  is chosen partly so the map needs no different mechanism later. Reopening it needs a map surface
+  that wants one, which does not exist.
+- **Top-bar stat popovers** — dropped: the owner deferred them explicitly ("not now").
+- **A player setting for any of the four durations** — dropped: the owner fixed the return grace as
+  internal ("Let's just leave it fixed for now"), and the other three have no evidence that a player
+  would want them different, only that we tuned them once.
+- **Whether pinning is discoverable** — booked at the gate: the owner smoke is the first time anyone
+  meets the pin control in a real panel, and the gate's reads include it. If it is not findable, that
+  is a copy-and-affordance question for the language strand, which is already booked.
+- **`buildOut`/`buildCount` on `FactionConstructionReadout`** — dropped here: they have no consumer,
+  but they sit on no surface this PR touches, and the roadmap's full-construction-screen row is what
+  would consume them.
+
+### Net-new UI
+
+For the owner, before `/implement-plan` starts:
+
+1. **`TermLabel`** (`components/ui/term-label.tsx`) — the copper-underlined word that opens its own
+   definition. This is the piece `theme.md:227` reserved copper for, and the one the prototype shows
+   on every underlined word.
+2. **The dwell bar** — an element inside `PopoverContent` in `dwell` mode, not a free-standing
+   component. The hairline between the header and the content in the prototype.
+3. **The pin control** — a `Button` in `PopoverContent`'s header in `dwell` mode. Composed rather than
+   new, but it is a control players have not seen before.
+
+Everything else composes existing pieces. The approved prototype shows exactly these three.
