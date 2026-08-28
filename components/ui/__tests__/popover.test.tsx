@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   DWELL_MS,
@@ -1557,5 +1557,182 @@ describe("Popover — the dwell stack lifecycle (return grace, leave grace, dept
     await wait(80);
     expect(screen.getByText("Definition A")).toBeInTheDocument();
     expect(screen.getByText("Definition A1")).toBeInTheDocument();
+  });
+});
+
+describe("Popover — keyboard access in the dwell mode", () => {
+  // Real timers throughout, per this file's own header comment and Tasks 2/3's own precedent.
+
+  function renderDwellPopover(onNestedClick?: () => void) {
+    render(
+      <Popover dwell>
+        <PopoverTrigger>
+          <button type="button">Term</button>
+        </PopoverTrigger>
+        <PopoverContent>
+          <button type="button" onClick={onNestedClick}>
+            Nested control
+          </button>
+        </PopoverContent>
+      </Popover>,
+    );
+  }
+
+  it("Enter on a term trigger opens its popover already locked and enterable, with no dwell elapsed", async () => {
+    const { user } = setup();
+    const onNestedClick = vi.fn();
+    renderDwellPopover(onNestedClick);
+    const trigger = screen.getByRole("button", { name: "Term" });
+
+    // No hover, no wait — a bare Enter keydown dispatched straight to the (unfocused) trigger, so
+    // nothing but the Enter handling itself can be responsible for what happens next.
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    const nested = await screen.findByRole("button", { name: "Nested control" });
+
+    // Clicked immediately, with no wait at all: if the dwell were still running (the ordinary
+    // hover path takes DWELL_MS before this succeeds — see the "dwell mode" describe block above),
+    // this click would reject with the same "pointer-events: none" error asserted there. A test
+    // that instead awaited something first could pass even with the dwell still in effect, which
+    // is exactly what this immediacy is pinned against.
+    await user.click(nested);
+    expect(onNestedClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("Enter also finishes an already-filling popover's dwell early, rather than waiting it out", async () => {
+    // The other half of the "already open" branch `openViaFocus` takes: reaching a term whose
+    // popover a stray hover already put into `filling` (not yet `locked`).
+    const { user } = setup();
+    const onNestedClick = vi.fn();
+    renderDwellPopover(onNestedClick);
+    const trigger = screen.getByRole("button", { name: "Term" });
+
+    await user.hover(trigger);
+    const nested = await screen.findByRole("button", { name: "Nested control" });
+    // Still filling — confirm the ordinary guard is live before forcing it early, or a broken
+    // Enter path could look like it worked while actually racing a dwell that was about to finish
+    // on its own.
+    await expect(user.click(nested)).rejects.toThrow(/pointer-events: none/);
+
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    await user.click(nested);
+    expect(onNestedClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("a keyboard-opened popover anchors to its trigger, not to wherever the pointer happens to be", async () => {
+    renderDwellPopover();
+    const trigger = screen.getByRole("button", { name: "Term" });
+
+    // Record a real, distinguishing pointer position first — a hover that never opens the popover
+    // (unhovered well inside the open grace), leaving `dwellPointerRef` non-null so a broken
+    // implementation that still ran the cursor-anchored path would have something real to place
+    // itself at, rather than silently no-op'ing on a null ref and passing either way.
+    fireEvent.pointerEnter(trigger, { clientX: 500, clientY: 500 });
+    fireEvent.pointerLeave(trigger);
+
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    const dialog = await screen.findByRole("dialog");
+
+    // The cursor-anchored `filling` state sets an inline `position: fixed` on the content element
+    // itself (`dwellStyle` in `PopoverContent`) — real DOM state this component sets, not a
+    // stylesheet-dependent value jsdom can't see. A keyboard open never enters `filling`, so that
+    // style is never applied at all, and the content keeps Radix's own anchor-to-trigger
+    // placement instead. This is the honest observable available in jsdom (no layout, so the
+    // resulting pixels themselves cannot be asserted) — see this task's own report for why.
+    expect(dialog.style.position).not.toBe("fixed");
+  });
+
+  it("Escape with a three-deep stack closes only the innermost, and a second Escape closes the next — each returning focus to its own trigger", async () => {
+    const { user } = setup();
+    render(
+      <Popover dwell>
+        <PopoverTrigger>
+          <button type="button">Term A</button>
+        </PopoverTrigger>
+        <PopoverContent>
+          <p>Definition A</p>
+          <Popover dwell>
+            <PopoverTrigger>
+              <button type="button">Term A1</button>
+            </PopoverTrigger>
+            <PopoverContent>
+              <p>Definition A1</p>
+              <Popover dwell>
+                <PopoverTrigger>
+                  <button type="button">Term A2</button>
+                </PopoverTrigger>
+                <PopoverContent>
+                  <p>Definition A2</p>
+                </PopoverContent>
+              </Popover>
+            </PopoverContent>
+          </Popover>
+        </PopoverContent>
+      </Popover>,
+    );
+
+    // Tab lands on Term A and opens it already locked — the existing `openViaFocus` path this
+    // task extends — then ArrowDown enters its content and reaches Term A1.
+    await user.tab();
+    await screen.findByText("Definition A");
+    await user.keyboard("{ArrowDown}");
+    const termA1 = screen.getByRole("button", { name: "Term A1" });
+    expect(termA1).toHaveFocus();
+
+    // Enter opens A1's popover locked, skipping the dwell it would otherwise run.
+    await user.keyboard("{Enter}");
+    await screen.findByText("Definition A1");
+    await user.keyboard("{ArrowDown}");
+    const termA2 = screen.getByRole("button", { name: "Term A2" });
+    expect(termA2).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    await screen.findByText("Definition A2");
+    await user.keyboard("{ArrowDown}");
+
+    // First Escape: closes only the innermost (A2). A and A1 both survive it.
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByText("Definition A2")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Definition A1")).toBeInTheDocument();
+    expect(screen.getByText("Definition A")).toBeInTheDocument();
+    expect(termA2).toHaveFocus();
+
+    // Second Escape: closes A1 — the next one up, not a jump straight to the outermost — and
+    // hands focus to A1's own trigger, not A's.
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByText("Definition A1")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Definition A")).toBeInTheDocument();
+    expect(termA1).toHaveFocus();
+  });
+
+  it("a popover the pointer opened and the keyboard then entered still closes when the pointer leaves", async () => {
+    // The dwell counterpart of the non-dwell case at the top of this file ("the pointer leaving
+    // does not close a popover the keyboard is inside") — and deliberately the OPPOSITE outcome:
+    // a dwell popover's leave-close governs the whole stack regardless of `keyboardInsideRef` (see
+    // the docblock's "dwell stack's own lifecycle" bullet). This task's keyboard-open changes must
+    // not blur that distinction by making the leave-close respect the flag too.
+    const { user } = setup();
+    const onNestedClick = vi.fn();
+    renderDwellPopover(onNestedClick);
+    const trigger = screen.getByRole("button", { name: "Term" });
+
+    await user.hover(trigger);
+    const nested = await screen.findByRole("button", { name: "Nested control" });
+    await wait(DWELL_MS + 50); // locked
+
+    act(() => trigger.focus());
+    await user.keyboard("{ArrowDown}");
+    expect(nested).toHaveFocus();
+
+    await user.unhover(trigger);
+    await waitFor(
+      () => {
+        expect(screen.queryByRole("button", { name: "Nested control" })).not.toBeInTheDocument();
+      },
+      { timeout: LEAVE_GRACE_MS + 500 },
+    );
   });
 });

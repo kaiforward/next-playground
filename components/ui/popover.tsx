@@ -88,6 +88,17 @@ import { placeAtCursor } from "./dwell-placement";
  *   not React state, so this is the one place a length change is broadcast to whatever renders off
  *   it. Harmless for a single-level stack: depth-from-top is always 0 there, which is full opacity.
  * - The keyboard enter/exit convention below.
+ * - **Keyboard opens a `dwell` popover locked, not filling.** Enter on its trigger, and the trigger
+ *   regaining focus (`openViaFocus`), skip both the open grace and the dwell entirely — `dwellState`
+ *   goes straight to `locked` rather than through `filling` first. A keyboard user pressing Enter or
+ *   landing on a trigger has already expressed intent unambiguously, so there is nothing left for the
+ *   dwell to disambiguate (unlike a passing hover, which is why the dwell exists at all for the
+ *   pointer). Because `dwellState` never becomes `filling` on this path, the cursor-anchored
+ *   `fillingPosition` effect — which only ever runs while it is — never runs either, so the popover
+ *   keeps whatever position Radix's own anchor-to-trigger placement gives it instead: `dwellPointerRef`
+ *   is never read, however recently the pointer visited. Reaching an already-`filling` popover this way
+ *   (Tab back onto a trigger whose popover a stray hover left mid-fill) finishes the dwell early rather
+ *   than waiting out whatever remained of it.
  *
  * ## The keyboard convention — every popover in the game obeys it
  *
@@ -474,6 +485,10 @@ export function Popover({
   const [dwellState, setDwellState] = useState<"filling" | "locked" | null>(null);
   const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dwellPointerRef = useRef<{ x: number; y: number } | null>(null);
+  /** Raised by `openViaFocus` immediately before a `setOpen(true)` it wants opened straight into
+   *  `locked` — read and cleared by `setOpen` itself in the same synchronous call, so it can never
+   *  leak into a later, unrelated open (a hover-scheduled one included). */
+  const keyboardOpenRef = useRef(false);
 
   function clearDwellTimer() {
     if (dwellTimerRef.current !== null) {
@@ -508,6 +523,10 @@ export function Popover({
     clearOpenTimer();
     clearCloseTimer();
     if (next) {
+      // Read and cleared here, synchronously, so it can only ever apply to THIS open — a plain
+      // hover-scheduled open that happens to land right after a keyboard one never inherits it.
+      const openedViaKeyboard = keyboardOpenRef.current;
+      keyboardOpenRef.current = false;
       claimOpen(closeSelf, depth);
       // A fresh session records nothing yet, so a content unmount partway through one — a Tracker
       // row dropping out of the list under an open popover — can never replay the previous close's
@@ -515,11 +534,17 @@ export function Popover({
       closeReasonRef.current = { entered: false, takeover: false };
       if (dwell) {
         clearDwellTimer();
-        setDwellState("filling");
-        dwellTimerRef.current = setTimeout(() => {
-          dwellTimerRef.current = null;
+        if (openedViaKeyboard) {
+          // Enter/focus already expressed intent unambiguously — see the docblock's "keyboard
+          // opens a dwell popover locked" bullet. Straight to `locked`, no `filling` in between.
           setDwellState("locked");
-        }, DWELL_MS);
+        } else {
+          setDwellState("filling");
+          dwellTimerRef.current = setTimeout(() => {
+            dwellTimerRef.current = null;
+            setDwellState("locked");
+          }, DWELL_MS);
+        }
       }
     } else {
       releaseOpen(closeSelf);
@@ -583,6 +608,13 @@ export function Popover({
 
   function openViaFocus() {
     clearOpenTimer();
+    // Set unconditionally, whether or not the popover is already open — reaching an already-open,
+    // still-`filling` popover this way (Tab back onto a trigger a stray hover left mid-fill) must
+    // finish its dwell on the spot too, and `setOpen`'s own `openedViaKeyboard` check below is what
+    // does that; there is nothing left for this function itself to special-case. Harmless for the
+    // five non-`dwell` consumers, and for a `dwell` popover already `locked`, since `setOpen(true)`
+    // on either was already this function's unconditional behaviour before this task.
+    keyboardOpenRef.current = true;
     setOpen(true);
   }
 
@@ -760,11 +792,25 @@ export const PopoverTrigger = forwardRef<
           popover.openViaFocus();
         })}
         onKeyDown={composeHandlers<React.KeyboardEvent<HTMLButtonElement>>(onKeyDown, (event) => {
+          const bare = !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+          // Enter, `dwell` popovers only — see the docblock's "keyboard opens a dwell popover
+          // locked" bullet. The five existing (non-`dwell`) consumers keep the browser's own
+          // Enter-activates-a-button default entirely: no handling here, so the resulting click
+          // still reaches Radix's ordinary open/close toggle exactly as it does today.
+          if (popover.dwell && event.key === "Enter" && !event.defaultPrevented && bare) {
+            // Consumed, so a term's Enter never falls through to the native click — that click
+            // would run Radix's own toggle and open into ordinary `filling` (or, worse, close an
+            // already-open popover), neither of which is the locked-immediately behaviour this
+            // key is for.
+            event.preventDefault();
+            popover.openViaFocus();
+            return;
+          }
           // ArrowDown is the way in — see the convention in Popover's docblock. Bare only: a
           // modified ArrowDown belongs to the browser (and Alt+Down is a native combobox gesture
           // on some platforms). A wrapped element that already handled the key keeps it.
           if (event.key !== "ArrowDown" || event.defaultPrevented) return;
-          if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+          if (!bare) return;
           // Consumed, so the page behind the popover does not scroll on the same press.
           event.preventDefault();
           popover.enterPopover();
