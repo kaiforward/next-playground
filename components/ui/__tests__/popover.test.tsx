@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import {
   DWELL_MS,
   DWELL_OPEN_DELAY_MS,
@@ -1734,5 +1735,280 @@ describe("Popover — keyboard access in the dwell mode", () => {
       },
       { timeout: LEAVE_GRACE_MS + 500 },
     );
+  });
+});
+
+describe("Popover — pinning a chain", () => {
+  // Real timers throughout, per this file's own header comment and every prior dwell-mode task's
+  // own precedent.
+
+  // A linear dwell chain built from `labels`, each level nested inside the previous one's content —
+  // exactly the shape a real TermLabel chain takes. `aria-label` on each level's content is what
+  // lets a test disambiguate "the Pin button inside THIS dialog" once more than one chain is open
+  // at once, and what lets a test read a specific dialog's own inline `opacity` style.
+  function buildChain(labels: readonly string[]): ReactNode {
+    const [label, ...rest] = labels;
+    if (!label) return null;
+    return (
+      <Popover dwell key={label}>
+        <PopoverTrigger>
+          <button type="button">{label}</button>
+        </PopoverTrigger>
+        <PopoverContent aria-label={`Definition ${label}`}>
+          <p>Definition {label}</p>
+          {rest.length > 0 && buildChain(rest)}
+        </PopoverContent>
+      </Popover>
+    );
+  }
+
+  function DepthProbe({ label }: { label: string }) {
+    const depth = usePopoverDepth();
+    return <p>{label} would-be depth {depth}</p>;
+  }
+
+  // Hovers `triggerName` and waits past the open grace and the dwell, so the popover it belongs to
+  // is `locked` by the time this resolves — the same helper the stack-lifecycle describe block above
+  // uses, redefined locally since that one is scoped to its own describe callback.
+  async function openLocked(user: ReturnType<typeof userEvent.setup>, triggerName: string) {
+    await user.hover(screen.getByRole("button", { name: triggerName }));
+    await wait(DWELL_OPEN_DELAY_MS + DWELL_MS + 80);
+  }
+
+  function dialogFor(label: string): HTMLElement {
+    return screen.getByRole("dialog", { name: `Definition ${label}` });
+  }
+
+  // A plain DOM click rather than `user.click` deliberately: the pointer's own transit toward the
+  // Pin button (leaving whatever was hovered before it) is a real pointer-leave in its own right —
+  // exercised on purpose by entry 6's own test below — and is not what THIS helper exists to drive.
+  function pin(label: string) {
+    const pinButton = within(dialogFor(label)).getByRole("button", { name: "Pin" });
+    fireEvent.click(pinButton);
+  }
+
+  it("a pinned chain survives the pointer leaving it entirely", async () => {
+    const { user } = setup();
+    render(buildChain(["Survive0", "Survive1"]));
+
+    await openLocked(user, "Survive0");
+    await openLocked(user, "Survive1");
+    pin("Survive0");
+
+    // Off the entire stack — nowhere else is hovered. Without pinning this is exactly the sequence
+    // the "leaving the whole stack closes every depth" test (above) fires the leave grace from.
+    await user.unhover(screen.getByText("Definition Survive1"));
+    await wait(LEAVE_GRACE_MS + 200);
+
+    expect(screen.getByText("Definition Survive0")).toBeInTheDocument();
+    expect(screen.getByText("Definition Survive1")).toBeInTheDocument();
+  });
+
+  it("a term inside a pinned popover opens at depth 0, leaving the pinned chain untouched", async () => {
+    const { user } = setup();
+    render(
+      <Popover dwell>
+        <PopoverTrigger>
+          <button type="button">Depth0</button>
+        </PopoverTrigger>
+        <PopoverContent aria-label="Definition Depth0">
+          <p>Definition Depth0</p>
+          {/* A direct child of Depth0's own content — a term sitting right where a real
+             TermLabel would, not nested inside a further popover of its own — so its
+             `usePopoverDepth()` reads Depth0's ambient context exactly as a real term's
+             `Popover` does when it computes its OWN depth. */}
+          <DepthProbe label="sibling term" />
+          <Popover dwell>
+            <PopoverTrigger>
+              <button type="button">Depth0Child</button>
+            </PopoverTrigger>
+            <PopoverContent aria-label="Definition Depth0Child">
+              <p>Definition Depth0Child</p>
+            </PopoverContent>
+          </Popover>
+        </PopoverContent>
+      </Popover>,
+    );
+
+    await openLocked(user, "Depth0");
+    pin("Depth0");
+
+    // A term sitting directly inside the now-pinned content reports depth 0 rather than one more
+    // than Depth0's own (which was 0, and would otherwise make this 1).
+    expect(await screen.findByText("sibling term would-be depth 0")).toBeInTheDocument();
+
+    // And a REAL popover opened from inside the pinned content — not only a depth probe — behaves
+    // as depth 0 too: opening it does not disturb the pinned parent.
+    await openLocked(user, "Depth0Child");
+    expect(await screen.findByText("Definition Depth0Child")).toBeInTheDocument();
+    expect(screen.getByText("Definition Depth0")).toBeInTheDocument();
+  });
+
+  it("a fresh chain opened after pinning does not close the pinned one, at any depth", async () => {
+    const { user } = setup();
+    render(
+      <>
+        {buildChain(["Fresh0", "Fresh1"])}
+        {buildChain(["FreshNew"])}
+      </>,
+    );
+
+    await openLocked(user, "Fresh0");
+    await openLocked(user, "Fresh1");
+    pin("Fresh0");
+
+    // A brand new depth-0 chain, opened only after the first one is pinned and so no longer holds
+    // depth 0 in the registry.
+    await openLocked(user, "FreshNew");
+
+    expect(screen.getByText("Definition Fresh0")).toBeInTheDocument();
+    expect(screen.getByText("Definition Fresh1")).toBeInTheDocument();
+    expect(screen.getByText("Definition FreshNew")).toBeInTheDocument();
+  });
+
+  it("a pinned chain holds full opacity while an unpinned stack beside it fades by depth", async () => {
+    const { user } = setup();
+    // Four deep each — one past FULL_OPACITY_DEPTH (3) — so the outermost level of a live,
+    // unpinned four-deep chain reads the faded (0.5) tier once the whole chain is open.
+    render(
+      <>
+        {buildChain(["Op0", "Op1", "Op2", "Op3"])}
+        {buildChain(["Oq0", "Oq1", "Oq2", "Oq3"])}
+      </>,
+    );
+
+    await openLocked(user, "Op0");
+    await openLocked(user, "Op1");
+    await openLocked(user, "Op2");
+    await openLocked(user, "Op3");
+    pin("Op0");
+
+    // Only opened — and so only occupying the registry — once the first chain is pinned and clear
+    // of it, exactly as the previous proof's own sequencing requires.
+    await openLocked(user, "Oq0");
+    await openLocked(user, "Oq1");
+    await openLocked(user, "Oq2");
+    await openLocked(user, "Oq3");
+
+    expect(dialogFor("Op0").style.opacity).toBe("1");
+    expect(dialogFor("Oq0").style.opacity).toBe("0.5");
+  });
+
+  it("dismissing a pinned chain does not corrupt a fresh chain's registry entries", async () => {
+    // Not a proof that the unmount cleanup's own `releaseOpen` call is necessary FOR the pinned
+    // chain — it isn't: pinning already removed Ghost0/Ghost1 from `openStack` at pin time, so by
+    // the time they unmount there is nothing left there for them to release. What this pins instead
+    // is the failure mode a naive "detach on pin" implementation invites: wiping the WHOLE registry
+    // on a pinned popover's unmount, rather than only its own (already-absent) entry, would take a
+    // completely unrelated, still-live chain down with it.
+    function Scene({ showPinned }: { showPinned: boolean }) {
+      return (
+        <>
+          {showPinned && buildChain(["Ghost0", "Ghost1"])}
+          {buildChain(["GhostQ"])}
+          {buildChain(["GhostS"])}
+        </>
+      );
+    }
+    const { user } = setup();
+    const { rerender } = render(<Scene showPinned />);
+
+    await openLocked(user, "Ghost0");
+    await openLocked(user, "Ghost1");
+    pin("Ghost0");
+
+    // Q claims depth 0 legitimately, once the pinned chain is clear of the registry.
+    await openLocked(user, "GhostQ");
+
+    // The pinned chain is dismissed entirely — unmounted, exactly as it would be were its own root
+    // popover closed while nested inside a parent whose content just closed.
+    rerender(<Scene showPinned={false} />);
+    expect(screen.getByText("Definition GhostQ")).toBeInTheDocument();
+
+    // A THIRD, unrelated popover claims depth 0. Ordinary exclusivity says this must close Q — if
+    // the pinned chain's dismissal had instead wiped Q's own (unrelated) registry entry as a side
+    // effect, Q would be an orphan by now: still visible, but no longer registered, so S opening
+    // would never close it and both would show at once.
+    await openLocked(user, "GhostS");
+
+    expect(screen.queryByText("Definition GhostQ")).not.toBeInTheDocument();
+    expect(screen.getByText("Definition GhostS")).toBeInTheDocument();
+  });
+
+  it("dismissing a pinned chain does not cancel a pending return-grace belonging to a live unpinned chain", async () => {
+    // The precondition this task books: `returnCloseTimer`/`leaveCloseTimer` are shared module
+    // state, and every popover's unmount clears both unconditionally. Once a pinned chain and a
+    // fresh unpinned chain can be live together, the pinned chain's dismissal must not be able to
+    // silently cancel a grace that belongs to the other, still-live chain.
+    function Scene({ showPinned }: { showPinned: boolean }) {
+      return (
+        <>
+          {showPinned && buildChain(["Precond0", "Precond1"])}
+          {buildChain(["Live0", "Live1"])}
+        </>
+      );
+    }
+    const { user } = setup();
+    const { rerender } = render(<Scene showPinned />);
+
+    await openLocked(user, "Precond0");
+    await openLocked(user, "Precond1");
+    pin("Precond0");
+
+    // The live, unpinned chain — opened only once the pinned one is clear of the registry.
+    await openLocked(user, "Live0");
+    await openLocked(user, "Live1");
+
+    // Resting on Live0 (the parent) while Live1 (the child) is open schedules Live1's return-close
+    // after RETURN_GRACE_MS — the same sequence the stack-lifecycle describe block above uses to
+    // pin that behaviour on its own.
+    await user.hover(screen.getByText("Definition Live0"));
+
+    // Well inside the pending grace: dismiss the pinned chain now, exercising the unmount cleanup
+    // this precondition is about.
+    await wait(RETURN_GRACE_MS / 2);
+    rerender(<Scene showPinned={false} />);
+
+    // Past the moment Live1's own return-close was scheduled for. It must still fire — undisturbed
+    // by the pinned chain's dismissal — closing Live1 (the child) while leaving Live0 (the parent)
+    // open, exactly as the plain (no concurrent pinned chain) version of this behaviour does.
+    await waitFor(
+      () => {
+        expect(screen.queryByText("Definition Live1")).not.toBeInTheDocument();
+      },
+      { timeout: RETURN_GRACE_MS + 500 },
+    );
+    expect(screen.getByText("Definition Live0")).toBeInTheDocument();
+  });
+
+  it("the pin control is reachable and operable by its accessible name, not by its glyph", async () => {
+    const { user } = setup();
+    render(
+      <Popover dwell>
+        <PopoverTrigger>
+          <button type="button">Reachable</button>
+        </PopoverTrigger>
+        <PopoverContent aria-label="Definition Reachable">
+          <p>Definition Reachable</p>
+        </PopoverContent>
+      </Popover>,
+    );
+
+    // Tab opens a dwell popover already locked (the existing `openViaFocus` path) — the pin control
+    // is the only focusable thing inside this content, so ArrowDown lands on it directly.
+    await user.tab();
+    await screen.findByText("Definition Reachable");
+    await user.keyboard("{ArrowDown}");
+
+    const pinButton = screen.getByRole("button", { name: "Pin" });
+    expect(pinButton).toHaveFocus();
+
+    // Activated by keyboard, found only by its accessible name — never by a class, a test id or the
+    // glyph it renders. A working pin removes the control (a locked-and-unpinned popover is the
+    // only state that renders it), so its disappearance is the operable half of this proof.
+    await user.keyboard("{Enter}");
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Pin" })).not.toBeInTheDocument();
+    });
   });
 });

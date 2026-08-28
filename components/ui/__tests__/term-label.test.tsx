@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DWELL_MS, DWELL_OPEN_DELAY_MS } from "@/components/ui/popover";
 import { TermLabel } from "@/components/ui/term-label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTriggerLabel } from "@/components/ui/tooltip";
+import { TERMS } from "@/lib/glossary/terms";
 
 // Rendered in jsdom, driven with real user-event pointer sequences and queried by role/accessible
 // name — never by class or style, per the component-test convention (AGENTS.md -> Testing). Real
@@ -38,11 +39,13 @@ describe("TermLabel", () => {
     await openTerm(user, "Resource slot");
 
     // `resourceSlot`'s definition names `body` and `resource`, each twice — every occurrence
-    // becomes its own working trigger, reachable inside the open dialog.
+    // becomes its own working trigger, reachable inside the open dialog by the label the segment
+    // carries. Scoped to the dialog and asserted by accessible name, not by counting every
+    // `<button>` in it — a count is also true of any unrelated control (the pin button included)
+    // that happens to render beside the body, which is not what this test means.
     const dialog = screen.getByRole("dialog", { name: "Resource slot" });
-    expect(await screen.findAllByRole("button", { name: "body" })).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "resource" })).toHaveLength(2);
-    expect(dialog.querySelectorAll('button[type="button"]').length).toBe(4);
+    expect(await within(dialog).findAllByRole("button", { name: "body" })).toHaveLength(2);
+    expect(within(dialog).getAllByRole("button", { name: "resource" })).toHaveLength(2);
   });
 
   it("a body referencing no term renders a leaf that opens nothing further", async () => {
@@ -52,8 +55,13 @@ describe("TermLabel", () => {
     await openTerm(user, "Worked");
 
     const dialog = await screen.findByRole("dialog", { name: "Worked" });
-    // The trigger itself is one button in the tree; the leaf body adds no further term trigger.
-    expect(dialog.querySelectorAll('button[type="button"]').length).toBe(0);
+    // The leaf body's own text carries no term reference, so none of the glossary's term names —
+    // enumerated from the data, not hardcoded — should be reachable as a trigger inside it. Asserted
+    // by name so an unrelated control (the pin button, named "Pin") can never make this fail; only a
+    // trigger for an actual term would.
+    for (const { term } of Object.values(TERMS)) {
+      expect(within(dialog).queryByRole("button", { name: term })).not.toBeInTheDocument();
+    }
     expect(dialog).toHaveTextContent(
       "Marks the slots a system's built extractor levels are on, best ground first.",
     );
