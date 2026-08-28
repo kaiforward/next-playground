@@ -56,13 +56,15 @@ The attention layer — how the player finds what to do — is two surfaces, bot
     Rationale and the rest of the vocabulary rules: [glossary](./planned/glossary.md).
 
   - **The glossary.** [`docs/planned/glossary.md`](./planned/glossary.md) — the single source
-    tooltips and tutorials quote from. Scope, writing rules, the qualifier-not-rename resolutions
-    (settled habitability, potential vs realised yield), the engine-only word list and the term
-    inventory are agreed and written down there. What is left: collapse duplicate terms in the
-    inventory and write the definitions. Flat for now;
-    it grows hyperlinks as the cross-linking system lands.
+    tooltips and tutorials quote from, and it is **written**: eight groups of definitions, the
+    vocabulary rules that produced them, the collapses, and the engine-only word list. Flat for
+    now; it grows hyperlinks as the cross-linking system lands. Three implementation items are
+    booked in its own "Still open" section and ride this migration, since it opens those surfaces
+    anyway: the `UST` date stamp, honest housing occupancy in the Industry ledger, and the panel
+    renames that retiring "deposit" for **resource** / **resource slot** implies.
 
-  *Next step:* write the definitions, then the design doc + prototype pass for nesting.
+  *Next step:* the design doc + prototype pass for nesting, starting from which tooltips must
+  become popovers at all — a plain label on a control gains nothing from one.
 
 ---
 
