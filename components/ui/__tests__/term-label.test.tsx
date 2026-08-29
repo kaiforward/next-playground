@@ -4,7 +4,6 @@ import userEvent from "@testing-library/user-event";
 import { DWELL_MS, DWELL_OPEN_DELAY_MS } from "@/components/ui/popover";
 import { TermLabel } from "@/components/ui/term-label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { TERMS } from "@/lib/glossary/terms";
 
 // Rendered in jsdom, driven with real user-event pointer sequences and queried by role/accessible
 // name — never by class or style, per the component-test convention (AGENTS.md -> Testing). Real
@@ -55,13 +54,16 @@ describe("TermLabel", () => {
     await openTerm(user, "Worked");
 
     const dialog = await screen.findByRole("dialog", { name: "Worked" });
-    // The leaf body's own text carries no term reference, so none of the glossary's term names —
-    // enumerated from the data, not hardcoded — should be reachable as a trigger inside it. Asserted
-    // by name so an unrelated control (the pin button, named "Pin") can never make this fail; only a
-    // trigger for an actual term would.
-    for (const { term } of Object.values(TERMS)) {
-      expect(within(dialog).queryByRole("button", { name: term })).not.toBeInTheDocument();
+    // The leaf body's own text carries no term reference, so it should contain no trigger at all.
+    // Scoped to the `[data-popover-body]` wrapper, not the dialog: that wrapper excludes the
+    // header's pin control (named "Pin", itself a glossary term), so any button found inside it
+    // is necessarily a term trigger — checking for zero buttons is sufficient without enumerating
+    // every term name.
+    const body = dialog.querySelector("[data-popover-body]");
+    if (!(body instanceof HTMLElement)) {
+      throw new Error("popover body wrapper missing");
     }
+    expect(within(body).queryAllByRole("button")).toHaveLength(0);
     expect(dialog).toHaveTextContent(
       "Marks the slots a system's built extractor levels are on, best ground first.",
     );

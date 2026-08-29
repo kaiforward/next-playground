@@ -26,18 +26,20 @@ The attention layer — how the player finds what to do — is two surfaces, bot
     with an ancestor-aware stack (replacing the old single-open pointer), a fading depth cue, and a
     chain that can be pinned to survive while another opens beside it. Keyboard access, a term
     trigger (`TermLabel`) and a row-triggered content popover (`PopoverTriggerLabel`) are built on
-    it. Converted: the industry panel, system astrography, the population panel, the potential-yield
-    table, and the provision and logistics row bodies. Control help (checkboxes, radio groups, the
-    map legend, the industry legend, quick-add) deliberately stays a plain `Tooltip` — that surface
-    is a control's accessible description, not a thing in the game.
+    it. Converted to the popover system: the industry panel, system astrography, the population
+    panel, the potential-yield table, and the provision and logistics row bodies — though only the
+    ground/industry surfaces carry deep term chains; the population panel, logistics panel and
+    provision block chains are flat, and the habitability body names exactly one term. Control help
+    (checkboxes, radio groups, the map legend, the industry legend, quick-add) deliberately stays a
+    plain `Tooltip` — that surface is a control's accessible description, not a thing in the game.
 
   - **The language.** Apply `/game-copy` to every tooltip and label surface — three registers, game
     vocabulary only. The skill shipped with habitability seeding and that branch's surfaces conform;
-    the rest of the UI has not been swept. **Settle the number conventions here** — when a quantity
-    reads as a percentage, when as a multiplier, when as a signed modifier. The rule the Astrography
-    tab arrived at: a quantity genuinely bounded 0–1 reads as a percentage; a multiplier that can
-    exceed 1 keeps its own words or its `×`, because a percentage would imply a ceiling it does not
-    have.
+    the rest of the UI has not been swept. **The number conventions are settled, in `/game-copy`
+    itself** — when a quantity reads as a percentage, when as a multiplier, when as a signed
+    modifier. The rule the Astrography tab arrived at: a quantity genuinely bounded 0–1 reads as a
+    percentage; a multiplier that can exceed 1 keeps its own words or its `×`, because a percentage
+    would imply a ceiling it does not have.
 
     **The allowance rule, settled:** an allowance never goes inside a displayed number. The
     Industry ledger's in-use column is `buildingUsed` (`lib/engine/industry.ts`) — the decay
@@ -50,15 +52,15 @@ The attention layer — how the player finds what to do — is two surfaces, bot
 
   - **The glossary.** [`docs/planned/glossary.md`](./planned/glossary.md) — the single source
     tooltips and tutorials quote from, and it is **written**: eight groups of definitions, the
-    vocabulary rules that produced them, the collapses, and the engine-only word list. The nesting
-    work wired only the terms the industry panel's own chains need (`lib/glossary/terms.ts`, twelve
-    entries); the rest of the written glossary has no `TermLabel` yet. Three implementation items are
-    booked in its own "Still open" section and ride the language pass, since that sweep opens those
-    surfaces anyway: the `UST` date stamp, honest housing occupancy in the Industry ledger, and
-    retiring "deposit" from that panel's copy for **resource** / **resource slot**.
+    vocabulary rules that produced them, the collapses, and the engine-only word list. The whole
+    written glossary is now wired as data (`lib/glossary/terms.ts`, 88 entries), its concatenation
+    checked against the doc by test. Three implementation items are still booked in its own
+    "Still open" section and still ride the language pass, since that sweep opens those surfaces
+    anyway: the `UST` date stamp, honest housing occupancy in the Industry ledger, and retiring
+    "deposit" from that panel's copy for **resource** / **resource slot**.
 
-  *Next step:* the `/game-copy` language pass over the converted tooltip surfaces, then wire the
-  rest of the written glossary's terms as each surface is touched.
+  *Next step:* the `/game-copy` language pass, surface by surface, hanging triggers on terms that
+  now all exist.
 
 ---
 
