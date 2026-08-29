@@ -35,11 +35,11 @@ The attention layer — how the player finds what to do — is two surfaces, bot
 
   - **The language.** Apply `/game-copy` to every tooltip and label surface — three registers, game
     vocabulary only. The skill shipped with habitability seeding and that branch's surfaces conform;
-    the rest of the UI has not been swept. **Settle the number conventions here** — when a quantity
-    reads as a percentage, when as a multiplier, when as a signed modifier. The rule the Astrography
-    tab arrived at: a quantity genuinely bounded 0–1 reads as a percentage; a multiplier that can
-    exceed 1 keeps its own words or its `×`, because a percentage would imply a ceiling it does not
-    have.
+    the rest of the UI has not been swept. **The number conventions are settled, in `/game-copy`
+    itself** — when a quantity reads as a percentage, when as a multiplier, when as a signed
+    modifier. The rule the Astrography tab arrived at: a quantity genuinely bounded 0–1 reads as a
+    percentage; a multiplier that can exceed 1 keeps its own words or its `×`, because a percentage
+    would imply a ceiling it does not have.
 
     **The allowance rule, settled:** an allowance never goes inside a displayed number. The
     Industry ledger's in-use column is `buildingUsed` (`lib/engine/industry.ts`) — the decay
@@ -52,19 +52,15 @@ The attention layer — how the player finds what to do — is two surfaces, bot
 
   - **The glossary.** [`docs/planned/glossary.md`](./planned/glossary.md) — the single source
     tooltips and tutorials quote from, and it is **written**: eight groups of definitions, the
-    vocabulary rules that produced them, the collapses, and the engine-only word list. The nesting
-    work wired only the ground/industry vocabulary (`lib/glossary/terms.ts`, twelve definitions, of
-    which five have a `TermLabel` trigger on a surface — the other seven are reachable only from
-    inside another definition's body); the rest of the written glossary has no code representation
-    at all. Three implementation items are booked in its own "Still open" section and ride the
-    language pass, since that sweep opens those surfaces anyway: the `UST` date stamp, honest
-    housing occupancy in the Industry ledger, and retiring "deposit" from that panel's copy for
-    **resource** / **resource slot**.
+    vocabulary rules that produced them, the collapses, and the engine-only word list. The whole
+    written glossary is now wired as data (`lib/glossary/terms.ts`, 88 entries), its concatenation
+    checked against the doc by test. Three implementation items are still booked in its own
+    "Still open" section and still ride the language pass, since that sweep opens those surfaces
+    anyway: the `UST` date stamp, honest housing occupancy in the Industry ledger, and retiring
+    "deposit" from that panel's copy for **resource** / **resource slot**.
 
-  *Next step:* land the whole written glossary as data (`lib/glossary/terms.ts`) and settle the
-  number conventions first — both are global, and sweeping a surface before they exist reopens it.
-  Then the `/game-copy` language pass, surface by surface, hanging triggers on terms that already
-  exist.
+  *Next step:* the `/game-copy` language pass, surface by surface, hanging triggers on terms that
+  now all exist.
 
 ---
 

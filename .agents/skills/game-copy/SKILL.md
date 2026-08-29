@@ -92,7 +92,7 @@ same name.
 
 | Was (code-speak) | Is (register) |
 |---|---|
-| `Extraction ×0.85 contribution weight` | `Yield: 85%` (stat, system-level — extraction pools per-system, so this never shows per body) |
+| `Extraction ×0.85 contribution weight` | `Yield: 85%` (stat, system-level — extraction pools per-system, so this never shows per body; contribution weight is genuinely bounded 0–1, which is why it reads as a percentage) |
 | `Growth ×0.85 — habitability` | `Habitability: 85%` (stat) — the level only; the derived `−15%` is the same number again |
 | `size 1.20` | *(deleted — the land and slot numbers already say it)* |
 | "the quality fold's frontier index" | *(keyword register, no internals)* "settlers fill the best ground first…" |
