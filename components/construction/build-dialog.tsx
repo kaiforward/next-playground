@@ -82,7 +82,6 @@ export function BuildDialog({
   const overCeiling = option !== undefined && option.maxLevels !== null && levels > option.maxLevels;
   const invalidLevels = !Number.isInteger(levels) || levels < 1;
   const staffingShort = option !== undefined && option.estStaffing < 1;
-  const totalWork = option !== undefined ? option.workPerLevel * Math.max(1, levels) : 0;
 
   const submit = handleSubmit((values) => {
     order.mutate(values, { onSuccess: () => { reset(); onClose(); } });
@@ -151,7 +150,6 @@ export function BuildDialog({
                 value={`${Math.round(option.estStaffing * 100)}%`}
                 tone={staffingShort ? "warn" : "ok"}
               />
-              <ReadoutRow label="Work" value={String(totalWork)} />
               <ReadoutRow label="First level" value={formatEta(option.etaCycles)} />
             </>
           )}
