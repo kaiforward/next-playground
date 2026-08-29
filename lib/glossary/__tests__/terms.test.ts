@@ -7,18 +7,102 @@ import { TERMS, type TermId } from "../terms";
  * checking a value against itself.
  */
 const EXPECTED_TERM_IDS: readonly TermId[] = [
-  "realisedYield",
-  "potentialYield",
-  "resourceSlot",
-  "worked",
-  "locked",
+  // Time and scale
+  "cycle",
+  "dayMonthYear",
+  "ust",
+  "developmentPoints",
+  // People
+  "population",
+  "popCap",
+  "housing",
+  "occupancy",
+  "habitableLand",
+  "workforce",
+  "skillGrades",
+  "skillCeiling",
+  "academy",
+  "staffing",
+  "unemployed",
+  "migration",
+  "colonistDelivery",
+  "abandonment",
+  // Wellbeing
+  "provision",
+  "expectation",
+  "grievance",
+  "provisionBands",
+  "famine",
+  "unrest",
+  "stability",
+  "strike",
+  "survivalGoods",
+  "need",
+  "satisfaction",
+  // Ground
   "body",
   "archetype",
-  "qualityBand",
+  "settled",
+  "habitability",
+  "settledHabitability",
   "resource",
+  "resourceSlot",
+  "qualityBand",
+  "potentialYield",
+  "realisedYield",
+  "worked",
+  "locked",
+  "orbitRing",
+  "starClass",
+  "danger",
+  // Industry
   "building",
+  "builtStaffedFree",
+  "decay",
+  "idleReason",
+  "recipe",
+  "inputGate",
+  "tier",
   "family",
   "specialisationComplex",
+  "healthStates",
+  // Trade and money
+  "stock",
+  "price",
+  "demand",
+  "surplus",
+  "deficit",
+  "haul",
+  "treasury",
+  "taxLevel",
+  "budgetBand",
+  "fundedFraction",
+  "charterFee",
+  "manifest",
+  // Territory and politics
+  "ownershipLadder",
+  "claim",
+  "colonise",
+  "colony",
+  "faction",
+  "government",
+  "doctrine",
+  "factionStatus",
+  "relationScore",
+  "relationTiers",
+  "alliance",
+  "region",
+  "jumpLane",
+  "fuelCost",
+  "gateway",
+  // The player's layer
+  "automationSwitch",
+  "pin",
+  "trackerSection",
+  "alertCategory",
+  "alertTiers",
+  "fundedFront",
+  "ghostRow",
 ];
 
 describe("TERMS", () => {
@@ -70,5 +154,24 @@ describe("TERMS", () => {
     expect(rendered).toBe(
       "The multiplier a system's extractors actually get, across the slots they sit on. Extractors take the best ground first, so it sits above potential yield while only the best ground is worked and moves toward it as more slots are worked. Locked slots count toward potential yield and can never be worked, so it need never arrive.",
     );
+  });
+
+  test("segment text concatenates back to the glossary's exact wording for settled habitability", () => {
+    const rendered = TERMS.settledHabitability.body
+      .map((segment) => (segment.kind === "text" ? segment.text : segment.label))
+      .join("");
+    expect(rendered).toBe(
+      "A system's own habitability figure: the land-weighted mean across the bodies its population actually occupies, best body first. It falls as population spreads onto worse worlds, and it multiplies population growth.",
+    );
+  });
+
+  test("every entry has a non-empty term name and a non-empty body", () => {
+    for (const definition of Object.values(TERMS)) {
+      expect(definition.term.length).toBeGreaterThan(0);
+      const rendered = definition.body
+        .map((segment) => (segment.kind === "text" ? segment.text : segment.label))
+        .join("");
+      expect(rendered.length).toBeGreaterThan(0);
+    }
   });
 });

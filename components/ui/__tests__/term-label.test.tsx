@@ -56,11 +56,16 @@ describe("TermLabel", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Worked" });
     // The leaf body's own text carries no term reference, so none of the glossary's term names —
-    // enumerated from the data, not hardcoded — should be reachable as a trigger inside it. Asserted
-    // by name so an unrelated control (the pin button, named "Pin") can never make this fail; only a
-    // trigger for an actual term would.
+    // enumerated from the data, not hardcoded — should be reachable as a trigger inside it. Scoped
+    // to the `[data-popover-body]` wrapper, not the dialog: the header's pin control is named
+    // "Pin", which is also a glossary term, so a dialog-wide query would match that unrelated
+    // control. Only a trigger in the body is an actual term trigger.
+    const body = dialog.querySelector("[data-popover-body]");
+    if (!(body instanceof HTMLElement)) {
+      throw new Error("popover body wrapper missing");
+    }
     for (const { term } of Object.values(TERMS)) {
-      expect(within(dialog).queryByRole("button", { name: term })).not.toBeInTheDocument();
+      expect(within(body).queryByRole("button", { name: term })).not.toBeInTheDocument();
     }
     expect(dialog).toHaveTextContent(
       "Marks the slots a system's built extractor levels are on, best ground first.",
