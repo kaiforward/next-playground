@@ -39,12 +39,11 @@ The attention layer — how the player finds what to do — is two surfaces, bot
 
   - **The language.** Apply `/game-copy` to every tooltip and label surface as the migration reaches
     it — three registers, game vocabulary only. The skill shipped with habitability seeding and that
-    branch's surfaces conform; the rest of the UI has not been swept. Fold the two near-duplicate
-    bodies (`NeedTooltip` in `population-panel.tsx`, `PopShortTooltipBody` in `industry-panel.tsx`)
-    into a shared shell while there. **Settle the number conventions here** — when a quantity reads
-    as a percentage, when as a multiplier, when as a signed modifier. The rule the Astrography tab
-    arrived at: a quantity genuinely bounded 0–1 reads as a percentage; a multiplier that can exceed
-    1 keeps its own words or its `×`, because a percentage would imply a ceiling it does not have.
+    branch's surfaces conform; the rest of the UI has not been swept. **Settle the number
+    conventions here** — when a quantity reads as a percentage, when as a multiplier, when as a
+    signed modifier. The rule the Astrography tab arrived at: a quantity genuinely bounded 0–1
+    reads as a percentage; a multiplier that can exceed 1 keeps its own words or its `×`, because a
+    percentage would imply a ceiling it does not have.
 
     **The allowance rule, settled:** an allowance never goes inside a displayed number. The
     Industry ledger's in-use column is `buildingUsed` (`lib/engine/industry.ts`) — the decay

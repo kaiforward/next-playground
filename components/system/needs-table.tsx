@@ -1,8 +1,11 @@
 /**
  * Shared Need / Met / Want / Delivered table markup — the Population tab's needs
- * ledger and the Industry pop-pressure chip tooltip render the same columns at
- * two densities. Callers own the `<tr>` wrappers (the ledger adds per-row
- * tooltips, focus and an expand tail; the chip body is static).
+ * ledger and the Industry pop-pressure chip popover render the same columns at
+ * two densities. Callers own the `<tr>` wrappers (the ledger adds a per-row
+ * popover, focus and an expand tail; the chip body is static).
+ *
+ * The `tooltip` density is named for its size, not its surface: it is the tighter
+ * of the two and is what the chip popover uses.
  */
 import type { ReactNode } from "react";
 import type { PopNeedData } from "@/lib/types/api";
