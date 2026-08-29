@@ -26,10 +26,12 @@ The attention layer — how the player finds what to do — is two surfaces, bot
     with an ancestor-aware stack (replacing the old single-open pointer), a fading depth cue, and a
     chain that can be pinned to survive while another opens beside it. Keyboard access, a term
     trigger (`TermLabel`) and a row-triggered content popover (`PopoverTriggerLabel`) are built on
-    it. Converted: the industry panel, system astrography, the population panel, the potential-yield
-    table, and the provision and logistics row bodies. Control help (checkboxes, radio groups, the
-    map legend, the industry legend, quick-add) deliberately stays a plain `Tooltip` — that surface
-    is a control's accessible description, not a thing in the game.
+    it. Converted to the popover system: the industry panel, system astrography, the population
+    panel, the potential-yield table, and the provision and logistics row bodies — though only the
+    ground/industry surfaces carry deep term chains; the population panel, logistics panel and
+    provision block chains are flat, and the habitability body names exactly one term. Control help
+    (checkboxes, radio groups, the map legend, the industry legend, quick-add) deliberately stays a
+    plain `Tooltip` — that surface is a control's accessible description, not a thing in the game.
 
   - **The language.** Apply `/game-copy` to every tooltip and label surface — three registers, game
     vocabulary only. The skill shipped with habitability seeding and that branch's surfaces conform;
@@ -51,14 +53,18 @@ The attention layer — how the player finds what to do — is two surfaces, bot
   - **The glossary.** [`docs/planned/glossary.md`](./planned/glossary.md) — the single source
     tooltips and tutorials quote from, and it is **written**: eight groups of definitions, the
     vocabulary rules that produced them, the collapses, and the engine-only word list. The nesting
-    work wired only the terms the industry panel's own chains need (`lib/glossary/terms.ts`, twelve
-    entries); the rest of the written glossary has no `TermLabel` yet. Three implementation items are
-    booked in its own "Still open" section and ride the language pass, since that sweep opens those
-    surfaces anyway: the `UST` date stamp, honest housing occupancy in the Industry ledger, and
-    retiring "deposit" from that panel's copy for **resource** / **resource slot**.
+    work wired only the ground/industry vocabulary (`lib/glossary/terms.ts`, twelve definitions, of
+    which five have a `TermLabel` trigger on a surface — the other seven are reachable only from
+    inside another definition's body); the rest of the written glossary has no code representation
+    at all. Three implementation items are booked in its own "Still open" section and ride the
+    language pass, since that sweep opens those surfaces anyway: the `UST` date stamp, honest
+    housing occupancy in the Industry ledger, and retiring "deposit" from that panel's copy for
+    **resource** / **resource slot**.
 
-  *Next step:* the `/game-copy` language pass over the converted tooltip surfaces, then wire the
-  rest of the written glossary's terms as each surface is touched.
+  *Next step:* land the whole written glossary as data (`lib/glossary/terms.ts`) and settle the
+  number conventions first — both are global, and sweeping a surface before they exist reopens it.
+  Then the `/game-copy` language pass, surface by surface, hanging triggers on terms that already
+  exist.
 
 ---
 
