@@ -50,7 +50,7 @@ export function MapZoomDebug({ zoom }: { zoom: number }) {
   const rows = buildRows(lod);
 
   return (
-    <div className="pointer-events-none absolute top-4 right-4 z-50 w-52 select-none border border-border bg-gray-950/85 px-3 py-2 font-mono text-[10px] leading-tight text-text-secondary backdrop-blur">
+    <div className="pointer-events-none absolute top-4 right-4 z-50 w-52 select-none border border-border bg-gray-950/85 px-3 py-2 font-mono text-xs leading-tight text-text-secondary backdrop-blur">
       <div className="mb-1.5 flex items-baseline justify-between border-b border-border pb-1">
         <span className="uppercase tracking-wider text-text-tertiary">zoom</span>
         <span className="text-base font-bold tabular-nums text-accent">{zoom.toFixed(3)}</span>

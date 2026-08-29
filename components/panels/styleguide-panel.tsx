@@ -83,18 +83,18 @@ function TypographySection() {
     <StyleSection title="Typography">
       <div className="space-y-4">
         <div>
-          <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-1">font-display (Chakra Petch) — headings, titles</p>
+          <p className="text-xs text-text-secondary uppercase tracking-wider mb-1">font-display (Chakra Petch) — headings, titles</p>
           <p className="text-2xl font-display font-bold text-text-primary">The Foundry Burns Bright</p>
           <p className="text-lg font-display font-semibold text-text-primary">Section Title</p>
           <p className="text-xs font-display font-semibold uppercase tracking-wider text-text-secondary">SECTION HEADER</p>
         </div>
         <div>
-          <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-1">font-sans (Geist) — body text</p>
+          <p className="text-xs text-text-secondary uppercase tracking-wider mb-1">font-sans (Geist) — body text</p>
           <p className="text-sm text-text-primary">Body text uses Geist for clean readability across all regular content.</p>
           <p className="text-xs text-text-secondary">Supporting text at smaller sizes for descriptions and labels.</p>
         </div>
         <div>
-          <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-1">font-mono (Geist Mono) — numeric values</p>
+          <p className="text-xs text-text-secondary uppercase tracking-wider mb-1">font-mono (Geist Mono) — numeric values</p>
           <p className="text-sm font-mono text-text-primary">1,250,000 cr · 2353.05.06 06:00 · 12.5% · (2048, 3072)</p>
         </div>
       </div>
@@ -156,7 +156,7 @@ function ButtonsSection() {
     <StyleSection title="Button">
       <div className="space-y-4">
         <div>
-          <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-2">Variants</p>
+          <p className="text-xs text-text-secondary uppercase tracking-wider mb-2">Variants</p>
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="primary" size="md">Primary</Button>
             <Button variant="action" color="green" size="md">Action Green</Button>
@@ -170,7 +170,7 @@ function ButtonsSection() {
           </div>
         </div>
         <div>
-          <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-2">Sizes</p>
+          <p className="text-xs text-text-secondary uppercase tracking-wider mb-2">Sizes</p>
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="primary" size="xs">XS</Button>
             <Button variant="primary" size="sm">SM</Button>
@@ -179,7 +179,7 @@ function ButtonsSection() {
           </div>
         </div>
         <div>
-          <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-2">Disabled</p>
+          <p className="text-xs text-text-secondary uppercase tracking-wider mb-2">Disabled</p>
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="primary" size="md" disabled>Primary</Button>
             <Button variant="action" color="green" size="md" disabled>Action</Button>
@@ -187,7 +187,7 @@ function ButtonsSection() {
           </div>
         </div>
         <div>
-          <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-2">Common patterns</p>
+          <p className="text-xs text-text-secondary uppercase tracking-wider mb-2">Common patterns</p>
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="ghost" size="xs">Details &rarr;</Button>
             <Button variant="action" color="green" size="sm">Trade</Button>
@@ -215,7 +215,7 @@ function BadgesSection() {
         <Badge color="cyan">Cyan</Badge>
       </div>
       <div className="mt-3">
-        <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-2">Common usage</p>
+        <p className="text-xs text-text-secondary uppercase tracking-wider mb-2">Common usage</p>
         <div className="flex flex-wrap items-center gap-3">
           <Badge color="green">Victory!</Badge>
           <Badge color="amber">In Progress</Badge>
@@ -237,7 +237,7 @@ function ProgressBarsSection() {
     <StyleSection title="ProgressBar">
       <div className="space-y-4">
         <div>
-          <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-2">Colors — size=&quot;sm&quot;</p>
+          <p className="text-xs text-text-secondary uppercase tracking-wider mb-2">Colors — size=&quot;sm&quot;</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <ProgressBar label="Copper (default)" value={75} max={100} color="copper" size="sm" />
             <ProgressBar label="Blue" value={60} max={100} color="blue" size="sm" />
@@ -248,7 +248,7 @@ function ProgressBarsSection() {
           </div>
         </div>
         <div>
-          <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-2">size=&quot;md&quot;</p>
+          <p className="text-xs text-text-secondary uppercase tracking-wider mb-2">size=&quot;md&quot;</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <ProgressBar label="Hull" value={42} max={80} color="green" size="md" />
             <ProgressBar label="Fuel" value={15} max={100} color="red" size="md" />
@@ -269,7 +269,7 @@ function TabsSection() {
     <StyleSection title="Tabs">
       <div className="space-y-4">
         <div>
-          <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-2">Underline (default)</p>
+          <p className="text-xs text-text-secondary uppercase tracking-wider mb-2">Underline (default)</p>
           <TabList aria-label="Underline tabs demo">
             <Tab active={underlineTab === 0} onClick={() => setUnderlineTab(0)}>Fleet</Tab>
             <Tab active={underlineTab === 1} onClick={() => setUnderlineTab(1)} count={3}>Missions</Tab>
@@ -277,7 +277,7 @@ function TabsSection() {
           </TabList>
         </div>
         <div>
-          <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-2">Pill</p>
+          <p className="text-xs text-text-secondary uppercase tracking-wider mb-2">Pill</p>
           <TabList variant="pill" aria-label="Pill tabs demo">
             <Tab variant="pill" active={pillTab === 0} onClick={() => setPillTab(0)}>All</Tab>
             <Tab variant="pill" active={pillTab === 1} onClick={() => setPillTab(1)}>Active</Tab>

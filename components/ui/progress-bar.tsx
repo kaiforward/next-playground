@@ -11,7 +11,7 @@ const progressBarVariants = tv({
     size: {
       sm: {
         track: "h-1.5",
-        labelRow: "text-[10px] text-text-secondary",
+        labelRow: "text-xs text-text-secondary",
       },
       md: {
         track: "h-2.5",

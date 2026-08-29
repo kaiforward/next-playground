@@ -51,7 +51,7 @@ function PartnerList({ label, partners }: { label: string; partners: TradeFlowPa
   if (partners.length === 0) return null;
   return (
     <div className="space-y-0.5">
-      <p className="font-display text-[10px] uppercase tracking-wider text-text-tertiary">{label}</p>
+      <p className="font-display text-xs uppercase tracking-wider text-text-tertiary">{label}</p>
       <dl className="space-y-0.5">
         {partners.map((p) => (
           <div key={p.systemId} className="flex justify-between gap-3">
@@ -231,7 +231,7 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
     <div className="space-y-4">
       <Card variant="bordered" padding="xs">
         {/* legend — internal consumption split (civilian vs manufacturing) shares the external directions */}
-        <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-text-tertiary">
+        <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-tertiary">
           <span className="inline-flex items-center gap-1.5">
             <LegendSwatch color="in" /> consumes / imports
           </span>
@@ -256,31 +256,31 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
               <th aria-hidden />
               <th
                 colSpan={2}
-                className="border-b border-border pb-1 text-center font-display text-[10px] font-semibold uppercase tracking-wider text-text-secondary"
+                className="border-b border-border pb-1 text-center font-display text-xs font-semibold uppercase tracking-wider text-text-secondary"
               >
                 Internal
               </th>
               <th
                 colSpan={2}
-                className="border-b border-l border-border pb-1 text-center font-display text-[10px] font-semibold uppercase tracking-wider text-text-secondary"
+                className="border-b border-l border-border pb-1 text-center font-display text-xs font-semibold uppercase tracking-wider text-text-secondary"
               >
                 External
               </th>
             </tr>
             <tr>
-              <th className="border-b border-border-strong px-1.5 py-1 text-left font-display text-[10px] font-normal uppercase tracking-wider text-text-tertiary">
+              <th className="border-b border-border-strong px-1.5 py-1 text-left font-display text-xs font-normal uppercase tracking-wider text-text-tertiary">
                 Good
               </th>
-              <th className="border-b border-border-strong px-1.5 py-1 text-center font-mono text-[10px] text-text-tertiary">
+              <th className="border-b border-border-strong px-1.5 py-1 text-center font-mono text-xs text-text-tertiary">
                 &#9664; Cons &middot; Prod &#9654;
               </th>
-              <th className="border-b border-border-strong px-1 py-1 text-right font-display text-[10px] font-normal uppercase tracking-wider text-text-tertiary">
+              <th className="border-b border-border-strong px-1 py-1 text-right font-display text-xs font-normal uppercase tracking-wider text-text-tertiary">
                 Net
               </th>
-              <th className="border-b border-l border-border-strong px-1.5 py-1 text-center font-mono text-[10px] text-text-tertiary">
+              <th className="border-b border-l border-border-strong px-1.5 py-1 text-center font-mono text-xs text-text-tertiary">
                 &#9664; Imp &middot; Exp &#9654;
               </th>
-              <th className="border-b border-border-strong px-1 py-1 text-right font-display text-[10px] font-normal uppercase tracking-wider text-text-tertiary">
+              <th className="border-b border-border-strong px-1 py-1 text-right font-display text-xs font-normal uppercase tracking-wider text-text-tertiary">
                 Net
               </th>
             </tr>
@@ -298,7 +298,7 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
                           className="h-2 w-2 shrink-0"
                           style={{ backgroundColor: pixiHexToCss(TIER_COLOR[tier]) }}
                         />
-                        <span className="font-mono text-[10px] uppercase tracking-widest text-text-secondary">
+                        <span className="font-mono text-xs uppercase tracking-widest text-text-secondary">
                           {TIER_LABEL[tier]}
                         </span>
                         <span className="h-px flex-1 bg-border" />

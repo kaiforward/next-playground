@@ -54,7 +54,7 @@ const THRESHOLD = INFRASTRUCTURE_DECAY_PARAMS.unrestThreshold;
 const problemRowVariants = tv({
   slots: {
     row: "",
-    cell: "px-1.5 pt-1 text-[12px]",
+    cell: "px-1.5 pt-1 text-xs",
   },
   variants: {
     hasProblems: {
@@ -147,9 +147,9 @@ function bodyLabel(bodyType: BodyArchetypeId): string {
 function PoolHead({ title, sub, right }: { title: string; sub?: string; right: React.ReactNode }) {
   return (
     <div className="mb-2 flex items-baseline gap-2">
-      <span className="font-display text-[11px] font-semibold uppercase tracking-wider text-text-primary">{title}</span>
-      {sub && <span className="font-mono text-[10px] text-text-tertiary">{sub}</span>}
-      <span className="ml-auto whitespace-nowrap font-mono text-[11px] text-text-secondary">{right}</span>
+      <span className="font-display text-xs font-semibold uppercase tracking-wider text-text-primary">{title}</span>
+      {sub && <span className="font-mono text-xs text-text-tertiary">{sub}</span>}
+      <span className="ml-auto whitespace-nowrap font-mono text-xs text-text-secondary">{right}</span>
     </div>
   );
 }
@@ -166,7 +166,7 @@ function YieldTag({ row }: { row: DepositRow }) {
   const pct = Math.round(row.yieldMult * 100);
   return (
     <PopoverTriggerLabel className="block w-full text-right" content={<YieldPopoverBody row={row} />}>
-      <span className={`block font-mono text-[11px] ${QUALITY_BAND_TEXT[row.band]}`}>{pct}%</span>
+      <span className={`block font-mono text-xs ${QUALITY_BAND_TEXT[row.band]}`}>{pct}%</span>
     </PopoverTriggerLabel>
   );
 }
@@ -226,7 +226,7 @@ function Staffed({ staffed, total, health }: { staffed: number; total: number; h
 /** Foundry table head cell — tight, uppercase, right-alignable. */
 function Th({ children, right = false }: { children: React.ReactNode; right?: boolean }) {
   return (
-    <th className={`border-b border-border-strong px-1.5 py-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary ${right ? "text-right" : "text-left"}`}>
+    <th className={`border-b border-border-strong px-1.5 py-1 font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary ${right ? "text-right" : "text-left"}`}>
       {children}
     </th>
   );
@@ -240,14 +240,14 @@ function Th({ children, right = false }: { children: React.ReactNode; right?: bo
 export function DepositPopoverBody({ row, contributors }: { row: DepositRow; contributors: BuildingEntry[] }) {
   return (
     <div className="space-y-1">
-      <p className="whitespace-nowrap font-mono text-[10px] text-text-tertiary">
+      <p className="whitespace-nowrap font-mono text-xs text-text-tertiary">
         {QUALITY_BAND_LABEL[row.band]} · {row.built}/{row.depositCounts} slots built · {row.staffed.toFixed(1)} staffed
       </p>
       {contributors.length > 0 && (
         <div className="space-y-0.5 overflow-x-auto border-t border-border/60 pt-1.5">
-          <p className="font-mono text-[9px] uppercase tracking-wider text-text-tertiary/80">extracted goods</p>
+          <p className="font-mono text-xs uppercase tracking-wider text-text-tertiary/80">extracted goods</p>
           {contributors.map((b) => (
-            <div key={b.buildingType} className="flex items-center justify-between gap-3 whitespace-nowrap text-[11px]">
+            <div key={b.buildingType} className="flex items-center justify-between gap-3 whitespace-nowrap text-xs">
               <span className="text-text-primary">{label(b.buildingType)}</span>
               <span className="font-mono text-text-secondary">{b.output !== undefined ? formatUnitsShort(b.output) : "0"}/cyc</span>
             </div>
@@ -289,19 +289,19 @@ function BuildingPopoverBody({
   return (
     <div className="space-y-1.5">
       {(tierLabel || b.count > 0) && (
-        <p className="whitespace-nowrap font-mono text-[10px] text-text-tertiary">
+        <p className="whitespace-nowrap font-mono text-xs text-text-tertiary">
           {tierLabel && !isAcademy && !isComplex && !isSupport ? `tier ${b.tier} · ${tierLabel} · ` : ""}×{formatMagnitude(b.count)} built
         </p>
       )}
-      <p className="text-[11px] leading-snug text-text-secondary">{describeBuilding(b.buildingType)}</p>
+      <p className="text-xs leading-snug text-text-secondary">{describeBuilding(b.buildingType)}</p>
 
       {complexFamily && (
         <div className="space-y-0.5 border-t border-border/60 pt-1.5">
-          <p className="whitespace-nowrap font-mono text-[9px] uppercase tracking-wider text-text-tertiary/80">
+          <p className="whitespace-nowrap font-mono text-xs uppercase tracking-wider text-text-tertiary/80">
             family yield — <span className="text-text-secondary">×{Number(familyBuff.toFixed(2))}</span>
             {b.count < 1 ? ` of ×${complexFamily.buffMult} at full strength` : ""}
           </p>
-          <p className="text-[11px] leading-snug text-text-secondary">
+          <p className="text-xs leading-snug text-text-secondary">
             {complexFamily.goods.map((g) => GOODS[g]?.name ?? g).join(" · ")}
           </p>
         </div>
@@ -309,10 +309,10 @@ function BuildingPopoverBody({
 
       {isProducer && grades.length > 0 && (
         <div className="space-y-0.5 overflow-x-auto border-t border-border/60 pt-1.5">
-          <p className="font-mono text-[9px] uppercase tracking-wider text-text-tertiary/80">staffing — filled / needed</p>
+          <p className="font-mono text-xs uppercase tracking-wider text-text-tertiary/80">staffing — filled / needed</p>
           {grades.map((g) => (
             <div key={g.grade} className="flex items-center gap-1.5 whitespace-nowrap">
-              <span aria-hidden className={`w-3 font-mono text-[9px] ${GRADE[g.grade].text}`}>{GRADE[g.grade].tag}</span>
+              <span aria-hidden className={`w-3 font-mono text-xs ${GRADE[g.grade].text}`}>{GRADE[g.grade].tag}</span>
               {/* `min-w` floors this bar's own width — under `w-max` the popover shrinks to its
                   widest row, and an empty flex-1 track has no content of its own to claim any of
                   that width from, so without a floor it could render at (near) zero width in a
@@ -320,7 +320,7 @@ function BuildingPopoverBody({
               <div className="relative h-1.5 min-w-16 flex-1 overflow-hidden border border-border bg-surface-active">
                 <div className={`absolute inset-y-0 left-0 ${GRADE[g.grade].bar}`} style={{ width: `${barWidthPct(g.fulfil)}%` }} />
               </div>
-              <span className={`w-[70px] text-right font-mono text-[10px] ${g.wall ? "text-status-red-light" : "text-text-secondary"}`}>
+              <span className={`w-[70px] text-right font-mono text-xs ${g.wall ? "text-status-red-light" : "text-text-secondary"}`}>
                 {formatMagnitude(g.filled)}/{formatMagnitude(g.needed)}{g.wall ? " ◄" : ""}
               </span>
             </div>
@@ -330,12 +330,12 @@ function BuildingPopoverBody({
 
       {recipeInputs.length > 0 && (
         <div className="space-y-0.5 border-t border-border/60 pt-1.5">
-          <p className="font-mono text-[9px] uppercase tracking-wider text-text-tertiary/80">inputs</p>
+          <p className="font-mono text-xs uppercase tracking-wider text-text-tertiary/80">inputs</p>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             {recipeInputs.map((input) => {
               const short = supply?.throttledBy.includes(input) ?? false;
               return (
-                <span key={input} className={`whitespace-nowrap font-mono text-[11px] ${short ? "text-status-amber-light" : "text-status-green-light"}`}>
+                <span key={input} className={`whitespace-nowrap font-mono text-xs ${short ? "text-status-amber-light" : "text-status-green-light"}`}>
                   {short ? "⚠" : "✓"} {label(input)}{short && supply ? ` ${Math.round(supply.inputGate * 100)}%` : ""}
                 </span>
               );
@@ -345,7 +345,7 @@ function BuildingPopoverBody({
       )}
 
       {isProducer && (
-        <p className="border-t border-border/60 pt-1.5 text-[11px] leading-snug text-text-tertiary">
+        <p className="border-t border-border/60 pt-1.5 text-xs leading-snug text-text-tertiary">
           Output <span className="font-mono text-text-secondary">{b.output !== undefined ? formatUnitsShort(b.output) : "0"}</span>/cyc — staffing{" "}
           <span className="font-mono text-text-secondary">{Math.round(b.staffedFraction * 100)}%</span>
           {wall && wall.fulfil < 1 ? (
@@ -371,9 +371,9 @@ function GhostNameCell({
   ghost, canCancel, onCancel, cancelPending,
 }: { ghost: GhostRow; canCancel: boolean; onCancel: (projectId: string) => void; cancelPending: boolean }) {
   return (
-    <td className="px-1.5 py-1 text-[12px] text-text-tertiary">
+    <td className="px-1.5 py-1 text-xs text-text-tertiary">
       <span className="flex items-center gap-1.5">
-        <span aria-hidden className="font-mono text-[9px] text-status-amber-light">◇</span>
+        <span aria-hidden className="font-mono text-xs text-status-amber-light">◇</span>
         {ghost.label} <span className="font-mono">+{ghost.levels}</span>
         {ghost.origin === "player" && <Badge color="amber">ORDERED</Badge>}
         {ghost.origin === "player" && canCancel && (
@@ -404,10 +404,10 @@ function DepositGhostRow({
   return (
     <tr className="border-b border-border/40 last:border-b-0">
       <GhostNameCell ghost={ghost} canCancel={canCancel} onCancel={onCancel} cancelPending={cancelPending} />
-      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-status-amber-light">{Math.round(barWidthPct(ghost.progress))}%</td>
+      <td className="px-1.5 py-1 text-right font-mono text-xs text-status-amber-light">{Math.round(barWidthPct(ghost.progress))}%</td>
       <td />
       <td />
-      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-text-tertiary">{formatEta(ghost.etaCycles)}</td>
+      <td className="px-1.5 py-1 text-right font-mono text-xs text-text-tertiary">{formatEta(ghost.etaCycles)}</td>
       {showActionColumn && <td />}
     </tr>
   );
@@ -420,8 +420,8 @@ function BuildingGhostRow({
   return (
     <tr className="border-b border-border/40 last:border-b-0">
       <GhostNameCell ghost={ghost} canCancel={canCancel} onCancel={onCancel} cancelPending={cancelPending} />
-      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-status-amber-light">{Math.round(barWidthPct(ghost.progress))}%</td>
-      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-text-tertiary">{formatEta(ghost.etaCycles)}</td>
+      <td className="px-1.5 py-1 text-right font-mono text-xs text-status-amber-light">{Math.round(barWidthPct(ghost.progress))}%</td>
+      <td className="px-1.5 py-1 text-right font-mono text-xs text-text-tertiary">{formatEta(ghost.etaCycles)}</td>
       {showActionColumn && <td />}
     </tr>
   );
@@ -454,15 +454,15 @@ function DepositTypeSubRow({
     <tr className={styles.row()}>
       <td className={styles.cell({ className: "text-text-secondary" })}>
         <span className="flex items-center gap-1.5 pl-3">
-          <span aria-hidden className="font-mono text-[10px] text-text-tertiary">└</span>
+          <span aria-hidden className="font-mono text-xs text-text-tertiary">└</span>
           {label(t.buildingType)}
         </span>
         <ProblemLine items={items} popNeed={popNeed} />
       </td>
-      <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary"><Staffed staffed={t.staffed} total={t.built} health={t.health} /></td>
+      <td className="px-1.5 py-1 align-top text-right font-mono text-xs text-text-secondary"><Staffed staffed={t.staffed} total={t.built} health={t.health} /></td>
       <td />
       <td />
-      <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary">{t.output > 0 ? formatUnitsShort(t.output) : "—"}</td>
+      <td className="px-1.5 py-1 align-top text-right font-mono text-xs text-text-secondary">{t.output > 0 ? formatUnitsShort(t.output) : "—"}</td>
       {canOrder && (
         <td className="px-1.5 py-1 align-top text-right">
           {option && <QuickAddButton systemId={systemId} option={option} />}
@@ -519,7 +519,7 @@ function DepositTable({
               <tr className={styles.row()}>
                 <td className={styles.cell({ className: "text-text-primary" })}>
                   <span className="flex items-center gap-1.5">
-                    <HealthGlyph health={row.health} className="text-[9px]" />
+                    <HealthGlyph health={row.health} className="text-xs" />
                     <PopoverTriggerLabel
                       className="capitalize"
                       content={<DepositPopoverBody row={row} contributors={contributorsFor(row.resource)} />}
@@ -530,12 +530,12 @@ function DepositTable({
                   </span>
                   <ProblemLine items={items} popNeed={rowPopNeed} />
                 </td>
-                <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary"><Staffed staffed={row.staffed} total={row.built} health={row.health} /></td>
-                <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary">{Math.round(row.built)}/{Math.round(row.depositCounts)}</td>
+                <td className="px-1.5 py-1 align-top text-right font-mono text-xs text-text-secondary"><Staffed staffed={row.staffed} total={row.built} health={row.health} /></td>
+                <td className="px-1.5 py-1 align-top text-right font-mono text-xs text-text-secondary">{Math.round(row.built)}/{Math.round(row.depositCounts)}</td>
                 <td className="px-1.5 py-1 align-top text-right">
                   <YieldTag row={row} />
                 </td>
-                <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-primary">{row.output > 0 ? formatUnitsShort(row.output) : "—"}</td>
+                <td className="px-1.5 py-1 align-top text-right font-mono text-xs text-text-primary">{row.output > 0 ? formatUnitsShort(row.output) : "—"}</td>
                 {canOrder && (
                   <td className="px-1.5 py-1 align-top text-right">
                     {quickAddOption && <QuickAddButton systemId={systemId} option={quickAddOption} />}
@@ -571,7 +571,7 @@ function DepositTable({
 function ProblemLine({ items, popNeed }: { items: ProblemItem[]; popNeed?: PopNeedData }) {
   if (items.length === 0) return null;
   return (
-    <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-4 text-[11px]">
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-4 text-xs">
       {items.map((item, i) => {
         const chip = (
           <span className={`font-mono ${SEVERITY_TEXT[item.severity]}`}>
@@ -628,7 +628,7 @@ function BuildingRow({
     <tr className={styles.row()}>
       <td className={styles.cell({ className: "text-text-primary" })}>
         <span className="flex items-center gap-1.5">
-          <HealthGlyph health={health} className="text-[9px]" />
+          <HealthGlyph health={health} className="text-xs" />
           <PopoverTriggerLabel
             content={<BuildingPopoverBody b={b} labour={labour} supply={supply} />}
             title={label(b.buildingType)}
@@ -638,8 +638,8 @@ function BuildingRow({
         </span>
         <ProblemLine items={items} popNeed={popNeed} />
       </td>
-      <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary"><Staffed staffed={staffedLevels(b)} total={b.count} health={health} /></td>
-      <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-primary">{b.output !== undefined ? formatUnitsShort(b.output) : "—"}</td>
+      <td className="px-1.5 py-1 align-top text-right font-mono text-xs text-text-secondary"><Staffed staffed={staffedLevels(b)} total={b.count} health={health} /></td>
+      <td className="px-1.5 py-1 align-top text-right font-mono text-xs text-text-primary">{b.output !== undefined ? formatUnitsShort(b.output) : "—"}</td>
       {canOrder && (
         <td className="px-1.5 py-1 align-top text-right">
           {option && <QuickAddButton systemId={systemId} option={option} />}
@@ -708,10 +708,10 @@ function BuildingsTable({
         {active.map((group) => (
           <Fragment key={group.title}>
             <tr>
-              <td className="px-1.5 pb-0.5 pt-2.5 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+              <td className="px-1.5 pb-0.5 pt-2.5 font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary">
                 {group.title}
               </td>
-              <td className="px-1.5 pb-0.5 pt-2.5 text-right font-mono text-[10px] text-text-tertiary">
+              <td className="px-1.5 pb-0.5 pt-2.5 text-right font-mono text-xs text-text-tertiary">
                 {GROUP_STAFFED_CAPTION[group.title] ?? ""}
               </td>
               <td />
@@ -752,21 +752,21 @@ function LegendTooltip() {
       </TooltipTrigger>
       <TooltipContent className="w-64 space-y-2">
         <div>
-          <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Health — mirrors what decays</p>
-          <ul className="space-y-0.5 text-[11px] text-text-secondary">
-            <li><HealthGlyph health="stable" className="mr-1 text-[9px]" decorative /> stable — understaffed by under a whole unit; nothing sheds</li>
-            <li><HealthGlyph health="idle" className="mr-1 text-[9px]" decorative /> idle — a whole level idle for want of a recipe input; nothing sheds until the input arrives</li>
-            <li><HealthGlyph health="contracting" className="mr-1 text-[9px]" decorative /> contracting — a whole level sits idle for a reason decay can act on; the marginal level sheds after a buffer</li>
-            <li><HealthGlyph health="collapsing" className="mr-1 text-[9px]" decorative /> collapsing — unrest teardown; levels tear down immediately</li>
+          <p className="mb-1 font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary">Health — mirrors what decays</p>
+          <ul className="space-y-0.5 text-xs text-text-secondary">
+            <li><HealthGlyph health="stable" className="mr-1 text-xs" decorative /> stable — understaffed by under a whole unit; nothing sheds</li>
+            <li><HealthGlyph health="idle" className="mr-1 text-xs" decorative /> idle — a whole level idle for want of a recipe input; nothing sheds until the input arrives</li>
+            <li><HealthGlyph health="contracting" className="mr-1 text-xs" decorative /> contracting — a whole level sits idle for a reason decay can act on; the marginal level sheds after a buffer</li>
+            <li><HealthGlyph health="collapsing" className="mr-1 text-xs" decorative /> collapsing — unrest teardown; levels tear down immediately</li>
           </ul>
         </div>
         <div>
-          <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Columns</p>
-          <p className="text-[11px] text-text-secondary"><span className="font-mono">staffed/built</span> is staffed labour on the built extractor levels — a row can read fully staffed and still show a state chip below it (understaffed, pop-short, or glut-idling — extractors have no recipe inputs, so never input-short) when it isn&apos;t selling everything it makes; <span className="font-mono">slots</span> is built levels against the deposit&apos;s max; <span className="font-mono">out/cyc</span> is real output after input gates. A deposit shared by more than one extractor type shows its state chip on each type&apos;s own sub-row rather than the shared parent row. The general-land table&apos;s Staffed column means occupancy for housing and licence/family draw for academies and complexes — captioned inline where it isn&apos;t staffing.</p>
+          <p className="mb-1 font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary">Columns</p>
+          <p className="text-xs text-text-secondary"><span className="font-mono">staffed/built</span> is staffed labour on the built extractor levels — a row can read fully staffed and still show a state chip below it (understaffed, pop-short, or glut-idling — extractors have no recipe inputs, so never input-short) when it isn&apos;t selling everything it makes; <span className="font-mono">slots</span> is built levels against the deposit&apos;s max; <span className="font-mono">out/cyc</span> is real output after input gates. A deposit shared by more than one extractor type shows its state chip on each type&apos;s own sub-row rather than the shared parent row. The general-land table&apos;s Staffed column means occupancy for housing and licence/family draw for academies and complexes — captioned inline where it isn&apos;t staffing.</p>
         </div>
         <div>
-          <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Labour grades</p>
-          <p className="text-[11px] text-text-secondary">
+          <p className="mb-1 font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary">Labour grades</p>
+          <p className="text-xs text-text-secondary">
             <span aria-hidden className="mr-1 inline-block h-2 w-2 bg-status-blue align-middle" />U unskilled &nbsp;
             <span aria-hidden className="mr-1 inline-block h-2 w-2 bg-status-cyan align-middle" />T technician &nbsp;
             <span aria-hidden className="mr-1 inline-block h-2 w-2 bg-status-purple align-middle" />E engineer
@@ -790,7 +790,7 @@ function LicensingRow({ grade, pool, buildHint }: { grade: "skill1" | "skill2"; 
   return (
     <div className="py-1">
       <div className="flex items-center gap-2.5">
-        <span aria-hidden className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center border border-border font-mono text-[9px] ${meta.text}`}>{meta.tag}</span>
+        <span aria-hidden className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center border border-border font-mono text-xs ${meta.text}`}>{meta.tag}</span>
         <span className="w-[88px] shrink-0 text-sm text-text-primary">{meta.name}</span>
         <div
           role="img"
@@ -800,13 +800,13 @@ function LicensingRow({ grade, pool, buildHint }: { grade: "skill1" | "skill2"; 
           <div className={meta.bar} style={{ width: `${workingPct}%` }} />
           <div className="border-l border-background" style={{ width: `${tailPct}%`, backgroundImage: bottleneck ? GAP_HATCH : IDLE_HATCH }} />
         </div>
-        <span className="w-32 shrink-0 whitespace-nowrap text-right font-mono text-[11px] text-text-secondary">
+        <span className="w-32 shrink-0 whitespace-nowrap text-right font-mono text-xs text-text-secondary">
           <span className="text-text-primary">{formatPeople(l.working)}</span>
           {bottleneck ? <> / {formatPeople(l.jobs)} jobs</> : <> / {formatPeople(l.licensed)} lic.</>}
         </span>
       </div>
       {(bottleneck || l.idleSeats > 0) && (
-        <p className={`mt-0.5 ml-[26px] text-[11px] ${bottleneck ? "text-status-red-light" : "text-text-tertiary"}`}>
+        <p className={`mt-0.5 ml-[26px] text-xs ${bottleneck ? "text-status-red-light" : "text-text-tertiary"}`}>
           {bottleneck
             ? `${formatPeople(l.unlicensedJobs)} jobs unlicensed — ${buildHint}`
             : `${formatPeople(l.idleSeats)} idle licence seats`}
@@ -821,13 +821,13 @@ function BasketPopoverBody({ grade, basket }: { grade: "skill1" | "skill2"; bask
   const noun = grade === "skill1" ? "technician" : "engineer";
   return (
     <div className="space-y-1">
-      <p className="text-[11px] leading-snug text-text-secondary">Each {noun} adds demand for:</p>
+      <p className="text-xs leading-snug text-text-secondary">Each {noun} adds demand for:</p>
       <div className="space-y-0.5 overflow-x-auto">
         {basket.map((entry) => (
           <div key={entry.goodId} className="flex items-center justify-between gap-3 whitespace-nowrap">
-            <span className="text-[11px] text-text-primary">{label(entry.goodId)}</span>
+            <span className="text-xs text-text-primary">{label(entry.goodId)}</span>
             {/* Fixed decimals — per-head rates sit below formatMagnitude's 0.1 cutoff at ECONOMY_SCALE=1. */}
-            <span className="font-mono text-[10px] text-text-secondary">{entry.perHead.toFixed(3)}/cyc</span>
+            <span className="font-mono text-xs text-text-secondary">{entry.perHead.toFixed(3)}/cyc</span>
           </div>
         ))}
       </div>
@@ -861,8 +861,8 @@ function LabourCard({
   return (
     <Card variant="bordered" padding="sm">
       <div className="mb-2 flex items-baseline gap-2">
-        <p className="font-display text-[11px] font-semibold uppercase tracking-wider text-text-primary">Labour</p>
-        <span className="ml-auto font-mono text-[10px] text-text-tertiary">
+        <p className="font-display text-xs font-semibold uppercase tracking-wider text-text-primary">Labour</p>
+        <span className="ml-auto font-mono text-xs text-text-tertiary">
           <span className="text-text-secondary">{formatPeople(pop)}</span> pop · {formatPeople(jobs)} jobs ·{" "}
           <span className="text-accent">{formatPeople(allocation.unemployed)} unemployed</span>
         </span>
@@ -877,7 +877,7 @@ function LabourCard({
         <div className="border-l border-background" style={{ width: `${pct(allocation.unemployed)}%`, backgroundImage: IDLE_HATCH }} />
       </div>
 
-      <div className="mt-2 flex flex-wrap gap-x-3.5 gap-y-1 font-mono text-[10px] text-text-secondary">
+      <div className="mt-2 flex flex-wrap gap-x-3.5 gap-y-1 font-mono text-xs text-text-secondary">
         {working.map((w) => {
           const chip = (
             <>
@@ -907,7 +907,7 @@ function LabourCard({
       {hasSkill && (
         <>
           <div className="my-2.5 h-px bg-border" />
-          <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-text-tertiary/80">Skill licensing — working / licensed seats</p>
+          <p className="mb-1 font-mono text-xs uppercase tracking-wider text-text-tertiary/80">Skill licensing — working / licensed seats</p>
           <LicensingRow grade="skill1" pool={labour.skill1} buildHint="build a vocational school" />
           <LicensingRow grade="skill2" pool={labour.skill2} buildHint="build a research institute" />
         </>
@@ -1030,7 +1030,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
         {unmet.length > 0 && (
           <div className="mt-1.5">
             <PopoverTriggerLabel
-              className="inline-flex items-center gap-1.5 border border-border bg-surface-active px-2 py-0.5 text-[11px]"
+              className="inline-flex items-center gap-1.5 border border-border bg-surface-active px-2 py-0.5 text-xs"
               content={
                 <div className="space-y-1">
                   <NeedsTable density="tooltip">
@@ -1042,14 +1042,14 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
                 </div>
               }
             >
-              <span aria-hidden className={`font-mono text-[10px] ${SEVERITY_TEXT[needSeverity(unmet[0].satisfaction)]}`}>{SEVERITY_GLYPH[needSeverity(unmet[0].satisfaction)]}</span>
+              <span aria-hidden className={`font-mono text-xs ${SEVERITY_TEXT[needSeverity(unmet[0].satisfaction)]}`}>{SEVERITY_GLYPH[needSeverity(unmet[0].satisfaction)]}</span>
               Pops short: <strong>{unmet[0].goodName}</strong>
               {unmet[1] && <> · {unmet[1].goodName}</>}
               {unmet.length > 2 && <span className="text-text-tertiary">+{unmet.length - 2}</span>}
             </PopoverTriggerLabel>
           </div>
         )}
-        <p className="mt-1.5 flex gap-3 font-mono text-[11px]">
+        <p className="mt-1.5 flex gap-3 font-mono text-xs">
           <span className="text-status-green-light">{tally.stable} stable</span>
           <span className="text-status-blue-light">{tally.idle} idle</span>
           <span className="text-status-amber-light">{tally.contracting} contracting</span>

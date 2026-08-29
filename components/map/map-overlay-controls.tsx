@@ -93,7 +93,7 @@ export function MapOverlayControls({
   return (
     <div className="w-44 border border-border bg-surface/95 backdrop-blur shadow-lg">
       <div className="px-3 py-2 border-b border-border">
-        <h3 className="text-[10px] font-display font-bold uppercase tracking-[0.18em] text-text-secondary">
+        <h3 className="text-xs font-display font-bold uppercase tracking-[0.18em] text-text-secondary">
           Map
         </h3>
       </div>
@@ -137,7 +137,7 @@ export function MapOverlayControls({
 function SectionHeading({ children }: { children: string }) {
   return (
     <div className="px-3 pt-2 pb-1">
-      <h4 className="text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+      <h4 className="text-xs font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
         {children}
       </h4>
     </div>
@@ -162,7 +162,7 @@ function rampGradient(mode: ContinuousMode): string {
 function StabilityRampLegend() {
   return (
     <div>
-      <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+      <h5 className="mb-1 text-xs font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
         Stability
       </h5>
       <div
@@ -170,11 +170,11 @@ function StabilityRampLegend() {
         style={{ background: rampGradient("stability") }}
         aria-hidden
       />
-      <div className="mt-0.5 flex justify-between text-[9px] font-mono text-text-secondary">
+      <div className="mt-0.5 flex justify-between text-xs font-mono text-text-secondary">
         <span>Unstable</span>
         <span>Stable</span>
       </div>
-      <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
+      <p className="mt-1 text-xs leading-relaxed text-text-secondary">
         Higher = calmer. Black = out of sensor range.
       </p>
     </div>
@@ -184,7 +184,7 @@ function StabilityRampLegend() {
 function PopulationRampLegend() {
   return (
     <div>
-      <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+      <h5 className="mb-1 text-xs font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
         Population
       </h5>
       <div
@@ -192,11 +192,11 @@ function PopulationRampLegend() {
         style={{ background: rampGradient("population") }}
         aria-hidden
       />
-      <div className="mt-0.5 flex justify-between text-[9px] font-mono text-text-secondary">
+      <div className="mt-0.5 flex justify-between text-xs font-mono text-text-secondary">
         <span>None</span>
         <span>Highest</span>
       </div>
-      <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
+      <p className="mt-1 text-xs leading-relaxed text-text-secondary">
         Relative to the most populous system you can currently see. Black = none.
       </p>
     </div>
@@ -206,7 +206,7 @@ function PopulationRampLegend() {
 function DevelopmentRampLegend() {
   return (
     <div>
-      <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+      <h5 className="mb-1 text-xs font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
         Development
       </h5>
       <div
@@ -214,11 +214,11 @@ function DevelopmentRampLegend() {
         style={{ background: rampGradient("development") }}
         aria-hidden
       />
-      <div className="mt-0.5 flex justify-between text-[9px] font-mono text-text-secondary">
+      <div className="mt-0.5 flex justify-between text-xs font-mono text-text-secondary">
         <span>Frontier</span>
         <span>Built-out</span>
       </div>
-      <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
+      <p className="mt-1 text-xs leading-relaxed text-text-secondary">
         Population + industry a system has built and worked, measured against the galaxy&rsquo;s biggest. Black = none.
       </p>
     </div>
@@ -228,7 +228,7 @@ function DevelopmentRampLegend() {
 function MigrationRampLegend() {
   return (
     <div>
-      <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+      <h5 className="mb-1 text-xs font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
         Migration
       </h5>
       <div
@@ -236,11 +236,11 @@ function MigrationRampLegend() {
         style={{ background: rampGradient("migration") }}
         aria-hidden
       />
-      <div className="mt-0.5 flex justify-between text-[9px] font-mono text-text-secondary">
+      <div className="mt-0.5 flex justify-between text-xs font-mono text-text-secondary">
         <span>Crowded</span>
         <span>Attractive</span>
       </div>
-      <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
+      <p className="mt-1 text-xs leading-relaxed text-text-secondary">
         Where population is drawn — room, jobs and calm. Black = undeveloped or out of sensor range.
       </p>
     </div>
@@ -257,7 +257,7 @@ function ProvisionRampLegend() {
   const stops = provisionLegendStops();
   return (
     <div>
-      <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+      <h5 className="mb-1 text-xs font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
         Provisioned
       </h5>
       <div className="flex h-2 w-full" aria-hidden>
@@ -267,11 +267,11 @@ function ProvisionRampLegend() {
           return <span key={stop.position} style={{ background: stop.css, width: `${width}%` }} />;
         })}
       </div>
-      <div className="mt-0.5 flex justify-between text-[9px] font-mono text-text-secondary">
+      <div className="mt-0.5 flex justify-between text-xs font-mono text-text-secondary">
         <span>Deprived</span>
         <span>Supplied</span>
       </div>
-      <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
+      <p className="mt-1 text-xs leading-relaxed text-text-secondary">
         Share of the civilian basket delivered — stepped at the Deprived / Rationing / Strained /
         Supplied band edges, not a smooth gradient. Famine is a separate reading and paints no band
         here. Black = never assessed.
@@ -287,7 +287,7 @@ function TierSwatchList() {
       {tiers.map((tier) => (
         <li
           key={tier}
-          className="flex items-center gap-1.5 text-[10px] text-text-secondary"
+          className="flex items-center gap-1.5 text-xs text-text-secondary"
         >
           <span
             className="h-2 w-2 shrink-0"
@@ -304,11 +304,11 @@ function TierSwatchList() {
 function LogisticsLegend() {
   return (
     <div>
-      <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+      <h5 className="mb-1 text-xs font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
         Directed Logistics
       </h5>
       <TierSwatchList />
-      <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
+      <p className="mt-1 text-xs leading-relaxed text-text-secondary">
         Curved arc = a faction haul across systems; the arrow points to the
         importing system.
       </p>

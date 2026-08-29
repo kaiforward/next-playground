@@ -74,7 +74,7 @@ export function AlertSettings({ categories, onChangeCategory }: AlertSettingsPro
     <PopoverContent aria-label="Alert settings" className="flex w-[330px] flex-col">
       <header className="shrink-0 border-b border-border px-2.5 py-2">
         <h3 className="font-display text-xs uppercase tracking-wider text-text-secondary">Alerts</h3>
-        <p className="text-[11px] text-text-tertiary">What appears on the bar</p>
+        <p className="text-xs text-text-tertiary">What appears on the bar</p>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
         {TIER_ORDER.map((tier) => {
@@ -82,7 +82,7 @@ export function AlertSettings({ categories, onChangeCategory }: AlertSettingsPro
           const note = TIER_NOTE[tier];
           return (
             <section key={tier} className="border-b border-border py-1.5 last:border-b-0">
-              <h4 className="flex items-baseline gap-2 px-2.5 pb-1 font-display text-[10px] uppercase tracking-[0.1em] text-text-tertiary">
+              <h4 className="flex items-baseline gap-2 px-2.5 pb-1 font-display text-xs uppercase tracking-[0.1em] text-text-tertiary">
                 {TIER_HEADING[tier]}
                 {note && <span className="normal-case tracking-normal opacity-85">{note}</span>}
               </h4>
@@ -93,10 +93,10 @@ export function AlertSettings({ categories, onChangeCategory }: AlertSettingsPro
                     return (
                       <div
                         key={id}
-                        className="flex items-center gap-2 px-2.5 py-1 text-[12px] text-text-primary opacity-75"
+                        className="flex items-center gap-2 px-2.5 py-1 text-xs text-text-primary opacity-75"
                       >
                         <span className="truncate">{def.label}</span>
-                        <span className="ml-auto font-mono text-[9px] text-text-tertiary">always on</span>
+                        <span className="ml-auto font-mono text-xs text-text-tertiary">always on</span>
                       </div>
                     );
                   }

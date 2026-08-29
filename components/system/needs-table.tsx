@@ -15,15 +15,15 @@ export type NeedsTableDensity = "panel" | "tooltip";
 
 const DENSITY: Record<NeedsTableDensity, { th: string; name: string; glyph: string; value: string }> = {
   panel: {
-    th: "whitespace-nowrap border-b border-border-strong px-1.5 py-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary",
+    th: "whitespace-nowrap border-b border-border-strong px-1.5 py-1 font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary",
     name: "whitespace-nowrap px-1.5 py-1 text-xs text-text-primary",
-    glyph: "mr-1.5 font-mono text-[10px]",
-    value: "whitespace-nowrap px-1.5 py-1 text-right font-mono text-[11px]",
+    glyph: "mr-1.5 font-mono text-xs",
+    value: "whitespace-nowrap px-1.5 py-1 text-right font-mono text-xs",
   },
   tooltip: {
-    th: "whitespace-nowrap border-b border-border/60 px-1 py-0.5 font-display text-[9px] font-semibold uppercase tracking-wider text-text-tertiary",
+    th: "whitespace-nowrap border-b border-border/60 px-1 py-0.5 font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary",
     name: "whitespace-nowrap px-1 py-0.5 text-text-primary",
-    glyph: "mr-1 font-mono text-[9px]",
+    glyph: "mr-1 font-mono text-xs",
     value: "whitespace-nowrap px-1 py-0.5 text-right font-mono",
   },
 };

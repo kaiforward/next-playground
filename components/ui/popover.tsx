@@ -1588,7 +1588,7 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
             // instead of stretching to its own single-line max-content width. `text-xs` is the one
             // body size this whole surface uses; a game this dense in small text has no reason for a
             // popover body to default to anything else, and every finer distinction a body still
-            // wants (a `text-[10px]` caption, a `text-[9px]` micro-label) stays a deliberate,
+            // wants (a `text-xs` caption, a `text-xs` micro-label) stays a deliberate,
             // explicit override on top of this rather than the default itself varying by call site.
             "z-50 w-max max-w-[min(24rem,calc(100vw-2rem))] border border-border-strong border-l-2 border-l-accent bg-surface p-3 text-left text-xs shadow-lg animate-in fade-in-0 zoom-in-95",
             className,

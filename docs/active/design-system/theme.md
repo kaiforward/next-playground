@@ -102,9 +102,15 @@ for it. A panel typically needs three:
 - `text-sm` — content and values: body text, stat figures, a card's inline title-level name.
 - `text-xs` — labels: `SectionHeader`, `Badge`, table column headers, secondary annotations.
 
-`ProgressBar`'s `sm` size (above) is a standing exception: `text-[10px]` for its label, predating
-this rule and out of scope to change. A new exception needs the same kind of stated reason, not a
-silent copy of that one.
+**`text-xs` (12px) is the floor.** Nothing renders text below it. This is a small-text game, but a
+mix of 9, 10, 11 and 12px reads as mess rather than as density — a reader notices four sizes long
+before noticing any one of them is small, and the smallest of them stops being legible. Where
+something genuinely cannot fit at 12px, step **down in 2px increments** (10px, then 8px) with a
+stated reason at the point of use, so an exception is still a size the rest of the scale recognises.
+
+A decorative glyph sized by `font-size` (a tick, a health dot) follows the same floor. If the floor
+makes one too large, size it by width and height instead of by font-size — that is the fix, not a
+smaller `text-[Npx]`.
 
 ---
 
@@ -186,7 +192,7 @@ Flat bar with no rounding. Track uses `bg-surface-active`.
 
 | Size | Track height | Label style |
 |------|-------------|-------------|
-| `sm` | `h-1.5` | `text-[10px] text-text-muted` |
+| `sm` | `h-1.5` | `text-xs text-text-secondary` |
 | `md` | `h-2.5` | `text-xs text-text-tertiary` |
 
 Default color: `copper` (accent). Other colors: blue, amber, red, green, purple.

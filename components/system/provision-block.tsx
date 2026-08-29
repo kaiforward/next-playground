@@ -41,8 +41,8 @@ function NeedsLedger({ needs }: { needs: PopNeedData[] }) {
         <tr>
           <td colSpan={4} className="px-1.5 py-1.5 text-xs text-text-tertiary">
             <button type="button" onClick={() => setExpanded(true)} className="inline-flex items-center gap-1.5 hover:text-text-secondary">
-              <span aria-hidden className="font-mono text-[10px] text-status-green-light">✓</span>
-              {met.length} needs met <span className="font-mono text-[10px]">▸ expand</span>
+              <span aria-hidden className="font-mono text-xs text-status-green-light">✓</span>
+              {met.length} needs met <span className="font-mono text-xs">▸ expand</span>
             </button>
           </td>
         </tr>

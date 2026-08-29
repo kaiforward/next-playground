@@ -63,7 +63,7 @@ export function ConstructionRow({
           </Badge>
         )}
         <span
-          className={`ml-auto font-mono text-[11px] ${stalled ? "text-status-amber-light" : "text-text-secondary"}`}
+          className={`ml-auto font-mono text-xs ${stalled ? "text-status-amber-light" : "text-text-secondary"}`}
         >
           {formatEta(row.etaCycles)}
         </span>
@@ -108,7 +108,7 @@ export function ConstructionRow({
 
       {row.kind === "colony_establish" && (
         <p
-          className={`mb-1.5 text-[11px] ${stalled ? "text-status-amber-light" : "text-text-tertiary"}`}
+          className={`mb-1.5 text-xs ${stalled ? "text-status-amber-light" : "text-text-tertiary"}`}
         >
           {row.stalledReason !== null
             ? COLONY_STALL_DETAIL[row.stalledReason]

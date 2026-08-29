@@ -54,7 +54,7 @@ export function TrackerPanel({ settingsOpen, onToggleSettings }: TrackerPanelPro
   return (
     <div className="pointer-events-auto flex h-full min-h-0 w-72 shrink-0 flex-col border border-border bg-surface/95 shadow-lg backdrop-blur">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <h2 className="font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-secondary">
+        <h2 className="font-display text-xs font-bold uppercase tracking-[0.18em] text-text-secondary">
           Tracker
         </h2>
         <Button
@@ -182,12 +182,12 @@ function TrackerPanelContent({
           footer={
             <>
               {data.building.length > BUILDING_ROW_CAP && (
-                <p className="px-3 py-1.5 text-[10px] text-text-tertiary">
+                <p className="px-3 py-1.5 text-xs text-text-tertiary">
                   {data.building.length - BUILDING_ROW_CAP} more funded this cycle, not shown
                 </p>
               )}
               {data.waitingCount > 0 && (
-                <p className="px-3 py-1.5 text-[10px] text-text-tertiary">
+                <p className="px-3 py-1.5 text-xs text-text-tertiary">
                   {data.waitingCount} more waiting on the pool
                 </p>
               )}

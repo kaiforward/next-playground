@@ -132,7 +132,7 @@ export function FactionEvents() {
                 <div className="text-xs font-mono text-text-primary">
                   {formatDuration(event.ticksRemaining)}
                 </div>
-                <div className="text-[10px] text-text-secondary mt-0.5">
+                <div className="text-xs text-text-secondary mt-0.5">
                   Sev: {event.severity.toFixed(1)}
                 </div>
               </div>

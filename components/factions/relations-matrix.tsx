@@ -132,7 +132,7 @@ function ColumnHeader({ faction }: { faction: RelationsMatrixFaction }) {
           aria-hidden
         />
         <span
-          className="text-[10px] font-display uppercase tracking-wider text-text-secondary whitespace-nowrap"
+          className="text-xs font-display uppercase tracking-wider text-text-secondary whitespace-nowrap"
           style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
         >
           {faction.name}
