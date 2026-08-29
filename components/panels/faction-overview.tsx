@@ -36,7 +36,7 @@ export function FactionOverview({ factionId }: { factionId: string }) {
       {/* Aggregate vitals — the same grid as the system overview, rolled up over the faction's
           systems. Extensive stats (territory, population, development points) sum; stability is
           population-weighted so spreading into small systems doesn't dilute it. */}
-      <VitalGrid columns={4}>
+      <VitalGrid columns={3}>
         <VitalTile
           label="Territory"
           dotColor="var(--color-text-tertiary)"
@@ -74,7 +74,7 @@ export function FactionOverview({ factionId }: { factionId: string }) {
           value={formatUnitsShort(foundingWorkingBalance(treasury.balance, treasury.foundingCommitted))}
           hint={`net ${treasury.net < 0 ? "−" : "+"}${formatUnitsShort(Math.abs(treasury.net))} / cycle`}
         />
-        <GhostVitalTile label="Future vitals" colSpan={3} future={<>control · tax base</>} />
+        <GhostVitalTile label="Future vitals" future={<>control · tax base</>} />
       </VitalGrid>
 
       {/* Government & doctrine — compacted: homeworld link + the flavour the card's badges don't carry. */}

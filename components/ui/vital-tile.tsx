@@ -126,13 +126,13 @@ export function GhostVitalTile({ label, future, colSpan = 1 }: GhostVitalTilePro
   );
 }
 
-/** Column counts `VitalGrid` supports — 2-up today, 3-/4-up for denser future screens (e.g. faction Overview). */
-export type VitalGridColumns = 2 | 3 | 4;
+/** Column counts `VitalGrid` supports. 3 is the ceiling: a quarter-width tile cannot fit the
+ *  longest labels ("Development") at the label type size, so denser than 3-up squashes. */
+export type VitalGridColumns = 2 | 3;
 
 const GRID_COLUMNS_CLASS = {
   2: "grid-cols-2",
   3: "grid-cols-3",
-  4: "grid-cols-4",
 } as const satisfies Record<VitalGridColumns, string>;
 
 export interface VitalGridProps {

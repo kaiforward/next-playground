@@ -81,7 +81,7 @@ export function SystemOverview({ systemId }: { systemId: string }) {
         const { stability, development, population, provision } = vitals;
         const pop = splitCompactNumber(formatPeople(population.headcount));
         return (
-          <VitalGrid columns={4}>
+          <VitalGrid columns={3}>
             <VitalTile
               label={<TermLabel id="stability">Stability</TermLabel>}
               dotColor="var(--color-status-cyan)"
@@ -96,6 +96,19 @@ export function SystemOverview({ systemId }: { systemId: string }) {
               unit="%"
               meter={{ pct: development.pct, color: "var(--color-accent)" }}
               hint={`${Math.round(development.points)} pts${development.pct < 100 ? " · room to grow" : ""}`}
+            />
+            <VitalTile
+              label="Construction"
+              dotColor="var(--color-status-amber)"
+              value={String(construction.visibility === "visible" ? construction.projects.length : 0)}
+              hint={
+                <LinkComponent
+                  href={`/system/${systemId}/industry`}
+                  className="text-text-accent transition-colors hover:text-text-accent-hover"
+                >
+                  → Industry
+                </LinkComponent>
+              }
             />
             <VitalTile
               label={<TermLabel id="population">Population</TermLabel>}
@@ -113,19 +126,6 @@ export function SystemOverview({ systemId }: { systemId: string }) {
                 ]}
               />
             </VitalTile>
-            <VitalTile
-              label="Construction"
-              dotColor="var(--color-status-amber)"
-              value={String(construction.visibility === "visible" ? construction.projects.length : 0)}
-              hint={
-                <LinkComponent
-                  href={`/system/${systemId}/industry`}
-                  className="text-text-accent transition-colors hover:text-text-accent-hover"
-                >
-                  → Industry
-                </LinkComponent>
-              }
-            />
             {provision.assessed ? (
               <VitalTile
                 label="Provisioned"
@@ -149,7 +149,7 @@ export function SystemOverview({ systemId }: { systemId: string }) {
             )}
             <GhostVitalTile
               label="Future vitals"
-              colSpan={2}
+              colSpan={3}
               future={
                 <>
                   control · treasury
