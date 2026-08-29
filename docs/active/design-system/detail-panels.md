@@ -48,8 +48,10 @@ star pin toggle, beside the cadence countdown and "Show on Map".
   opt out of click-to-open — the Tracker's rows do, because a row click navigates. Consumers whose
   trigger hover already means something else opt out of hover-to-open the same way.
 
-  Scoped to one level. Nested, pinnable deep tooltips and the concept glossary behind them are
-  planned, not built; migrating the existing plain tooltips onto `Popover` is deferred with them.
+  Cards nest — a term inside a card can open a further card — and a card can be pinned for
+  comparison against another. Both draw on the concept glossary (`docs/active/glossary.md`,
+  `lib/glossary/terms.ts`). Migrating the existing plain tooltips onto `Popover` remains
+  deferred.
 
 ### The keyboard enter/exit convention
 

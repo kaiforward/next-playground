@@ -196,6 +196,16 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
     expect(container.textContent).toContain(`${row.staffed.toFixed(1)} staffed`);
   });
 
+  it("housing's Staffed cell reads honest occupancy — min(count, housingUsed(population)), never the padded vacancy-allowance figure the fixture's own `used` (16) would render", () => {
+    // population 50 / POP_CENTRE_DENSITY 20 = 2.5 housingUsed, under count 20, so the honest figure
+    // is 2.5/20 — distinct from the fixture's padded `used: 16` (would render 16.0/20 uncapped).
+    industryValue.current = READOUT;
+    const { container } = renderPanel();
+
+    expect(container.textContent).toContain("2.5/20");
+    expect(container.textContent).not.toContain("16.0/20");
+  });
+
   it("never renders the retired industry-land vocabulary — no 'Industry land', 'General land', 'habitableFree' or 'factoryFree' anywhere in the DOM", () => {
     industryValue.current = READOUT;
     const { container } = renderPanel();

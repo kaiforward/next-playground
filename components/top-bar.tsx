@@ -96,10 +96,13 @@ export function TickReadout() {
   return (
     <div className="flex items-center gap-1.5 text-xs font-mono text-text-secondary whitespace-nowrap">
       <span className="h-1.5 w-1.5 rounded-full bg-status-green animate-pulse shrink-0" />
-      {/* The raw tick survives only in the title — the shipped UI reads the fictional calendar. */}
-      <span title={`tick ${currentTick}`}>
-        <span className="text-secondary">{formatDate(currentTick)}</span>{" "}
-        <span className="text-text-primary">{formatTimeOfDay(currentTick)}</span>{" "}
+      <span>
+        {/* The raw tick survives only in the title — the shipped UI reads the fictional calendar.
+            Scoped to the date/time text alone so it doesn't shadow the UST trigger's own popover. */}
+        <span title={`tick ${currentTick}`}>
+          <span className="text-secondary">{formatDate(currentTick)}</span>{" "}
+          <span className="text-text-primary">{formatTimeOfDay(currentTick)}</span>
+        </span>{" "}
         <TermLabel id="ust" />
       </span>
       <span className="text-text-tertiary">·</span>

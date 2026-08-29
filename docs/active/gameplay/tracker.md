@@ -181,10 +181,9 @@ A consumer can **opt out of click-to-open** where the trigger's click already me
 The Tracker does exactly that: a row's click navigates, so the card is reached by hover or keyboard
 only.
 
-Scope is one level. Cards whose terms open further cards, pinning a card for comparison, the concept
-glossary behind them, and migrating the game's existing tooltips onto this component are all
-deliberately out — a nesting model designed without a real chain of descriptions to design against
-would be guessing at a shape.
+Nesting, pinning and the concept glossary are the popover system's, not the Tracker's own — the
+Tracker's card is a single-level trigger into that system. Migrating the game's existing plain
+tooltips onto this component remains out of scope.
 
 ## Settings
 
@@ -224,4 +223,5 @@ belonging to another faction is still shown: a pin is a bookmark, not an ownersh
   problem and it is solved there by authored category tiers.
 - **Pinning anything but systems.** Formations, markets and factions are all plausible later; systems
   are what the game has and what the two named reads are about.
-- **Nesting, pinning and glossary links in the card**, and migrating existing tooltips onto it.
+- **Migrating existing tooltips onto the card.** Nesting, pinning and glossary links exist in the
+  popover system generally; the Tracker's own card stays a single-level trigger into them.

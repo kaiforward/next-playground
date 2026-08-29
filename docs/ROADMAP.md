@@ -30,6 +30,12 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   *Don't:* sweep every `text-[Npx]` out on sight. Some are load-bearing at their size; the rule
   wants a stated reason at the point of use, not removal.
 
+- **[S] Register-convert the remaining raw-number surfaces the language pass didn't reach.**
+  The trade/market tables, the relations-matrix and faction-diplomacy raw relation scores/bounds,
+  and the raw development-points readouts (system-overview "pts", faction-overview headline) all
+  still show unconverted numbers.
+  *Next step:* apply `/game-copy` to those files.
+
 **Packaging**
 - **[M] Desktop shell packaging (Tauri vs Electron)** — booked out of the client-runtime migration
   by explicit decision (2026-08-19, "we should do it at some point soon"). The client runtime has

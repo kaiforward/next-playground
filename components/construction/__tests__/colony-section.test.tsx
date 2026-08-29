@@ -25,7 +25,7 @@ vi.mock("@/lib/hooks/use-construction-orders", () => ({
 }));
 
 const preview: ColonyPreviewData = {
-  sourceSystemId: "s-home", sourceSystemName: "Sol", seedPop: 2, housingLevels: 1, work: 84,
+  sourceSystemId: "s-home", sourceSystemName: "Sol", seedPop: 2, housingLevels: 1,
   charter: 1200, projectedBill: 3400, commitment: 8000,
 };
 

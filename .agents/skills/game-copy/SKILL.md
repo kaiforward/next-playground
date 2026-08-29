@@ -42,7 +42,7 @@ allowed at the end, never at the start.
   system fills toward its poorer land. Shown as a percentage of normal population growth."*
 - Keyword definitions are glossary entries: written once, reused everywhere the term is
   hoverable. If a definition exists, link it; never write a second definition of the same
-  term. (The roadmap's game-term glossary is this register's home.)
+  term. (`docs/active/glossary.md` / `lib/glossary/terms.ts` is this register's home.)
 - A keyword sentence doesn't take a dash-appended clause — if it needs a dash, it's two
   thoughts and one gets cut. (Contrast the stat register above, where a dashed aside is fine.)
 

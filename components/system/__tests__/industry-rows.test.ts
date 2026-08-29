@@ -221,9 +221,18 @@ describe("staffedLevels", () => {
   });
 
   it("housing (tier -1) with a population caps true occupancy at count — an overcrowded system never reads past its housing", () => {
-    // population 400 → housingUsed(400) = 20, which would overshoot count (5) uncapped.
-    const housing: Parameters<typeof staffedLevels>[0] = { tier: -1, used: 5, staffedFraction: 4, count: 5 };
-    expect(staffedLevels(housing, 400)).toBe(5);
+    // population 400 → housingUsed(400) = 20, which would overshoot count (10) uncapped.
+    const housing: Parameters<typeof staffedLevels>[0] = { tier: -1, used: 10, staffedFraction: 4, count: 10 };
+    expect(staffedLevels(housing, 400)).toBe(10);
+  });
+
+  it("housing (tier -1) with a population under count reads the honest uncapped figure, not the vacancy-padded one the cap would otherwise hide behind", () => {
+    // population 190 → housingUsed(190) = 9.5, under count (10) — so the cap never engages, and the
+    // fixture's own `used` (10, i.e. what the padded `used × (1 + VACANCY_SLACK)` fallback would
+    // read once capped) must NOT come back: a fix that still capped-or-padded here would read 10,
+    // not 9.5.
+    const housing: Parameters<typeof staffedLevels>[0] = { tier: -1, used: 10, staffedFraction: 0.95, count: 10 };
+    expect(staffedLevels(housing, 190)).toBeCloseTo(9.5);
   });
 
   it("a producer/extractor (tier >= 0) reads staffedFraction × count — pure labour, not the staffed-and-selling `used`", () => {

@@ -40,7 +40,7 @@ export function QuickAddButton({ systemId, option }: { systemId: string; option:
           <p className="text-xs text-text-secondary">{BLOCK_COPY[option.blocked]}</p>
         ) : (
           <p className="font-mono text-xs text-text-secondary">
-            +1 level · {option.workPerLevel} work · {formatEta(option.etaCycles)}
+            +1 level · {formatEta(option.etaCycles)}
           </p>
         )}
       </TooltipContent>

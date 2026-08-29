@@ -99,8 +99,16 @@ describe("PlayerFactionSummary — the flag opens the faction panel, the stats q
 
 describe("TickReadout — the clock carries a UST stamp as a term trigger", () => {
   it("renders the date and clock followed by a UST trigger, decoration over the same tick", () => {
-    render(<TickReadout />);
-    expect(screen.getByTitle("tick 0")).toHaveTextContent("2350.01.01 00:00 UST");
+    const { container } = render(<TickReadout />);
     expect(screen.getByRole("button", { name: "UST" })).toBeInTheDocument();
+    expect(container).toHaveTextContent("2350.01.01 00:00 UST");
+  });
+
+  it("scopes the raw-tick title to the date/time text alone, so it doesn't shadow the UST trigger's own popover", () => {
+    render(<TickReadout />);
+    const dated = screen.getByTitle("tick 0");
+    expect(dated).toHaveTextContent("2350.01.01 00:00");
+    expect(dated).not.toHaveTextContent("UST");
+    expect(screen.getByRole("button", { name: "UST" })).not.toHaveAttribute("title");
   });
 });

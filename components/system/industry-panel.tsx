@@ -39,6 +39,7 @@ import { InfoIcon } from "@/components/ui/icons";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { PopoverTriggerLabel } from "@/components/ui/popover-trigger-label";
 import { TermLabel } from "@/components/ui/term-label";
+import { UnmetNeedConsequences } from "@/components/system/unmet-need-consequences";
 import { useDialog } from "@/components/ui/dialog";
 import { CompositionBar } from "@/components/ui/composition-bar";
 import { depositRows, depositRowProblems, depositTypeProblems, idleLevelSplit, staffedLevels, type DepositRow, type DepositTypeRow } from "@/components/system/industry-rows";
@@ -1026,7 +1027,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
             {HEALTH[sysHealth].label}
           </Badge>
           <span className="ml-auto flex items-center gap-3.5 font-mono text-xs text-text-secondary">
-            <span>unrest <span className="text-text-primary">{unrest.toFixed(2)}</span></span>
+            <span>unrest <span className="text-text-primary">{Math.round(unrest * 100)}%</span></span>
             <span>labour <span className="text-text-primary">{Math.round(labourFulfilment * 100)}%</span></span>
             <LegendTooltip />
             {canOrder && (
@@ -1047,7 +1048,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
                       <tr key={n.goodId}><NeedCells n={n} density="tooltip" /></tr>
                     ))}
                   </NeedsTable>
-                  <p className="border-t border-border/60 pt-1 text-text-secondary">Doing worse than this <TermLabel id="population">population</TermLabel> is used to breeds <TermLabel id="unrest">unrest</TermLabel> — <TermLabel id="famine">famine</TermLabel> and critical shortages always do.</p>
+                  <UnmetNeedConsequences />
                 </div>
               }
             >

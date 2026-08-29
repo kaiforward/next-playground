@@ -74,7 +74,7 @@ export function orderBuild(input: { systemId: string; buildingType: string; leve
     return {
       ok: false,
       error: option.blocked === "no_deposit_slots"
-        ? "No free deposit slots for that building here."
+        ? "No free resource slots for that building here."
         : `Not enough space: ${option.maxLevels} more level(s) fit here.`,
     };
   }
