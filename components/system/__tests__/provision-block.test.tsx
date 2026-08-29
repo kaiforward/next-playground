@@ -1,17 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ProvisionBlock } from "@/components/system/provision-block";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { DWELL_OPEN_DELAY_MS, DWELL_MS } from "@/components/ui/popover";
 import type { PopNeedData, SystemProvisionRead } from "@/lib/types/api";
 
 // The band widths, tones and the ledger split are tested against numbers in `provision-view` and
 // `needs-view`. What is left for the DOM is what a reader actually gets: the chip, the headline,
 // the key naming both numbers, and which need rows are on screen.
 //
-// Every case renders inside the app's own `TooltipProvider` — the ledger's rows are tooltip
-// triggers, and Radix's `Tooltip.Root` throws without a provider above it (the real app mounts one
-// in client/main.tsx).
+// The ledger's rows are `dwell`-popover triggers (Task 8 of `docs/build-plans/nested-tooltips.md`
+// converted `NeedRow` from a plain Radix Tooltip, whose body is this row's own need data rather
+// than a fixed definition) — `Popover` needs no surrounding provider, unlike Radix's `Tooltip.Root`.
 
 const assessed: SystemProvisionRead = {
   assessed: true,
@@ -31,11 +31,20 @@ function need(overrides: Partial<PopNeedData> & { goodId: string; goodName: stri
 }
 
 function renderBlock(read: SystemProvisionRead, needs: PopNeedData[] = []) {
-  return render(
-    <TooltipProvider>
-      <ProvisionBlock read={read} needs={needs} />
-    </TooltipProvider>,
-  );
+  return render(<ProvisionBlock read={read} needs={needs} />);
+}
+
+/** Same helper shape as `industry-panel.test.tsx`'s own — hovers a need row (found by its good
+ *  name, since the row itself carries no single accessible name) and waits past the open grace
+ *  and the dwell, so the `dwell` popover it belongs to is `locked` by the time this resolves. Real
+ *  timers, matching `components/ui/__tests__/popover.test.tsx`'s own convention. */
+async function openNeedRow(user: ReturnType<typeof userEvent.setup>, goodName: string) {
+  const row = screen.getByText(goodName).closest("tr");
+  if (!row) throw new Error(`no <tr> ancestor for "${goodName}"`);
+  await user.hover(row);
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, DWELL_OPEN_DELAY_MS + DWELL_MS + 80));
+  });
 }
 
 describe("ProvisionBlock — band chip, percentage, track key, and the absent state", () => {
@@ -84,5 +93,17 @@ describe("ProvisionBlock — band chip, percentage, track key, and the absent st
     // …and the toggle is what brings it back, which is the only reason hiding it is acceptable.
     await userEvent.click(toggle);
     expect(screen.getByText("Met good")).toBeInTheDocument();
+  });
+
+  it("opens a need row's own dwell popover, naming the good and its want/delivered/pressure breakdown — Task 8's conversion of NeedRow to a Popover", async () => {
+    const user = userEvent.setup({ delay: null });
+    const needs: PopNeedData[] = [
+      need({ goodId: "critical-good", goodName: "Critical good", satisfaction: 0.2, want: 12, delivered: 4 }),
+    ];
+    renderBlock(assessed, needs);
+
+    await openNeedRow(user, "Critical good");
+    expect(await screen.findByText(/want 12\.00\/cyc/)).toBeInTheDocument();
+    expect(screen.getByText(/delivered 4\.00\/cyc/)).toBeInTheDocument();
   });
 });

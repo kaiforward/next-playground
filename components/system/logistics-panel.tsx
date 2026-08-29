@@ -8,7 +8,7 @@ import {
   BAR_HATCH,
   type BarSegment,
 } from "@/components/ui/diverging-bars";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { VolumeSparkline } from "@/components/system/volume-sparkline";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -122,33 +122,33 @@ function externalTooltip(g: LogisticsGoodRow): React.ReactNode | undefined {
   );
 }
 
-/** A diverging bar in a table cell, wrapped in a keyboard-focusable Radix tooltip when it
- *  carries detail (so the tooltip opens on focus, not just hover); otherwise rendered bare. */
+/** A diverging bar in a table cell, wrapped in a keyboard-focusable dwell popover when it
+ *  carries detail (so the popover opens on focus, not just hover); otherwise rendered bare. */
 function BarCell({
   segments,
   maxValue,
-  tooltip,
-  tooltipClassName,
+  popoverContent,
+  popoverClassName,
 }: {
   segments: BarSegment[];
   maxValue: number;
-  tooltip?: React.ReactNode;
-  tooltipClassName?: string;
+  popoverContent?: React.ReactNode;
+  popoverClassName?: string;
 }) {
   const track = <DivergingBarTrack segments={segments} maxValue={maxValue} />;
-  if (!tooltip) return track;
+  if (!popoverContent) return track;
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
+    <Popover dwell>
+      <PopoverTrigger asChild>
         <div
           tabIndex={0}
           className="w-full cursor-default outline-none focus-visible:ring-1 focus-visible:ring-accent"
         >
           {track}
         </div>
-      </TooltipTrigger>
-      <TooltipContent className={tooltipClassName}>{tooltip}</TooltipContent>
-    </Tooltip>
+      </PopoverTrigger>
+      <PopoverContent className={popoverClassName}>{popoverContent}</PopoverContent>
+    </Popover>
   );
 }
 
@@ -171,8 +171,8 @@ function GoodRow({
         <BarCell
           segments={internalSegments(g)}
           maxValue={internalMax}
-          tooltip={internalTooltip(g)}
-          tooltipClassName="w-56"
+          popoverContent={internalTooltip(g)}
+          popoverClassName="w-56"
         />
       </td>
       <td className={`px-1 py-1 text-right align-middle font-mono text-xs ${netClass(g.internalNet)}`}>
@@ -180,7 +180,7 @@ function GoodRow({
       </td>
       <td className="border-l border-border px-1.5 py-1 align-middle">
         {g.traded ? (
-          <BarCell segments={externalSegments(g)} maxValue={externalMax} tooltip={externalTooltip(g)} />
+          <BarCell segments={externalSegments(g)} maxValue={externalMax} popoverContent={externalTooltip(g)} />
         ) : (
           <div className="h-2.5" />
         )}

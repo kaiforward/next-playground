@@ -1,3 +1,4 @@
+import { TermLabel } from "@/components/ui/term-label";
 import type { FillOrderRow } from "@/lib/utils/substrate";
 
 /**
@@ -40,7 +41,7 @@ export function HabitabilityTooltipContent({
                 aria-hidden
                 className={`inline-block h-2 w-2 shrink-0 ${row.occupied ? "bg-status-green" : "bg-surface-active"}`}
               />
-              {row.className}
+              <TermLabel id="archetype">{row.className}</TermLabel>
               {row.partial && <span className="text-text-tertiary">— Partial</span>}
             </span>
             <span className="font-mono text-text-primary">{Math.round(row.score * 100)}%</span>

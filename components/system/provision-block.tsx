@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
 import { Badge, BADGE_COLOR_VAR } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { TrackMarker } from "@/components/ui/track-marker";
 import { bandLabel, bandTone, provisionScaleSegments, provisionTrackTone } from "@/components/system/provision-view";
 import type { SupplyRegime } from "@/lib/engine/population";
@@ -16,14 +16,14 @@ import { NeedTooltipContent } from "@/components/system/need-tooltip-content";
 
 function NeedRow({ n }: { n: PopNeedData }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
+    <Popover dwell>
+      <PopoverTrigger asChild>
         <tr tabIndex={0} className="border-b border-border/40 outline-none last:border-b-0 focus-visible:ring-1 focus-visible:ring-accent">
           <NeedCells n={n} density="panel" />
         </tr>
-      </TooltipTrigger>
-      <TooltipContent className="w-64"><NeedTooltipContent need={n} /></TooltipContent>
-    </Tooltip>
+      </PopoverTrigger>
+      <PopoverContent className="w-64"><NeedTooltipContent need={n} /></PopoverContent>
+    </Popover>
   );
 }
 

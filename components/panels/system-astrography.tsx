@@ -10,7 +10,8 @@ import { BodyReadout } from "@/components/system/body-readout";
 import { SystemRings } from "@/components/system/system-rings";
 import { PotentialYieldTable } from "@/components/system/potential-yield-table";
 import { HabitabilityTooltipContent } from "@/components/system/habitability-tooltip-content";
-import { Tooltip, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
+import { PopoverTriggerLabel } from "@/components/ui/popover-trigger-label";
+import { TermLabel } from "@/components/ui/term-label";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
 import { splitBracketedName } from "@/lib/utils/format";
 
@@ -86,19 +87,22 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
                 <div className="flex items-baseline gap-1">
                   {/* The trigger is a `<button>` sitting inside the `<dt>` rather than replacing it,
                       so the dt/dd association (and "Habitability, 87%" read together) survives —
-                      only the label text itself becomes interactive. Not `uppercase`: this row's
-                      labels are plain case (unlike the "Potential yield" SectionHeader below),
-                      so the trigger needs no text-transform restatement. */}
+                      only the label text itself becomes interactive. This row's own habitability
+                      data (this system's `growthMultiplier`/`fillOrder`), not a fixed definition,
+                      so it's a `PopoverTriggerLabel` keeping `HabitabilityTooltipContent` as its
+                      body, not a `TermLabel`. */}
                   <dt className="font-display text-text-tertiary">
-                    <Tooltip>
-                      <TooltipTriggerLabel>Habitability</TooltipTriggerLabel>
-                      <TooltipContent className="w-64">
+                    <PopoverTriggerLabel
+                      contentClassName="w-64"
+                      content={
                         <HabitabilityTooltipContent
                           growthMultiplier={habitability.growthMultiplier}
                           fillOrder={habitability.fillOrder}
                         />
-                      </TooltipContent>
-                    </Tooltip>
+                      }
+                    >
+                      Habitability
+                    </PopoverTriggerLabel>
                   </dt>
                   <dd className="font-mono text-text-primary">{habitability.pct}%</dd>
                 </div>
@@ -124,15 +128,10 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
         {potentialYields.length > 0 && (
           <div className="mt-4 border-t border-border pt-4">
             <SectionHeader className="mb-3">
-              <Tooltip>
-                {/* A button does not inherit text-transform, so the header's own `uppercase`
-                    stops at the trigger — restated here to match the labels either side. */}
-                <TooltipTriggerLabel className="uppercase">Potential yield</TooltipTriggerLabel>
-                <TooltipContent className="w-64 text-xs">
-                  What this system could produce if every body here were fully developed — not
-                  what it produces today.
-                </TooltipContent>
-              </Tooltip>
+              {/* `TermLabel`'s trigger inherits the header's `uppercase` via
+                  `triggerLabelStyles`' `[text-transform:inherit]` — no restatement needed here,
+                  unlike a plain button without that base. */}
+              <TermLabel id="potentialYield">Potential yield</TermLabel>
             </SectionHeader>
             <PotentialYieldTable rows={potentialYields} />
           </div>

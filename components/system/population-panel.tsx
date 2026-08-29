@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StabilityBadge } from "@/components/ui/stability-badge";
 import { ContributorBars } from "@/components/ui/contributor-bars";
 import { TrackMarker } from "@/components/ui/track-marker";
-import { Tooltip, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
+import { PopoverTriggerLabel } from "@/components/ui/popover-trigger-label";
 import { PopulationSummary } from "@/components/system/population-summary";
 import { ProvisionBlock } from "@/components/system/provision-block";
 import { HabitabilityTooltipContent } from "@/components/system/habitability-tooltip-content";
@@ -29,14 +29,13 @@ import type { FillOrderRow } from "@/lib/utils/substrate";
  */
 function GrowthLine({ growthMultiplier, fillOrder }: { growthMultiplier: number; fillOrder: FillOrderRow[] }) {
   return (
-    <Tooltip>
-      <TooltipTriggerLabel className="text-xs">
-        Habitability: <span className="font-mono text-text-secondary">{Math.round(growthMultiplier * 100)}%</span>
-      </TooltipTriggerLabel>
-      <TooltipContent className="w-64">
-        <HabitabilityTooltipContent growthMultiplier={growthMultiplier} fillOrder={fillOrder} />
-      </TooltipContent>
-    </Tooltip>
+    <PopoverTriggerLabel
+      className="text-xs"
+      contentClassName="w-64"
+      content={<HabitabilityTooltipContent growthMultiplier={growthMultiplier} fillOrder={fillOrder} />}
+    >
+      Habitability: <span className="font-mono text-text-secondary">{Math.round(growthMultiplier * 100)}%</span>
+    </PopoverTriggerLabel>
   );
 }
 
