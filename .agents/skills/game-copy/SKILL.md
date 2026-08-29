@@ -66,6 +66,17 @@ percentages of normal and plain quantities, never raw multipliers on an unstated
 internal scores or thresholds. Bands may be named ("rich", "poor"); the cutoffs behind them
 are not shown.
 
+**Percentage or multiplier:** a quantity genuinely bounded 0–1 reads as a percentage; a
+multiplier that can exceed 1 keeps its own words or its `×`, because a percentage would imply
+a ceiling it does not have. (A multiplier shown with `×` still names its base in the label —
+"yield ×1.4" is honest only where the surface says what is being multiplied.)
+
+**An allowance never goes inside a displayed number.** Where a mechanic works against a
+tolerance (a vacancy allowance, a selling allowance), the figure shown is the true quantity;
+the tolerance surfaces through the state it already drives (a health colour, a band), never by
+inflating the number. Rationale and the case it comes from: the glossary doc's own rule of the
+same name.
+
 ## Judging a surface
 
 1. Name the register before writing a word. Component describing a mechanic → stat. Hover on
