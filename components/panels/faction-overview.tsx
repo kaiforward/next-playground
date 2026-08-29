@@ -12,6 +12,7 @@ import { formatPeople, formatUnitsShort, splitCompactNumber } from "@/lib/utils/
 import { foundingWorkingBalance } from "@/lib/engine/treasury";
 import { GRADE } from "@/lib/constants/ui";
 import { useLinkComponent } from "@/components/ui/link-provider";
+import { TermLabel } from "@/components/ui/term-label";
 
 /** Moved from `app/(game)/@panel/factions/[factionId]/page.tsx`. The panel root
  *  (`faction-panel.tsx`) already proved `factionId` names a live faction; the `!result.found` guard
@@ -44,14 +45,14 @@ export function FactionOverview({ factionId }: { factionId: string }) {
           hint={`${vitals.activeSystemCount} developed`}
         />
         <VitalTile
-          label="Population"
+          label={<TermLabel id="population">Population</TermLabel>}
           dotColor={GRADE.unskilled.color}
           value={pop.value}
           unit={pop.unit}
           hint={`across ${vitals.activeSystemCount} system${vitals.activeSystemCount === 1 ? "" : "s"}`}
         />
         <VitalTile
-          label="Stability"
+          label={<TermLabel id="stability">Stability</TermLabel>}
           dotColor="var(--color-status-cyan)"
           value={String(Math.round(vitals.stabilityPct))}
           unit="%"
@@ -59,7 +60,7 @@ export function FactionOverview({ factionId }: { factionId: string }) {
           hint="pop-weighted"
         />
         <VitalTile
-          label="Development"
+          label={<TermLabel id="developmentPoints">Development</TermLabel>}
           dotColor="var(--color-accent)"
           value={formatUnitsShort(vitals.developmentPoints)}
           meter={{ pct: vitals.developmentPct, color: "var(--color-accent)" }}

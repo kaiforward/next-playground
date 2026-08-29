@@ -763,15 +763,15 @@ function LegendTooltip() {
         <div>
           <p className="mb-1 font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary">Health — mirrors what decays</p>
           <ul className="space-y-0.5 text-xs text-text-secondary">
-            <li><HealthGlyph health="stable" className="mr-1 text-xs" decorative /> stable — understaffed by under a whole unit; nothing sheds</li>
-            <li><HealthGlyph health="idle" className="mr-1 text-xs" decorative /> idle — a whole level idle for want of a recipe input; nothing sheds until the input arrives</li>
-            <li><HealthGlyph health="contracting" className="mr-1 text-xs" decorative /> contracting — a whole level sits idle for a reason decay can act on; the marginal level sheds after a buffer</li>
-            <li><HealthGlyph health="collapsing" className="mr-1 text-xs" decorative /> collapsing — unrest teardown; levels tear down immediately</li>
+            <li><HealthGlyph health="stable" className="mr-1 text-xs" decorative /> stable — holding; nothing sheds</li>
+            <li><HealthGlyph health="idle" className="mr-1 text-xs" decorative /> idle — waiting on a recipe input; decay can&apos;t see it, so nothing sheds until the input arrives</li>
+            <li><HealthGlyph health="contracting" className="mr-1 text-xs" decorative /> contracting — decay is about to shed a level</li>
+            <li><HealthGlyph health="collapsing" className="mr-1 text-xs" decorative /> collapsing — unrest is tearing levels down</li>
           </ul>
         </div>
         <div>
           <p className="mb-1 font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary">Columns</p>
-          <p className="text-xs text-text-secondary"><span className="font-mono">staffed/built</span> is staffed labour on the built extractor levels — a row can read fully staffed and still show a state chip below it (understaffed, pop-short, or glut-idling — extractors have no recipe inputs, so never input-short) when it isn&apos;t selling everything it makes; <span className="font-mono">slots</span> is built levels against the resource&apos;s max; <span className="font-mono">out/cyc</span> is real output after input gates. A resource shared by more than one extractor type shows its state chip on each type&apos;s own sub-row rather than the shared parent row. The general-land table&apos;s Staffed column means occupancy for housing and licence/family draw for academies and complexes — captioned inline where it isn&apos;t staffing.</p>
+          <p className="text-xs text-text-secondary"><span className="font-mono">staffed/built</span> is staffing on the built levels — a row can read fully staffed and still carry a state chip below it (understaffed, pop-short, or can&apos;t sell what it makes; extractors take no recipe input, so never input-short); <span className="font-mono">slots</span> is built levels against the resource&apos;s slot count; <span className="font-mono">out/cyc</span> is output after input gates. A resource worked by more than one extractor type carries its state chip on each type&apos;s own row, not the shared row above. On the general-land table, Staffed reads occupancy for housing and licence or family draw for academies and complexes — captioned where it isn&apos;t staffing.</p>
         </div>
         <div>
           <p className="mb-1 font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary">Labour grades</p>

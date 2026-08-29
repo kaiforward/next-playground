@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, type ReactNode } from "react";
 
 export interface Column<T> {
   /** Unique column identifier — used for React keys and sort tracking. */
   key: string;
-  label: string;
+  label: ReactNode;
   sortable?: boolean;
   /** How to render the cell. */
   render: (row: T) => React.ReactNode;

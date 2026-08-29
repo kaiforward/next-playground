@@ -107,6 +107,22 @@ describe("VitalTile — the three concrete Overview tiles render their real outp
     expect(container.querySelector(".border-dashed")).not.toBeNull();
   });
 
+  it("a ReactNode label (a term trigger wrapping plain text) still reads as plain text in the meter's accessible name", () => {
+    render(
+      <VitalTile
+        label={<button type="button">Stability</button>}
+        dotColor="#06b6d4"
+        value="82"
+        unit="%"
+        meter={{ pct: 82, color: "#06b6d4" }}
+      />,
+    );
+    // The visible label renders whatever was passed (here a real button)…
+    expect(screen.getByRole("button", { name: "Stability" })).toBeInTheDocument();
+    // …but the meter's own accessible name flattens it to plain text rather than stringifying the element.
+    expect(screen.getByRole("progressbar", { name: "Stability: 82%" })).toBeInTheDocument();
+  });
+
   it("omitting markerPct draws no second tick — the four existing callers are unaffected", () => {
     const { container } = render(
       <VitalTile

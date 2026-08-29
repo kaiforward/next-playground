@@ -1,5 +1,19 @@
-import type { ReactNode } from "react";
+import { isValidElement, type ReactNode } from "react";
 import { TrackMarker } from "@/components/ui/track-marker";
+
+/**
+ * Flattens a `VitalTile` label to plain text for the meter's `aria-label` — the visible label can
+ * now carry a `TermLabel` trigger (a button around plain text), but the accessible name built from
+ * it still needs to read as a word, not `[object Object]`. Walks strings/numbers and an element's
+ * own `children` only (never its other props), which is exactly the shape every label passed here
+ * takes: plain text, or one interactive wrapper around plain text.
+ */
+function labelText(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(labelText).join("");
+  if (isValidElement<{ children?: ReactNode }>(node)) return labelText(node.props.children);
+  return "";
+}
 
 /** The tile's 5px fill meter — omit on tiles that use `children` for their body instead (e.g. Population). */
 export interface VitalMeter {
@@ -15,8 +29,8 @@ export interface VitalMeter {
 }
 
 export interface VitalTileProps {
-  /** Uppercase display label (e.g. "Stability"). */
-  label: string;
+  /** Uppercase display label (e.g. "Stability") — may wrap a `TermLabel` trigger around the text. */
+  label: ReactNode;
   /** Status-dot color — a CSS color value (hex or a `var(--color-*)` theme token). */
   dotColor: string;
   /** Pre-formatted large mono value (e.g. "82", "2.42"). */
@@ -62,7 +76,7 @@ export function VitalTile({ label, dotColor, value, unit, meter, hint, children,
           aria-valuenow={Math.round(meter.pct)}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={`${label}: ${value}${unit ?? ""}`}
+          aria-label={`${labelText(label)}: ${value}${unit ?? ""}`}
           className="relative mt-[9px] h-[5px] overflow-hidden bg-surface-active"
         >
           <span className="block h-full" style={{ width: `${meter.pct}%`, background: meter.color }} />

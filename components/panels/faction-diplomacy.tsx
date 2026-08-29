@@ -31,7 +31,7 @@ export function FactionDiplomacy({ factionId }: { factionId: string }) {
     <>
       <Card variant="bordered" padding="md" className="mb-6">
         <CardHeader
-          title="Active Alliances"
+          title={<>Active <TermLabel id="alliance">Alliances</TermLabel></>}
           subtitle={
             faction.alliances.length === 0
               ? "No formal pacts."

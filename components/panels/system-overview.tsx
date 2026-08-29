@@ -83,14 +83,14 @@ export function SystemOverview({ systemId }: { systemId: string }) {
         return (
           <VitalGrid columns={4}>
             <VitalTile
-              label="Stability"
+              label={<TermLabel id="stability">Stability</TermLabel>}
               dotColor="var(--color-status-cyan)"
               value={String(Math.round(stability.pct))}
               unit="%"
               meter={{ pct: stability.pct, color: "var(--color-status-cyan)" }}
             />
             <VitalTile
-              label="Development"
+              label={<TermLabel id="developmentPoints">Development</TermLabel>}
               dotColor="var(--color-accent)"
               value={String(Math.round(development.pct))}
               unit="%"
@@ -98,7 +98,7 @@ export function SystemOverview({ systemId }: { systemId: string }) {
               hint={`${Math.round(development.points)} pts${development.pct < 100 ? " · room to grow" : ""}`}
             />
             <VitalTile
-              label="Population"
+              label={<TermLabel id="population">Population</TermLabel>}
               dotColor={GRADE.unskilled.color}
               value={pop.value}
               unit={pop.unit}

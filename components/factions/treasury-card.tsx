@@ -55,7 +55,7 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
 
   return (
     <Card variant="bordered" padding="md" className="mb-6">
-      <CardHeader title="Treasury" />
+      <CardHeader title={<TermLabel id="treasury">Treasury</TermLabel>} />
       <CardContent>
         {/* The headline is what the player can actually spend: balance minus what founding has
             already called for. The stored balance only falls at settlement (the single balance
