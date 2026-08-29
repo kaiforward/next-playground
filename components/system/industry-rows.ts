@@ -27,7 +27,7 @@ const SEVERITY: Record<IndustryHealth, number> = { stable: 0, idle: 1, contracti
  * (`industry.ts:745-749`), so it can read past `count` on an overcrowded system. Nor does it read
  * `used` any more — `used` (`capacityUsed`, `industry.ts:406-415`) folds a vacancy allowance
  * (`VACANCY_SLACK`) into the display figure, which is exactly the case "An allowance never goes
- * inside a displayed number" (`docs/planned/glossary.md`) forbids: a system at 91% real occupancy
+ * inside a displayed number" (`docs/active/glossary.md`) forbids: a system at 91% real occupancy
  * read `379 / 379`. Given a `population`, housing instead reads the true figure,
  * `min(count, housingUsed(population))` — the allowance stays inside decay, invisible on screen. The
  * row's health colouring is unaffected: `buildingHealth` is called elsewhere with `used` directly,

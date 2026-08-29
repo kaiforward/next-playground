@@ -7,7 +7,7 @@
  * `TermId`, which is what lets `components/ui/term-label.tsx` open a chain — this file only ever
  * describes the chain, it never walks it.
  *
- * Copy is quoted verbatim from `docs/planned/glossary.md` — this carries the whole written
+ * Copy is quoted verbatim from `docs/active/glossary.md` — this carries the whole written
  * glossary, one entry per bolded term in that doc's "## Definitions" section, grouped in the
  * doc's own order.
  */
