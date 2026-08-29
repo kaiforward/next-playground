@@ -1344,7 +1344,24 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
             // exactly its existing `scheduleClose` behaviour, untouched. A pinned popover runs
             // neither: it survives until dismissed.
             if (popover.dwell) {
-              if (!popover.pinned && dwellState === "locked") popover.markStackLeft();
+              if (!popover.pinned && dwellState === "locked") {
+                popover.markStackLeft();
+                // Schedules THIS popover's own close, and it is the pointer leaving — not some
+                // ancestor being entered — that has to drive it, because the enter can never
+                // arrive. A nested popover's content renders inside its parent's content, so
+                // moving from a child back onto its parent never leaves the parent's subtree and
+                // fires no `pointerenter` on it; only the child's own `pointerleave` is dispatched.
+                // Hanging the return close off the ancestor's enter left a chain that could only
+                // be walked forwards. Re-entering this content before the grace elapses reschedules
+                // from the enter handler above, and leaving the stack entirely is still the leave
+                // grace's job, which closes every depth rather than one.
+                // Depth 0 is excluded deliberately: `closeFromDepth(-1)` is the close-everything
+                // sentinel, so scheduling it here would turn "left the outermost popover" into
+                // "close the whole stack" via the return grace. Leaving the outermost popover is
+                // the LEAVE grace's job — it is the one that knows whether the pointer reached
+                // anything else in the stack or genuinely left it.
+                if (popover.depth > 0) scheduleReturnClose(popover.depth - 1);
+              }
             } else {
               popover.scheduleClose();
             }
