@@ -18,6 +18,7 @@ import { EVENT_TYPE_BADGE_COLOR } from "@/lib/constants/ui";
 import type { FactionRelatedEvent } from "@/lib/services/factions";
 import { formatDate, formatDuration } from "@/lib/utils/calendar";
 import { useLinkComponent } from "@/components/ui/link-provider";
+import { TermLabel } from "@/components/ui/term-label";
 
 /** Moved from `app/(game)/@panel/factions/[factionId]/diplomacy/page.tsx`. */
 export function FactionDiplomacy({ factionId }: { factionId: string }) {
@@ -30,7 +31,7 @@ export function FactionDiplomacy({ factionId }: { factionId: string }) {
     <>
       <Card variant="bordered" padding="md" className="mb-6">
         <CardHeader
-          title="Active Alliances"
+          title={<>Active <TermLabel id="alliance">Alliances</TermLabel></>}
           subtitle={
             faction.alliances.length === 0
               ? "No formal pacts."
@@ -81,7 +82,12 @@ export function FactionDiplomacy({ factionId }: { factionId: string }) {
       <Card variant="bordered" padding="md" className="mb-6">
         <CardHeader
           title="Diplomatic Stance"
-          subtitle="Score with every other faction. Positive = friendly, negative = hostile."
+          subtitle={
+            <>
+              <TermLabel id="relationScore">Score</TermLabel> with every other faction. Positive =
+              friendly, negative = hostile.
+            </>
+          }
         />
         <CardContent>
           {faction.relations.length === 0 ? (
@@ -159,7 +165,7 @@ function GalaxyRelationsCard() {
           <>
             <div className="mb-4 flex flex-wrap items-center gap-2">
               <span className="text-xs text-text-tertiary font-display uppercase tracking-wider">
-                Legend
+                <TermLabel id="relationTiers">Legend</TermLabel>
               </span>
               {RELATION_TIERS.map((t) => (
                 <Badge key={t.tier} color={getRelationTierColor(t.tier)}>

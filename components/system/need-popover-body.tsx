@@ -1,5 +1,6 @@
 import type { PopNeedData } from "@/lib/types/api";
 import { needSeverity, SEVERITY_GLYPH, SEVERITY_TEXT } from "@/components/system/needs-view";
+import { UnmetNeedConsequences } from "@/components/system/unmet-need-consequences";
 
 // Tier swatch colours match the dataviz-validated categorical set (base copper /
 // technician deep-cyan / engineer purple) used elsewhere for consumer tiers.
@@ -37,7 +38,7 @@ export function NeedPopoverBody({
   return (
     <div className="space-y-1">
       <p className="whitespace-nowrap font-mono text-text-secondary">
-        want {need.want.toFixed(2)}/cyc · delivered {need.delivered.toFixed(2)}/cyc · gap {gap.toFixed(2)}/cyc · pressure {need.pressure.toFixed(2)}
+        want {need.want.toFixed(2)}/cyc · delivered {need.delivered.toFixed(2)}/cyc · gap {gap.toFixed(2)}/cyc
       </p>
       <div className="space-y-0.5 overflow-x-auto border-t border-border/60 pt-1">
         {TIER_META.map((tier) => (
@@ -49,7 +50,7 @@ export function NeedPopoverBody({
           </div>
         ))}
       </div>
-      <p className="border-t border-border/60 pt-1 text-text-secondary">Doing worse than this population is used to breeds unrest — famine and critical shortages always do.</p>
+      <UnmetNeedConsequences />
     </div>
   );
 }

@@ -8,7 +8,7 @@
  */
 import type { ResourceType, QualityBandId } from "@/lib/types/game";
 import { BUILDING_TYPES } from "@/lib/constants/industry";
-import { buildingHealth } from "@/lib/engine/industry";
+import { buildingHealth, housingUsed } from "@/lib/engine/industry";
 import type { SystemDepositSummary, SystemIndustryReadout, IndustryHealth, IdleReason } from "@/lib/engine/industry";
 import { buildProblems, type ProblemItem } from "@/components/system/needs-view";
 
@@ -24,14 +24,27 @@ const SEVERITY: Record<IndustryHealth, number> = { stable: 0, idle: 1, contracti
  * Housing (`tier === -1`, the readout's own housing sentinel — see `industry.ts:569-570`, also used
  * this way at `industry-panel.tsx`'s buildingGroups filter) is the one row type that must NOT read
  * `staffedFraction × count`: housing's `staffedFraction` is deliberately uncapped bare occupancy
- * (`industry.ts:745-749`), so it can read past `count` on an overcrowded system, while `used` is the
- * vacancy-protected figure (`capacityUsed`, `industry.ts:406-415`) that belongs on screen. Every
- * other row type keeps `staffedFraction × count`: for academies/complexes/support `staffedFraction`
- * is already defined as `used / count`, so this is a no-op there; for producers/extractors it is
- * pure staffed labour, not gated by selling — the intended change.
+ * (`industry.ts:745-749`), so it can read past `count` on an overcrowded system. Nor does it read
+ * `used` any more — `used` (`capacityUsed`, `industry.ts:406-415`) folds a vacancy allowance
+ * (`VACANCY_SLACK`) into the display figure, which is exactly the case "An allowance never goes
+ * inside a displayed number" (`docs/active/glossary.md`) forbids: a system at 91% real occupancy
+ * read `379 / 379`. Given a `population`, housing instead reads the true figure,
+ * `min(count, housingUsed(population))` — the allowance stays inside decay, invisible on screen. The
+ * row's health colouring is unaffected: `buildingHealth` is called elsewhere with `used` directly,
+ * never through this function. Without a `population` (a caller with no occupancy figure to hand,
+ * e.g. a bare fixture) housing falls back to `used`. Every other row type keeps
+ * `staffedFraction × count` regardless of `population`: for academies/complexes/support
+ * `staffedFraction` is already defined as `used / count`, so this is a no-op there; for
+ * producers/extractors it is pure staffed labour, not gated by selling — the intended change.
  */
-export function staffedLevels(b: Pick<SystemIndustryReadout["buildings"][number], "tier" | "used" | "staffedFraction" | "count">): number {
-  return b.tier === -1 ? b.used : b.staffedFraction * b.count;
+export function staffedLevels(
+  b: Pick<SystemIndustryReadout["buildings"][number], "tier" | "used" | "staffedFraction" | "count">,
+  population?: number,
+): number {
+  if (b.tier === -1) {
+    return population === undefined ? b.used : Math.min(b.count, housingUsed(population));
+  }
+  return b.staffedFraction * b.count;
 }
 
 /**

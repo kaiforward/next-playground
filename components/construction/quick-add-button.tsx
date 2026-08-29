@@ -8,7 +8,7 @@ import type { BuildOptionData } from "@/lib/types/api";
 
 const BLOCK_COPY = {
   no_space: "No space left for this building here.",
-  no_deposit_slots: "No free deposit slots here.",
+  no_deposit_slots: "No free resource slots here.",
 } as const;
 
 /**
@@ -40,7 +40,7 @@ export function QuickAddButton({ systemId, option }: { systemId: string; option:
           <p className="text-xs text-text-secondary">{BLOCK_COPY[option.blocked]}</p>
         ) : (
           <p className="font-mono text-xs text-text-secondary">
-            +1 level · {option.workPerLevel} work · {formatEta(option.etaCycles)}
+            +1 level · {formatEta(option.etaCycles)}
           </p>
         )}
       </TooltipContent>

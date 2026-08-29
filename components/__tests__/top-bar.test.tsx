@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { PlayerFactionSummary } from "@/components/top-bar";
+import { PlayerFactionSummary, TickReadout } from "@/components/top-bar";
 import type { FactionTreasuryData, FactionVitalsData } from "@/lib/types/api";
 import type { AtlasData } from "@/lib/types/game";
 
@@ -20,6 +20,15 @@ vi.mock("@/lib/hooks/use-faction-treasury", () => ({
 }));
 vi.mock("@/lib/hooks/use-faction-vitals", () => ({
   useFactionVitals: () => vitalsValue.current,
+}));
+vi.mock("@/lib/hooks/use-tick-context", () => ({
+  useTickContext: () => ({
+    currentTick: 0,
+    achievedTps: 4,
+    speed: "1x",
+    isConnected: true,
+    subscribeToEvent: () => () => {},
+  }),
 }));
 
 const BASE_ATLAS: AtlasData = {
@@ -68,12 +77,12 @@ describe("PlayerFactionSummary — the flag opens the faction panel, the stats q
     renderSummary({ treasury: { balance: 1000, foundingCommitted: 400, net: 310 } });
     expect(screen.getByText("600")).toBeInTheDocument();
     expect(screen.queryByText("1000")).not.toBeInTheDocument();
-    expect(screen.getByText("+310/cy")).toBeInTheDocument();
+    expect(screen.getByText("+310/cyc")).toBeInTheDocument();
   });
 
   it("signs a negative net with a true minus", () => {
     renderSummary({ treasury: { net: -42 } });
-    expect(screen.getByText("−42/cy")).toBeInTheDocument();
+    expect(screen.getByText("−42/cyc")).toBeInTheDocument();
   });
 
   it("shows the owned-system count", () => {
@@ -85,5 +94,21 @@ describe("PlayerFactionSummary — the flag opens the faction panel, the stats q
   it("renders nothing at all when the world has no player seat", () => {
     const { container } = renderSummary({ player: null });
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("TickReadout — the clock carries a UST stamp as a term trigger", () => {
+  it("renders the date and clock followed by a UST trigger, decoration over the same tick", () => {
+    const { container } = render(<TickReadout />);
+    expect(screen.getByRole("button", { name: "UST" })).toBeInTheDocument();
+    expect(container).toHaveTextContent("2350.01.01 00:00 UST");
+  });
+
+  it("scopes the raw-tick title to the date/time text alone, so it doesn't shadow the UST trigger's own popover", () => {
+    render(<TickReadout />);
+    const dated = screen.getByTitle("tick 0");
+    expect(dated).toHaveTextContent("2350.01.01 00:00");
+    expect(dated).not.toHaveTextContent("UST");
+    expect(screen.getByRole("button", { name: "UST" })).not.toHaveAttribute("title");
   });
 });

@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { VolumeSparkline } from "@/components/system/volume-sparkline";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { TermLabel } from "@/components/ui/term-label";
 import { TIER_COLOR, TIER_LABEL, pixiHexToCss } from "@/lib/constants/good-colors";
 import type { GoodTier } from "@/lib/types/game";
 import type { LogisticsGoodRow, TradeFlowPartner } from "@/lib/types/api";
@@ -300,7 +301,7 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
                           style={{ backgroundColor: pixiHexToCss(TIER_COLOR[tier]) }}
                         />
                         <span className="font-mono text-xs uppercase tracking-widest text-text-secondary">
-                          {TIER_LABEL[tier]}
+                          <TermLabel id="tier">{TIER_LABEL[tier]}</TermLabel>
                         </span>
                         <span className="h-px flex-1 bg-border" />
                       </div>

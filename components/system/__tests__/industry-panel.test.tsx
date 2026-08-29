@@ -100,11 +100,11 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
     expect(container.textContent).toContain(`${formatMagnitude(200)} free`);
   });
 
-  it("renders a Deposit land bar reading worked/authored COUNTS, never land units — the people-land figures (100/300/200) never appear there", () => {
+  it("renders a Resource land bar reading worked/authored COUNTS, never land units — the people-land figures (100/300/200) never appear there", () => {
     industryValue.current = READOUT;
     const { container } = renderPanel();
 
-    expect(screen.getByText("Deposit land")).toBeInTheDocument();
+    expect(screen.getByText("Resource land")).toBeInTheDocument();
     // 3 worked / 10 authored, 7 free — deliberately disjoint from the people-land numbers (100/300/200)
     // above, so a bar wired to the wrong budget would fail this assertion.
     expect(screen.getByRole("img", { name: "Composition: Worked 30%, Free 70%" })).toBeInTheDocument();
@@ -152,7 +152,7 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
     expect(container.textContent).toContain("Next slot: 120% on Temperate World");
   });
 
-  it("YieldPopoverBody reads 'All deposit slots worked' instead of a next-slot line once nothing is left to build on", () => {
+  it("YieldPopoverBody reads 'All resource slots worked' instead of a next-slot line once nothing is left to build on", () => {
     const [row] = depositRows(
       [{ resource: "arable", depositCounts: 3, worked: 3, yieldMult: 1.4, marginal: null, workedByBody: [{ bodyType: "gaia_world", worked: 3, groundValue: 1.4 }], band: "good" }],
       [],
@@ -162,7 +162,7 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
     const { container } = render(<YieldPopoverBody row={row} />);
 
     expect(container.textContent).toContain("Combined yield: 140%");
-    expect(container.textContent).toContain("All deposit slots worked");
+    expect(container.textContent).toContain("All resource slots worked");
     expect(container.textContent).not.toContain("Next slot:");
   });
 
@@ -194,6 +194,16 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
     expect(container.textContent).toContain("Average");
     expect(container.textContent).toContain(`${row.built}/${row.depositCounts} slots built`);
     expect(container.textContent).toContain(`${row.staffed.toFixed(1)} staffed`);
+  });
+
+  it("housing's Staffed cell reads honest occupancy — min(count, housingUsed(population)), never the padded vacancy-allowance figure the fixture's own `used` (16) would render", () => {
+    // population 50 / POP_CENTRE_DENSITY 20 = 2.5 housingUsed, under count 20, so the honest figure
+    // is 2.5/20 — distinct from the fixture's padded `used: 16` (would render 16.0/20 uncapped).
+    industryValue.current = READOUT;
+    const { container } = renderPanel();
+
+    expect(container.textContent).toContain("2.5/20");
+    expect(container.textContent).not.toContain("16.0/20");
   });
 
   it("never renders the retired industry-land vocabulary — no 'Industry land', 'General land', 'habitableFree' or 'factoryFree' anywhere in the DOM", () => {

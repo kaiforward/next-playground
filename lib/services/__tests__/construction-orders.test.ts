@@ -145,7 +145,7 @@ describe("construction order services", () => {
     expect(r.ok).toBe(false);
   });
 
-  it("rejects a build with no free deposit slots, with the exact reason string", () => {
+  it("rejects a build with no free resource slots, with the exact reason string", () => {
     // Force the ore deposit exhausted regardless of what world-gen rolled here (mirrors the
     // manufactured-eligibility idiom the colony test below uses): zero the homeworld's ore slots,
     // then ask for one more ore extractor level.
@@ -154,7 +154,7 @@ describe("construction order services", () => {
     const r = orderBuild({ systemId: h.id, buildingType: "ore", levels: 1 });
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.error).toBe("No free deposit slots for that building here.");
+    expect(r.error).toBe("No free resource slots for that building here.");
   });
 
   it("every write verb rejects when no world is loaded", () => {

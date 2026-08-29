@@ -13,55 +13,6 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 ## Queued
 
-The attention layer — how the player finds what to do — is two surfaces, both shipped:
-[the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
-
-1. **[L] The tooltip system — nesting and pinning shipped; a language pass and the fuller glossary
-  remain.** Three strands sharing one refactor because it opens every tooltip surface once:
-  nesting and pinning are done, so the other two now ride an opened surface rather than a plan.
-
-  - **The system — shipped.** `Popover` (`components/ui/popover.tsx`) carries a `dwell` mode: a
-    definition opens at the cursor, fills a hairline bar, then locks and can be entered; a term
-    inside it opens its own definition the same way, nested to whatever depth the player follows,
-    with an ancestor-aware stack (replacing the old single-open pointer), a fading depth cue, and a
-    chain that can be pinned to survive while another opens beside it. Keyboard access, a term
-    trigger (`TermLabel`) and a row-triggered content popover (`PopoverTriggerLabel`) are built on
-    it. Converted to the popover system: the industry panel, system astrography, the population
-    panel, the potential-yield table, and the provision and logistics row bodies — though only the
-    ground/industry surfaces carry deep term chains; the population panel, logistics panel and
-    provision block chains are flat, and the habitability body names exactly one term. Control help
-    (checkboxes, radio groups, the map legend, the industry legend, quick-add) deliberately stays a
-    plain `Tooltip` — that surface is a control's accessible description, not a thing in the game.
-
-  - **The language.** Apply `/game-copy` to every tooltip and label surface — three registers, game
-    vocabulary only. The skill shipped with habitability seeding and that branch's surfaces conform;
-    the rest of the UI has not been swept. **The number conventions are settled, in `/game-copy`
-    itself** — when a quantity reads as a percentage, when as a multiplier, when as a signed
-    modifier. The rule the Astrography tab arrived at: a quantity genuinely bounded 0–1 reads as a
-    percentage; a multiplier that can exceed 1 keeps its own words or its `×`, because a percentage
-    would imply a ceiling it does not have.
-
-    **The allowance rule, settled:** an allowance never goes inside a displayed number. The
-    Industry ledger's in-use column is `buildingUsed` (`lib/engine/industry.ts`) — the decay
-    engine's keep-or-shed verdict, folding a 10% vacancy allowance for housing (`VACANCY_SLACK`)
-    and a 15% selling allowance for production rows (`USED_SLACK`) — so every row saturates before
-    the thing is full, and housing reads "379 / 379" at 91% real occupancy. The column shows the
-    true figure instead; decay's verdict already has a channel in the row's health colouring
-    (stable / idle / contracting / collapsing), and the allowance stays inside decay, invisible.
-    Rationale and the rest of the vocabulary rules: [glossary](./planned/glossary.md).
-
-  - **The glossary.** [`docs/planned/glossary.md`](./planned/glossary.md) — the single source
-    tooltips and tutorials quote from, and it is **written**: eight groups of definitions, the
-    vocabulary rules that produced them, the collapses, and the engine-only word list. The whole
-    written glossary is now wired as data (`lib/glossary/terms.ts`, 88 entries), its concatenation
-    checked against the doc by test. Three implementation items are still booked in its own
-    "Still open" section and still ride the language pass, since that sweep opens those surfaces
-    anyway: the `UST` date stamp, honest housing occupancy in the Industry ledger, and retiring
-    "deposit" from that panel's copy for **resource** / **resource slot**.
-
-  *Next step:* the `/game-copy` language pass, surface by surface, hanging triggers on terms that
-  now all exist.
-
 ---
 
 ## Unqueued
@@ -78,6 +29,12 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   its own tier — since that decides most of the diff.
   *Don't:* sweep every `text-[Npx]` out on sight. Some are load-bearing at their size; the rule
   wants a stated reason at the point of use, not removal.
+
+- **[S] Register-convert the remaining raw-number surfaces the language pass didn't reach.**
+  The trade/market tables, the relations-matrix and faction-diplomacy raw relation scores/bounds,
+  and the raw development-points readouts (system-overview "pts", faction-overview headline) all
+  still show unconverted numbers.
+  *Next step:* apply `/game-copy` to those files.
 
 **Packaging**
 - **[M] Desktop shell packaging (Tauri vs Electron)** — booked out of the client-runtime migration

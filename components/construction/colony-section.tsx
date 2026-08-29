@@ -18,8 +18,7 @@ function ColonyPreviewLines({ preview }: { preview: ColonyPreviewData }) {
       <p className="mt-2.5 text-xs text-text-secondary">
         seeds <span className="font-mono text-text-primary">{formatMagnitude(preview.seedPop)}</span> pop
         from <span className="text-text-accent">{preview.sourceSystemName}</span> ·{" "}
-        <span className="font-mono text-text-primary">{preview.housingLevels}</span> housing bundled ·{" "}
-        <span className="font-mono text-text-primary">{formatMagnitude(preview.work)}</span> work
+        <span className="font-mono text-text-primary">{preview.housingLevels}</span> housing bundled
       </p>
       {/* "up to" on the materials: the projection is the uncapped want, an upper bound on what
           the founder will actually be asked to spare. */}
@@ -73,7 +72,7 @@ export function ColonySection({ systemId }: { systemId: string }) {
         ) : colony?.state === "eligible" ? (
           <>
             <p className="mb-3 text-sm text-text-tertiary">
-              Controlled, not yet colonised. Charted deposits await development.
+              Controlled, not yet colonised. Charted resources await development.
             </p>
             <Button
               variant="action"

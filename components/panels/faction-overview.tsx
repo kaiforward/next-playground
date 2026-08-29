@@ -12,6 +12,7 @@ import { formatPeople, formatUnitsShort, splitCompactNumber } from "@/lib/utils/
 import { foundingWorkingBalance } from "@/lib/engine/treasury";
 import { GRADE } from "@/lib/constants/ui";
 import { useLinkComponent } from "@/components/ui/link-provider";
+import { TermLabel } from "@/components/ui/term-label";
 
 /** Moved from `app/(game)/@panel/factions/[factionId]/page.tsx`. The panel root
  *  (`faction-panel.tsx`) already proved `factionId` names a live faction; the `!result.found` guard
@@ -35,7 +36,7 @@ export function FactionOverview({ factionId }: { factionId: string }) {
       {/* Aggregate vitals — the same grid as the system overview, rolled up over the faction's
           systems. Extensive stats (territory, population, development points) sum; stability is
           population-weighted so spreading into small systems doesn't dilute it. */}
-      <VitalGrid columns={4}>
+      <VitalGrid columns={3}>
         <VitalTile
           label="Territory"
           dotColor="var(--color-text-tertiary)"
@@ -44,14 +45,14 @@ export function FactionOverview({ factionId }: { factionId: string }) {
           hint={`${vitals.activeSystemCount} developed`}
         />
         <VitalTile
-          label="Population"
+          label={<TermLabel id="population">Population</TermLabel>}
           dotColor={GRADE.unskilled.color}
           value={pop.value}
           unit={pop.unit}
           hint={`across ${vitals.activeSystemCount} system${vitals.activeSystemCount === 1 ? "" : "s"}`}
         />
         <VitalTile
-          label="Stability"
+          label={<TermLabel id="stability">Stability</TermLabel>}
           dotColor="var(--color-status-cyan)"
           value={String(Math.round(vitals.stabilityPct))}
           unit="%"
@@ -59,7 +60,7 @@ export function FactionOverview({ factionId }: { factionId: string }) {
           hint="pop-weighted"
         />
         <VitalTile
-          label="Development"
+          label={<TermLabel id="developmentPoints">Development</TermLabel>}
           dotColor="var(--color-accent)"
           value={formatUnitsShort(vitals.developmentPoints)}
           meter={{ pct: vitals.developmentPct, color: "var(--color-accent)" }}
@@ -73,7 +74,7 @@ export function FactionOverview({ factionId }: { factionId: string }) {
           value={formatUnitsShort(foundingWorkingBalance(treasury.balance, treasury.foundingCommitted))}
           hint={`net ${treasury.net < 0 ? "−" : "+"}${formatUnitsShort(Math.abs(treasury.net))} / cycle`}
         />
-        <GhostVitalTile label="Future vitals" colSpan={3} future={<>control · tax base</>} />
+        <GhostVitalTile label="Future vitals" future={<>control · tax base</>} />
       </VitalGrid>
 
       {/* Government & doctrine — compacted: homeworld link + the flavour the card's badges don't carry. */}

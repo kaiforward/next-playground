@@ -43,7 +43,7 @@ export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData 
             sourceSystemId: priced.sourceSystemId,
             sourceSystemName:
               world.systems.find((s) => s.id === priced.sourceSystemId)?.name ?? priced.sourceSystemId,
-            seedPop: sizing.seedPop, housingLevels: sizing.housingLevels, work: sizing.work,
+            seedPop: sizing.seedPop, housingLevels: sizing.housingLevels,
             charter: priced.charter, projectedBill: priced.projectedBill,
             commitment: foundingCommitmentCost(
               priced.charter, priced.projectedBill, COLONISATION.FOUNDING_GATE_HEADROOM,

@@ -30,11 +30,11 @@ describe("a rejected command surfaces its error, never silently queued", () => {
       deliverCommandResult({
         type: "commandResult",
         id: posted[0].id,
-        result: { ok: false, error: "No free deposit slots for that building here." },
+        result: { ok: false, error: "No free resource slots for that building here." },
       });
     });
 
-    expect(capturedError).toBe("No free deposit slots for that building here.");
+    expect(capturedError).toBe("No free resource slots for that building here.");
     expect(result.current.isPending).toBe(false);
   });
 

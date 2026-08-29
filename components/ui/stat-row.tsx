@@ -13,7 +13,7 @@ export function StatList({ children, className }: StatListProps) {
 }
 
 interface StatRowProps {
-  label: string;
+  label: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }

@@ -12,6 +12,7 @@ import { buildingLabel } from "@/lib/engine/construction-readout";
 import { formatMagnitude, formatSignedMagnitude } from "@/lib/utils/format";
 import type { TaxLevel } from "@/lib/types/game";
 import { bandShortfall, foundingWorkingBalance, type TreasuryBands } from "@/lib/engine/treasury";
+import { TermLabel } from "@/components/ui/term-label";
 
 function money(n: number): string {
   return formatMagnitude(n);
@@ -54,7 +55,7 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
 
   return (
     <Card variant="bordered" padding="md" className="mb-6">
-      <CardHeader title="Treasury" />
+      <CardHeader title={<TermLabel id="treasury">Treasury</TermLabel>} />
       <CardContent>
         {/* The headline is what the player can actually spend: balance minus what founding has
             already called for. The stored balance only falls at settlement (the single balance
@@ -144,7 +145,9 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
         />
 
         <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
-          <span className="text-sm text-text-secondary">Tax level</span>
+          <span className="text-sm text-text-secondary">
+            <TermLabel id="taxLevel">Tax level</TermLabel>
+          </span>
           <TaxLevelStepper value={data.taxLevel} interactive={interactive} onChange={commitTaxLevel} />
         </div>
       </CardContent>

@@ -4,8 +4,7 @@ One definition per term, in plain language, written once and quoted everywhere. 
 and tutorials all draw from here; nothing defines a term a second time in its own words.
 
 This doc is the reference the player can open directly, and it is also the source the tooltip
-migration links to. It is written before the deep-tooltip system so that migration has something to
-point at.
+system quotes, wired as data in `lib/glossary/terms.ts`.
 
 ## What earns an entry
 
@@ -117,13 +116,10 @@ verdict as the row's health colouring (stable / idle / contracting / collapsing)
 is a second, worse copy of it. The column shows the true figure; the colour says whether decay is
 eroding the level. The allowance stays inside decay, invisible.
 
-Production rows now obey this: the Staffed column reads `staffedLevels`
-(`components/system/industry-rows.ts`), pure staffed labour with no selling allowance. **Housing
-does not yet.** For those rows `staffedLevels` returns `used`, which is
-`housingUsed(population) × (1 + VACANCY_SLACK)` capped at the level count, and the code defends it
-on the grounds that the obvious alternative (`staffedFraction × count`) can read past the count on
-an overcrowded system. That defends against overshoot rather than for the allowance, and it skips a
-third figure that is both true and bounded: `min(count, housingUsed(population))`.
+Both row kinds obey this now: the Staffed column reads `staffedLevels`
+(`components/system/industry-rows.ts`), pure staffed labour with no selling allowance for
+production rows, and for housing `min(count, housingUsed(population))` — the true, bounded figure,
+with no vacancy allowance folded in.
 
 ## Words that stay inside the engine
 
@@ -448,17 +444,3 @@ Anything behind the front is queued but not progressing.
 
 **Ghost row** — A building still under construction, shown in the industry ledger where it will sit
 once it is finished, with its progress and an estimated finish.
-
-## Still open
-
-- Showing housing occupancy honestly in the Industry ledger — `min(count, housingUsed(population))`
-  in place of the vacancy-padded `used` (`components/system/industry-rows.ts`), with `VACANCY_SLACK`
-  staying inside decay. Rides the tooltip migration, which opens that panel anyway.
-- Rendering dates with the `UST` stamp — decoration over the existing calendar
-  (`lib/constants/calendar.ts` is display-only), so it rides the language pass, and it is cheap to
-  drop again if it does not land.
-- Retiring "deposit" from the Industry panel's player-facing copy for **resource** / **resource
-  slot**, per *Deposit retires* above — the column header, the "Deposit land" bar and the table's
-  own labels all still read "Deposit" (`components/system/industry-panel.tsx`). Player-facing text
-  only; the `DepositRow`/`depositRows` code vocabulary is a separate question. Rides the language
-  pass, which opens that panel's copy anyway.

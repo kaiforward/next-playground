@@ -82,7 +82,6 @@ export function BuildDialog({
   const overCeiling = option !== undefined && option.maxLevels !== null && levels > option.maxLevels;
   const invalidLevels = !Number.isInteger(levels) || levels < 1;
   const staffingShort = option !== undefined && option.estStaffing < 1;
-  const totalWork = option !== undefined ? option.workPerLevel * Math.max(1, levels) : 0;
 
   const submit = handleSubmit((values) => {
     order.mutate(values, { onSuccess: () => { reset(); onClose(); } });
@@ -123,7 +122,7 @@ export function BuildDialog({
           {overCeiling && option && option.maxLevels !== null && (
             <InlineAlert variant="error" className="mt-3">
               {option.blocked === "no_deposit_slots"
-                ? "No free deposit slots for that building here."
+                ? "No free resource slots for that building here."
                 : `Not enough space — ${option.maxLevels} level(s) fit here.`}
             </InlineAlert>
           )}
@@ -151,7 +150,6 @@ export function BuildDialog({
                 value={`${Math.round(option.estStaffing * 100)}%`}
                 tone={staffingShort ? "warn" : "ok"}
               />
-              <ReadoutRow label="Work" value={String(totalWork)} />
               <ReadoutRow label="First level" value={formatEta(option.etaCycles)} />
             </>
           )}
