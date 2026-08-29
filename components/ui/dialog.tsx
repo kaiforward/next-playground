@@ -116,8 +116,11 @@ export function Dialog({
   useEffect(() => {
     if (modal || !open) return;
 
+    // `defaultPrevented` for the same reason `DetailPanel` checks it: a dismissable layer above
+    // this dialog (a popover opened from inside it) consumes Escape in the capture phase and marks
+    // the event, so one Escape must not also close the dialog underneath it.
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !e.defaultPrevented) onClose();
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);

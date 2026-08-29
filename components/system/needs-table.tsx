@@ -1,8 +1,11 @@
 /**
  * Shared Need / Met / Want / Delivered table markup — the Population tab's needs
- * ledger and the Industry pop-pressure chip tooltip render the same columns at
- * two densities. Callers own the `<tr>` wrappers (the ledger adds per-row
- * tooltips, focus and an expand tail; the chip body is static).
+ * ledger and the Industry pop-pressure chip popover render the same columns at
+ * two densities. Callers own the `<tr>` wrappers (the ledger adds a per-row
+ * popover, focus and an expand tail; the chip body is static).
+ *
+ * The `tooltip` density is named for its size, not its surface: it is the tighter
+ * of the two and is what the chip popover uses.
  */
 import type { ReactNode } from "react";
 import type { PopNeedData } from "@/lib/types/api";
@@ -12,16 +15,16 @@ export type NeedsTableDensity = "panel" | "tooltip";
 
 const DENSITY: Record<NeedsTableDensity, { th: string; name: string; glyph: string; value: string }> = {
   panel: {
-    th: "border-b border-border-strong px-1.5 py-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary",
+    th: "whitespace-nowrap border-b border-border-strong px-1.5 py-1 font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary",
     name: "px-1.5 py-1 text-xs text-text-primary",
-    glyph: "mr-1.5 font-mono text-[10px]",
-    value: "px-1.5 py-1 text-right font-mono text-[11px]",
+    glyph: "mr-1.5 font-mono text-xs",
+    value: "whitespace-nowrap px-1.5 py-1 text-right font-mono text-xs",
   },
   tooltip: {
-    th: "border-b border-border/60 px-1 py-0.5 font-display text-[9px] font-semibold uppercase tracking-wider text-text-tertiary",
-    name: "px-1 py-0.5 text-text-primary",
-    glyph: "mr-1 font-mono text-[9px]",
-    value: "px-1 py-0.5 text-right font-mono",
+    th: "whitespace-nowrap border-b border-border/60 px-1 py-0.5 font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary",
+    name: "whitespace-nowrap px-1 py-0.5 text-text-primary",
+    glyph: "mr-1 font-mono text-xs",
+    value: "whitespace-nowrap px-1 py-0.5 text-right font-mono",
   },
 };
 
@@ -48,15 +51,21 @@ export function NeedCells({ n, density }: { n: PopNeedData; density: NeedsTableD
 export function NeedsTable({ density, children }: { density: NeedsTableDensity; children: ReactNode }) {
   const d = DENSITY[density];
   return (
-    <table className="w-full border-collapse">
-      <thead>
-        <tr>
-          {HEADERS.map((h, i) => (
-            <th key={h} className={`${d.th} ${i > 0 ? "text-right" : "text-left"}`}>{h}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>{children}</tbody>
-    </table>
+    // `overflow-x-auto` is a backstop, not the expected case for the `tooltip` density: every cell
+    // there is `whitespace-nowrap`, so a popover sizing itself to `w-max` grows to fit this table
+    // rather than this table ever needing to scroll inside it. The `panel` density's name cell wraps
+    // instead — it sits in a fixed-width Card that cannot grow to fit a long good name.
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse">
+        <thead>
+          <tr>
+            {HEADERS.map((h, i) => (
+              <th key={h} className={`${d.th} ${i > 0 ? "text-right" : "text-left"}`}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{children}</tbody>
+      </table>
+    </div>
   );
 }

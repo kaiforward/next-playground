@@ -180,7 +180,7 @@ export function AlertFlyout({ category, onNavigate, runRef }: AlertFlyoutProps) 
           {def.label}
         </h3>
       </header>
-      <p className="shrink-0 border-b border-border px-2.5 py-1.5 text-[11px] text-text-tertiary">
+      <p className="shrink-0 border-b border-border px-2.5 py-1.5 text-xs text-text-tertiary">
         {def.conditionLine}
       </p>
       <ul className="min-h-0 flex-1 overflow-y-auto">
@@ -194,7 +194,7 @@ export function AlertFlyout({ category, onNavigate, runRef }: AlertFlyoutProps) 
         ))}
       </ul>
       {footerText != null && (
-        <footer className="shrink-0 border-t border-border px-2.5 py-1.5 text-[11px] text-text-tertiary">
+        <footer className="shrink-0 border-t border-border px-2.5 py-1.5 text-xs text-text-tertiary">
           {footerText}
         </footer>
       )}

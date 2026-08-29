@@ -206,9 +206,10 @@ export function AlertRunContent({
  * opening a flyout closes settings — never both floating over the map at once. This used to be code
  * in this file; it is now `Popover`'s own module-level registry, since the settings panel is a
  * `Popover` instance exactly like every chip's flyout (verified: the registry
- * (`components/ui/popover.tsx`'s `openPopover`/`claimOpen`) is a bare module-level variable, not
+ * (`components/ui/popover.tsx`'s `openStack`/`claimOpen`) is a bare module-level variable, not
  * scoped to any one `Popover` React tree, so it applies across every mounted instance regardless of
- * which component renders it).
+ * which component renders it — both are depth-0 popovers here, so the stack's depth-0 slot is
+ * exactly the single incumbent this comment already describes).
  */
 function AlertRunChips({
   availableWidth,

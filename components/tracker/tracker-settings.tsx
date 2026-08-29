@@ -37,7 +37,7 @@ export function TrackerSettings({ sections, onChangeSection }: TrackerSettingsPr
   return (
     <div className="pointer-events-auto flex h-full min-h-0 w-44 shrink-0 flex-col border border-border bg-surface/95 shadow-lg backdrop-blur">
       <div className="shrink-0 border-b border-border px-3 py-2">
-        <h2 className="font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-secondary">
+        <h2 className="font-display text-xs font-bold uppercase tracking-[0.18em] text-text-secondary">
           Tracker settings
         </h2>
       </div>

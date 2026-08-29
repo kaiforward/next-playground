@@ -69,10 +69,15 @@ export function DetailPanel({ title, subtitle, headerAction, subHeader, backPath
     navigate(backPath);
   }, [navigate, backPath]);
 
-  // Close on Escape — only when focus is not inside an input/textarea/select
+  // Close on Escape — only when focus is not inside an input/textarea/select, and only when
+  // nothing layered above the panel has already claimed the key. Radix's dismissable layers
+  // (every popover and tooltip in the game) listen in the CAPTURE phase and call `preventDefault`
+  // on the Escape they consume, so by the time this bubble-phase listener runs, a handled Escape
+  // is already marked. Without the check, one Escape both dismisses the popover the player was
+  // reading and navigates the panel out from behind it.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || e.defaultPrevented) return;
       const tag = e.target instanceof HTMLElement ? e.target.tagName : "";
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       e.preventDefault();

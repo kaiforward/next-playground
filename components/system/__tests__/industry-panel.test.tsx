@@ -1,8 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { IndustryPanel, YieldTooltipBody, DepositTooltipBody } from "@/components/system/industry-panel";
+import { act, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { IndustryPanel, YieldPopoverBody, DepositPopoverBody } from "@/components/system/industry-panel";
 import { depositRows } from "@/components/system/industry-rows";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { openLocked, waitForDwellLock } from "@/components/system/__tests__/dwell-popover-test-utils";
 import { formatMagnitude } from "@/lib/utils/format";
 import type { SystemIndustryData, SystemBuildOptionsData, SystemConstructionData } from "@/lib/types/api";
 
@@ -116,17 +118,17 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
 
     expect(screen.getByText("115%")).toBeInTheDocument();
     // The marginal/next-slot figure and the working-X-of-Y-slots line both moved into the
-    // tooltip (see YieldTooltipBody below) — the cell itself must not carry either.
+    // tooltip (see YieldPopoverBody below) — the cell itself must not carry either.
     expect(screen.queryByText(/^Next:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/working \d+ of \d+ slots/)).not.toBeInTheDocument();
     expect(screen.queryByText("×1.15")).not.toBeInTheDocument();
   });
 
-  it("YieldTooltipBody — combined figure, one line per contributing body, and the next slot", () => {
+  it("YieldPopoverBody — combined figure, one line per contributing body, and the next slot", () => {
     // Real production join (depositRows) rather than a hand-typed DepositRow, so the fixture can't
     // drift from the shape the panel actually builds. Rendered directly rather than via a hovered
     // Tooltip trigger — Radix never mounts its portal content without an open interaction jsdom
-    // can't reliably drive (same convention as habitability-tooltip-content.test.tsx).
+    // can't reliably drive (same convention as habitability-popover-body.test.tsx).
     const [row] = depositRows(
       [{
         resource: "arable",
@@ -141,7 +143,7 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
       0,
       0.75,
     );
-    const { container } = render(<YieldTooltipBody row={row} />);
+    const { container } = render(<YieldPopoverBody row={row} />);
 
     expect(container.textContent).toContain("Combined yield: 100%");
     expect(container.textContent).toContain("Arid World");
@@ -150,25 +152,25 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
     expect(container.textContent).toContain("Next slot: 120% on Temperate World");
   });
 
-  it("YieldTooltipBody reads 'All deposit slots worked' instead of a next-slot line once nothing is left to build on", () => {
+  it("YieldPopoverBody reads 'All deposit slots worked' instead of a next-slot line once nothing is left to build on", () => {
     const [row] = depositRows(
       [{ resource: "arable", depositCounts: 3, worked: 3, yieldMult: 1.4, marginal: null, workedByBody: [{ bodyType: "gaia_world", worked: 3, groundValue: 1.4 }], band: "good" }],
       [],
       0,
       0.75,
     );
-    const { container } = render(<YieldTooltipBody row={row} />);
+    const { container } = render(<YieldPopoverBody row={row} />);
 
     expect(container.textContent).toContain("Combined yield: 140%");
     expect(container.textContent).toContain("All deposit slots worked");
     expect(container.textContent).not.toContain("Next slot:");
   });
 
-  it("DepositTooltipBody no longer duplicates the Yield column's combined/next-slot figures — band, built/slots and staffed only", () => {
-    // Same real production join as the YieldTooltipBody tests above, so this fixture can't drift
+  it("DepositPopoverBody no longer duplicates the Yield column's combined/next-slot figures — band, built/slots and staffed only", () => {
+    // Same real production join as the YieldPopoverBody tests above, so this fixture can't drift
     // from the shape the panel actually builds. yieldMult 1.15 and marginal.groundValue 1.2 are the
     // duplication bait: pre-fix this tooltip rendered "avg 115%" and "Next 120%" — both figures the
-    // Yield column's own tooltip (YieldTooltipBody) already owns.
+    // Yield column's own tooltip (YieldPopoverBody) already owns.
     const [row] = depositRows(
       [{
         resource: "arable",
@@ -183,7 +185,7 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
       0,
       0.75,
     );
-    const { container } = render(<DepositTooltipBody row={row} contributors={[]} />);
+    const { container } = render(<DepositPopoverBody row={row} contributors={[]} />);
 
     expect(container.textContent).not.toContain("avg 115%");
     expect(container.textContent).not.toContain("Next 120%");
@@ -203,5 +205,121 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
     expect(container.textContent).not.toContain("habitableFree");
     expect(container.textContent).not.toContain("factoryFree");
     expect(screen.queryByText("General land")).not.toBeInTheDocument();
+  });
+});
+
+// This panel's term triggers are dwell popovers, and YieldPopoverBody carries TermLabel markup —
+// the panel's first real chain. Real timers throughout, matching components/ui/__tests__/popover.test.tsx's own
+// convention: Radix's FocusScope/Presence machinery is fragile under fake timers, and a locked
+// `dwell` popover still renders through `PopoverPrimitive.Content`.
+function setup() {
+  return { user: userEvent.setup({ delay: null }) };
+}
+
+async function wait(ms: number) {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  });
+}
+
+describe("IndustryPanel — dwell popovers with glossary term chains", () => {
+  it("renders with no popover open — none of the converted tooltips' content appears unbidden", () => {
+    industryValue.current = READOUT;
+    const { container } = renderPanel();
+
+    // "Combined yield" only exists inside YieldPopoverBody, which only mounts once its popover is
+    // open (Radix's Presence unmounts closed non-forced content entirely) — present on load would
+    // mean a popover opened, or was forced open, without any interaction.
+    expect(container.textContent).not.toContain("Combined yield");
+    expect(screen.queryByText("Realised yield")).not.toBeInTheDocument();
+  });
+
+  it("the yield cell's dwell popover is reachable and readable, and its own 'Combined yield' term opens the Realised yield definition — the panel's first real chain", async () => {
+    industryValue.current = READOUT;
+    const { user } = setup();
+    renderPanel();
+
+    await openLocked(user, "115%");
+    expect(await screen.findByText("Combined yield")).toBeInTheDocument();
+
+    await openLocked(user, "Combined yield");
+    expect(await screen.findByText("Realised yield")).toBeInTheDocument();
+  });
+
+  it("passing the pointer briefly over an intervening term inside the yield tooltip does not open that term's own popover — falsifier F1", async () => {
+    // What this honestly pins: jsdom has no layout, so there is no real transit geometry here —
+    // only the timing mechanism the dwell relies on as its second job (E1). A pointer that enters
+    // and leaves an intervening trigger faster than the open grace never accumulates enough dwell
+    // to open it, which is asserted directly. Whether a real cursor's path between a term and its
+    // own popover physically crosses this trigger is what the owner's browser smoke (F1, run "where
+    // it actually matters") checks instead.
+    industryValue.current = READOUT;
+    const { user } = setup();
+    renderPanel();
+
+    await openLocked(user, "115%");
+    expect(await screen.findByText("Combined yield")).toBeInTheDocument();
+
+    // The transit from "Combined yield" to its own popover passes over "Arid World" (the
+    // `archetype` term two lines below it) without lingering there — moving straight on to the
+    // destination trigger, the way a real cursor crossing a sibling trigger on its way somewhere
+    // else would, rather than truly leaving the whole stack (which would tear down "Combined
+    // yield" itself via the unrelated leave grace and make this test about the wrong mechanism).
+    const intervening = screen.getByRole("button", { name: "Arid World" });
+    const destination = screen.getByRole("button", { name: "Combined yield" });
+    await user.hover(intervening);
+    // Checked partway through the intervening trigger's own open grace (200ms), before moving on to
+    // the destination — an implementation that opened it synchronously, or on a much shorter timer,
+    // would already show its definition here. Moving straight to the destination without this
+    // checkpoint would let the destination's own same-depth claim evict an already-open intervening
+    // popover before the assertion ever ran, silently passing either way.
+    await wait(50);
+    expect(screen.queryByText("Archetype")).not.toBeInTheDocument();
+
+    await user.hover(destination);
+    // Long past the intervening trigger's own open grace and dwell — it still never opened.
+    await waitForDwellLock();
+    expect(screen.queryByText("Archetype")).not.toBeInTheDocument();
+    // The transit did not damage the chain it passed through on the way — the actual destination
+    // term still locks open normally.
+    expect(await screen.findByText("Realised yield")).toBeInTheDocument();
+  });
+
+  it("LegendTooltip stays a plain Tooltip — the control-help trigger the spec's rule keeps out of the conversion", async () => {
+    // Radix's `Tooltip.Arrow` needs `ResizeObserver`, which jsdom doesn't provide — stubbed here,
+    // same convention as components/ui/__tests__/term-label.test.tsx and
+    // components/panels/__tests__/system-astrography.test.tsx.
+    class StubResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", StubResizeObserver);
+
+    industryValue.current = READOUT;
+    const { user } = setup();
+    renderPanel();
+
+    const legendButton = screen.getByRole("button", { name: "Legend" });
+    await user.hover(legendButton);
+    // Radix Tooltip's own default open delay (no `delayDuration` override in this test's
+    // `TooltipProvider`) — a real duration, not a shortened test double.
+    await wait(900);
+    // Radix Tooltip renders the content into two Presence copies while animating — `findAllByText`
+    // rather than a singular lookup for exactly that reason, matching the rest of this file's own
+    // convention for Radix-portalled content.
+    expect((await screen.findAllByText("Health — mirrors what decays")).length).toBeGreaterThan(0);
+
+    // A `dwell` popover renders a Pin control once locked (components/ui/popover.tsx); a plain
+    // Radix Tooltip never does. Its absence here is the check that this trigger stayed a Tooltip
+    // rather than converting to a dwell popover, checked against the spec's own rule (a control
+    // stays a tooltip) rather than against the conversion count.
+    expect(screen.queryByRole("button", { name: "Pin" })).not.toBeInTheDocument();
+
+    // The other half of the same rule: a trigger that describes a thing in the game (here, the
+    // "metals" production building's own row) did convert, and shows the Pin control a `dwell`
+    // popover carries once locked — the positive case beside the LegendTooltip's negative one.
+    await openLocked(user, "Metals");
+    expect(await screen.findByRole("button", { name: "Pin" })).toBeInTheDocument();
   });
 });

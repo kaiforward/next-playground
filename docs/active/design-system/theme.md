@@ -102,9 +102,15 @@ for it. A panel typically needs three:
 - `text-sm` — content and values: body text, stat figures, a card's inline title-level name.
 - `text-xs` — labels: `SectionHeader`, `Badge`, table column headers, secondary annotations.
 
-`ProgressBar`'s `sm` size (above) is a standing exception: `text-[10px]` for its label, predating
-this rule and out of scope to change. A new exception needs the same kind of stated reason, not a
-silent copy of that one.
+**`text-xs` (12px) is the floor.** Nothing renders text below it. This is a small-text game, but a
+mix of 9, 10, 11 and 12px reads as mess rather than as density — a reader notices four sizes long
+before noticing any one of them is small, and the smallest of them stops being legible. Where
+something genuinely cannot fit at 12px, step **down in 2px increments** (10px, then 8px) with a
+stated reason at the point of use, so an exception is still a size the rest of the scale recognises.
+
+A decorative glyph sized by `font-size` (a tick, a health dot) follows the same floor. If the floor
+makes one too large, size it by width and height instead of by font-size — that is the fix, not a
+smaller `text-[Npx]`.
 
 ---
 
@@ -186,7 +192,7 @@ Flat bar with no rounding. Track uses `bg-surface-active`.
 
 | Size | Track height | Label style |
 |------|-------------|-------------|
-| `sm` | `h-1.5` | `text-[10px] text-text-muted` |
+| `sm` | `h-1.5` | `text-xs text-text-secondary` |
 | `md` | `h-2.5` | `text-xs text-text-tertiary` |
 
 Default color: `copper` (accent). Other colors: blue, amber, red, green, purple.
@@ -219,12 +225,14 @@ Filter chips use `rounded-full` (pill shape) with accent tint when active. This 
 
 ### Tooltip affordance (`components/ui/tooltip.tsx`)
 
-Any plain text whose tooltip is the payload — good names, building names, labour chips, keywords in descriptions — is marked with a **dotted underline** (`decoration-text-tertiary/75`, offset 3px) that turns solid on hover. Text colour stays untouched, so panel colour-coding (chip grades, yield gold) survives. Use `TooltipTriggerLabel`, which bakes the affordance in; pass `className` for layout only, never decoration.
+Any plain text or row whose popover is the payload — good names, building names, labour chips, keywords in descriptions, a deposit row's yield breakdown, a building's own staffing — is marked with a **dotted underline** (`decoration-text-tertiary/75`, offset 3px) that turns solid on hover. Text colour stays untouched, so panel colour-coding (chip grades, yield gold) survives. Use `PopoverTriggerLabel` (`components/ui/popover-trigger-label.tsx`), which bakes the affordance in; pass `className` for layout only, never decoration.
+
+A second, copper tier marks a word that opens its own definition rather than a plain description: **`TermLabel`** (`components/ui/term-label.tsx`), for a glossary term whose definition may itself name further terms, chaining as deep as the player follows it. It shares `PopoverTriggerLabel`'s dotted-underline shape (`triggerLabelStyles`, exported from `components/ui/tooltip.tsx`) but renders it in the accent colour, so the two tiers read as distinct at a glance: dotted grey is "explanation, not navigation" (the web `<abbr>` convention), copper is "this word has its own entry." Both open a `Popover` in `dwell` mode rather than a `Tooltip` — their content is a thing in the game, reachable and enterable, not a control's description.
 
 Two deliberate boundaries:
 
 - **Controls stay unmarked.** Checkboxes, segmented controls, radio rows, bars, and icon buttons whose tooltips are supplemental legends use the bare `TooltipTrigger` — they already read as interactive, and a dotted underline would misread.
-- **Copper is reserved.** Dotted grey means "explanation, not navigation" (the web `<abbr>` convention); coloured/underlined text in a browser promises a link. A copper treatment is deliberately held back as the future second tier for glossary-backed concept links (the planned deep-tooltip system).
+- **A surface becomes a `TermLabel`/`Popover` when it describes a thing in the game; it stays a `Tooltip` when it describes a control.** This is an accessibility line, not a preference: a tooltip's content is the control's `aria-describedby` description, announced with the control, while a popover is a separate region a person can enter and read. Converting control help would make its text unreachable to a screen reader at the moment it is needed.
 
 ---
 
@@ -249,4 +257,4 @@ Lucide icons default to 24x24. Size them explicitly for context:
 - **No raw `<input>` or `<select>`** — use form components from `components/form/`
 - **No inline progress bars** — use `ProgressBar` component with appropriate color/size
 - **No unsized lucide icons in buttons** — always set explicit `w-*` / `h-*` classes
-- **No unmarked text tooltips, no ad-hoc trigger styling** — text labels carrying a tooltip use `TooltipTriggerLabel` (dotted-underline affordance), never a hand-styled `TooltipTrigger` + `hover:underline`
+- **No unmarked text tooltips, no ad-hoc trigger styling** — text labels or rows carrying a popover use `PopoverTriggerLabel` (dotted-underline affordance), or `TermLabel` for a glossary term (the copper tier) — never a hand-styled `TooltipTrigger`/`PopoverTrigger` + `hover:underline`

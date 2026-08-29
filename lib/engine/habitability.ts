@@ -36,7 +36,7 @@ export interface SystemHabitabilityQuality {
    * landed anywhere yet — `frontierIndex` 0 just names the best body as next-to-fill, not
    * partially filled) and the clamp arm (population has overrun every body's land — the last body
    * is fully occupied, not partial). Read-side consumers (`habitabilityFillOrder`,
-   * `habitability-tooltip-content.tsx`) use this to avoid labelling a saturated system's last body
+   * `habitability-popover-body.tsx`) use this to avoid labelling a saturated system's last body
    * or a zero-pop system's first body "Partial".
    */
   partial: boolean;

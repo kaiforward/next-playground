@@ -8,7 +8,7 @@ import {
   BAR_HATCH,
   type BarSegment,
 } from "@/components/ui/diverging-bars";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { VolumeSparkline } from "@/components/system/volume-sparkline";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -46,13 +46,13 @@ function LegendSwatch({ color, hatch = false }: { color: "in" | "out"; hatch?: b
   );
 }
 
-/** Top source/destination partner systems for an External bar's hover tooltip. */
+/** Top source/destination partner systems for an External bar's popover. */
 function PartnerList({ label, partners }: { label: string; partners: TradeFlowPartner[] }) {
   if (partners.length === 0) return null;
   return (
     <div className="space-y-0.5">
-      <p className="font-display text-[10px] uppercase tracking-wider text-text-tertiary">{label}</p>
-      <dl className="space-y-0.5 text-xs">
+      <p className="font-display text-xs uppercase tracking-wider text-text-tertiary">{label}</p>
+      <dl className="space-y-0.5">
         {partners.map((p) => (
           <div key={p.systemId} className="flex justify-between gap-3">
             <dt className="truncate text-text-secondary">{p.systemName}</dt>
@@ -82,11 +82,11 @@ function externalSegments(g: LogisticsGoodRow): BarSegment[] {
   ];
 }
 
-/** Internal bar tooltip: the produces/consumes totals and the civilian/manufacturing consumption split. */
-function internalTooltip(g: LogisticsGoodRow): React.ReactNode {
+/** Internal bar popover body: the produces/consumes totals and the civilian/manufacturing consumption split. */
+function internalPopoverBody(g: LogisticsGoodRow): React.ReactNode {
   const totalConsumption = g.consumption + g.inputDemand;
   return (
-    <dl className="space-y-0.5 whitespace-nowrap text-xs">
+    <dl className="space-y-0.5 whitespace-nowrap">
       <div className="flex justify-between gap-3">
         <dt className="text-text-tertiary">Produces</dt>
         <dd className="font-mono text-status-green-light">{g.production.toFixed(1)}/cyc</dd>
@@ -111,8 +111,8 @@ function internalTooltip(g: LogisticsGoodRow): React.ReactNode {
   );
 }
 
-/** External bar tooltip: top source/destination partner systems — undefined when none are tracked. */
-function externalTooltip(g: LogisticsGoodRow): React.ReactNode | undefined {
+/** External bar popover body: top source/destination partner systems — undefined when none are tracked. */
+function externalPopoverBody(g: LogisticsGoodRow): React.ReactNode | undefined {
   if (g.importPartners.length === 0 && g.exportPartners.length === 0) return undefined;
   return (
     <div className="space-y-1.5">
@@ -122,33 +122,36 @@ function externalTooltip(g: LogisticsGoodRow): React.ReactNode | undefined {
   );
 }
 
-/** A diverging bar in a table cell, wrapped in a keyboard-focusable Radix tooltip when it
- *  carries detail (so the tooltip opens on focus, not just hover); otherwise rendered bare. */
+/** A diverging bar in a table cell, wrapped in a keyboard-focusable dwell popover when it
+ *  carries detail (so the popover opens on focus, not just hover); otherwise rendered bare.
+ *  The trigger is a focusable wrapper round the bar track, not a word — `title` names the good
+ *  and which bar (Internal/External) the reader is looking at, since nothing else does. */
 function BarCell({
   segments,
   maxValue,
-  tooltip,
-  tooltipClassName,
+  popoverContent,
+  title,
 }: {
   segments: BarSegment[];
   maxValue: number;
-  tooltip?: React.ReactNode;
-  tooltipClassName?: string;
+  popoverContent?: React.ReactNode;
+  title?: React.ReactNode;
 }) {
   const track = <DivergingBarTrack segments={segments} maxValue={maxValue} />;
-  if (!tooltip) return track;
+  if (!popoverContent) return track;
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
+    <Popover dwell>
+      <PopoverTrigger asChild>
         <div
           tabIndex={0}
+          aria-label={typeof title === "string" ? title : undefined}
           className="w-full cursor-default outline-none focus-visible:ring-1 focus-visible:ring-accent"
         >
           {track}
         </div>
-      </TooltipTrigger>
-      <TooltipContent className={tooltipClassName}>{tooltip}</TooltipContent>
-    </Tooltip>
+      </PopoverTrigger>
+      <PopoverContent title={title}>{popoverContent}</PopoverContent>
+    </Popover>
   );
 }
 
@@ -171,8 +174,8 @@ function GoodRow({
         <BarCell
           segments={internalSegments(g)}
           maxValue={internalMax}
-          tooltip={internalTooltip(g)}
-          tooltipClassName="w-56"
+          popoverContent={internalPopoverBody(g)}
+          title={`${g.goodName} — Internal`}
         />
       </td>
       <td className={`px-1 py-1 text-right align-middle font-mono text-xs ${netClass(g.internalNet)}`}>
@@ -180,7 +183,12 @@ function GoodRow({
       </td>
       <td className="border-l border-border px-1.5 py-1 align-middle">
         {g.traded ? (
-          <BarCell segments={externalSegments(g)} maxValue={externalMax} tooltip={externalTooltip(g)} />
+          <BarCell
+            segments={externalSegments(g)}
+            maxValue={externalMax}
+            popoverContent={externalPopoverBody(g)}
+            title={`${g.goodName} — External`}
+          />
         ) : (
           <div className="h-2.5" />
         )}
@@ -224,7 +232,7 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
     <div className="space-y-4">
       <Card variant="bordered" padding="xs">
         {/* legend — internal consumption split (civilian vs manufacturing) shares the external directions */}
-        <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-text-tertiary">
+        <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-tertiary">
           <span className="inline-flex items-center gap-1.5">
             <LegendSwatch color="in" /> consumes / imports
           </span>
@@ -249,31 +257,31 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
               <th aria-hidden />
               <th
                 colSpan={2}
-                className="border-b border-border pb-1 text-center font-display text-[10px] font-semibold uppercase tracking-wider text-text-secondary"
+                className="border-b border-border pb-1 text-center font-display text-xs font-semibold uppercase tracking-wider text-text-secondary"
               >
                 Internal
               </th>
               <th
                 colSpan={2}
-                className="border-b border-l border-border pb-1 text-center font-display text-[10px] font-semibold uppercase tracking-wider text-text-secondary"
+                className="border-b border-l border-border pb-1 text-center font-display text-xs font-semibold uppercase tracking-wider text-text-secondary"
               >
                 External
               </th>
             </tr>
             <tr>
-              <th className="border-b border-border-strong px-1.5 py-1 text-left font-display text-[10px] font-normal uppercase tracking-wider text-text-tertiary">
+              <th className="border-b border-border-strong px-1.5 py-1 text-left font-display text-xs font-normal uppercase tracking-wider text-text-tertiary">
                 Good
               </th>
-              <th className="border-b border-border-strong px-1.5 py-1 text-center font-mono text-[10px] text-text-tertiary">
+              <th className="border-b border-border-strong px-1.5 py-1 text-center font-mono text-xs text-text-tertiary">
                 &#9664; Cons &middot; Prod &#9654;
               </th>
-              <th className="border-b border-border-strong px-1 py-1 text-right font-display text-[10px] font-normal uppercase tracking-wider text-text-tertiary">
+              <th className="border-b border-border-strong px-1 py-1 text-right font-display text-xs font-normal uppercase tracking-wider text-text-tertiary">
                 Net
               </th>
-              <th className="border-b border-l border-border-strong px-1.5 py-1 text-center font-mono text-[10px] text-text-tertiary">
+              <th className="border-b border-l border-border-strong px-1.5 py-1 text-center font-mono text-xs text-text-tertiary">
                 &#9664; Imp &middot; Exp &#9654;
               </th>
-              <th className="border-b border-border-strong px-1 py-1 text-right font-display text-[10px] font-normal uppercase tracking-wider text-text-tertiary">
+              <th className="border-b border-border-strong px-1 py-1 text-right font-display text-xs font-normal uppercase tracking-wider text-text-tertiary">
                 Net
               </th>
             </tr>
@@ -291,7 +299,7 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
                           className="h-2 w-2 shrink-0"
                           style={{ backgroundColor: pixiHexToCss(TIER_COLOR[tier]) }}
                         />
-                        <span className="font-mono text-[10px] uppercase tracking-widest text-text-secondary">
+                        <span className="font-mono text-xs uppercase tracking-widest text-text-secondary">
                           {TIER_LABEL[tier]}
                         </span>
                         <span className="h-px flex-1 bg-border" />

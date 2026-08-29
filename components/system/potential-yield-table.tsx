@@ -1,27 +1,31 @@
-import { Tooltip, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
+import { PopoverTriggerLabel } from "@/components/ui/popover-trigger-label";
 import { Badge } from "@/components/ui/badge";
+import { TermLabel } from "@/components/ui/term-label";
 import { QUALITY_BAND_TEXT } from "@/lib/constants/ui";
 import type { PotentialYieldRowView } from "@/lib/utils/substrate";
 
 /**
- * One potential-yield row's tooltip: per-body breakdown — name, slot count, ground value %, and a
- * locked marker where the body's tech isn't unlocked yet. Same tooltip primitive the industry
- * panel's deposit tooltips use (`DepositTooltipBody`/`YieldTooltipBody`,
+ * One potential-yield row's popover body: per-body breakdown — name, slot count, ground value %,
+ * and a locked marker where the body's tech isn't unlocked yet. Same dwell popover the industry
+ * panel's deposit readouts use (`DepositPopoverBody`/`YieldPopoverBody`,
  * `components/system/industry-panel.tsx`).
  */
-export function PotentialYieldTooltipBody({ row }: { row: PotentialYieldRowView }) {
+export function PotentialYieldPopoverBody({ row }: { row: PotentialYieldRowView }) {
   return (
     <div className="space-y-1">
-      <p className="font-display text-sm font-semibold capitalize text-text-primary">{row.resource}</p>
-      <div className="space-y-1 border-t border-border/60 pt-1">
+      <div className="space-y-1 overflow-x-auto">
         {row.byBody.map((b, i) => (
-          <div key={`${b.bodyId}-${i}`} className="flex items-center justify-between gap-2 font-mono text-xs">
+          <div key={`${b.bodyId}-${i}`} className="flex items-center justify-between gap-2 whitespace-nowrap font-mono">
             <span className="flex items-center gap-1.5 text-text-secondary">
-              {b.archetypeName}
+              <TermLabel id="archetype">{b.archetypeName}</TermLabel>
+              {/* Not a `TermLabel`: nesting the trigger's button styling (copper underline,
+                  `text-accent`) inside this small pill overrides the badge's own slate tone and
+                  adds an underline the pill isn't built for. Left unmarked. */}
               {b.locked && <Badge color="slate" variant="outline">Locked</Badge>}
             </span>
-            <span className="whitespace-nowrap text-text-tertiary">
-              {b.slotCount} {b.slotCount === 1 ? "slot" : "slots"} · {Math.round(b.groundValue * 100)}%
+            <span className="text-text-tertiary">
+              {b.slotCount} <TermLabel id="resourceSlot">{b.slotCount === 1 ? "slot" : "slots"}</TermLabel> ·{" "}
+              <TermLabel id="qualityBand">{Math.round(b.groundValue * 100)}%</TermLabel>
             </span>
           </div>
         ))}
@@ -58,10 +62,13 @@ export function PotentialYieldTable({ rows }: { rows: PotentialYieldRowView[] })
         {rows.map((row) => (
           <tr key={row.resource} className="border-b border-border/40 last:border-b-0">
             <td className="px-1.5 py-1 text-text-primary">
-              <Tooltip>
-                <TooltipTriggerLabel className="capitalize">{row.resource}</TooltipTriggerLabel>
-                <TooltipContent className="w-64 text-xs"><PotentialYieldTooltipBody row={row} /></TooltipContent>
-              </Tooltip>
+              <PopoverTriggerLabel
+                className="capitalize"
+                content={<PotentialYieldPopoverBody row={row} />}
+                title={<span className="capitalize">{row.resource}</span>}
+              >
+                {row.resource}
+              </PopoverTriggerLabel>
             </td>
             <td className={`px-1.5 py-1 text-right font-mono ${QUALITY_BAND_TEXT[row.band]}`}>
               {Math.round(row.yieldMult * 100)}%

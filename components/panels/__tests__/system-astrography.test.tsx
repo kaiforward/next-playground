@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SystemAstrography } from "@/components/panels/system-astrography";
-import { PotentialYieldTooltipBody } from "@/components/system/potential-yield-table";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { PotentialYieldPopoverBody } from "@/components/system/potential-yield-table";
+import { openLocked } from "@/components/system/__tests__/dwell-popover-test-utils";
 import { emptyResourceVector, makeResourceVector } from "@/lib/engine/resources";
 import type { SystemPopulationData, SystemSubstrateData } from "@/lib/types/api";
 import type { PotentialYieldRowView } from "@/lib/utils/substrate";
@@ -19,11 +19,7 @@ vi.mock("@/lib/hooks/use-system-population", () => ({
 }));
 
 function renderPanel() {
-  return render(
-    <TooltipProvider>
-      <SystemAstrography systemId="s1" />
-    </TooltipProvider>,
-  );
+  return render(<SystemAstrography systemId="s1" />);
 }
 
 describe("SystemAstrography — the system-level habitable-land header, absolute not percent", () => {
@@ -95,16 +91,7 @@ describe("SystemAstrography — the system-level habitable-land header, absolute
     expect(dd).toHaveTextContent("93%");
   });
 
-  it("opens the habitability figure's breakdown tooltip, naming the contributing bodies — the same breakdown the Population tab uses", async () => {
-    // Radix's `Tooltip.Arrow` needs `ResizeObserver`, which jsdom doesn't provide — stubbed here,
-    // same convention as the "Potential yield" tooltip test below.
-    class StubResizeObserver {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    }
-    vi.stubGlobal("ResizeObserver", StubResizeObserver);
-
+  it("opens the habitability figure's breakdown popover, naming the contributing bodies, and a body row's own Archetype term opens a second level", async () => {
     const user = userEvent.setup({ delay: null });
     substrateValue = { visibility: "visible", sunClass: "yellow", peopleLand: 300, bodies: [], potentialYields: [] };
     popValue = {
@@ -125,13 +112,17 @@ describe("SystemAstrography — the system-level habitable-land header, absolute
 
     const trigger = screen.getByRole("button", { name: "Habitability" });
     await user.tab();
-    while (document.activeElement !== trigger) {
-      await user.tab();
-    }
     expect(trigger).toHaveFocus();
-    const tooltip = await screen.findByRole("tooltip");
-    expect(tooltip).toHaveTextContent("Temperate World");
-    expect(tooltip).toHaveTextContent("Habitability");
+    // Keyboard focus opens a `dwell` popover locked immediately — no open grace or dwell to wait
+    // out (`Popover`'s own docblock, "keyboard opens a dwell popover locked"), same convention as
+    // the Potential-yield header term test below.
+    const dialog = await screen.findByRole("dialog", { name: "Habitability" });
+    expect(within(dialog).getByText("Habitability: 93%")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Temperate World" })).toBeInTheDocument();
+
+    // A second level: the body row's own name is an `archetype` term, opening its own definition.
+    await openLocked(user, "Temperate World");
+    expect(await screen.findByText("Archetype")).toBeInTheDocument();
   });
 
   it("omits the habitability stat (never N/A, never a fabricated 100%) when the system has no assessment yet", () => {
@@ -245,19 +236,8 @@ describe("SystemAstrography — the body list", () => {
   });
 });
 
-describe("SystemAstrography — potential-yield header tooltip", () => {
-  it("keeps the yield explanation out of the layout and reachable only through the header's tooltip trigger", async () => {
-    // Radix's `Tooltip.Arrow` needs `ResizeObserver`, which jsdom doesn't provide — stubbed here,
-    // local to this test, so the tooltip can actually be driven open rather than only asserting the
-    // trigger exists (the convention elsewhere in this repo, e.g. `industry-panel.test.tsx`,
-    // `habitability-tooltip-content.test.tsx`, where the content is instead rendered directly).
-    class StubResizeObserver {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    }
-    vi.stubGlobal("ResizeObserver", StubResizeObserver);
-
+describe("SystemAstrography — potential-yield header term", () => {
+  it("keeps the yield definition out of the layout and reachable only through the header's own TermLabel", async () => {
     const user = userEvent.setup({ delay: null });
     substrateValue = {
       visibility: "visible", sunClass: "yellow", peopleLand: 0, bodies: [],
@@ -266,20 +246,20 @@ describe("SystemAstrography — potential-yield header tooltip", () => {
     popValue = { visibility: "unknown" };
     renderPanel();
 
-    const explanation = /What this system could produce if every body here were fully developed/;
-    // Not rendered as inline prose any more.
-    expect(screen.queryByText(explanation)).not.toBeInTheDocument();
+    // The old hardcoded inline-prose explanation is gone — the definition now lives once, in
+    // `lib/glossary/terms.ts`, and only renders once its own popover opens.
+    const oldExplanation = /What this system could produce if every body here were fully developed/;
+    expect(screen.queryByText(oldExplanation)).not.toBeInTheDocument();
 
-    // The "Potential yield" header is itself the tooltip's keyboard-reachable trigger — a real
+    // The "Potential yield" header is itself the term's keyboard-reachable trigger — a real
     // `<button>`, focusable and opened by Tab like any other control.
     const trigger = screen.getByRole("button", { name: "Potential yield" });
     await user.tab();
     expect(trigger).toHaveFocus();
-    // Radix renders the tooltip's copy twice (a visible node plus a visually-hidden
-    // `role="tooltip"` one for screen readers) — assert on the accessible tooltip role rather than
-    // the text, which would otherwise match both.
-    const tooltip = await screen.findByRole("tooltip");
-    expect(tooltip).toHaveTextContent(explanation);
+    // Keyboard focus opens a `dwell` popover locked immediately — no open grace or dwell to wait
+    // out (`Popover`'s own docblock, "keyboard opens a dwell popover locked").
+    const dialog = await screen.findByRole("dialog", { name: "Potential yield" });
+    expect(dialog).toHaveTextContent(/would give with every slot in the system/);
   });
 });
 
@@ -309,10 +289,33 @@ describe("SystemAstrography — potential-yield table", () => {
     expect(screen.queryByText("Potential yield")).not.toBeInTheDocument();
   });
 
-  it("PotentialYieldTooltipBody marks a locked body's breakdown line as locked, an unlocked one as not", () => {
+  it("opens the resource cell's own popover, and a body row's Archetype/Resource slot/Quality band terms each open a second level", async () => {
+    const user = userEvent.setup({ delay: null });
+    substrateValue = {
+      visibility: "visible", sunClass: "yellow", peopleLand: 0, bodies: [],
+      potentialYields: [
+        {
+          resource: "ore", yieldMult: 0.72, slotCount: 1, band: "average",
+          byBody: [{ bodyId: "b0", archetypeName: "Temperate World", slotCount: 1, groundValue: 0.9, locked: false }],
+        },
+      ],
+    };
+    popValue = { visibility: "unknown" };
+    renderPanel();
+
+    await openLocked(user, "ore");
+    expect(await screen.findByRole("button", { name: "Temperate World" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "slot" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "90%" })).toBeInTheDocument();
+
+    await openLocked(user, "Temperate World");
+    expect(await screen.findByText("Archetype")).toBeInTheDocument();
+  });
+
+  it("PotentialYieldPopoverBody marks a locked body's breakdown line as locked, an unlocked one as not", () => {
     // Rendered directly rather than via a hovered Tooltip trigger — Radix never mounts its portal
     // content without an open interaction jsdom can't reliably drive (same convention as
-    // industry-panel.test.tsx's YieldTooltipBody tests).
+    // industry-panel.test.tsx's YieldPopoverBody tests).
     const row: PotentialYieldRowView = {
       resource: "ore", yieldMult: 0.63, slotCount: 3, band: "average",
       byBody: [
@@ -320,7 +323,7 @@ describe("SystemAstrography — potential-yield table", () => {
         { bodyId: "b1", archetypeName: "Volcanic World", slotCount: 2, groundValue: 0.36, locked: true },
       ],
     };
-    const { container } = render(<PotentialYieldTooltipBody row={row} />);
+    const { container } = render(<PotentialYieldPopoverBody row={row} />);
 
     expect(container.textContent).toContain("Temperate World");
     expect(container.textContent).toContain("Volcanic World");

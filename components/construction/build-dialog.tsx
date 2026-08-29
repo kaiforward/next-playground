@@ -135,7 +135,7 @@ export function BuildDialog({
           )}
         </div>
         <div className="self-start border border-border bg-surface-hover p-3.5">
-          <p className="mb-2 font-display text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
+          <p className="mb-2 font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary">
             Feasibility — {systemName}
           </p>
           {option && (

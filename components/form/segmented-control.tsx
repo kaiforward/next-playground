@@ -26,7 +26,7 @@ const segmentVariants = tv({
         "bg-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary",
     },
     size: {
-      sm: "px-2 py-1 text-[10px]",
+      sm: "px-2 py-1 text-xs",
       md: "px-2 py-1 text-xs",
     },
   },

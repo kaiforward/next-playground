@@ -6,24 +6,28 @@ import { Card } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
 import { Badge, BADGE_COLOR_VAR } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { TrackMarker } from "@/components/ui/track-marker";
 import { bandLabel, bandTone, provisionScaleSegments, provisionTrackTone } from "@/components/system/provision-view";
 import type { SupplyRegime } from "@/lib/engine/population";
 import { splitNeedsLedger } from "@/components/system/needs-view";
 import { NeedCells, NeedsTable } from "@/components/system/needs-table";
-import { NeedTooltipContent } from "@/components/system/need-tooltip-content";
+import { NeedPopoverBody, NeedPopoverMeta } from "@/components/system/need-popover-body";
 
+/** The trigger here is a focusable `<tr>`, not a word — nothing else names what the popover is
+ *  about, so it carries the header title `NeedPopoverBody` used to render for itself. */
 function NeedRow({ n }: { n: PopNeedData }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <tr tabIndex={0} className="border-b border-border/40 outline-none last:border-b-0 focus-visible:ring-1 focus-visible:ring-accent">
+    <Popover dwell>
+      <PopoverTrigger asChild>
+        <tr tabIndex={0} aria-label={n.goodName} className="border-b border-border/40 outline-none last:border-b-0 focus-visible:ring-1 focus-visible:ring-accent">
           <NeedCells n={n} density="panel" />
         </tr>
-      </TooltipTrigger>
-      <TooltipContent className="w-64"><NeedTooltipContent need={n} /></TooltipContent>
-    </Tooltip>
+      </PopoverTrigger>
+      <PopoverContent title={n.goodName} titleMeta={<NeedPopoverMeta need={n} />}>
+        <NeedPopoverBody need={n} />
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -37,8 +41,8 @@ function NeedsLedger({ needs }: { needs: PopNeedData[] }) {
         <tr>
           <td colSpan={4} className="px-1.5 py-1.5 text-xs text-text-tertiary">
             <button type="button" onClick={() => setExpanded(true)} className="inline-flex items-center gap-1.5 hover:text-text-secondary">
-              <span aria-hidden className="font-mono text-[10px] text-status-green-light">✓</span>
-              {met.length} needs met <span className="font-mono text-[10px]">▸ expand</span>
+              <span aria-hidden className="font-mono text-xs text-status-green-light">✓</span>
+              {met.length} needs met <span className="font-mono text-xs">▸ expand</span>
             </button>
           </td>
         </tr>

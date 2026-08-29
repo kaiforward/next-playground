@@ -124,7 +124,7 @@ function MarketComparisonContent({
       </div>
 
       {/* Sortable header */}
-      <div className={`grid ${GRID_COLS} gap-2 px-4 py-2 text-[10px] uppercase tracking-wider text-text-tertiary border-b border-border bg-background`}>
+      <div className={`grid ${GRID_COLS} gap-2 px-4 py-2 text-xs uppercase tracking-wider text-text-tertiary border-b border-border bg-background`}>
         <span>System</span>
         <button
           onClick={() => toggleSort("hops")}
@@ -232,7 +232,7 @@ function MarketComparisonRows({
 
   return (
     <>
-      <p className="px-4 py-1.5 text-[11px] text-text-tertiary border-b border-border">
+      <p className="px-4 py-1.5 text-xs text-text-tertiary border-b border-border">
         {rows.length} visible {rows.length === 1 ? "market" : "markets"}
       </p>
       {rows.length === 0 && (
@@ -255,7 +255,7 @@ function MarketComparisonRows({
             <span className="text-text-primary truncate">
               {r.name}{" "}
               {isOrigin && (
-                <span className="text-text-tertiary text-[10px]">(here)</span>
+                <span className="text-text-tertiary text-xs">(here)</span>
               )}
             </span>
             <span className="text-text-secondary font-mono">

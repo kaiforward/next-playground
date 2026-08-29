@@ -1,17 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ProvisionBlock } from "@/components/system/provision-block";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { hoverUntilLocked } from "@/components/system/__tests__/dwell-popover-test-utils";
 import type { PopNeedData, SystemProvisionRead } from "@/lib/types/api";
 
 // The band widths, tones and the ledger split are tested against numbers in `provision-view` and
 // `needs-view`. What is left for the DOM is what a reader actually gets: the chip, the headline,
 // the key naming both numbers, and which need rows are on screen.
 //
-// Every case renders inside the app's own `TooltipProvider` — the ledger's rows are tooltip
-// triggers, and Radix's `Tooltip.Root` throws without a provider above it (the real app mounts one
-// in client/main.tsx).
+// The ledger's rows are `dwell`-popover triggers: a row's body is its own need data rather than a
+// fixed definition — `Popover` needs no surrounding provider, unlike Radix's `Tooltip.Root`.
 
 const assessed: SystemProvisionRead = {
   assessed: true,
@@ -31,11 +30,14 @@ function need(overrides: Partial<PopNeedData> & { goodId: string; goodName: stri
 }
 
 function renderBlock(read: SystemProvisionRead, needs: PopNeedData[] = []) {
-  return render(
-    <TooltipProvider>
-      <ProvisionBlock read={read} needs={needs} />
-    </TooltipProvider>,
-  );
+  return render(<ProvisionBlock read={read} needs={needs} />);
+}
+
+/** Finds a need row by its own accessible name (the row's `aria-label`, set to the good name) and
+ *  waits for its `dwell` popover to lock. */
+async function openNeedRow(user: ReturnType<typeof userEvent.setup>, goodName: string) {
+  const row = screen.getByRole("row", { name: goodName });
+  await hoverUntilLocked(user, row);
 }
 
 describe("ProvisionBlock — band chip, percentage, track key, and the absent state", () => {
@@ -84,5 +86,21 @@ describe("ProvisionBlock — band chip, percentage, track key, and the absent st
     // …and the toggle is what brings it back, which is the only reason hiding it is acceptable.
     await userEvent.click(toggle);
     expect(screen.getByText("Met good")).toBeInTheDocument();
+  });
+
+  it("opens a need row's own dwell popover, naming the good and its want/delivered/pressure breakdown", async () => {
+    const user = userEvent.setup({ delay: null });
+    const needs: PopNeedData[] = [
+      need({ goodId: "critical-good", goodName: "Critical good", satisfaction: 0.2, want: 12, delivered: 4 }),
+    ];
+    renderBlock(assessed, needs);
+
+    await openNeedRow(user, "Critical good");
+    // The two props the conversion actually added — the row's `title`/`titleMeta` passed to
+    // `PopoverContent` — render in the popover's own header, not just the body it already had.
+    const dialog = await screen.findByRole("dialog", { name: "Critical good" });
+    expect(within(dialog).getByText(/20% met/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/want 12\.00\/cyc/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/delivered 4\.00\/cyc/)).toBeInTheDocument();
   });
 });
