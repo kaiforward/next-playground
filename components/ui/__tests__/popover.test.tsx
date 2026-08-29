@@ -8,7 +8,6 @@ import {
   LEAVE_GRACE_MS,
   Popover,
   PopoverContent,
-  PopoverHeader,
   PopoverTrigger,
   RETURN_GRACE_MS,
   usePopoverDepth,
@@ -2126,11 +2125,15 @@ describe("Popover — pinning a chain", () => {
       </Popover>,
     );
 
-    // Tab opens a dwell popover already locked (the existing `openViaFocus` path) — the pin control
-    // is the only focusable thing inside this content, so ArrowDown lands on it directly.
+    // Tab opens a dwell popover already locked (the existing `openViaFocus` path). The pin is
+    // chrome (the header), not body content, so ArrowDown's scoped query — which only ever
+    // searches `[data-popover-body]` — finds nothing in this content-free body and falls back to
+    // the content container itself; a further Tab is what reaches the pin, the only tabbable thing
+    // anywhere in the popover.
     await user.tab();
     await screen.findByText("Definition Reachable");
     await user.keyboard("{ArrowDown}");
+    await user.tab();
 
     const pinButton = screen.getByRole("button", { name: "Pin" });
     expect(pinButton).toHaveFocus();
@@ -2230,18 +2233,19 @@ describe("Popover — pinning a chain", () => {
   });
 
   it("a header's own title never displaces ArrowDown's target — a nested term trigger still gets it first", async () => {
-    // Issue 2's header sits BEFORE the body in DOM order; the pin control still sits AFTER
-    // `{children}` (see `PopoverContent`'s own comment on why). This proves the header's presence
-    // doesn't change which element `focusIntoContent`/ArrowDown reaches first — the nested trigger,
-    // never the header and never the pin control.
+    // The header region is structural now (rendered by `PopoverContent` itself, in ORDINARY
+    // document order, BEFORE `{children}`) rather than a `PopoverHeader` a body opts into. Its
+    // presence — and its own DOM position ahead of the body — must still never change which
+    // element `focusIntoContent`/ArrowDown reaches: the nested trigger, never the header's title
+    // or the pin nested inside it. That guarantee no longer rests on DOM order at all (see
+    // `FOCUSABLE_IN_POPOVER_BODY`'s own comment) — this test is what proves it holds regardless.
     const { user } = setup();
     render(
       <Popover dwell>
         <PopoverTrigger>
           <button type="button">Headered</button>
         </PopoverTrigger>
-        <PopoverContent aria-label="Definition Headered">
-          <PopoverHeader title="A Title" />
+        <PopoverContent aria-label="Definition Headered" title="A Title">
           <Popover dwell>
             <PopoverTrigger>
               <button type="button">Nested term</button>
@@ -2259,5 +2263,84 @@ describe("Popover — pinning a chain", () => {
     await user.keyboard("{ArrowDown}");
 
     expect(screen.getByRole("button", { name: "Nested term" })).toHaveFocus();
+  });
+
+  it("the header region renders for every dwell popover, with the pin control reserved on its right even without a title", async () => {
+    const { user } = setup();
+    render(
+      <Popover dwell>
+        <PopoverTrigger>
+          <button type="button">Untitled</button>
+        </PopoverTrigger>
+        <PopoverContent aria-label="Definition Untitled">
+          <p>Definition Untitled</p>
+        </PopoverContent>
+      </Popover>,
+    );
+
+    await user.tab();
+    await screen.findByText("Definition Untitled");
+
+    // No title was given, but the header's own pin control still renders — the region exists
+    // structurally whether or not a title was supplied.
+    expect(screen.getByRole("button", { name: "Pin" })).toBeInTheDocument();
+  });
+
+  it("a title given to a dwell popover renders inside its header", async () => {
+    const { user } = setup();
+    render(
+      <Popover dwell>
+        <PopoverTrigger>
+          <button type="button">Titled</button>
+        </PopoverTrigger>
+        <PopoverContent aria-label="Definition Titled" title="The Heading">
+          <p>Definition Titled</p>
+        </PopoverContent>
+      </Popover>,
+    );
+
+    await user.tab();
+    await screen.findByText("Definition Titled");
+
+    expect(screen.getByText("The Heading")).toBeInTheDocument();
+  });
+
+  it("ArrowDown reaches a nested term trigger over the header's own pin control, and Shift+Tab from there reaches the pin", async () => {
+    // The header (with its pin control, since Tab opens this popover already locked and it is the
+    // only thing currently open) sits BEFORE `{children}` in plain document order now — no
+    // `absolute` positioning, no CSS `order`. What keeps ArrowDown from landing on the pin is the
+    // scoped `[data-popover-body]` query, not DOM order; what keeps the pin still reachable by
+    // keyboard is Radix's own `FocusScope` in `loop` mode, which tabs (and shift-tabs) across the
+    // WHOLE popover, header included — so one Shift+Tab back from the body's own control reaches it.
+    //
+    // The body control is a plain button rather than a genuine nested `Popover` trigger
+    // deliberately: a real nested term trigger auto-opens ITS OWN popover the instant it receives
+    // focus (`PopoverTrigger`'s own `onFocus` — see the docblock's keyboard convention), which
+    // immediately displaces this popover's pin with the nested one's own (only the deepest open
+    // level ever shows one). That cascade is real and covered elsewhere; it would only obscure what
+    // this test is actually pinning — that the header/pin sits outside `focusIntoContent`'s scoped
+    // search, in ordinary DOM order, reachable by Tab regardless.
+    const { user } = setup();
+    render(
+      <Popover dwell>
+        <PopoverTrigger>
+          <button type="button">Parent</button>
+        </PopoverTrigger>
+        <PopoverContent aria-label="Definition Parent" title="A Title">
+          <button type="button">Nested control</button>
+        </PopoverContent>
+      </Popover>,
+    );
+
+    await user.tab();
+    await screen.findByText("A Title");
+    await screen.findByRole("button", { name: "Pin" });
+
+    await user.keyboard("{ArrowDown}");
+    const nestedControl = screen.getByRole("button", { name: "Nested control" });
+    expect(nestedControl).toHaveFocus();
+
+    await user.tab({ shift: true });
+    expect(screen.getByRole("button", { name: "Pin" })).toHaveFocus();
   });
 });

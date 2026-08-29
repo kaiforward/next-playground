@@ -123,15 +123,19 @@ function externalPopoverBody(g: LogisticsGoodRow): React.ReactNode | undefined {
 }
 
 /** A diverging bar in a table cell, wrapped in a keyboard-focusable dwell popover when it
- *  carries detail (so the popover opens on focus, not just hover); otherwise rendered bare. */
+ *  carries detail (so the popover opens on focus, not just hover); otherwise rendered bare.
+ *  The trigger is a focusable wrapper round the bar track, not a word — `title` names the good
+ *  and which bar (Internal/External) the reader is looking at, since nothing else does. */
 function BarCell({
   segments,
   maxValue,
   popoverContent,
+  title,
 }: {
   segments: BarSegment[];
   maxValue: number;
   popoverContent?: React.ReactNode;
+  title?: React.ReactNode;
 }) {
   const track = <DivergingBarTrack segments={segments} maxValue={maxValue} />;
   if (!popoverContent) return track;
@@ -145,7 +149,7 @@ function BarCell({
           {track}
         </div>
       </PopoverTrigger>
-      <PopoverContent>{popoverContent}</PopoverContent>
+      <PopoverContent title={title}>{popoverContent}</PopoverContent>
     </Popover>
   );
 }
@@ -170,6 +174,7 @@ function GoodRow({
           segments={internalSegments(g)}
           maxValue={internalMax}
           popoverContent={internalPopoverBody(g)}
+          title={`${g.goodName} — Internal`}
         />
       </td>
       <td className={`px-1 py-1 text-right align-middle font-mono text-xs ${netClass(g.internalNet)}`}>
@@ -177,7 +182,12 @@ function GoodRow({
       </td>
       <td className="border-l border-border px-1.5 py-1 align-middle">
         {g.traded ? (
-          <BarCell segments={externalSegments(g)} maxValue={externalMax} popoverContent={externalPopoverBody(g)} />
+          <BarCell
+            segments={externalSegments(g)}
+            maxValue={externalMax}
+            popoverContent={externalPopoverBody(g)}
+            title={`${g.goodName} — External`}
+          />
         ) : (
           <div className="h-2.5" />
         )}

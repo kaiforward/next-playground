@@ -38,7 +38,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { InfoIcon } from "@/components/ui/icons";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { PopoverTriggerLabel } from "@/components/ui/popover-trigger-label";
-import { PopoverHeader } from "@/components/ui/popover";
 import { TermLabel } from "@/components/ui/term-label";
 import { useDialog } from "@/components/ui/dialog";
 import { CompositionBar } from "@/components/ui/composition-bar";
@@ -46,7 +45,7 @@ import { depositRows, depositRowProblems, depositTypeProblems, idleLevelSplit, s
 import { classifyGhosts, type GhostGroup, type GhostRow } from "@/components/system/industry-ghosts";
 import { buildProblems, needSeverity, problemGlyph, SEVERITY_GLYPH, SEVERITY_TEXT, type ProblemItem } from "@/components/system/needs-view";
 import { NeedCells, NeedsTable } from "@/components/system/needs-table";
-import { NeedPopoverBody } from "@/components/system/need-popover-body";
+import { NeedPopoverBody, NeedPopoverMeta } from "@/components/system/need-popover-body";
 import { QuickAddButton } from "@/components/construction/quick-add-button";
 import { BuildDialog } from "@/components/construction/build-dialog";
 
@@ -241,7 +240,6 @@ function Th({ children, right = false }: { children: React.ReactNode; right?: bo
 export function DepositPopoverBody({ row, contributors }: { row: DepositRow; contributors: BuildingEntry[] }) {
   return (
     <div className="space-y-1">
-      <PopoverHeader title={<span className="capitalize">{row.resource}</span>} />
       <p className="whitespace-nowrap font-mono text-[10px] text-text-tertiary">
         {QUALITY_BAND_LABEL[row.band]} · {row.built}/{row.depositCounts} slots built · {row.staffed.toFixed(1)} staffed
       </p>
@@ -290,7 +288,6 @@ function BuildingPopoverBody({
 
   return (
     <div className="space-y-1.5">
-      <PopoverHeader title={label(b.buildingType)} />
       {(tierLabel || b.count > 0) && (
         <p className="whitespace-nowrap font-mono text-[10px] text-text-tertiary">
           {tierLabel && !isAcademy && !isComplex && !isSupport ? `tier ${b.tier} · ${tierLabel} · ` : ""}×{formatMagnitude(b.count)} built
@@ -526,6 +523,7 @@ function DepositTable({
                     <PopoverTriggerLabel
                       className="capitalize"
                       content={<DepositPopoverBody row={row} contributors={contributorsFor(row.resource)} />}
+                      title={<span className="capitalize">{row.resource}</span>}
                     >
                       {row.resource}
                     </PopoverTriggerLabel>
@@ -584,7 +582,11 @@ function ProblemLine({ items, popNeed }: { items: ProblemItem[]; popNeed?: PopNe
           <Fragment key={`${item.kind}-${item.label}`}>
             {i > 0 && <span className="text-text-tertiary">·</span>}
             {item.kind === "pops" && popNeed ? (
-              <PopoverTriggerLabel content={<NeedPopoverBody need={popNeed} />}>
+              <PopoverTriggerLabel
+                content={<NeedPopoverBody need={popNeed} />}
+                title={popNeed.goodName}
+                titleMeta={<NeedPopoverMeta need={popNeed} />}
+              >
                 {chip}
               </PopoverTriggerLabel>
             ) : (
@@ -627,7 +629,10 @@ function BuildingRow({
       <td className={styles.cell({ className: "text-text-primary" })}>
         <span className="flex items-center gap-1.5">
           <HealthGlyph health={health} className="text-[9px]" />
-          <PopoverTriggerLabel content={<BuildingPopoverBody b={b} labour={labour} supply={supply} />}>
+          <PopoverTriggerLabel
+            content={<BuildingPopoverBody b={b} labour={labour} supply={supply} />}
+            title={label(b.buildingType)}
+          >
             {label(b.buildingType)}
           </PopoverTriggerLabel>
         </span>

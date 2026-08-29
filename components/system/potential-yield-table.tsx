@@ -1,5 +1,4 @@
 import { PopoverTriggerLabel } from "@/components/ui/popover-trigger-label";
-import { PopoverHeader } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { TermLabel } from "@/components/ui/term-label";
 import { QUALITY_BAND_TEXT } from "@/lib/constants/ui";
@@ -14,7 +13,6 @@ import type { PotentialYieldRowView } from "@/lib/utils/substrate";
 export function PotentialYieldPopoverBody({ row }: { row: PotentialYieldRowView }) {
   return (
     <div className="space-y-1">
-      <PopoverHeader title={<span className="capitalize">{row.resource}</span>} />
       <div className="space-y-1 overflow-x-auto">
         {row.byBody.map((b, i) => (
           <div key={`${b.bodyId}-${i}`} className="flex items-center justify-between gap-2 whitespace-nowrap font-mono">
@@ -67,6 +65,7 @@ export function PotentialYieldTable({ rows }: { rows: PotentialYieldRowView[] })
               <PopoverTriggerLabel
                 className="capitalize"
                 content={<PotentialYieldPopoverBody row={row} />}
+                title={<span className="capitalize">{row.resource}</span>}
               >
                 {row.resource}
               </PopoverTriggerLabel>

@@ -11,6 +11,12 @@ export interface PopoverTriggerLabelProps {
    *  definition (`TERMS[id].body`), this is arbitrary per-call-site content the caller supplies —
    *  a row's own yield breakdown, a building's own staffing, a pop's own shortage. */
   content: ReactNode;
+  /** Passed straight through to `PopoverContent`'s own `title` — the header region itself is
+   *  structural (every `dwell` popover reserves the pin's gutter), this is only the optional
+   *  heading inside it. */
+  title?: ReactNode;
+  /** Passed straight through to `PopoverContent`'s own `titleMeta`. */
+  titleMeta?: ReactNode;
   /** Extra classes on the trigger button — merged onto `triggerLabelStyles` the same way
    *  `TooltipTriggerLabel`'s own `className` prop is. */
   className?: string;
@@ -34,7 +40,13 @@ export interface PopoverTriggerLabelProps {
  * otherwise each hand-roll as `<Popover dwell><PopoverTrigger><button
  * className={triggerLabelStyles(...)}>`.
  */
-export function PopoverTriggerLabel({ children, content, className }: PopoverTriggerLabelProps) {
+export function PopoverTriggerLabel({
+  children,
+  content,
+  title,
+  titleMeta,
+  className,
+}: PopoverTriggerLabelProps) {
   return (
     <Popover dwell>
       <PopoverTrigger>
@@ -42,7 +54,9 @@ export function PopoverTriggerLabel({ children, content, className }: PopoverTri
           {children}
         </button>
       </PopoverTrigger>
-      <PopoverContent>{content}</PopoverContent>
+      <PopoverContent title={title} titleMeta={titleMeta}>
+        {content}
+      </PopoverContent>
     </Popover>
   );
 }

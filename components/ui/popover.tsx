@@ -548,16 +548,24 @@ function releaseStackHover(count: number) {
   stackHoverCount = Math.max(0, stackHoverCount - count);
 }
 
-// Focusable-in-a-popover selector. Deliberately attribute-based (`:not([disabled])` rather than
-// `:not(:disabled)`) so it reads the same in every DOM implementation the tests run in.
-const FOCUSABLE_IN_POPOVER = [
+// Focusable-in-a-popover-BODY selector. Deliberately attribute-based (`:not([disabled])` rather
+// than `:not(:disabled)`) so it reads the same in every DOM implementation the tests run in.
+// Every clause is scoped to descend from `[data-popover-body]` — the wrapper `PopoverContent`
+// renders around `{children}` only, never around its own header region — so this can never match
+// the pin control or a header title, however either is arranged in the DOM. That is what lets the
+// header render BEFORE `{children}` (ordinary document order, no `absolute`/`order` positioning
+// trick needed to put the pin where it visually belongs): the guarantee that ArrowDown reaches the
+// body's own first focusable element is now enforced by the query's scope, not by DOM order.
+const FOCUSABLE_IN_POPOVER_BODY = [
   "a[href]",
   "button:not([disabled])",
   "input:not([disabled])",
   "select:not([disabled])",
   "textarea:not([disabled])",
   '[tabindex]:not([tabindex="-1"])',
-].join(", ");
+]
+  .map((selector) => `[data-popover-body] ${selector}`)
+  .join(", ");
 
 /**
  * The one way focus ever gets into a popover — both the "open it, then enter" and the "already open,
@@ -569,7 +577,7 @@ const FOCUSABLE_IN_POPOVER = [
  * `FocusScope` gives a `tabIndex` of -1 (programmatically focusable, never in the tab order).
  */
 function focusIntoContent(content: HTMLElement | null) {
-  const first = content?.querySelector<HTMLElement>(FOCUSABLE_IN_POPOVER);
+  const first = content?.querySelector<HTMLElement>(FOCUSABLE_IN_POPOVER_BODY);
   (first ?? content)?.focus();
 }
 
@@ -1357,7 +1365,19 @@ function DwellBar({ durationMs }: { durationMs: number }) {
 }
 
 interface PopoverContentProps
-  extends Omit<PopoverPrimitive.PopoverContentProps, "side" | "align"> {}
+  extends Omit<PopoverPrimitive.PopoverContentProps, "side" | "align" | "title"> {
+  /** The header region's own heading — optional, unlike the header region itself (see the header
+   *  block's own comment below). Earns its place when the trigger is not itself a word (a row, a
+   *  bar cell) — nothing else names what the reader is looking at then. A trigger that already IS
+   *  the word (a resource name, a building name) keeps repeating it here only where an earlier
+   *  design pass already decided to (`DepositPopoverBody`, `BuildingPopoverBody`,
+   *  `PotentialYieldPopoverBody`, `NeedPopoverBody`, `TermLabel`'s own definition body) — this prop
+   *  does not itself judge whether a new title is warranted. */
+  title?: ReactNode;
+  /** Extra content on the header row, right of the title — a status figure, a badge — laid out to
+   *  the LEFT of the space the header reserves for the pin control, never underneath it. */
+  titleMeta?: ReactNode;
+}
 
 /** Writes a node to a forwarded ref of either shape, so an element can be handed to a consumer's
  *  ref AND kept on one of the popover's own internal refs (`contentRef`, `triggerRef`) at the same
@@ -1374,6 +1394,8 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
       className = "",
       sideOffset = 8,
       style,
+      title,
+      titleMeta,
       onPointerEnter,
       onPointerLeave,
       onOpenAutoFocus,
@@ -1574,67 +1596,53 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
           {...props}
         >
           {dwellState === "filling" && <DwellBar durationMs={DWELL_MS} />}
-          {children}
-          {/* After `children`, not before: `focusIntoContent`/ArrowDown focuses the FIRST
-             focusable element in the content, and that has to stay whatever the popover's own
-             body puts first (a nested term trigger included) — not this control, and not a
-             `PopoverHeader` title either, since a header renders as ordinary `children` content
-             ahead of whatever the body nests inside it. */}
-          {showPinControl && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="iconXs"
-              aria-label={popover.pinned ? "Unpin" : "Pin"}
-              aria-pressed={popover.pinned}
-              className="absolute right-1 top-1"
-              onClick={() => (popover.pinned ? popover.unpinChain() : popover.pinChain())}
-            >
-              <PinIcon className="h-3 w-3" aria-hidden="true" />
-            </Button>
+          {/* The header region: structural for every `dwell` popover, not a body's opt-in — the pin
+             control can only ever appear on a `dwell` popover, so every one of them reserves this
+             row's right side for it (a fixed-size slot, always rendered while `popover.dwell`,
+             whether or not `showPinControl` currently fills it) rather than each body reserving its
+             own gutter (or not) as the earlier `PopoverHeader` component made it. Rendered in
+             ORDINARY document order, BEFORE `{children}` — nothing here needs `absolute`
+             positioning or a CSS `order` trick to sit visually above the body, because
+             `focusIntoContent`/ArrowDown no longer depends on document order to skip it: the query
+             it runs is scoped to `[data-popover-body]` (below), which this header and the pin
+             inside it are never part of. */}
+          {popover.dwell && (
+            <div className="mb-1.5 flex items-center gap-3 border-b border-border/60 pb-1">
+              {title !== undefined && (
+                <span className="whitespace-nowrap font-display font-semibold text-text-primary">
+                  {title}
+                </span>
+              )}
+              {titleMeta}
+              <span className="ml-auto flex h-5 w-5 shrink-0 items-center justify-center">
+                {showPinControl && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="iconXs"
+                    aria-label={popover.pinned ? "Unpin" : "Pin"}
+                    aria-pressed={popover.pinned}
+                    className={twMerge(popover.pinned && "text-accent hover:text-accent")}
+                    onClick={() => (popover.pinned ? popover.unpinChain() : popover.pinChain())}
+                  >
+                    <PinIcon
+                      className="h-3 w-3"
+                      aria-hidden="true"
+                      fill={popover.pinned ? "currentColor" : "none"}
+                    />
+                  </Button>
+                )}
+              </span>
+            </div>
           )}
+          {/* The popover's own body — the ONLY subtree `focusIntoContent`'s scoped query ever
+             searches (see `FOCUSABLE_IN_POPOVER_BODY`'s own comment), so a nested term trigger
+             inside it is always what ArrowDown reaches first, regardless of where the header (or
+             the pin nested inside it) sits in the DOM. */}
+          <div data-popover-body>{children}</div>
         </PopoverPrimitive.Content>
       </PopoverPrimitive.Portal>
     );
   },
 );
 PopoverContent.displayName = "PopoverContent";
-
-export interface PopoverHeaderProps {
-  /** The header's own heading — what several popover bodies used to render as their own first
-   *  `<p className="font-display ...">` line (`PotentialYieldPopoverBody`, `DepositPopoverBody`,
-   *  `BuildingPopoverBody`, `NeedPopoverBody`, `TermLabel`'s own body), each a slightly different
-   *  hand-rolled heading competing with this one. */
-  title: ReactNode;
-  /** Extra content on the header's own row, right of the title — a status figure, a badge — laid out
-   *  to the LEFT of the space this header reserves for the pin control, never underneath it. */
-  meta?: ReactNode;
-  className?: string;
-}
-
-/**
- * A popover body's optional heading row: a title, room for one more figure beside it, and a gutter
- * on the right sized to the pin/unpin control `PopoverContent` may render over this same top-right
- * corner — reserved unconditionally (whether or not THIS particular popover currently shows the
- * control) so the header's own layout never shifts depending on chain depth. `pr-6` is
- * `right-1` (0.25rem) plus the button's own `iconXs` width (`h-5 w-5`, 1.25rem) — the exact footprint
- * `PopoverContent`'s `absolute right-1 top-1` button occupies.
- *
- * Purely presentational — this file has no opinion on whether a body uses it, and a body with
- * nothing worth naming (`YieldPopoverBody`, whose first line is already a labelled figure, or
- * `HabitabilityPopoverBody`, whose own headline states its own percentage) is free to render nothing
- * here at all.
- */
-export function PopoverHeader({ title, meta, className }: PopoverHeaderProps) {
-  return (
-    <div
-      className={twMerge(
-        "mb-1.5 flex items-baseline justify-between gap-3 border-b border-border/60 pb-1 pr-6",
-        className,
-      )}
-    >
-      <span className="whitespace-nowrap font-display font-semibold text-text-primary">{title}</span>
-      {meta}
-    </div>
-  );
-}

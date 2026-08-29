@@ -12,8 +12,10 @@ import { bandLabel, bandTone, provisionScaleSegments, provisionTrackTone } from 
 import type { SupplyRegime } from "@/lib/engine/population";
 import { splitNeedsLedger } from "@/components/system/needs-view";
 import { NeedCells, NeedsTable } from "@/components/system/needs-table";
-import { NeedPopoverBody } from "@/components/system/need-popover-body";
+import { NeedPopoverBody, NeedPopoverMeta } from "@/components/system/need-popover-body";
 
+/** The trigger here is a focusable `<tr>`, not a word — nothing else names what the popover is
+ *  about, so it carries the header title `NeedPopoverBody` used to render for itself. */
 function NeedRow({ n }: { n: PopNeedData }) {
   return (
     <Popover dwell>
@@ -22,7 +24,9 @@ function NeedRow({ n }: { n: PopNeedData }) {
           <NeedCells n={n} density="panel" />
         </tr>
       </PopoverTrigger>
-      <PopoverContent><NeedPopoverBody need={n} /></PopoverContent>
+      <PopoverContent title={n.goodName} titleMeta={<NeedPopoverMeta need={n} />}>
+        <NeedPopoverBody need={n} />
+      </PopoverContent>
     </Popover>
   );
 }
