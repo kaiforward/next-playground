@@ -1660,6 +1660,26 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
           data-dwell-anchor={
             dwellState === null ? undefined : popover.cursorAnchored ? "cursor" : "trigger"
           }
+          // Marks every popover's outermost element, so the pinned-dismissal guard below can ask
+          // "did this click land in another popover?" — the header and its pin control sit outside
+          // `[data-popover-body]`, so that marker cannot answer it.
+          data-popover-content=""
+          onPointerDownOutside={composeHandlers<Parameters<NonNullable<PopoverContentProps["onPointerDownOutside"]>>[0]>(
+            props.onPointerDownOutside,
+            (event) => {
+              // Pinning exists so one chain can be read while another is opened beside it — and
+              // opening that second chain's pin is itself a CLICK outside the first, which Radix
+              // would otherwise dismiss. That made two pinned chains unreachable by the very
+              // gesture meant to produce them. So a pinned popover ignores a pointer-down that
+              // lands inside any other popover, and only that: a click on the page background
+              // still dismisses it, keeping the ordinary click-away exit everything else has.
+              if (!popover.pinned) return;
+              const target = event.target;
+              if (target instanceof Element && target.closest("[data-popover-content]")) {
+                event.preventDefault();
+              }
+            },
+          )}
           style={{ ...style, ...dwellStyle, opacity }}
           onPointerEnter={composeHandlers<React.PointerEvent<HTMLDivElement>>(onPointerEnter, () => {
             popover.cancelScheduledClose();

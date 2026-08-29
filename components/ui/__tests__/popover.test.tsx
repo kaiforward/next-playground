@@ -76,8 +76,14 @@ function dialogFor(label: string): HTMLElement {
 //
 // `label` must name the chain's DEEPEST currently-open level — the pin/unpin control renders only
 // there (it follows the pointer down as the chain grows), not at every open ancestor.
+// `pointerDown` before the click, and it is load-bearing rather than ceremony: Radix's
+// `DismissableLayer` detects an outside interaction from `pointerdown`, never from `click`. A
+// `fireEvent.click` alone therefore never asks any OTHER open popover whether this click dismisses
+// it — which is exactly the question a second pin has to survive, and it silently passed for a
+// build in which pinning a second chain destroyed the first.
 function pin(label: string) {
   const pinButton = within(dialogFor(label)).getByRole("button", { name: "Pin" });
+  fireEvent.pointerDown(pinButton);
   fireEvent.click(pinButton);
 }
 
@@ -85,6 +91,7 @@ function pin(label: string) {
 // currently-open (and now pinned) level, where the toggle now reads "Unpin".
 function unpin(label: string) {
   const unpinButton = within(dialogFor(label)).getByRole("button", { name: "Unpin" });
+  fireEvent.pointerDown(unpinButton);
   fireEvent.click(unpinButton);
 }
 
