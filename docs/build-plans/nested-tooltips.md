@@ -528,7 +528,7 @@ Interface: no new exported surface. The 6 `TooltipTriggerLabel` term triggers in
 `TermLabel`. **`LegendTooltip` (`:726`) does NOT convert** — it is an icon button carrying
 `aria-label="Legend"`, control help by the spec's own rule, the same shape as the map overlay legend
 already listed as staying a tooltip. An earlier draft of this plan wrongly listed it among the
-content-rich row bodies. `YieldTooltipBody` (`components/system/industry-panel.tsx:176`)
+content-rich row bodies. `YieldPopoverBody` (`components/system/industry-panel.tsx:176`)
 keeps its shape and gains `TermLabel` markup on the terms it already names — combined yield, the body
 archetypes, slots, the quality-band percentages — which is what makes the panel's first real chain.
 The remaining `<Tooltip>` roots in the file that describe controls are left alone.

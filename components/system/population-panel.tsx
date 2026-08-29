@@ -10,7 +10,7 @@ import { TrackMarker } from "@/components/ui/track-marker";
 import { PopoverTriggerLabel } from "@/components/ui/popover-trigger-label";
 import { PopulationSummary } from "@/components/system/population-summary";
 import { ProvisionBlock } from "@/components/system/provision-block";
-import { HabitabilityTooltipContent } from "@/components/system/habitability-tooltip-content";
+import { HabitabilityPopoverBody } from "@/components/system/habitability-popover-body";
 import {
   stabilityView,
   DIRECTION_GLYPH,
@@ -22,7 +22,7 @@ import type { SystemUnrestRead } from "@/lib/types/api";
 import type { FillOrderRow } from "@/lib/utils/substrate";
 
 /**
- * "Habitability: 93%" plus its per-body decomposition tooltip — quality is always shown as a story
+ * "Habitability: 93%" plus its per-body decomposition popover — quality is always shown as a story
  * about bodies, never a bare number (spec §3). The percentage is the service's `growthMultiplier`
  * FORMATTED only; this component computes nothing (`fillOrder` is likewise assembled server-side by
  * `habitabilityFillOrder`).
@@ -32,7 +32,7 @@ function GrowthLine({ growthMultiplier, fillOrder }: { growthMultiplier: number;
     <PopoverTriggerLabel
       className="text-xs"
       contentClassName="w-64"
-      content={<HabitabilityTooltipContent growthMultiplier={growthMultiplier} fillOrder={fillOrder} />}
+      content={<HabitabilityPopoverBody growthMultiplier={growthMultiplier} fillOrder={fillOrder} />}
     >
       Habitability: <span className="font-mono text-text-secondary">{Math.round(growthMultiplier * 100)}%</span>
     </PopoverTriggerLabel>

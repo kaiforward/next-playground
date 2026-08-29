@@ -12,7 +12,7 @@ import { bandLabel, bandTone, provisionScaleSegments, provisionTrackTone } from 
 import type { SupplyRegime } from "@/lib/engine/population";
 import { splitNeedsLedger } from "@/components/system/needs-view";
 import { NeedCells, NeedsTable } from "@/components/system/needs-table";
-import { NeedTooltipContent } from "@/components/system/need-tooltip-content";
+import { NeedPopoverBody } from "@/components/system/need-popover-body";
 
 function NeedRow({ n }: { n: PopNeedData }) {
   return (
@@ -22,7 +22,7 @@ function NeedRow({ n }: { n: PopNeedData }) {
           <NeedCells n={n} density="panel" />
         </tr>
       </PopoverTrigger>
-      <PopoverContent className="w-64"><NeedTooltipContent need={n} /></PopoverContent>
+      <PopoverContent className="w-64"><NeedPopoverBody need={n} /></PopoverContent>
     </Popover>
   );
 }

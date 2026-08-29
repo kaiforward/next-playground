@@ -5,12 +5,12 @@ import { QUALITY_BAND_TEXT } from "@/lib/constants/ui";
 import type { PotentialYieldRowView } from "@/lib/utils/substrate";
 
 /**
- * One potential-yield row's tooltip: per-body breakdown — name, slot count, ground value %, and a
- * locked marker where the body's tech isn't unlocked yet. Same tooltip primitive the industry
- * panel's deposit tooltips use (`DepositTooltipBody`/`YieldTooltipBody`,
+ * One potential-yield row's popover body: per-body breakdown — name, slot count, ground value %,
+ * and a locked marker where the body's tech isn't unlocked yet. Same dwell popover the industry
+ * panel's deposit readouts use (`DepositPopoverBody`/`YieldPopoverBody`,
  * `components/system/industry-panel.tsx`).
  */
-export function PotentialYieldTooltipBody({ row }: { row: PotentialYieldRowView }) {
+export function PotentialYieldPopoverBody({ row }: { row: PotentialYieldRowView }) {
   return (
     <div className="space-y-1">
       <p className="font-display text-sm font-semibold capitalize text-text-primary">{row.resource}</p>
@@ -66,7 +66,7 @@ export function PotentialYieldTable({ rows }: { rows: PotentialYieldRowView[] })
               <PopoverTriggerLabel
                 className="capitalize"
                 contentClassName="w-64 text-xs"
-                content={<PotentialYieldTooltipBody row={row} />}
+                content={<PotentialYieldPopoverBody row={row} />}
               >
                 {row.resource}
               </PopoverTriggerLabel>

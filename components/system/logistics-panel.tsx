@@ -46,7 +46,7 @@ function LegendSwatch({ color, hatch = false }: { color: "in" | "out"; hatch?: b
   );
 }
 
-/** Top source/destination partner systems for an External bar's hover tooltip. */
+/** Top source/destination partner systems for an External bar's popover. */
 function PartnerList({ label, partners }: { label: string; partners: TradeFlowPartner[] }) {
   if (partners.length === 0) return null;
   return (
@@ -82,8 +82,8 @@ function externalSegments(g: LogisticsGoodRow): BarSegment[] {
   ];
 }
 
-/** Internal bar tooltip: the produces/consumes totals and the civilian/manufacturing consumption split. */
-function internalTooltip(g: LogisticsGoodRow): React.ReactNode {
+/** Internal bar popover body: the produces/consumes totals and the civilian/manufacturing consumption split. */
+function internalPopoverBody(g: LogisticsGoodRow): React.ReactNode {
   const totalConsumption = g.consumption + g.inputDemand;
   return (
     <dl className="space-y-0.5 whitespace-nowrap text-xs">
@@ -111,8 +111,8 @@ function internalTooltip(g: LogisticsGoodRow): React.ReactNode {
   );
 }
 
-/** External bar tooltip: top source/destination partner systems — undefined when none are tracked. */
-function externalTooltip(g: LogisticsGoodRow): React.ReactNode | undefined {
+/** External bar popover body: top source/destination partner systems — undefined when none are tracked. */
+function externalPopoverBody(g: LogisticsGoodRow): React.ReactNode | undefined {
   if (g.importPartners.length === 0 && g.exportPartners.length === 0) return undefined;
   return (
     <div className="space-y-1.5">
@@ -171,7 +171,7 @@ function GoodRow({
         <BarCell
           segments={internalSegments(g)}
           maxValue={internalMax}
-          popoverContent={internalTooltip(g)}
+          popoverContent={internalPopoverBody(g)}
           popoverClassName="w-56"
         />
       </td>
@@ -180,7 +180,7 @@ function GoodRow({
       </td>
       <td className="border-l border-border px-1.5 py-1 align-middle">
         {g.traded ? (
-          <BarCell segments={externalSegments(g)} maxValue={externalMax} popoverContent={externalTooltip(g)} />
+          <BarCell segments={externalSegments(g)} maxValue={externalMax} popoverContent={externalPopoverBody(g)} />
         ) : (
           <div className="h-2.5" />
         )}

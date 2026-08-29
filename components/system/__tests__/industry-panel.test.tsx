@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { IndustryPanel, YieldTooltipBody, DepositTooltipBody } from "@/components/system/industry-panel";
+import { IndustryPanel, YieldPopoverBody, DepositPopoverBody } from "@/components/system/industry-panel";
 import { depositRows } from "@/components/system/industry-rows";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DWELL_OPEN_DELAY_MS, DWELL_MS } from "@/components/ui/popover";
@@ -118,17 +118,17 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
 
     expect(screen.getByText("115%")).toBeInTheDocument();
     // The marginal/next-slot figure and the working-X-of-Y-slots line both moved into the
-    // tooltip (see YieldTooltipBody below) — the cell itself must not carry either.
+    // tooltip (see YieldPopoverBody below) — the cell itself must not carry either.
     expect(screen.queryByText(/^Next:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/working \d+ of \d+ slots/)).not.toBeInTheDocument();
     expect(screen.queryByText("×1.15")).not.toBeInTheDocument();
   });
 
-  it("YieldTooltipBody — combined figure, one line per contributing body, and the next slot", () => {
+  it("YieldPopoverBody — combined figure, one line per contributing body, and the next slot", () => {
     // Real production join (depositRows) rather than a hand-typed DepositRow, so the fixture can't
     // drift from the shape the panel actually builds. Rendered directly rather than via a hovered
     // Tooltip trigger — Radix never mounts its portal content without an open interaction jsdom
-    // can't reliably drive (same convention as habitability-tooltip-content.test.tsx).
+    // can't reliably drive (same convention as habitability-popover-body.test.tsx).
     const [row] = depositRows(
       [{
         resource: "arable",
@@ -143,7 +143,7 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
       0,
       0.75,
     );
-    const { container } = render(<YieldTooltipBody row={row} />);
+    const { container } = render(<YieldPopoverBody row={row} />);
 
     expect(container.textContent).toContain("Combined yield: 100%");
     expect(container.textContent).toContain("Arid World");
@@ -152,25 +152,25 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
     expect(container.textContent).toContain("Next slot: 120% on Temperate World");
   });
 
-  it("YieldTooltipBody reads 'All deposit slots worked' instead of a next-slot line once nothing is left to build on", () => {
+  it("YieldPopoverBody reads 'All deposit slots worked' instead of a next-slot line once nothing is left to build on", () => {
     const [row] = depositRows(
       [{ resource: "arable", depositCounts: 3, worked: 3, yieldMult: 1.4, marginal: null, workedByBody: [{ bodyType: "gaia_world", worked: 3, groundValue: 1.4 }], band: "good" }],
       [],
       0,
       0.75,
     );
-    const { container } = render(<YieldTooltipBody row={row} />);
+    const { container } = render(<YieldPopoverBody row={row} />);
 
     expect(container.textContent).toContain("Combined yield: 140%");
     expect(container.textContent).toContain("All deposit slots worked");
     expect(container.textContent).not.toContain("Next slot:");
   });
 
-  it("DepositTooltipBody no longer duplicates the Yield column's combined/next-slot figures — band, built/slots and staffed only", () => {
-    // Same real production join as the YieldTooltipBody tests above, so this fixture can't drift
+  it("DepositPopoverBody no longer duplicates the Yield column's combined/next-slot figures — band, built/slots and staffed only", () => {
+    // Same real production join as the YieldPopoverBody tests above, so this fixture can't drift
     // from the shape the panel actually builds. yieldMult 1.15 and marginal.groundValue 1.2 are the
     // duplication bait: pre-fix this tooltip rendered "avg 115%" and "Next 120%" — both figures the
-    // Yield column's own tooltip (YieldTooltipBody) already owns.
+    // Yield column's own tooltip (YieldPopoverBody) already owns.
     const [row] = depositRows(
       [{
         resource: "arable",
@@ -185,7 +185,7 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
       0,
       0.75,
     );
-    const { container } = render(<DepositTooltipBody row={row} contributors={[]} />);
+    const { container } = render(<DepositPopoverBody row={row} contributors={[]} />);
 
     expect(container.textContent).not.toContain("avg 115%");
     expect(container.textContent).not.toContain("Next 120%");
@@ -209,7 +209,7 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
 });
 
 // Task 7 of docs/build-plans/nested-tooltips.md: the 6 TooltipTriggerLabel term triggers in this
-// panel convert to dwell popovers, and YieldTooltipBody gains real TermLabel markup — the panel's
+// panel convert to dwell popovers, and YieldPopoverBody gains real TermLabel markup — the panel's
 // first real chain. Real timers throughout, matching components/ui/__tests__/popover.test.tsx's own
 // convention: Radix's FocusScope/Presence machinery is fragile under fake timers, and a locked
 // `dwell` popover still renders through `PopoverPrimitive.Content`.
@@ -235,7 +235,7 @@ describe("IndustryPanel — nested-tooltips conversion (Task 7)", () => {
     industryValue.current = READOUT;
     const { container } = renderPanel();
 
-    // "Combined yield" only exists inside YieldTooltipBody, which only mounts once its popover is
+    // "Combined yield" only exists inside YieldPopoverBody, which only mounts once its popover is
     // open (Radix's Presence unmounts closed non-forced content entirely) — present on load would
     // mean a popover opened, or was forced open, without any interaction.
     expect(container.textContent).not.toContain("Combined yield");

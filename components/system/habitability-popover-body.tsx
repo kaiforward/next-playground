@@ -15,7 +15,7 @@ import type { FillOrderRow } from "@/lib/utils/substrate";
  * body without either being partially filled, so neither carries the label. Every body before the
  * marginal one is fully occupied, every body after it is untouched.
  */
-export function HabitabilityTooltipContent({
+export function HabitabilityPopoverBody({
   growthMultiplier,
   fillOrder,
 }: {

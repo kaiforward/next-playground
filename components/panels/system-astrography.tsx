@@ -9,7 +9,7 @@ import { StarGlyph } from "@/components/system/star-glyph";
 import { BodyReadout } from "@/components/system/body-readout";
 import { SystemRings } from "@/components/system/system-rings";
 import { PotentialYieldTable } from "@/components/system/potential-yield-table";
-import { HabitabilityTooltipContent } from "@/components/system/habitability-tooltip-content";
+import { HabitabilityPopoverBody } from "@/components/system/habitability-popover-body";
 import { PopoverTriggerLabel } from "@/components/ui/popover-trigger-label";
 import { TermLabel } from "@/components/ui/term-label";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
@@ -89,13 +89,13 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
                       so the dt/dd association (and "Habitability, 87%" read together) survives —
                       only the label text itself becomes interactive. This row's own habitability
                       data (this system's `growthMultiplier`/`fillOrder`), not a fixed definition,
-                      so it's a `PopoverTriggerLabel` keeping `HabitabilityTooltipContent` as its
+                      so it's a `PopoverTriggerLabel` keeping `HabitabilityPopoverBody` as its
                       body, not a `TermLabel`. */}
                   <dt className="font-display text-text-tertiary">
                     <PopoverTriggerLabel
                       contentClassName="w-64"
                       content={
-                        <HabitabilityTooltipContent
+                        <HabitabilityPopoverBody
                           growthMultiplier={habitability.growthMultiplier}
                           fillOrder={habitability.fillOrder}
                         />
@@ -122,8 +122,8 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
 
         {/* Potential yield — what this system COULD produce, locked bodies included; never what its
             extractors currently realise (that stays the industry panel's worked-prefix yield). The
-            explanatory sentence lives in the header's tooltip rather than as inline prose — "Potential"
-            already carries the distinction in the label; the tooltip is the fuller version for anyone
+            definition lives in the glossary rather than as inline prose — "Potential"
+            already carries the distinction in the label; the term's body is the fuller version for anyone
             who hovers. */}
         {potentialYields.length > 0 && (
           <div className="mt-4 border-t border-border pt-4">

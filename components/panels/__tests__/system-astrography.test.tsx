@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SystemAstrography } from "@/components/panels/system-astrography";
-import { PotentialYieldTooltipBody } from "@/components/system/potential-yield-table";
+import { PotentialYieldPopoverBody } from "@/components/system/potential-yield-table";
 import { DWELL_OPEN_DELAY_MS, DWELL_MS } from "@/components/ui/popover";
 import { emptyResourceVector, makeResourceVector } from "@/lib/engine/resources";
 import type { SystemPopulationData, SystemSubstrateData } from "@/lib/types/api";
@@ -102,7 +102,7 @@ describe("SystemAstrography — the system-level habitable-land header, absolute
     expect(dd).toHaveTextContent("93%");
   });
 
-  it("opens the habitability figure's breakdown popover, naming the contributing bodies, and a body row's own Archetype term opens a second level — Task 8's conversion from a plain Tooltip to a PopoverTriggerLabel keeping HabitabilityTooltipContent as its body", async () => {
+  it("opens the habitability figure's breakdown popover, naming the contributing bodies, and a body row's own Archetype term opens a second level — Task 8's conversion from a plain Tooltip to a PopoverTriggerLabel keeping HabitabilityPopoverBody as its body", async () => {
     const user = userEvent.setup({ delay: null });
     substrateValue = { visibility: "visible", sunClass: "yellow", peopleLand: 300, bodies: [], potentialYields: [] };
     popValue = {
@@ -317,10 +317,10 @@ describe("SystemAstrography — potential-yield table", () => {
     expect(await screen.findByText("Archetype")).toBeInTheDocument();
   });
 
-  it("PotentialYieldTooltipBody marks a locked body's breakdown line as locked, an unlocked one as not", () => {
+  it("PotentialYieldPopoverBody marks a locked body's breakdown line as locked, an unlocked one as not", () => {
     // Rendered directly rather than via a hovered Tooltip trigger — Radix never mounts its portal
     // content without an open interaction jsdom can't reliably drive (same convention as
-    // industry-panel.test.tsx's YieldTooltipBody tests).
+    // industry-panel.test.tsx's YieldPopoverBody tests).
     const row: PotentialYieldRowView = {
       resource: "ore", yieldMult: 0.63, slotCount: 3, band: "average",
       byBody: [
@@ -328,7 +328,7 @@ describe("SystemAstrography — potential-yield table", () => {
         { bodyId: "b1", archetypeName: "Volcanic World", slotCount: 2, groundValue: 0.36, locked: true },
       ],
     };
-    const { container } = render(<PotentialYieldTooltipBody row={row} />);
+    const { container } = render(<PotentialYieldPopoverBody row={row} />);
 
     expect(container.textContent).toContain("Temperate World");
     expect(container.textContent).toContain("Volcanic World");

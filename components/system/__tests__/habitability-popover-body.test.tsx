@@ -1,18 +1,18 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { HabitabilityTooltipContent } from "@/components/system/habitability-tooltip-content";
+import { HabitabilityPopoverBody } from "@/components/system/habitability-popover-body";
 import type { FillOrderRow } from "@/lib/utils/substrate";
 
 // Rendered directly (not via a hovered Tooltip trigger — Radix never mounts its portal content
 // without an open interaction jsdom can't reliably drive) so the list itself is asserted against
 // accessible text, exactly what a reader of the real tooltip sees.
 
-describe("HabitabilityTooltipContent — headline stat, every habitable-land body in score order, marginal body marked", () => {
+describe("HabitabilityPopoverBody — headline stat, every habitable-land body in score order, marginal body marked", () => {
   it("renders the headline habitability stat from growthMultiplier alone", () => {
     const fillOrder: FillOrderRow[] = [
       { className: "Jungle World", score: 0.7, occupied: true, frontier: true, partial: true },
     ];
-    const { container } = render(<HabitabilityTooltipContent growthMultiplier={0.85} fillOrder={fillOrder} />);
+    const { container } = render(<HabitabilityPopoverBody growthMultiplier={0.85} fillOrder={fillOrder} />);
     expect(container.textContent).toContain("Habitability: 85%");
   });
 
@@ -20,7 +20,7 @@ describe("HabitabilityTooltipContent — headline stat, every habitable-land bod
     const fillOrder: FillOrderRow[] = [
       { className: "Gaia World", score: 1.0, occupied: true, frontier: true, partial: false },
     ];
-    const { container } = render(<HabitabilityTooltipContent growthMultiplier={1} fillOrder={fillOrder} />);
+    const { container } = render(<HabitabilityPopoverBody growthMultiplier={1} fillOrder={fillOrder} />);
     // The unpenalised case is the one a wrong scale reads backwards: a perfectly habitable system
     // is at FULL growth, and anything phrased as a modifier renders it "0%", which reads as no
     // growth at all.
@@ -33,7 +33,7 @@ describe("HabitabilityTooltipContent — headline stat, every habitable-land bod
     const fillOrder: FillOrderRow[] = [
       { className: "Gaia World", score: 1.0, occupied: true, frontier: true, partial: false },
     ];
-    const { container } = render(<HabitabilityTooltipContent growthMultiplier={0.5} fillOrder={fillOrder} />);
+    const { container } = render(<HabitabilityPopoverBody growthMultiplier={0.5} fillOrder={fillOrder} />);
     expect(container.textContent).toContain("Habitability: 50%");
     // The same number written twice — once as 50%, once as "−50%" — is what this guards against.
     expect(container.textContent).not.toContain("Population growth");
@@ -46,7 +46,7 @@ describe("HabitabilityTooltipContent — headline stat, every habitable-land bod
       { className: "Ocean World", score: 0.65, occupied: true, frontier: true, partial: true },
       { className: "Boreal World", score: 0.6, occupied: false, frontier: false, partial: false },
     ];
-    render(<HabitabilityTooltipContent growthMultiplier={0.93} fillOrder={fillOrder} />);
+    render(<HabitabilityPopoverBody growthMultiplier={0.93} fillOrder={fillOrder} />);
 
     const items = screen.getAllByRole("listitem");
     expect(items).toHaveLength(3);
@@ -71,7 +71,7 @@ describe("HabitabilityTooltipContent — headline stat, every habitable-land bod
     const fillOrder: FillOrderRow[] = [
       { className: "Gaia World", score: 1.0, occupied: true, frontier: true, partial: false },
     ];
-    render(<HabitabilityTooltipContent growthMultiplier={1} fillOrder={fillOrder} />);
+    render(<HabitabilityPopoverBody growthMultiplier={1} fillOrder={fillOrder} />);
     expect(screen.getAllByRole("listitem")[0]).not.toHaveTextContent("Partial");
   });
 
@@ -79,12 +79,12 @@ describe("HabitabilityTooltipContent — headline stat, every habitable-land bod
     const fillOrder: FillOrderRow[] = [
       { className: "Jungle World", score: 0.7, occupied: true, frontier: true, partial: true },
     ];
-    render(<HabitabilityTooltipContent growthMultiplier={0.7} fillOrder={fillOrder} />);
+    render(<HabitabilityPopoverBody growthMultiplier={0.7} fillOrder={fillOrder} />);
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
   });
 
   it("an empty fill order (no habitable-land body) renders a stated absence, never a blank list", () => {
-    render(<HabitabilityTooltipContent growthMultiplier={1} fillOrder={[]} />);
+    render(<HabitabilityPopoverBody growthMultiplier={1} fillOrder={[]} />);
     expect(screen.queryByRole("list")).not.toBeInTheDocument();
     expect(screen.getByText(/No habitable-land bodies/)).toBeInTheDocument();
     expect(screen.queryByText(/people-land/)).not.toBeInTheDocument();

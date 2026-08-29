@@ -45,7 +45,7 @@ import { depositRows, depositRowProblems, depositTypeProblems, idleLevelSplit, s
 import { classifyGhosts, type GhostGroup, type GhostRow } from "@/components/system/industry-ghosts";
 import { buildProblems, needSeverity, problemGlyph, SEVERITY_GLYPH, SEVERITY_TEXT, type ProblemItem } from "@/components/system/needs-view";
 import { NeedCells, NeedsTable } from "@/components/system/needs-table";
-import { NeedTooltipContent } from "@/components/system/need-tooltip-content";
+import { NeedPopoverBody } from "@/components/system/need-popover-body";
 import { QuickAddButton } from "@/components/construction/quick-add-button";
 import { BuildDialog } from "@/components/construction/build-dialog";
 
@@ -136,7 +136,7 @@ function label(id: string): string {
   return NON_GOOD_LABELS[id] ?? COMPLEX_LABELS[id] ?? GOODS[id]?.name ?? id;
 }
 
-/** Human-readable label for a body archetype — the deposit yield tooltip's per-body breakdown. */
+/** Human-readable label for a body archetype — the deposit yield popover's per-body breakdown. */
 function bodyLabel(bodyType: BodyArchetypeId): string {
   return BODY_ARCHETYPES[bodyType].name;
 }
@@ -157,7 +157,7 @@ function PoolHead({ title, sub, right }: { title: string; sub?: string; right: R
 /**
  * The deposit row's yield read: the worked-prefix mean ground value alone, band-coloured, one
  * stat-register figure and nothing else in the cell (owner decision, Kai 2026-08-25 — a clean cell,
- * the marginal/per-body story moved entirely into the tooltip below). The tooltip is the
+ * the marginal/per-body story moved entirely into the popover below). The popover is the
  * explanation surface: the same combined figure repeated as a labelled line, then which bodies are
  * actually contributing worked ground and at what value each, then what the next extractor built
  * here would realise (or that there is nothing left to build on).
@@ -165,16 +165,16 @@ function PoolHead({ title, sub, right }: { title: string; sub?: string; right: R
 function YieldTag({ row }: { row: DepositRow }) {
   const pct = Math.round(row.yieldMult * 100);
   return (
-    <PopoverTriggerLabel className="block w-full text-right" contentClassName="w-64 text-xs" content={<YieldTooltipBody row={row} />}>
+    <PopoverTriggerLabel className="block w-full text-right" contentClassName="w-64 text-xs" content={<YieldPopoverBody row={row} />}>
       <span className={`block font-mono text-[11px] ${QUALITY_BAND_TEXT[row.band]}`}>{pct}%</span>
     </PopoverTriggerLabel>
   );
 }
 
-/** The yield tag's tooltip body: combined figure · per-body worked breakdown · next slot. The
+/** The yield tag's popover body: combined figure · per-body worked breakdown · next slot. The
  *  panel's first real chain — "Combined yield", each body archetype, "slot"/"slots" and the
  *  quality-band percentages all open their own glossary definition. */
-export function YieldTooltipBody({ row }: { row: DepositRow }) {
+export function YieldPopoverBody({ row }: { row: DepositRow }) {
   return (
     <div className="space-y-1">
       <p className="font-mono text-text-primary">
@@ -232,12 +232,12 @@ function Th({ children, right = false }: { children: React.ReactNode; right?: bo
   );
 }
 
-// ── Tooltips ─────────────────────────────────────────────────────────────────
+// ── Popover bodies ───────────────────────────────────────────────────────────
 
-/** Deposit tooltip: resource · yield band · built/slots · staffed · the goods extracted from it.
- *  The combined/next-slot yield figures live in the Yield column's own tooltip
- *  (`YieldTooltipBody`) — this one never repeats them. */
-export function DepositTooltipBody({ row, contributors }: { row: DepositRow; contributors: BuildingEntry[] }) {
+/** Deposit popover body: resource · yield band · built/slots · staffed · the goods extracted from
+ *  it. The combined/next-slot yield figures live in the Yield column's own popover
+ *  (`YieldPopoverBody`) — this one never repeats them. */
+export function DepositPopoverBody({ row, contributors }: { row: DepositRow; contributors: BuildingEntry[] }) {
   return (
     <div className="space-y-1">
       <p className="font-display text-[12px] font-semibold capitalize text-text-primary">{row.resource}</p>
@@ -259,8 +259,8 @@ export function DepositTooltipBody({ row, contributors }: { row: DepositRow; con
   );
 }
 
-/** Rich per-building tooltip: header · description · per-grade filled/needed · inputs · footer. Producers get the grade split + input gates. */
-function BuildingTooltipBody({
+/** Rich per-building popover body: header · description · per-grade filled/needed · inputs · footer. Producers get the grade split + input gates. */
+function BuildingPopoverBody({
   b,
   labour,
   supply,
@@ -521,7 +521,7 @@ function DepositTable({
                     <PopoverTriggerLabel
                       className="capitalize"
                       contentClassName="w-56"
-                      content={<DepositTooltipBody row={row} contributors={contributorsFor(row.resource)} />}
+                      content={<DepositPopoverBody row={row} contributors={contributorsFor(row.resource)} />}
                     >
                       {row.resource}
                     </PopoverTriggerLabel>
@@ -580,7 +580,7 @@ function ProblemLine({ items, popNeed }: { items: ProblemItem[]; popNeed?: PopNe
           <Fragment key={`${item.kind}-${item.label}`}>
             {i > 0 && <span className="text-text-tertiary">·</span>}
             {item.kind === "pops" && popNeed ? (
-              <PopoverTriggerLabel contentClassName="w-64" content={<NeedTooltipContent need={popNeed} />}>
+              <PopoverTriggerLabel contentClassName="w-64" content={<NeedPopoverBody need={popNeed} />}>
                 {chip}
               </PopoverTriggerLabel>
             ) : (
@@ -593,7 +593,7 @@ function ProblemLine({ items, popNeed }: { items: ProblemItem[]; popNeed?: PopNe
   );
 }
 
-/** One general-land building row — health glyph · name (tooltip) · staffed/built · output, with an exception-only problem sub-row.
+/** One general-land building row — health glyph · name (popover) · staffed/built · output, with an exception-only problem sub-row.
  *  On the player's own systems, a trailing quick-add column offers +1 level when a feasibility option exists. */
 function BuildingRow({
   b,
@@ -623,7 +623,7 @@ function BuildingRow({
       <td className={styles.cell({ className: "text-text-primary" })}>
         <span className="flex items-center gap-1.5">
           <HealthGlyph health={health} className="text-[9px]" />
-          <PopoverTriggerLabel contentClassName="w-64" content={<BuildingTooltipBody b={b} labour={labour} supply={supply} />}>
+          <PopoverTriggerLabel contentClassName="w-64" content={<BuildingPopoverBody b={b} labour={labour} supply={supply} />}>
             {label(b.buildingType)}
           </PopoverTriggerLabel>
         </span>
@@ -807,8 +807,8 @@ function LicensingRow({ grade, pool, buildHint }: { grade: "skill1" | "skill2"; 
   );
 }
 
-/** Skilled-grade basket tooltip body: lead-in line + per-good per-head rate, richest first. */
-function BasketTooltipBody({ grade, basket }: { grade: "skill1" | "skill2"; basket: SkillBasketEntry[] }) {
+/** Skilled-grade basket popover body: lead-in line + per-good per-head rate, richest first. */
+function BasketPopoverBody({ grade, basket }: { grade: "skill1" | "skill2"; basket: SkillBasketEntry[] }) {
   const noun = grade === "skill1" ? "technician" : "engineer";
   return (
     <div className="space-y-1">
@@ -884,7 +884,7 @@ function LabourCard({
               key={w.key}
               className="inline-flex items-center gap-1.5"
               contentClassName="w-56"
-              content={<BasketTooltipBody grade={w.key} basket={w.basket} />}
+              content={<BasketPopoverBody grade={w.key} basket={w.basket} />}
             >
               {chip}
             </PopoverTriggerLabel>

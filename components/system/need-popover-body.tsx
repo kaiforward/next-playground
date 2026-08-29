@@ -9,8 +9,8 @@ const TIER_META = [
   { key: "engineers", label: "Engineers", color: "#a855f7" },
 ] as const;
 
-/** Canonical need-pressure tooltip shared by population and industry surfaces. */
-export function NeedTooltipContent({
+/** Canonical need-pressure popover body shared by population and industry surfaces. */
+export function NeedPopoverBody({
   need,
 }: {
   need: PopNeedData;
