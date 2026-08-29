@@ -8,7 +8,7 @@ import type { BuildOptionData } from "@/lib/types/api";
 
 const BLOCK_COPY = {
   no_space: "No space left for this building here.",
-  no_deposit_slots: "No free deposit slots here.",
+  no_deposit_slots: "No free resource slots here.",
 } as const;
 
 /**

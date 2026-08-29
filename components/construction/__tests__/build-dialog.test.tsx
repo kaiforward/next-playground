@@ -50,7 +50,7 @@ describe("BuildDialog — feasibility readout", () => {
 
     expect(screen.getByText("No ceiling")).toBeInTheDocument();
     expect(screen.queryByText(/Not enough space/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/No free deposit slots/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No free resource slots/)).not.toBeInTheDocument();
   });
 
   it("reads the numeric ceiling for a finite-maxLevels option", () => {

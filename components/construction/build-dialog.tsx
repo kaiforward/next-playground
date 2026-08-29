@@ -123,7 +123,7 @@ export function BuildDialog({
           {overCeiling && option && option.maxLevels !== null && (
             <InlineAlert variant="error" className="mt-3">
               {option.blocked === "no_deposit_slots"
-                ? "No free deposit slots for that building here."
+                ? "No free resource slots for that building here."
                 : `Not enough space — ${option.maxLevels} level(s) fit here.`}
             </InlineAlert>
           )}

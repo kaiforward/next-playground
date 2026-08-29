@@ -203,7 +203,7 @@ export function YieldPopoverBody({ row }: { row: DepositRow }) {
             <TermLabel id="archetype">{bodyLabel(row.marginal.bodyType)}</TermLabel>
           </>
         ) : (
-          <>All deposit <TermLabel id="resourceSlot">slots</TermLabel> worked</>
+          <>All resource <TermLabel id="resourceSlot">slots</TermLabel> worked</>
         )}
       </p>
     </div>
@@ -213,8 +213,8 @@ export function YieldPopoverBody({ row }: { row: DepositRow }) {
 /**
  * `fill/capacity`, coloured by health when not stable. The fill keeps one decimal (the fractional
  * figure is the signal); the capacity reads as a whole count of slots / built levels. The fill is
- * `staffedLevels` — pure labour for producers/extractors, occupancy for housing, licence/family draw
- * for academies/complexes/support (see that helper's docstring). Health is driven separately by
+ * `staffedLevels` — pure labour for producers/extractors, true occupancy for housing, licence/family
+ * draw for academies/complexes/support (see that helper's docstring). Health is driven separately by
  * `used` (staffed AND selling for producers/extractors), so a producer or extractor row can read
  * fully staffed while still contracting or collapsing from a stalled sell-through; the state sub-row
  * (`ProblemLine`) names that condition, on both the general-land and deposit tables.
@@ -350,7 +350,7 @@ function BuildingPopoverBody({
 
       {isProducer && (
         <p className="border-t border-border/60 pt-1.5 text-xs leading-snug text-text-tertiary">
-          Output <span className="font-mono text-text-secondary">{b.output !== undefined ? formatUnitsShort(b.output) : "0"}</span>/cyc — staffing{" "}
+          Output <span className="font-mono text-text-secondary">{b.output !== undefined ? formatUnitsShort(b.output) : "0"}</span>/cyc — <TermLabel id="staffing">staffing</TermLabel>{" "}
           <span className="font-mono text-text-secondary">{Math.round(b.staffedFraction * 100)}%</span>
           {wall && wall.fulfil < 1 ? (
             <>
@@ -505,7 +505,7 @@ function DepositTable({
     <table className="w-full border-collapse">
       <thead>
         <tr>
-          <Th>Deposit</Th><Th right>Staffed</Th><Th right>Slots</Th><Th right>Yield</Th><Th right>Out/cyc</Th>
+          <Th>Resource</Th><Th right>Staffed</Th><Th right>Slots</Th><Th right>Yield</Th><Th right>Out/cyc</Th>
           {canOrder && <Th right> </Th>}
         </tr>
       </thead>
@@ -609,6 +609,7 @@ function BuildingRow({
   b,
   labour,
   unrest,
+  population,
   supply,
   popNeed,
   systemId,
@@ -618,6 +619,7 @@ function BuildingRow({
   b: BuildingEntry;
   labour: SystemLabour;
   unrest: number;
+  population: number;
   supply?: SystemIndustryReadout["supplyChain"][number];
   popNeed?: PopNeedData;
   systemId: string;
@@ -642,7 +644,7 @@ function BuildingRow({
         </span>
         <ProblemLine items={items} popNeed={popNeed} />
       </td>
-      <td className="px-1.5 py-1 align-top text-right font-mono text-xs text-text-secondary"><Staffed staffed={staffedLevels(b)} total={b.count} health={health} /></td>
+      <td className="px-1.5 py-1 align-top text-right font-mono text-xs text-text-secondary"><Staffed staffed={staffedLevels(b, population)} total={b.count} health={health} /></td>
       <td className="px-1.5 py-1 align-top text-right font-mono text-xs text-text-primary">{b.output !== undefined ? formatUnitsShort(b.output) : "—"}</td>
       {canOrder && (
         <td className="px-1.5 py-1 align-top text-right">
@@ -677,6 +679,7 @@ function BuildingsTable({
   groups,
   labour,
   unrest,
+  population,
   supplyByGood,
   popNeedByGood,
   systemId,
@@ -689,6 +692,7 @@ function BuildingsTable({
   groups: Array<{ title: BuildingGroupTitle; buildings: BuildingEntry[] }>;
   labour: SystemLabour;
   unrest: number;
+  population: number;
   supplyByGood: Map<string, SystemIndustryReadout["supplyChain"][number]>;
   popNeedByGood: Map<string, PopNeedData>;
   systemId: string;
@@ -727,6 +731,7 @@ function BuildingsTable({
                 b={b}
                 labour={labour}
                 unrest={unrest}
+                population={population}
                 supply={b.outputGood ? supplyByGood.get(b.outputGood) : undefined}
                 popNeed={b.outputGood ? popNeedByGood.get(b.outputGood) : undefined}
                 systemId={systemId}
@@ -766,7 +771,7 @@ function LegendTooltip() {
         </div>
         <div>
           <p className="mb-1 font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary">Columns</p>
-          <p className="text-xs text-text-secondary"><span className="font-mono">staffed/built</span> is staffed labour on the built extractor levels — a row can read fully staffed and still show a state chip below it (understaffed, pop-short, or glut-idling — extractors have no recipe inputs, so never input-short) when it isn&apos;t selling everything it makes; <span className="font-mono">slots</span> is built levels against the deposit&apos;s max; <span className="font-mono">out/cyc</span> is real output after input gates. A deposit shared by more than one extractor type shows its state chip on each type&apos;s own sub-row rather than the shared parent row. The general-land table&apos;s Staffed column means occupancy for housing and licence/family draw for academies and complexes — captioned inline where it isn&apos;t staffing.</p>
+          <p className="text-xs text-text-secondary"><span className="font-mono">staffed/built</span> is staffed labour on the built extractor levels — a row can read fully staffed and still show a state chip below it (understaffed, pop-short, or glut-idling — extractors have no recipe inputs, so never input-short) when it isn&apos;t selling everything it makes; <span className="font-mono">slots</span> is built levels against the resource&apos;s max; <span className="font-mono">out/cyc</span> is real output after input gates. A resource shared by more than one extractor type shows its state chip on each type&apos;s own sub-row rather than the shared parent row. The general-land table&apos;s Staffed column means occupancy for housing and licence/family draw for academies and complexes — captioned inline where it isn&apos;t staffing.</p>
         </div>
         <div>
           <p className="mb-1 font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary">Labour grades</p>
@@ -825,7 +830,7 @@ function BasketPopoverBody({ grade, basket }: { grade: "skill1" | "skill2"; bask
   const noun = grade === "skill1" ? "technician" : "engineer";
   return (
     <div className="space-y-1">
-      <p className="text-xs leading-snug text-text-secondary">Each {noun} adds demand for:</p>
+      <p className="text-xs leading-snug text-text-secondary">Each {noun} adds <TermLabel id="demand">demand</TermLabel> for:</p>
       <div className="space-y-0.5 overflow-x-auto">
         {basket.map((entry) => (
           <div key={entry.goodId} className="flex items-center justify-between gap-3 whitespace-nowrap">
@@ -958,7 +963,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
   const { space, deposits, labour, labourAllocation, labourFulfilment, supplyChain, unrest, skillBaskets, popNeeds } = data;
 
   if (buildings.length === 0) {
-    return <EmptyState message="Undeveloped — no industry established. Charted deposits await development." />;
+    return <EmptyState message="Undeveloped — no industry established. Charted resources await development." />;
   }
 
   // System health + per-building tally, grounded in the decay engine: a level sheds only under
@@ -1042,7 +1047,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
                       <tr key={n.goodId}><NeedCells n={n} density="tooltip" /></tr>
                     ))}
                   </NeedsTable>
-                  <p className="border-t border-border/60 pt-1 text-text-secondary">Doing worse than this population is used to breeds unrest — famine and critical shortages always do.</p>
+                  <p className="border-t border-border/60 pt-1 text-text-secondary">Doing worse than this <TermLabel id="population">population</TermLabel> is used to breeds <TermLabel id="unrest">unrest</TermLabel> — <TermLabel id="famine">famine</TermLabel> and critical shortages always do.</p>
                 </div>
               }
             >
@@ -1078,7 +1083,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
       {depRows.length > 0 && (
         <Card variant="bordered" padding="xs">
           <PoolHead
-            title="Deposit land"
+            title="Resource land"
             sub="extractors"
             right={<><span className="text-text-primary">{formatMagnitude(space.deposit.used)}</span>/{formatMagnitude(space.deposit.total)} worked · <span className="text-accent">{formatMagnitude(depositFree)} free</span></>}
           />
@@ -1126,6 +1131,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           groups={buildingGroups}
           labour={labour}
           unrest={unrest}
+          population={labourAllocation.population}
           supplyByGood={supplyByGood}
           popNeedByGood={popNeedByGood}
           systemId={systemId}

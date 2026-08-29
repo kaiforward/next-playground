@@ -204,11 +204,26 @@ describe("depositRowProblems", () => {
 });
 
 describe("staffedLevels", () => {
-  it("housing (tier -1) reads `used` — the vacancy-protected figure — not staffedFraction × count, which is bare occupancy and can overshoot count", () => {
+  it("housing (tier -1) with no population supplied falls back to `used` — the vacancy-protected figure — not staffedFraction × count, which is bare occupancy and can overshoot count", () => {
     // Overcrowded system: bare occupancy (staffedFraction 1.24) sits above 1, so staffedFraction ×
-    // count (6.2) would overshoot `count` (5); `used` (4.8, vacancy-capped) is what belongs on screen.
+    // count (6.2) would overshoot `count` (5); `used` (4.8, vacancy-capped) is the fallback figure.
     const housing: Parameters<typeof staffedLevels>[0] = { tier: -1, used: 4.8, staffedFraction: 1.24, count: 5 };
     expect(staffedLevels(housing)).toBe(4.8);
+  });
+
+  it("housing (tier -1) with a population reads TRUE occupancy — min(count, housingUsed(population)) — never the vacancy-padded `used`, which can read a full count while real occupancy is under 100%", () => {
+    // count 10, population 182 → housingUsed(182) = 182/20 = 9.1 (91% real occupancy). `used` is
+    // padded by decay's own vacancy allowance and capped at count, so it reads a deceptive 10/10
+    // (full) — exactly the "379 / 379 at 91% real occupancy" case the glossary's "An allowance never
+    // goes inside a displayed number" rule calls out. The displayed figure must be 9.1, not 10.
+    const housing: Parameters<typeof staffedLevels>[0] = { tier: -1, used: 10, staffedFraction: 1, count: 10 };
+    expect(staffedLevels(housing, 182)).toBeCloseTo(9.1);
+  });
+
+  it("housing (tier -1) with a population caps true occupancy at count — an overcrowded system never reads past its housing", () => {
+    // population 400 → housingUsed(400) = 20, which would overshoot count (5) uncapped.
+    const housing: Parameters<typeof staffedLevels>[0] = { tier: -1, used: 5, staffedFraction: 4, count: 5 };
+    expect(staffedLevels(housing, 400)).toBe(5);
   });
 
   it("a producer/extractor (tier >= 0) reads staffedFraction × count — pure labour, not the staffed-and-selling `used`", () => {

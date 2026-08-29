@@ -174,7 +174,7 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
   // population — must render Population/Stability/Provisioned like any other system; see §6.
   if (populationPanelView({ population, popCap, unrest }) === "uninhabited") {
     return (
-      <EmptyState message="Uninhabited — no population is established here. This system's deposits are charted on the Astrography tab." />
+      <EmptyState message="Uninhabited — no population is established here. This system's resources are charted on the Astrography tab." />
     );
   }
 

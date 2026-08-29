@@ -73,7 +73,7 @@ export function ColonySection({ systemId }: { systemId: string }) {
         ) : colony?.state === "eligible" ? (
           <>
             <p className="mb-3 text-sm text-text-tertiary">
-              Controlled, not yet colonised. Charted deposits await development.
+              Controlled, not yet colonised. Charted resources await development.
             </p>
             <Button
               variant="action"
