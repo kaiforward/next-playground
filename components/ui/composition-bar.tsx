@@ -34,7 +34,7 @@ export function CompositionBar({ segments }: CompositionBarProps) {
           />
         ))}
       </div>
-      <div className="mt-[7px] flex flex-wrap gap-2 text-[9.5px] text-text-secondary">
+      <div className="mt-[7px] flex flex-wrap gap-2 text-xs text-text-secondary">
         {widths.map((segment) => (
           <span key={segment.label} className="inline-flex items-center">
             <i aria-hidden className="mr-[3px] inline-block h-2 w-2" style={{ background: segment.color }} />

@@ -44,7 +44,7 @@ export function VitalTile({ label, dotColor, value, unit, meter, hint, children,
       className="relative min-h-[92px] border border-border border-l-2 border-l-accent bg-surface px-[11px] pt-[10px] pb-[11px]"
       style={{ gridColumn: `span ${colSpan}` }}
     >
-      <div className="flex items-center gap-[5px] font-display text-[9.5px] font-semibold tracking-wider text-text-tertiary uppercase">
+      <div className="flex items-center gap-[5px] font-display text-xs font-semibold tracking-wider text-text-tertiary uppercase">
         <span
           aria-hidden
           className="inline-block h-[7px] w-[7px] shrink-0 rounded-full"
@@ -77,7 +77,7 @@ export function VitalTile({ label, dotColor, value, unit, meter, hint, children,
       )}
       {children}
       {hasHintRow && (
-        <div className="mt-[7px] flex items-center gap-[5px] text-[10.5px] text-text-secondary">
+        <div className="mt-[7px] flex items-center gap-[5px] text-xs text-text-secondary">
           {hint}
         </div>
       )}
@@ -104,10 +104,10 @@ export function GhostVitalTile({ label, future, colSpan = 1 }: GhostVitalTilePro
       className="flex min-h-[92px] flex-col justify-center border border-dashed border-border-strong border-l-2 border-l-border-strong bg-surface px-[11px] pt-[10px] pb-[11px] opacity-[.55]"
       style={{ gridColumn: `span ${colSpan}` }}
     >
-      <div className="font-display text-[9.5px] font-semibold tracking-wider text-text-tertiary uppercase">
+      <div className="font-display text-xs font-semibold tracking-wider text-text-tertiary uppercase">
         {label}
       </div>
-      <div className="mt-[6px] text-[10.5px] leading-[1.5] text-text-tertiary">{future}</div>
+      <div className="mt-[6px] text-xs leading-[1.5] text-text-tertiary">{future}</div>
     </div>
   );
 }
