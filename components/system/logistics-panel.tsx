@@ -144,6 +144,7 @@ function BarCell({
       <PopoverTrigger asChild>
         <div
           tabIndex={0}
+          aria-label={typeof title === "string" ? title : undefined}
           className="w-full cursor-default outline-none focus-visible:ring-1 focus-visible:ring-accent"
         >
           {track}

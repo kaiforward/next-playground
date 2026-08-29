@@ -17,22 +17,22 @@ export interface PopoverTriggerLabelProps {
   title?: ReactNode;
   /** Passed straight through to `PopoverContent`'s own `titleMeta`. */
   titleMeta?: ReactNode;
-  /** Extra classes on the trigger button — merged onto `triggerLabelStyles` the same way
-   *  `TooltipTriggerLabel`'s own `className` prop is. */
+  /** Extra classes on the trigger button — merged onto `triggerLabelStyles`, the dotted-grey
+   *  trigger-label base this shares with `TermLabel` (`components/ui/tooltip.tsx`). */
   className?: string;
 }
 
 /**
- * A label that opens a dwell popover carrying arbitrary content — the `TooltipTriggerLabel` +
- * `TooltipContent` pairing's dwell-popover equivalent (enterable, keyboard-reachable,
- * ancestor-stack-aware via `Popover`'s `dwell` mode) rather than a plain hover tooltip.
+ * A label that opens a dwell popover carrying arbitrary content — a plain hover tooltip's
+ * equivalent for content that has to be enterable, keyboard-reachable and ancestor-stack-aware
+ * (via `Popover`'s `dwell` mode).
  *
  * Distinct from its sibling `TermLabel` (`components/ui/term-label.tsx`), which always opens the
  * same fixed glossary definition for a given `TermId`: a `PopoverTriggerLabel`'s popover is THIS
  * call site's own data — a deposit row's yield breakdown, a building's own staffing, a pop's own
  * shortage — not a definition. Both are dwell popovers; they differ only in where the content
- * comes from. Named to mirror `TooltipTriggerLabel` exactly, since the two otherwise take the same
- * `className` + label-as-children shape and differ only in which popover kind backs them.
+ * comes from. The two are siblings: both wear `triggerLabelStyles` and take the same `className` +
+ * label-as-children shape, and differ only in where their popover's content comes from.
  *
  * Extracted per `AGENTS.md`'s second-occurrence rule: this shell is what
  * `components/system/industry-panel.tsx`, `components/panels/system-astrography.tsx`,

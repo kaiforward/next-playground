@@ -20,7 +20,7 @@ function NeedRow({ n }: { n: PopNeedData }) {
   return (
     <Popover dwell>
       <PopoverTrigger asChild>
-        <tr tabIndex={0} className="border-b border-border/40 outline-none last:border-b-0 focus-visible:ring-1 focus-visible:ring-accent">
+        <tr tabIndex={0} aria-label={n.goodName} className="border-b border-border/40 outline-none last:border-b-0 focus-visible:ring-1 focus-visible:ring-accent">
           <NeedCells n={n} density="panel" />
         </tr>
       </PopoverTrigger>

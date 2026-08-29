@@ -19,8 +19,8 @@ import {
 // pointer-transit *geometry* test (does the physical path between trigger
 // and content matter) is not something jsdom can honestly answer — it has
 // no layout — so the transit test below exercises the time-based grace
-// period the implementation actually uses instead, and that limitation is
-// called out again in the summary this file's task reports.
+// period the implementation actually uses instead. Placement and hit-testing
+// stay unprovable here: they need a real browser.
 
 // Real timers throughout: Radix's FocusScope/Presence machinery reacts to
 // real rAF/timeout scheduling in ways that are fragile under Vitest's fake
@@ -37,6 +37,55 @@ async function wait(ms: number) {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, ms));
   });
+}
+
+// A linear dwell chain built from `labels`, each level nested inside the previous one's content —
+// exactly the shape a real TermLabel chain takes. `aria-label` on each level's content is what lets
+// a test disambiguate "the Pin button inside THIS dialog" once more than one chain is open at once,
+// and what lets a test read a specific dialog's own inline `opacity` style.
+function buildChain(labels: readonly string[]): ReactNode {
+  const [label, ...rest] = labels;
+  if (!label) return null;
+  return (
+    <Popover dwell key={label}>
+      <PopoverTrigger>
+        <button type="button">{label}</button>
+      </PopoverTrigger>
+      <PopoverContent aria-label={`Definition ${label}`}>
+        <p>Definition {label}</p>
+        {rest.length > 0 && buildChain(rest)}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Hovers `triggerName` and waits past the open grace and the dwell, so the popover it belongs to is
+// `locked` by the time this resolves.
+async function openLocked(user: ReturnType<typeof userEvent.setup>, triggerName: string) {
+  await user.hover(screen.getByRole("button", { name: triggerName }));
+  await wait(DWELL_OPEN_DELAY_MS + DWELL_MS + 80);
+}
+
+function dialogFor(label: string): HTMLElement {
+  return screen.getByRole("dialog", { name: `Definition ${label}` });
+}
+
+// A plain DOM click rather than `user.click` deliberately: the pointer's own transit toward the Pin
+// button (leaving whatever was hovered before it) is a real pointer-leave in its own right —
+// exercised on purpose by its own test below — and is not what this helper exists to drive.
+//
+// `label` must name the chain's DEEPEST currently-open level — the pin/unpin control renders only
+// there (it follows the pointer down as the chain grows), not at every open ancestor.
+function pin(label: string) {
+  const pinButton = within(dialogFor(label)).getByRole("button", { name: "Pin" });
+  fireEvent.click(pinButton);
+}
+
+// Same DOM-click rationale as `pin` above, for the same reason: `label` names the chain's deepest
+// currently-open (and now pinned) level, where the toggle now reads "Unpin".
+function unpin(label: string) {
+  const unpinButton = within(dialogFor(label)).getByRole("button", { name: "Unpin" });
+  fireEvent.click(unpinButton);
 }
 
 function renderPopover(label = "System row") {
@@ -902,8 +951,8 @@ describe("Popover — usePopoverDepth", () => {
 
 describe("Popover — the exclusivity stack is ancestor-aware, not a single incumbent", () => {
   it("a popover opening at depth 0 while another depth-0 popover is open closes it — today's exclusivity, unchanged", async () => {
-    // Mirrors the pre-existing depth-0 exclusivity coverage exactly, as this task's own vacuity
-    // check: the stack has to reproduce the single-pointer behaviour before any nested case matters.
+    // Mirrors the plain depth-0 exclusivity coverage exactly: the stack has to reproduce the
+    // single-incumbent behaviour before any nested case matters.
     const { user } = setup();
     render(
       <>
@@ -1234,8 +1283,8 @@ describe("Popover — dwell mode", () => {
   // Real timers throughout, per this file's own header comment — Radix's FocusScope/Presence
   // machinery is fragile under fake timers, and `dwell` mode still renders through
   // `PopoverPrimitive.Content`. `DWELL_OPEN_DELAY_MS` and `DWELL_MS` are fixed module constants
-  // (not props, per the build plan — the mode is tuned as a unit), so these waits are the real
-  // durations rather than a shortened test double.
+  // (not props — the mode is tuned as a unit), so these waits are the real durations rather than a
+  // shortened test double.
   //
   // "Does not receive the pointer" / "receives the pointer" (entries 2 and 3) are asserted via
   // `@testing-library/user-event`'s own pointer-events check: by default (`PointerEventsCheckLevel
@@ -1418,7 +1467,7 @@ describe("Popover — dwell mode", () => {
 });
 
 describe("Popover — the dwell stack lifecycle (return grace, leave grace, depth cue)", () => {
-  // Real timers throughout, per this file's own header comment and Task 2's own precedent — Radix's
+  // Real timers throughout, per this file's own header comment — Radix's
   // FocusScope/Presence machinery is fragile under fake timers, and a locked `dwell` popover still
   // renders through `PopoverPrimitive.Content`. `RETURN_GRACE_MS` (140) and `LEAVE_GRACE_MS` (90) are
   // real fixed module constants, so the waits below are the real durations.
@@ -1446,13 +1495,6 @@ describe("Popover — the dwell stack lifecycle (return grace, leave grace, dept
         </PopoverContent>
       </Popover>,
     );
-  }
-
-  // Hovers `triggerName` and waits past the open grace and the dwell, so the popover it belongs to
-  // is `locked` by the time this resolves.
-  async function openLocked(user: ReturnType<typeof userEvent.setup>, triggerName: string) {
-    await user.hover(screen.getByRole("button", { name: triggerName }));
-    await wait(DWELL_OPEN_DELAY_MS + DWELL_MS + 80);
   }
 
   it("moving from a term to its own child popover does not close that child, though the path crosses the parent", async () => {
@@ -1508,6 +1550,13 @@ describe("Popover — the dwell stack lifecycle (return grace, leave grace, dept
     // scripted jumps never produce that ordering (it only fires enter/leave on its own target), so
     // this dispatches the two events directly, in that order, to pin the ordering itself.
     //
+    // The leave carries a `relatedTarget` inside the parent's content because that is what a real
+    // pointer moving there carries, and React's enter/leave dispatch reads it: it fires leave only
+    // up to the common ancestor of where the pointer was and where it went. Without one, React
+    // treats the pointer as having left the document and fires a leave on the PARENT's content too
+    // — a departure the browser never reports for this gesture, and one that says the pointer is
+    // off the whole stack when it is resting in the middle of it.
+    //
     // Before the fix, this closed the WHOLE stack: the parent's `onPointerEnter` cancelled the
     // pending whole-stack leave grace and armed the (correct) return grace targeting the child, but
     // the child trigger's `onPointerLeave` — arriving after — unconditionally re-armed the
@@ -1520,7 +1569,7 @@ describe("Popover — the dwell stack lifecycle (return grace, leave grace, dept
     await openLocked(user, "Term A1");
 
     fireEvent.pointerEnter(screen.getByText("Definition A"));
-    fireEvent.pointerLeave(screen.getByRole("button", { name: "Term A1" }));
+    fireEvent.pointerLeave(screen.getByRole("button", { name: "Term A1" }), { relatedTarget: screen.getByText("Definition A") });
 
     await wait(Math.max(RETURN_GRACE_MS, LEAVE_GRACE_MS) + 150);
     // The parent survives — the bug this pins.
@@ -1591,7 +1640,7 @@ describe("Popover — the dwell stack lifecycle (return grace, leave grace, dept
   });
 
   it("hovering a separate, standalone plain popover's trigger never cancels another chain's pending leave grace", async () => {
-    // `markStackEntered` — the only thing that cancels a pending whole-stack leave grace — is
+    // `markRegionEntered` — the only thing that cancels a pending whole-stack leave grace — is
     // gated on `popover.dwell` at both call sites (`PopoverTrigger`'s and `PopoverContent`'s
     // pointer-enter). A plain (non-`dwell`) popover's own trigger must never call it. Nesting the
     // plain popover inside the dwell one to test this doesn't work: the plain trigger would then
@@ -1716,7 +1765,7 @@ describe("Popover — keyboard access in the dwell mode", () => {
 
     // Placement is Radix's own now, off a virtual cursor `Anchor` `Popover` mounts only for a
     // pointer-driven open (`cursorAnchored` in `popover.tsx`) — jsdom has no layout, so the
-    // resulting pixels can't be asserted (see this task's own report for why), but which anchor
+    // resulting pixels can't be asserted, but which anchor
     // mode is live is a real decision this component makes and records on the content element
     // itself (`data-dwell-anchor`), not a value derived from layout. A keyboard open never sets
     // `cursorAnchored`, so the virtual anchor is never even mounted and the content keeps Radix's
@@ -1824,59 +1873,9 @@ describe("Popover — pinning a chain", () => {
   // Real timers throughout, per this file's own header comment and every prior dwell-mode task's
   // own precedent.
 
-  // A linear dwell chain built from `labels`, each level nested inside the previous one's content —
-  // exactly the shape a real TermLabel chain takes. `aria-label` on each level's content is what
-  // lets a test disambiguate "the Pin button inside THIS dialog" once more than one chain is open
-  // at once, and what lets a test read a specific dialog's own inline `opacity` style.
-  function buildChain(labels: readonly string[]): ReactNode {
-    const [label, ...rest] = labels;
-    if (!label) return null;
-    return (
-      <Popover dwell key={label}>
-        <PopoverTrigger>
-          <button type="button">{label}</button>
-        </PopoverTrigger>
-        <PopoverContent aria-label={`Definition ${label}`}>
-          <p>Definition {label}</p>
-          {rest.length > 0 && buildChain(rest)}
-        </PopoverContent>
-      </Popover>
-    );
-  }
-
   function DepthProbe({ label }: { label: string }) {
     const depth = usePopoverDepth();
     return <p>{label} would-be depth {depth}</p>;
-  }
-
-  // Hovers `triggerName` and waits past the open grace and the dwell, so the popover it belongs to
-  // is `locked` by the time this resolves — the same helper the stack-lifecycle describe block above
-  // uses, redefined locally since that one is scoped to its own describe callback.
-  async function openLocked(user: ReturnType<typeof userEvent.setup>, triggerName: string) {
-    await user.hover(screen.getByRole("button", { name: triggerName }));
-    await wait(DWELL_OPEN_DELAY_MS + DWELL_MS + 80);
-  }
-
-  function dialogFor(label: string): HTMLElement {
-    return screen.getByRole("dialog", { name: `Definition ${label}` });
-  }
-
-  // A plain DOM click rather than `user.click` deliberately: the pointer's own transit toward the
-  // Pin button (leaving whatever was hovered before it) is a real pointer-leave in its own right —
-  // exercised on purpose by entry 6's own test below — and is not what THIS helper exists to drive.
-  //
-  // `label` must name the chain's DEEPEST currently-open level — the pin/unpin control renders only
-  // there (it follows the pointer down as the chain grows), not at every open ancestor.
-  function pin(label: string) {
-    const pinButton = within(dialogFor(label)).getByRole("button", { name: "Pin" });
-    fireEvent.click(pinButton);
-  }
-
-  // Same DOM-click rationale as `pin` above, for the same reason: `label` names the chain's deepest
-  // currently-open (and now pinned) level, where the toggle now reads "Unpin".
-  function unpin(label: string) {
-    const unpinButton = within(dialogFor(label)).getByRole("button", { name: "Unpin" });
-    fireEvent.click(unpinButton);
   }
 
   it("a pinned chain survives the pointer leaving it entirely", async () => {
@@ -2033,10 +2032,10 @@ describe("Popover — pinning a chain", () => {
   });
 
   it("dismissing a pinned chain does not cancel a pending return-grace belonging to a live unpinned chain", async () => {
-    // The precondition this task books: `returnCloseTimer`/`leaveCloseTimer` are shared module
-    // state, and every popover's unmount clears both unconditionally. Once a pinned chain and a
-    // fresh unpinned chain can be live together, the pinned chain's dismissal must not be able to
-    // silently cancel a grace that belongs to the other, still-live chain.
+    // `returnCloseTimer`/`leaveCloseTimer` are shared module state, and a popover's unmount clears
+    // both. Since a pinned chain and a fresh unpinned chain can be live together, the pinned
+    // chain's dismissal must not be able to silently cancel a grace belonging to the other,
+    // still-live chain.
     function Scene({ showPinned }: { showPinned: boolean }) {
       return (
         <>
@@ -2140,8 +2139,8 @@ describe("Popover — pinning a chain", () => {
 
     // Activated by keyboard, found only by its accessible name — never by a class, a test id or the
     // glyph it renders. A working pin turns the SAME control into an "Unpin" toggle rather than
-    // removing it (§ Issue 4 — the button stays so a pinned chain can be released from the same
-    // place, without falling back to Escape), so both halves of that toggle are the operable proof
+    // removing it — the button stays so a pinned chain can be released from the same place,
+    // without falling back to Escape — so both halves of that toggle are the operable proof
     // here: "Pin" is gone, "Unpin" has taken its place, and focus is still on the same element.
     await user.keyboard("{Enter}");
     await waitFor(() => {
@@ -2183,12 +2182,11 @@ describe("Popover — pinning a chain", () => {
   });
 
   it("unpinning restores the chain: it survives an unrelated hover, then closes normally once the pointer truly leaves", async () => {
-    // The fiddly part this task books: pinning released this chain's `stackHoverCount`
-    // contribution, and nothing re-primes it via a real `pointerenter` on unpin — the pointer never
-    // crosses a boundary, it was already resting on the content the Unpin button lives in. Without
-    // `unmarkPinned` restoring that contribution, the leave grace below would never arm (the eventual
-    // `pointerleave` would find its own local count already at 0 and no-op), and this chain would
-    // never close on its own again.
+    // Pinning drops this chain's share of `stackHoverCount`, and nothing re-primes it via a real
+    // `pointerenter` on unpin — the pointer never crosses a boundary, it was already resting on the
+    // content the Unpin button lives in. Unless unpinning recomputes that share from where the
+    // pointer actually is, the leave grace below would never arm and this chain would never close
+    // on its own again.
     const { user } = setup();
     render(
       <>
@@ -2210,6 +2208,114 @@ describe("Popover — pinning a chain", () => {
       expect(screen.queryByText("Definition Restore0")).not.toBeInTheDocument();
     });
     expect(screen.getByText("Definition RestoreRival")).toBeInTheDocument();
+  });
+
+  it("pinning a second chain leaves the first pinned chain with its own working Unpin", async () => {
+    // Two chains pinned at once is the point of pinning, not an edge case: the whole reason to pin
+    // is to keep something while opening another thing beside it. Each chain must keep its own
+    // identity, so each Unpin reattaches the chain it belongs to — a single "most recently pinned"
+    // slot leaves the first chain rendering an Unpin that reattaches the SECOND one, and no way out
+    // of the first but Escape.
+    const { user } = setup();
+    render(
+      <>
+        {buildChain(["Two0", "Two1"])}
+        {buildChain(["TwoB0"])}
+      </>,
+    );
+
+    await openLocked(user, "Two0");
+    await openLocked(user, "Two1");
+    pin("Two1");
+
+    await openLocked(user, "TwoB0");
+    pin("TwoB0");
+
+    // Both chains are still up, and each shows its OWN Unpin at its own deepest level.
+    expect(screen.getByText("Definition Two0")).toBeInTheDocument();
+    expect(within(dialogFor("Two1")).getByRole("button", { name: "Unpin" })).toBeInTheDocument();
+    expect(within(dialogFor("TwoB0")).getByRole("button", { name: "Unpin" })).toBeInTheDocument();
+
+    // Unpinning the FIRST chain reattaches that chain — the control flips back to Pin there — and
+    // leaves the second chain pinned, still showing its own Unpin.
+    unpin("Two1");
+    await waitFor(() => {
+      expect(within(dialogFor("Two1")).getByRole("button", { name: "Pin" })).toBeInTheDocument();
+    });
+    expect(within(dialogFor("TwoB0")).getByRole("button", { name: "Unpin" })).toBeInTheDocument();
+    expect(screen.getByText("Definition TwoB0")).toBeInTheDocument();
+  });
+
+  it("dismissing only the deepest level of a pinned chain hands the unpin control to the level above", async () => {
+    // Escape dismisses the highest Radix layer alone, so a pinned chain can lose its deepest level
+    // while the rest of it stays on screen. The control has to follow: frozen at the instant of
+    // pinning, it disappears with the level that carried it and the surviving levels float with no
+    // way to unpin them at all — Escape works, but the affordance is gone.
+    const { user } = setup();
+    render(buildChain(["Hand0", "Hand1"]));
+
+    await openLocked(user, "Hand0");
+    await openLocked(user, "Hand1");
+    pin("Hand1");
+    expect(within(dialogFor("Hand0")).queryByRole("button", { name: "Unpin" })).not.toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByText("Definition Hand1")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Definition Hand0")).toBeInTheDocument();
+
+    // The surviving level inherits the control — and it still unpins its own chain from there.
+    await waitFor(() => {
+      expect(within(dialogFor("Hand0")).getByRole("button", { name: "Unpin" })).toBeInTheDocument();
+    });
+    unpin("Hand0");
+    await waitFor(() => {
+      expect(within(dialogFor("Hand0")).getByRole("button", { name: "Pin" })).toBeInTheDocument();
+    });
+  });
+
+  it("unpinning by keyboard with the pointer elsewhere leaves later chains still closing on pointer-leave", async () => {
+    // Unpinning restores this popover's share of the shared hover count. Restoring a share captured
+    // at pin time is wrong for the keyboard path: the control is deliberately keyboard-operable, and
+    // between pinning and unpinning the pointer can leave entirely. A restored-anyway share is never
+    // given back — the count never reaches zero again, and no dwell popover ANYWHERE in the app
+    // closes on pointer-leave for the rest of the session.
+    const { user } = setup();
+    render(
+      <>
+        {buildChain(["Key0"])}
+        {buildChain(["KeyLater"])}
+      </>,
+    );
+
+    // Opened by POINTER, so the trigger genuinely holds a share at the moment of pinning.
+    await openLocked(user, "Key0");
+    act(() => screen.getByRole("button", { name: "Key0" }).focus());
+    await user.keyboard("{ArrowDown}");
+    await user.tab();
+    const pinButton = screen.getByRole("button", { name: "Pin" });
+    expect(pinButton).toHaveFocus();
+    await user.keyboard("{Enter}");
+
+    // The pointer leaves the trigger entirely while the chain is pinned, so by the time it is
+    // unpinned there is nothing left anywhere for it to hold.
+    await user.unhover(screen.getByRole("button", { name: "Key0" }));
+    await user.keyboard("{Enter}");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Pin" })).toBeInTheDocument();
+    });
+
+    // A completely separate chain, opened afterwards, must still close when the pointer leaves it.
+    await openLocked(user, "KeyLater");
+    await user.hover(screen.getByText("Definition KeyLater"));
+    await user.unhover(screen.getByText("Definition KeyLater"));
+    await waitFor(
+      () => {
+        expect(screen.queryByText("Definition KeyLater")).not.toBeInTheDocument();
+      },
+      { timeout: LEAVE_GRACE_MS + 500 },
+    );
   });
 
   it("unpinning restores the leave grace: leaving the reattached chain entirely closes it", async () => {
@@ -2342,5 +2448,175 @@ describe("Popover — pinning a chain", () => {
 
     await user.tab({ shift: true });
     expect(screen.getByRole("button", { name: "Pin" })).toHaveFocus();
+  });
+});
+
+describe("Popover — a region that vanishes gives its hover contribution back", () => {
+  // The whole-stack leave grace only ever arms on the shared hover count reaching zero, and that
+  // count is module-level: one popover that never gives its share back does not merely misbehave
+  // itself, it stops every dwell popover in the app from ever closing on pointer-leave again. So
+  // each of these opens a chain, does something that removes a tracked region without any
+  // pointer-leave to report it, and then proves a LATER, unrelated chain still closes normally.
+
+  it("Escape with the pointer resting in the content leaves later chains still closing on pointer-leave", async () => {
+    // Radix's `Presence` unmounts the content while the popover's root stays mounted, and no
+    // `pointerleave` is dispatched for an element removed from under a stationary cursor — so the
+    // content's own share has to be released by the content going away, not by an event.
+    const { user } = setup();
+    render(
+      <>
+        {buildChain(["Esc0"])}
+        {buildChain(["EscLater"])}
+      </>,
+    );
+
+    await openLocked(user, "Esc0");
+    // Into the content, and then not another pointer movement of any kind.
+    await user.hover(screen.getByText("Definition Esc0"));
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByText("Definition Esc0")).not.toBeInTheDocument();
+    });
+
+    // A fresh chain, opened afterwards, still closes when the pointer leaves it.
+    await openLocked(user, "EscLater");
+    await user.hover(screen.getByText("Definition EscLater"));
+    await user.unhover(screen.getByText("Definition EscLater"));
+    await waitFor(
+      () => {
+        expect(screen.queryByText("Definition EscLater")).not.toBeInTheDocument();
+      },
+      { timeout: LEAVE_GRACE_MS + 500 },
+    );
+  });
+
+  it("a popover taken over while the pointer rests in its content leaves later chains still closing", async () => {
+    // The same removal without a `pointerleave`, reached without the keyboard: Tab onto another
+    // dwell trigger opens it, which closes the incumbent at that depth and unmounts its content
+    // under the pointer.
+    const { user } = setup();
+    render(
+      <>
+        {buildChain(["Over0"])}
+        {buildChain(["OverRival"])}
+        {buildChain(["OverLater"])}
+      </>,
+    );
+
+    await openLocked(user, "Over0");
+    await user.hover(screen.getByText("Definition Over0"));
+    // Focus (not the pointer) reaches the rival's trigger, which opens it and takes depth 0.
+    act(() => screen.getByRole("button", { name: "OverRival" }).focus());
+    await waitFor(() => {
+      expect(screen.queryByText("Definition Over0")).not.toBeInTheDocument();
+    });
+
+    await openLocked(user, "OverLater");
+    await user.hover(screen.getByText("Definition OverLater"));
+    await user.unhover(screen.getByText("Definition OverLater"));
+    await waitFor(
+      () => {
+        expect(screen.queryByText("Definition OverLater")).not.toBeInTheDocument();
+      },
+      { timeout: LEAVE_GRACE_MS + 500 },
+    );
+  });
+
+  it("a plain popover unmounting mid-grace does not cancel a dwell chain's pending close", async () => {
+    // The return and leave graces are module-level timers, and a non-`dwell` popover never
+    // schedules either one — it closes on its own private grace instead. So its unmount must not
+    // clear them: an alert chip's popover dropping out when its run's count hits zero on a tick, or
+    // a Tracker row leaving the list, would otherwise cancel a pending whole-stack close, and since
+    // that grace only arms on the transition to zero, nothing would ever re-arm it.
+    function Scene({ showPlain }: { showPlain: boolean }) {
+      return (
+        <>
+          {buildChain(["Plain0"])}
+          {showPlain && (
+            <Popover>
+              <PopoverTrigger>
+                <button type="button">Plain row</button>
+              </PopoverTrigger>
+              <PopoverContent>
+                <p>Plain vitals</p>
+              </PopoverContent>
+            </Popover>
+          )}
+        </>
+      );
+    }
+    const { user } = setup();
+    const { rerender } = render(<Scene showPlain />);
+
+    await openLocked(user, "Plain0");
+    await user.hover(screen.getByText("Definition Plain0"));
+    // Off the stack entirely — the whole-stack leave grace is now pending.
+    await user.unhover(screen.getByText("Definition Plain0"));
+    // And the unrelated plain popover disappears inside that window.
+    rerender(<Scene showPlain={false} />);
+
+    await waitFor(
+      () => {
+        expect(screen.queryByText("Definition Plain0")).not.toBeInTheDocument();
+      },
+      { timeout: LEAVE_GRACE_MS + 500 },
+    );
+  });
+});
+
+describe("Popover — the dialog carries a name", () => {
+  // `role="dialog"` gets no accessible name from anywhere on its own, and a screen reader
+  // announcing an unnamed dialog tells the reader only that one opened. `PopoverContent` decides
+  // this centrally so no call site has to remember to.
+
+  it("names the dialog after the header title it was given", async () => {
+    const { user } = setup();
+    render(
+      <Popover dwell>
+        <PopoverTrigger>
+          <button type="button">Yield cell</button>
+        </PopoverTrigger>
+        <PopoverContent title="Combined yield">
+          <p>Worked average across all bodies.</p>
+        </PopoverContent>
+      </Popover>,
+    );
+
+    await user.tab();
+    expect(await screen.findByRole("dialog", { name: "Combined yield" })).toBeInTheDocument();
+  });
+
+  it("names an untitled dialog after the trigger that opened it", async () => {
+    const { user } = setup();
+    render(
+      <Popover dwell>
+        <PopoverTrigger>
+          <button type="button">Habitability</button>
+        </PopoverTrigger>
+        <PopoverContent>
+          <p>Growth multiplier and fill order.</p>
+        </PopoverContent>
+      </Popover>,
+    );
+
+    await user.tab();
+    expect(await screen.findByRole("dialog", { name: "Habitability" })).toBeInTheDocument();
+  });
+
+  it("leaves a name the call site supplied itself alone", async () => {
+    const { user } = setup();
+    render(
+      <Popover dwell>
+        <PopoverTrigger>
+          <button type="button">Own name trigger</button>
+        </PopoverTrigger>
+        <PopoverContent aria-label="Its own name" title="A Title">
+          <p>Body</p>
+        </PopoverContent>
+      </Popover>,
+    );
+
+    await user.tab();
+    expect(await screen.findByRole("dialog", { name: "Its own name" })).toBeInTheDocument();
   });
 });

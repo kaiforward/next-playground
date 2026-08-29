@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { IndustryPanel, YieldPopoverBody, DepositPopoverBody } from "@/components/system/industry-panel";
 import { depositRows } from "@/components/system/industry-rows";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { DWELL_OPEN_DELAY_MS, DWELL_MS } from "@/components/ui/popover";
+import { openLocked, waitForDwellLock } from "@/components/system/__tests__/dwell-popover-test-utils";
 import { formatMagnitude } from "@/lib/utils/format";
 import type { SystemIndustryData, SystemBuildOptionsData, SystemConstructionData } from "@/lib/types/api";
 
@@ -222,14 +222,7 @@ async function wait(ms: number) {
   });
 }
 
-/** Hovers `triggerName` and waits past the open grace and the dwell, so the popover it belongs to
- *  is `locked` by the time this resolves — same helper shape as popover.test.tsx's own. */
-async function openLocked(user: ReturnType<typeof userEvent.setup>, triggerName: string) {
-  await user.hover(screen.getByRole("button", { name: triggerName }));
-  await wait(DWELL_OPEN_DELAY_MS + DWELL_MS + 80);
-}
-
-describe("IndustryPanel — nested-tooltips conversion (Task 7)", () => {
+describe("IndustryPanel — dwell popovers with glossary term chains", () => {
   it("renders with no popover open — none of the converted tooltips' content appears unbidden", () => {
     industryValue.current = READOUT;
     const { container } = renderPanel();
@@ -285,7 +278,7 @@ describe("IndustryPanel — nested-tooltips conversion (Task 7)", () => {
 
     await user.hover(destination);
     // Long past the intervening trigger's own open grace and dwell — it still never opened.
-    await wait(DWELL_OPEN_DELAY_MS + DWELL_MS + 80);
+    await waitForDwellLock();
     expect(screen.queryByText("Archetype")).not.toBeInTheDocument();
     // The transit did not damage the chain it passed through on the way — the actual destination
     // term still locks open normally.

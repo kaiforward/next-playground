@@ -9,8 +9,9 @@ import { triggerLabelStyles } from "./tooltip";
 
 /**
  * The copper second tier `theme.md` reserves for a term that opens its own definition — one
- * level above `TooltipTriggerLabel`'s dotted-grey "explanation, not navigation" affordance. Built
- * on `triggerLabelStyles` (`components/ui/tooltip.tsx`) rather than a second copy of it, per
+ * level above the dotted-grey "explanation, not navigation" affordance `triggerLabelStyles` gives
+ * a plain trigger label. Built on `triggerLabelStyles` (`components/ui/tooltip.tsx`, the shared
+ * base this and `PopoverTriggerLabel` both wear) rather than a second copy of it, per
  * AGENTS.md's second-occurrence rule: the shared base (layout, underline shape, hover-solid) stays
  * one definition, and this only overrides the colour tier on top of it.
  */
@@ -69,7 +70,10 @@ export function TermLabel({ id, children }: TermLabelProps) {
           {children ?? definition.term}
         </button>
       </PopoverTrigger>
-      <PopoverContent aria-label={definition.term} title={definition.term}>
+      {/* No `aria-label` of its own: `PopoverContent` names its dialog after the header title it is
+          already given (and after the trigger where there is no title), so a second, hand-written
+          name here would only be a copy that can drift. */}
+      <PopoverContent title={definition.term}>
         <TermBody id={id} />
       </PopoverContent>
     </Popover>

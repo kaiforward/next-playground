@@ -165,7 +165,11 @@ function PoolHead({ title, sub, right }: { title: string; sub?: string; right: R
 function YieldTag({ row }: { row: DepositRow }) {
   const pct = Math.round(row.yieldMult * 100);
   return (
-    <PopoverTriggerLabel className="block w-full text-right" content={<YieldPopoverBody row={row} />}>
+    <PopoverTriggerLabel
+      className="block w-full text-right"
+      content={<YieldPopoverBody row={row} />}
+      title={<span className="capitalize">{row.resource}</span>}
+    >
       <span className={`block font-mono text-xs ${QUALITY_BAND_TEXT[row.band]}`}>{pct}%</span>
     </PopoverTriggerLabel>
   );

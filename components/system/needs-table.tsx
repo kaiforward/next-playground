@@ -16,7 +16,7 @@ export type NeedsTableDensity = "panel" | "tooltip";
 const DENSITY: Record<NeedsTableDensity, { th: string; name: string; glyph: string; value: string }> = {
   panel: {
     th: "whitespace-nowrap border-b border-border-strong px-1.5 py-1 font-display text-xs font-semibold uppercase tracking-wider text-text-tertiary",
-    name: "whitespace-nowrap px-1.5 py-1 text-xs text-text-primary",
+    name: "px-1.5 py-1 text-xs text-text-primary",
     glyph: "mr-1.5 font-mono text-xs",
     value: "whitespace-nowrap px-1.5 py-1 text-right font-mono text-xs",
   },
@@ -51,9 +51,10 @@ export function NeedCells({ n, density }: { n: PopNeedData; density: NeedsTableD
 export function NeedsTable({ density, children }: { density: NeedsTableDensity; children: ReactNode }) {
   const d = DENSITY[density];
   return (
-    // `overflow-x-auto` is a backstop, not the expected case — every cell is already
-    // `whitespace-nowrap`, so a popover sizing itself to `w-max` grows to fit this table rather than
-    // this table ever needing to scroll inside it.
+    // `overflow-x-auto` is a backstop, not the expected case for the `tooltip` density: every cell
+    // there is `whitespace-nowrap`, so a popover sizing itself to `w-max` grows to fit this table
+    // rather than this table ever needing to scroll inside it. The `panel` density's name cell wraps
+    // instead — it sits in a fixed-width Card that cannot grow to fit a long good name.
     <div className="overflow-x-auto">
       <table className="w-full border-collapse">
         <thead>

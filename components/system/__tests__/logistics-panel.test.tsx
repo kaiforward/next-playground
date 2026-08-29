@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LogisticsPanel } from "@/components/system/logistics-panel";
-import { DWELL_OPEN_DELAY_MS, DWELL_MS } from "@/components/ui/popover";
+import { hoverUntilLocked } from "@/components/system/__tests__/dwell-popover-test-utils";
 import type { LogisticsGoodRow, SystemLogisticsData } from "@/lib/types/api";
 
 // `BarCell` opens a `dwell` Popover — its trigger is a focusable wrapper round a
@@ -36,22 +36,19 @@ function renderPanel() {
   return render(<LogisticsPanel systemId="s1" />);
 }
 
-/** Hovers a bar cell (found via its row's good name) and waits past the open grace and the dwell,
- *  so the `dwell` popover it belongs to is `locked` — same helper shape as
- *  `industry-panel.test.tsx`'s own. Real timers, matching `components/ui/__tests__/popover.test.tsx`'s
- *  own convention. `cellIndex` picks which `<td>` in the good's row carries the bar (1 = internal,
- *  3 = external). */
+/** Locates a bar cell's trigger by its own accessible name (`"<good> — Internal"`/
+ *  `"<good> — External"`, the `BarCell` `title`) rather than a bare `[tabindex]` selector, so a
+ *  markup change that preserves focusability but drops the trigger's name still fails here.
+ *  `cellIndex` picks which `<td>` in the good's row carries the bar (1 = internal, 3 = external). */
 async function openBarCell(user: ReturnType<typeof userEvent.setup>, goodName: string, cellIndex: number) {
   const nameCell = screen.getByText(goodName);
   const row = nameCell.closest("tr");
   if (!row) throw new Error(`no <tr> ancestor for "${goodName}"`);
   const cell = row.children[cellIndex];
-  const trigger = cell?.querySelector("[tabindex]");
-  if (!trigger) throw new Error(`no focusable bar trigger in cell ${cellIndex} of "${goodName}"'s row`);
-  await user.hover(trigger);
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, DWELL_OPEN_DELAY_MS + DWELL_MS + 80));
-  });
+  if (!cell) throw new Error(`no cell ${cellIndex} in "${goodName}"'s row`);
+  const kind = cellIndex === 1 ? "Internal" : "External";
+  const trigger = within(cell as HTMLElement).getByLabelText(`${goodName} — ${kind}`);
+  await hoverUntilLocked(user, trigger);
 }
 
 describe("LogisticsPanel — bar cell dwell popovers", () => {

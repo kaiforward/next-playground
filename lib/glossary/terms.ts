@@ -8,9 +8,8 @@
  * describes the chain, it never walks it.
  *
  * Copy is quoted verbatim from `docs/planned/glossary.md` — this is the minimum set the industry
- * panel's own chains need (Task 4 of the nested-tooltips build plan), plus `family` and
- * `specialisation complex`, the glossary's one documented cycle, needed to exercise it for real
- * rather than hypothetically.
+ * panel's own chains need, plus `family` and `specialisation complex`, the glossary's one
+ * documented cycle, needed to exercise it for real rather than hypothetically.
  */
 
 export type TermId =

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import { act, render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SystemAstrography } from "@/components/panels/system-astrography";
 import { PotentialYieldPopoverBody } from "@/components/system/potential-yield-table";
-import { DWELL_OPEN_DELAY_MS, DWELL_MS } from "@/components/ui/popover";
+import { openLocked } from "@/components/system/__tests__/dwell-popover-test-utils";
 import { emptyResourceVector, makeResourceVector } from "@/lib/engine/resources";
 import type { SystemPopulationData, SystemSubstrateData } from "@/lib/types/api";
 import type { PotentialYieldRowView } from "@/lib/utils/substrate";
@@ -20,17 +20,6 @@ vi.mock("@/lib/hooks/use-system-population", () => ({
 
 function renderPanel() {
   return render(<SystemAstrography systemId="s1" />);
-}
-
-/** Hovers `triggerName` and waits past the open grace and the dwell, so the `dwell` popover it
- *  belongs to is `locked` by the time this resolves — same helper shape as
- *  `industry-panel.test.tsx`'s own. Real timers, matching `components/ui/__tests__/popover.test.tsx`'s
- *  own convention. */
-async function openLocked(user: ReturnType<typeof userEvent.setup>, triggerName: string) {
-  await user.hover(screen.getByRole("button", { name: triggerName }));
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, DWELL_OPEN_DELAY_MS + DWELL_MS + 80));
-  });
 }
 
 describe("SystemAstrography — the system-level habitable-land header, absolute not percent", () => {
@@ -102,7 +91,7 @@ describe("SystemAstrography — the system-level habitable-land header, absolute
     expect(dd).toHaveTextContent("93%");
   });
 
-  it("opens the habitability figure's breakdown popover, naming the contributing bodies, and a body row's own Archetype term opens a second level — Task 8's conversion from a plain Tooltip to a PopoverTriggerLabel keeping HabitabilityPopoverBody as its body", async () => {
+  it("opens the habitability figure's breakdown popover, naming the contributing bodies, and a body row's own Archetype term opens a second level", async () => {
     const user = userEvent.setup({ delay: null });
     substrateValue = { visibility: "visible", sunClass: "yellow", peopleLand: 300, bodies: [], potentialYields: [] };
     popValue = {
@@ -121,9 +110,15 @@ describe("SystemAstrography — the system-level habitable-land header, absolute
     };
     renderPanel();
 
-    await openLocked(user, "Habitability");
-    expect(await screen.findByText("Habitability: 93%")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Temperate World" })).toBeInTheDocument();
+    const trigger = screen.getByRole("button", { name: "Habitability" });
+    await user.tab();
+    expect(trigger).toHaveFocus();
+    // Keyboard focus opens a `dwell` popover locked immediately — no open grace or dwell to wait
+    // out (`Popover`'s own docblock, "keyboard opens a dwell popover locked"), same convention as
+    // the Potential-yield header term test below.
+    const dialog = await screen.findByRole("dialog", { name: "Habitability" });
+    expect(within(dialog).getByText("Habitability: 93%")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Temperate World" })).toBeInTheDocument();
 
     // A second level: the body row's own name is an `archetype` term, opening its own definition.
     await openLocked(user, "Temperate World");
@@ -242,7 +237,7 @@ describe("SystemAstrography — the body list", () => {
 });
 
 describe("SystemAstrography — potential-yield header term", () => {
-  it("keeps the yield definition out of the layout and reachable only through the header's own TermLabel — Task 8's conversion from an inline-explanation Tooltip to the fixed glossary definition", async () => {
+  it("keeps the yield definition out of the layout and reachable only through the header's own TermLabel", async () => {
     const user = userEvent.setup({ delay: null });
     substrateValue = {
       visibility: "visible", sunClass: "yellow", peopleLand: 0, bodies: [],
@@ -294,7 +289,7 @@ describe("SystemAstrography — potential-yield table", () => {
     expect(screen.queryByText("Potential yield")).not.toBeInTheDocument();
   });
 
-  it("opens the resource cell's own popover, and a body row's Archetype/Resource slot/Quality band terms each open a second level — Task 8's conversion of the resource cell to PopoverTriggerLabel", async () => {
+  it("opens the resource cell's own popover, and a body row's Archetype/Resource slot/Quality band terms each open a second level", async () => {
     const user = userEvent.setup({ delay: null });
     substrateValue = {
       visibility: "visible", sunClass: "yellow", peopleLand: 0, bodies: [],

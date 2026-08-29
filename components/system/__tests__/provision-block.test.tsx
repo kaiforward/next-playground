@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ProvisionBlock } from "@/components/system/provision-block";
-import { DWELL_OPEN_DELAY_MS, DWELL_MS } from "@/components/ui/popover";
+import { hoverUntilLocked } from "@/components/system/__tests__/dwell-popover-test-utils";
 import type { PopNeedData, SystemProvisionRead } from "@/lib/types/api";
 
 // The band widths, tones and the ledger split are tested against numbers in `provision-view` and
@@ -33,17 +33,11 @@ function renderBlock(read: SystemProvisionRead, needs: PopNeedData[] = []) {
   return render(<ProvisionBlock read={read} needs={needs} />);
 }
 
-/** Same helper shape as `industry-panel.test.tsx`'s own — hovers a need row (found by its good
- *  name, since the row itself carries no single accessible name) and waits past the open grace
- *  and the dwell, so the `dwell` popover it belongs to is `locked` by the time this resolves. Real
- *  timers, matching `components/ui/__tests__/popover.test.tsx`'s own convention. */
+/** Finds a need row by its own accessible name (the row's `aria-label`, set to the good name) and
+ *  waits for its `dwell` popover to lock. */
 async function openNeedRow(user: ReturnType<typeof userEvent.setup>, goodName: string) {
-  const row = screen.getByText(goodName).closest("tr");
-  if (!row) throw new Error(`no <tr> ancestor for "${goodName}"`);
-  await user.hover(row);
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, DWELL_OPEN_DELAY_MS + DWELL_MS + 80));
-  });
+  const row = screen.getByRole("row", { name: goodName });
+  await hoverUntilLocked(user, row);
 }
 
 describe("ProvisionBlock — band chip, percentage, track key, and the absent state", () => {
@@ -94,7 +88,7 @@ describe("ProvisionBlock — band chip, percentage, track key, and the absent st
     expect(screen.getByText("Met good")).toBeInTheDocument();
   });
 
-  it("opens a need row's own dwell popover, naming the good and its want/delivered/pressure breakdown — Task 8's conversion of NeedRow to a Popover", async () => {
+  it("opens a need row's own dwell popover, naming the good and its want/delivered/pressure breakdown", async () => {
     const user = userEvent.setup({ delay: null });
     const needs: PopNeedData[] = [
       need({ goodId: "critical-good", goodName: "Critical good", satisfaction: 0.2, want: 12, delivered: 4 }),
@@ -102,7 +96,11 @@ describe("ProvisionBlock — band chip, percentage, track key, and the absent st
     renderBlock(assessed, needs);
 
     await openNeedRow(user, "Critical good");
-    expect(await screen.findByText(/want 12\.00\/cyc/)).toBeInTheDocument();
-    expect(screen.getByText(/delivered 4\.00\/cyc/)).toBeInTheDocument();
+    // The two props the conversion actually added — the row's `title`/`titleMeta` passed to
+    // `PopoverContent` — render in the popover's own header, not just the body it already had.
+    const dialog = await screen.findByRole("dialog", { name: "Critical good" });
+    expect(within(dialog).getByText(/20% met/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/want 12\.00\/cyc/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/delivered 4\.00\/cyc/)).toBeInTheDocument();
   });
 });

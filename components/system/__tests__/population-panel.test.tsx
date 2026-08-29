@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { PopulationPanel } from "@/components/system/population-panel";
-import { DWELL_OPEN_DELAY_MS, DWELL_MS } from "@/components/ui/popover";
+import { openLocked } from "@/components/system/__tests__/dwell-popover-test-utils";
 import type { SystemPopulationData, SystemUnrestRead } from "@/lib/types/api";
 
 // The Population tab's growth line ("Habitability: 93%") is a straight FORMAT of the service's
@@ -43,16 +43,6 @@ function renderPanel() {
   return render(<PopulationPanel systemId="s1" />);
 }
 
-/** Same helper shape as `industry-panel.test.tsx`'s own — hovers a trigger and waits past the
- *  open grace and the dwell, so the `dwell` popover it belongs to is `locked` by the time this
- *  resolves. Real timers, matching `components/ui/__tests__/popover.test.tsx`'s own convention. */
-async function openLocked(user: ReturnType<typeof userEvent.setup>, triggerName: string | RegExp) {
-  await user.hover(screen.getByRole("button", { name: triggerName }));
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, DWELL_OPEN_DELAY_MS + DWELL_MS + 80));
-  });
-}
-
 describe("PopulationPanel — the growth line", () => {
   it("renders the service's growthMultiplier, format-only — a NaN service value is visible in DOM text", () => {
     popValue = populated({ growthMultiplier: NaN });
@@ -87,7 +77,7 @@ describe("PopulationPanel — the growth line", () => {
     expect(screen.queryByText(/Habitability/)).not.toBeInTheDocument();
   });
 
-  it("opens the growth line's own dwell popover, naming the contributing bodies, and a body row's own Archetype term opens a second level from it — Task 8's conversion of GrowthLine to PopoverTriggerLabel", async () => {
+  it("opens the growth line's own dwell popover, naming the contributing bodies, and a body row's own Archetype term opens a second level from it", async () => {
     const user = userEvent.setup({ delay: null });
     popValue = populated({
       growthMultiplier: 0.93,

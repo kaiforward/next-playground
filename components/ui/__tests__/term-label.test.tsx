@@ -3,7 +3,7 @@ import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DWELL_MS, DWELL_OPEN_DELAY_MS } from "@/components/ui/popover";
 import { TermLabel } from "@/components/ui/term-label";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTriggerLabel } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TERMS } from "@/lib/glossary/terms";
 
 // Rendered in jsdom, driven with real user-event pointer sequences and queried by role/accessible
@@ -94,7 +94,7 @@ describe("TermLabel", () => {
     ).toHaveLength(1);
   });
 
-  it("is distinguishable from TooltipTriggerLabel: it opens an enterable dialog region, not a description", async () => {
+  it("is distinguishable from a control's TooltipTrigger: it opens an enterable dialog region, not a description", async () => {
     // Radix's `Tooltip.Arrow` needs `ResizeObserver`, which jsdom doesn't provide — stubbed here,
     // same convention as `components/panels/__tests__/system-astrography.test.tsx`.
     class StubResizeObserver {
@@ -109,7 +109,9 @@ describe("TermLabel", () => {
       <>
         <TooltipProvider>
           <Tooltip>
-            <TooltipTriggerLabel>Plain control help</TooltipTriggerLabel>
+            <TooltipTrigger asChild>
+              <button type="button">Plain control help</button>
+            </TooltipTrigger>
             <TooltipContent>Supplemental legend text</TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -117,8 +119,8 @@ describe("TermLabel", () => {
       </>,
     );
 
-    // TooltipTriggerLabel's content is a description announced with the control — not a separate
-    // focusable region a person can enter. No `dialog` role exists for it at all.
+    // A control's TooltipTrigger content is a description announced with the control — not a
+    // separate focusable region a person can enter. No `dialog` role exists for it at all.
     await user.hover(screen.getByRole("button", { name: "Plain control help" }));
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Supplemental legend text");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
