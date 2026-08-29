@@ -223,6 +223,8 @@ Any plain text whose tooltip is the payload — good names, building names, labo
 
 A second, copper tier marks a word that opens its own definition rather than a plain description: **`TermLabel`** (`components/ui/term-label.tsx`), for a glossary term whose definition may itself name further terms, chaining as deep as the player follows it. It shares `TooltipTriggerLabel`'s dotted-underline shape (`triggerLabelStyles`, exported from `components/ui/tooltip.tsx`) but renders it in the accent colour, so the two tiers read as distinct at a glance: dotted grey is "explanation, not navigation" (the web `<abbr>` convention), copper is "this word has its own entry." Behind it, `TermLabel` opens a `Popover` in `dwell` mode rather than a `Tooltip` — a term's definition is a thing in the game, reachable and enterable, not a control's description.
 
+A row or wrapper that opens the same kind of enterable popover but with its own per-call-site content — a deposit row's yield breakdown, a building's own staffing — uses **`PopoverTriggerLabel`** (`components/ui/popover-trigger-label.tsx`) instead. It stays in the plain dotted-grey tier, since its content is this call site's own data rather than a glossary entry; only `TermLabel` spends the copper tier.
+
 Two deliberate boundaries:
 
 - **Controls stay unmarked.** Checkboxes, segmented controls, radio rows, bars, and icon buttons whose tooltips are supplemental legends use the bare `TooltipTrigger` — they already read as interactive, and a dotted underline would misread.
@@ -251,4 +253,4 @@ Lucide icons default to 24x24. Size them explicitly for context:
 - **No raw `<input>` or `<select>`** — use form components from `components/form/`
 - **No inline progress bars** — use `ProgressBar` component with appropriate color/size
 - **No unsized lucide icons in buttons** — always set explicit `w-*` / `h-*` classes
-- **No unmarked text tooltips, no ad-hoc trigger styling** — text labels carrying a tooltip use `TooltipTriggerLabel` (dotted-underline affordance) or, for a glossary term, `TermLabel` (the copper tier) — never a hand-styled `TooltipTrigger`/`PopoverTrigger` + `hover:underline`
+- **No unmarked text tooltips, no ad-hoc trigger styling** — text labels carrying a tooltip use `TooltipTriggerLabel` (dotted-underline affordance), `PopoverTriggerLabel` for the same affordance backed by a row's own content, or `TermLabel` for a glossary term (the copper tier) — never a hand-styled `TooltipTrigger`/`PopoverTrigger` + `hover:underline`

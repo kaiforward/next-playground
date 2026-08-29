@@ -97,10 +97,10 @@ interface Measurable {
  * - The dwell stack's own lifecycle, layered on top of `dwellState` rather than the plain
  *   `CLOSE_GRACE_MS` a hover-mode popover uses: the pointer entering a `locked` popover at depth
  *   *d* schedules the close of everything deeper than *d* after `RETURN_GRACE_MS`, replaced (not
- *   raced) by reaching any still-deeper popover — the workaround for a mechanical artifact
- *   (`docs/build-plans/nested-tooltips.md` -> N2), not observed behaviour: a child opens offset
- *   from the cursor, so the trip from a term to its own popover crosses the parent's body for a
- *   few pixels, indistinguishable from a genuine return without a time window. That enter is only
+ *   raced) by reaching any still-deeper popover — the workaround for a mechanical artifact, not
+ *   observed behaviour: a child opens offset from the cursor, so the trip from a term to its own
+ *   popover crosses the parent's body for a few pixels, indistinguishable from a genuine return
+ *   without a time window. That enter is only
  *   half of it, and the rarer half: a nested popover's content renders INSIDE its parent's
  *   content, so returning from a child to its parent never leaves the parent's subtree and fires
  *   no `pointerenter` on it. The child's own `pointerleave` is the event that does arrive, so a
@@ -224,8 +224,9 @@ interface Measurable {
 
 const DEFAULT_OPEN_DELAY_MS = 300;
 const CLOSE_GRACE_MS = 150;
-/** Hover-open delay for a `dwell` popover — replaces `openDelay` entirely, since dwell mode is
- *  tuned as a unit (see `docs/build-plans/nested-tooltips.md` → the four durations). */
+/** Hover-open delay for a `dwell` popover — replaces `openDelay` entirely, since dwell mode's four
+ *  durations (this, `DWELL_MS`, `RETURN_GRACE_MS`, `LEAVE_GRACE_MS`) are tuned as a unit rather
+ *  than independently per consumer. */
 export const DWELL_OPEN_DELAY_MS = 200;
 /** How long a `dwell` popover spends `filling` before it `locked`s — the single constant that
  *  drives both the lock timer below and the `DwellBar`'s fill duration, so the two can never
@@ -441,15 +442,15 @@ function scheduleLeaveClose() {
 //
 // This is what `noteStackEnter`/`noteStackLeave` (below) use to decide whether the whole-stack
 // leave grace should actually arm: only on the transition to zero, rather than unconditionally on
-// every leave the way `scheduleLeaveClose` alone used to be called. That distinction is the fix
-// for a real bug (`docs/build-plans/nested-tooltips.md` found no name for it, so: a nested
-// popover's own TRIGGER sits inside its ancestor's CONTENT — reaching the ancestor for a second
-// look at it, from the child, plausibly leaves the child's trigger's bounds a beat AFTER the
-// ancestor's content has already been entered, not before. With schedule-on-every-leave,
-// cancel-on-every-enter, that late leave re-arms a whole-stack close with nothing left to cancel
-// it, closing the ancestor too — the transit workaround `RETURN_GRACE_MS` exists for on the way
-// IN has no counterpart on the way back OUT. Counting makes the arm/disarm decision depend on
-// whether ANYTHING is currently entered, not on which of two racing events happened last.
+// every leave the way a bare schedule-on-every-leave, cancel-on-every-enter pair would. That
+// distinction fixes a real ordering bug: a nested popover's own TRIGGER sits inside its ancestor's
+// CONTENT — reaching the ancestor for a second look at it, from the child, plausibly leaves the
+// child's trigger's bounds a beat AFTER the ancestor's content has already been entered, not
+// before. Schedule-on-every-leave, cancel-on-every-enter would let that late leave re-arm a
+// whole-stack close with nothing left to cancel it, closing the ancestor too — the transit
+// workaround `RETURN_GRACE_MS` exists for on the way IN has no counterpart on the way back OUT.
+// Counting makes the arm/disarm decision depend on whether ANYTHING is currently entered, not on
+// which of two racing events happened last.
 let stackHoverCount = 0;
 
 /** A tracked region entered: always cancels any pending whole-stack close, matching a real
@@ -943,7 +944,7 @@ export function Popover({
     // finish its dwell on the spot too, and `setOpen`'s own `openedViaKeyboard` check below is what
     // does that; there is nothing left for this function itself to special-case. Harmless for the
     // five non-`dwell` consumers, and for a `dwell` popover already `locked`, since `setOpen(true)`
-    // on either was already this function's unconditional behaviour before this task.
+    // is this function's unconditional behaviour on either regardless.
     keyboardOpenRef.current = true;
     setOpen(true);
   }

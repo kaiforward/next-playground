@@ -1589,6 +1589,57 @@ describe("Popover — the dwell stack lifecycle (return grace, leave grace, dept
     expect(screen.getByText("Definition A")).toBeInTheDocument();
     expect(screen.getByText("Definition A1")).toBeInTheDocument();
   });
+
+  it("hovering a separate, standalone plain popover's trigger never cancels another chain's pending leave grace", async () => {
+    // `markStackEntered` — the only thing that cancels a pending whole-stack leave grace — is
+    // gated on `popover.dwell` at both call sites (`PopoverTrigger`'s and `PopoverContent`'s
+    // pointer-enter). A plain (non-`dwell`) popover's own trigger must never call it. Nesting the
+    // plain popover inside the dwell one to test this doesn't work: the plain trigger would then
+    // be a real DOM descendant of the dwell content, so physically reaching it always genuinely
+    // re-enters the dwell content first too — there is no event that reaches a NESTED trigger
+    // without also, correctly, re-arming its ancestor. Two separate, sibling popovers sidesteps
+    // that: hovering one's trigger never crosses the other's bounds at all.
+    //
+    // The plain popover's own `openDelay` is set far longer than this test's window so it never
+    // itself opens and claims a stack slot — hovering its trigger, without it ever opening, is
+    // the only thing under test.
+    const { user } = setup();
+    render(
+      <>
+        <Popover dwell>
+          <PopoverTrigger>
+            <button type="button">Term A</button>
+          </PopoverTrigger>
+          <PopoverContent>
+            <p>Definition A</p>
+          </PopoverContent>
+        </Popover>
+        <Popover openDelay={5000}>
+          <PopoverTrigger>
+            <button type="button">Plain row</button>
+          </PopoverTrigger>
+          <PopoverContent>
+            <p>Plain vitals</p>
+          </PopoverContent>
+        </Popover>
+      </>,
+    );
+
+    await openLocked(user, "Term A");
+    await user.hover(screen.getByText("Definition A"));
+    // Off the entire stack — arms the whole-stack leave grace.
+    await user.unhover(screen.getByText("Definition A"));
+
+    await wait(LEAVE_GRACE_MS - 40);
+    // A completely unrelated, standalone plain popover's own trigger, well inside the leave grace.
+    await user.hover(screen.getByRole("button", { name: "Plain row" }));
+
+    // Past the leave grace's original mark: Term A closes on schedule, undisturbed by the pointer
+    // now resting on the unrelated plain popover's trigger.
+    await waitFor(() => {
+      expect(screen.queryByText("Definition A")).not.toBeInTheDocument();
+    });
+  });
 });
 
 describe("Popover — keyboard access in the dwell mode", () => {
@@ -2010,6 +2061,39 @@ describe("Popover — pinning a chain", () => {
       { timeout: RETURN_GRACE_MS + 500 },
     );
     expect(screen.getByText("Definition Live0")).toBeInTheDocument();
+  });
+
+  it("an unpinned popover unmounting without closing releases its own registry slot", async () => {
+    // The Tracker-row-drops-out case the unmount cleanup's own comment names: a still-open,
+    // never-pinned popover disappearing from the tree without ever passing through `setOpen(false)`
+    // (a `Popover` unmounting is exactly that — no close branch runs, only the cleanup effect).
+    // `releaseOpen(closeSelf)` there is what shrinks `openStack` back down; without it the vanished
+    // level's slot lingers, so a still-open ANCESTOR keeps reading a stack one level taller than
+    // what is actually on screen.
+    function Scene({ depth }: { depth: number }) {
+      return buildChain(["Un0", "Un1", "Un2", "Un3"].slice(0, depth));
+    }
+    const { user } = setup();
+    const { rerender } = render(<Scene depth={4} />);
+
+    await openLocked(user, "Un0");
+    await openLocked(user, "Un1");
+    await openLocked(user, "Un2");
+    await openLocked(user, "Un3");
+
+    // Four deep, all live: the root already reads the faded tier, the same boundary the sibling
+    // "fades by depth" proof above pins.
+    expect(dialogFor("Un0").style.opacity).toBe("0.5");
+
+    // Un3 — the deepest, still open — vanishes without closing. Un0..Un2 keep their keys and stay
+    // mounted, exactly as a list dropping only its last row would.
+    rerender(<Scene depth={3} />);
+
+    // A released slot puts the root back within the full-opacity band; a leaked one leaves the
+    // stack believing a fourth level is still live and the root stays faded.
+    await waitFor(() => {
+      expect(dialogFor("Un0").style.opacity).toBe("1");
+    });
   });
 
   it("the pin control is reachable and operable by its accessible name, not by its glyph", async () => {

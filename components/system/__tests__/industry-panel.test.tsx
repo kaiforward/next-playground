@@ -208,9 +208,8 @@ describe("IndustryPanel — two-budget bars (people land, deposit land), industr
   });
 });
 
-// Task 7 of docs/build-plans/nested-tooltips.md: the 6 TooltipTriggerLabel term triggers in this
-// panel convert to dwell popovers, and YieldPopoverBody gains real TermLabel markup — the panel's
-// first real chain. Real timers throughout, matching components/ui/__tests__/popover.test.tsx's own
+// This panel's term triggers are dwell popovers, and YieldPopoverBody carries TermLabel markup —
+// the panel's first real chain. Real timers throughout, matching components/ui/__tests__/popover.test.tsx's own
 // convention: Radix's FocusScope/Presence machinery is fragile under fake timers, and a locked
 // `dwell` popover still renders through `PopoverPrimitive.Content`.
 function setup() {

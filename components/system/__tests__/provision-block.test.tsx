@@ -9,9 +9,8 @@ import type { PopNeedData, SystemProvisionRead } from "@/lib/types/api";
 // `needs-view`. What is left for the DOM is what a reader actually gets: the chip, the headline,
 // the key naming both numbers, and which need rows are on screen.
 //
-// The ledger's rows are `dwell`-popover triggers (Task 8 of `docs/build-plans/nested-tooltips.md`
-// converted `NeedRow` from a plain Radix Tooltip, whose body is this row's own need data rather
-// than a fixed definition) — `Popover` needs no surrounding provider, unlike Radix's `Tooltip.Root`.
+// The ledger's rows are `dwell`-popover triggers: a row's body is its own need data rather than a
+// fixed definition — `Popover` needs no surrounding provider, unlike Radix's `Tooltip.Root`.
 
 const assessed: SystemProvisionRead = {
   assessed: true,

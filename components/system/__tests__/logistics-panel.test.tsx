@@ -5,10 +5,10 @@ import { LogisticsPanel } from "@/components/system/logistics-panel";
 import { DWELL_OPEN_DELAY_MS, DWELL_MS } from "@/components/ui/popover";
 import type { LogisticsGoodRow, SystemLogisticsData } from "@/lib/types/api";
 
-// Task 8 of docs/build-plans/nested-tooltips.md converted `BarCell`'s Radix Tooltip to a `dwell`
-// Popover — its trigger is a focusable wrapper round a `DivergingBarTrack`, never a text label, so
-// it stays the raw `Popover`/`PopoverTrigger asChild`/`PopoverContent` form rather than
-// `PopoverTriggerLabel`. `Popover` needs no surrounding provider.
+// `BarCell` opens a `dwell` Popover — its trigger is a focusable wrapper round a
+// `DivergingBarTrack`, never a text label, so it takes the raw
+// `Popover`/`PopoverTrigger asChild`/`PopoverContent` form rather than `PopoverTriggerLabel`.
+// `Popover` needs no surrounding provider.
 
 let dataValue: SystemLogisticsData = { visibility: "unknown" };
 vi.mock("@/lib/hooks/use-system-logistics", () => ({

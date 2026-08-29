@@ -16,34 +16,28 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-1. **[L] The tooltip system — nesting and pinning, carrying a language and glossary pass on the same
-  refactor.** Three strands that were separate rows and are not separable work: the deep-tooltip
-  system migrates every plain Radix tooltip onto the popover, which means every tooltip surface is
-  opened and edited once. Rewording and glossary-linking as each one is touched costs almost
-  nothing; doing them as their own later sweeps means opening all of them a second and third time.
-  Start from the glossary's key agreed terms, so the migration has something to link to.
+1. **[L] The tooltip system — nesting and pinning shipped; a language pass and the fuller glossary
+  remain.** Three strands sharing one refactor because it opens every tooltip surface once:
+  nesting and pinning are done, so the other two now ride an opened surface rather than a plan.
 
-  - **The system.** Tooltips whose terms are themselves hoverable, pinnable for comparison, backed
-    by a cross-linking concept glossary. Needs a design doc + collaborative HTML-prototype pass.
-    Core genre UI post-pivot, not polish. The theme already reserves a copper treatment as this
-    system's second tier. **The primitive shipped with the Tracker** (`Popover`,
-    `components/ui/popover.tsx`) — hover-to-open, keyboard access and a safe transit area, scoped to
-    one level. What is left: **nesting** (a parent popover must not close while a child is open —
-    neither Radix primitive gives this, so it is custom either way), pinning, the glossary, and
-    **migrating the existing plain Radix tooltips** onto the popover.
-    Design input worth not losing: Paradox tooltips **follow the cursor until you hold still, then
-    latch** so you can move onto them. A legitimate alternative to a grace-area polygon and arguably
-    simpler; decide between them at the prototype pass.
-    *Don't:* design the nesting model before there is a real chain of descriptions to design
-    against — the shape follows the content, and the Tracker needed only one level.
+  - **The system — shipped.** `Popover` (`components/ui/popover.tsx`) carries a `dwell` mode: a
+    definition opens at the cursor, fills a hairline bar, then locks and can be entered; a term
+    inside it opens its own definition the same way, nested to whatever depth the player follows,
+    with an ancestor-aware stack (replacing the old single-open pointer), a fading depth cue, and a
+    chain that can be pinned to survive while another opens beside it. Keyboard access, a term
+    trigger (`TermLabel`) and a row-triggered content popover (`PopoverTriggerLabel`) are built on
+    it. Converted: the industry panel, system astrography, the population panel, the potential-yield
+    table, and the provision and logistics row bodies. Control help (checkboxes, radio groups, the
+    map legend, the industry legend, quick-add) deliberately stays a plain `Tooltip` — that surface
+    is a control's accessible description, not a thing in the game.
 
-  - **The language.** Apply `/game-copy` to every tooltip and label surface as the migration reaches
-    it — three registers, game vocabulary only. The skill shipped with habitability seeding and that
-    branch's surfaces conform; the rest of the UI has not been swept. **Settle the number
-    conventions here** — when a quantity reads as a percentage, when as a multiplier, when as a
-    signed modifier. The rule the Astrography tab arrived at: a quantity genuinely bounded 0–1
-    reads as a percentage; a multiplier that can exceed 1 keeps its own words or its `×`, because a
-    percentage would imply a ceiling it does not have.
+  - **The language.** Apply `/game-copy` to every tooltip and label surface — three registers, game
+    vocabulary only. The skill shipped with habitability seeding and that branch's surfaces conform;
+    the rest of the UI has not been swept. **Settle the number conventions here** — when a quantity
+    reads as a percentage, when as a multiplier, when as a signed modifier. The rule the Astrography
+    tab arrived at: a quantity genuinely bounded 0–1 reads as a percentage; a multiplier that can
+    exceed 1 keeps its own words or its `×`, because a percentage would imply a ceiling it does not
+    have.
 
     **The allowance rule, settled:** an allowance never goes inside a displayed number. The
     Industry ledger's in-use column is `buildingUsed` (`lib/engine/industry.ts`) — the decay
@@ -56,14 +50,15 @@ The attention layer — how the player finds what to do — is two surfaces, bot
 
   - **The glossary.** [`docs/planned/glossary.md`](./planned/glossary.md) — the single source
     tooltips and tutorials quote from, and it is **written**: eight groups of definitions, the
-    vocabulary rules that produced them, the collapses, and the engine-only word list. Flat for
-    now; it grows hyperlinks as the cross-linking system lands. Three implementation items are
-    booked in its own "Still open" section and ride this migration, since it opens those surfaces
-    anyway: the `UST` date stamp, honest housing occupancy in the Industry ledger, and the panel
-    renames that retiring "deposit" for **resource** / **resource slot** implies.
+    vocabulary rules that produced them, the collapses, and the engine-only word list. The nesting
+    work wired only the terms the industry panel's own chains need (`lib/glossary/terms.ts`, twelve
+    entries); the rest of the written glossary has no `TermLabel` yet. Three implementation items are
+    booked in its own "Still open" section and ride the language pass, since that sweep opens those
+    surfaces anyway: the `UST` date stamp, honest housing occupancy in the Industry ledger, and
+    retiring "deposit" from that panel's copy for **resource** / **resource slot**.
 
-  *Next step:* the design doc + prototype pass for nesting, starting from which tooltips must
-  become popovers at all — a plain label on a control gains nothing from one.
+  *Next step:* the `/game-copy` language pass over the converted tooltip surfaces, then wire the
+  rest of the written glossary's terms as each surface is touched.
 
 ---
 

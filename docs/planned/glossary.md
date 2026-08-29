@@ -457,3 +457,8 @@ once it is finished, with its progress and an estimated finish.
 - Rendering dates with the `UST` stamp — decoration over the existing calendar
   (`lib/constants/calendar.ts` is display-only), so it rides the language pass, and it is cheap to
   drop again if it does not land.
+- Retiring "deposit" from the Industry panel's player-facing copy for **resource** / **resource
+  slot**, per *Deposit retires* above — the column header, the "Deposit land" bar and the table's
+  own labels all still read "Deposit" (`components/system/industry-panel.tsx`). Player-facing text
+  only; the `DepositRow`/`depositRows` code vocabulary is a separate question. Rides the language
+  pass, which opens that panel's copy anyway.

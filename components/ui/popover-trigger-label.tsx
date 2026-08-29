@@ -31,11 +31,11 @@ export interface PopoverTriggerLabelProps {
  * comes from. Named to mirror `TooltipTriggerLabel` exactly, since the two otherwise take the same
  * `className` + label-as-children shape and differ only in which popover kind backs them.
  *
- * Extracted per `AGENTS.md`'s second-occurrence rule: `components/system/industry-panel.tsx` held
- * six copies of `<Popover dwell><PopoverTrigger><button className={triggerLabelStyles(...)}>`
- * before this existed, and Task 8 of `docs/build-plans/nested-tooltips.md` was about to add roughly
- * six more across `system-astrography.tsx`, `population-panel.tsx`, `potential-yield-table.tsx`,
- * `provision-block.tsx` and `logistics-panel.tsx`.
+ * Extracted per `AGENTS.md`'s second-occurrence rule: this shell is what
+ * `components/system/industry-panel.tsx`, `components/panels/system-astrography.tsx`,
+ * `components/system/population-panel.tsx` and `components/system/potential-yield-table.tsx` would
+ * otherwise each hand-roll as `<Popover dwell><PopoverTrigger><button
+ * className={triggerLabelStyles(...)}>`.
  */
 export function PopoverTriggerLabel({ children, content, className, contentClassName }: PopoverTriggerLabelProps) {
   return (
