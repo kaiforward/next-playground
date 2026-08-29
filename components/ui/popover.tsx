@@ -1664,13 +1664,18 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
           // "did this click land in another popover?" — the header and its pin control sit outside
           // `[data-popover-body]`, so that marker cannot answer it.
           data-popover-content=""
-          onPointerDownOutside={composeHandlers<Parameters<NonNullable<PopoverContentProps["onPointerDownOutside"]>>[0]>(
-            props.onPointerDownOutside,
+          // `onInteractOutside`, not `onPointerDownOutside`: Radix dismisses from TWO independent
+          // paths — a `pointerdown` anywhere outside, and a `focusin` anywhere outside — and each
+          // checks `defaultPrevented` on its own event. Clicking a button does both, so guarding
+          // only the pointer path leaves the focus path to dismiss anyway. `onInteractOutside` is
+          // the one hook Radix calls from both.
+          onInteractOutside={composeHandlers<Parameters<NonNullable<PopoverContentProps["onInteractOutside"]>>[0]>(
+            props.onInteractOutside,
             (event) => {
               // Pinning exists so one chain can be read while another is opened beside it — and
-              // opening that second chain's pin is itself a CLICK outside the first, which Radix
+              // reaching that second chain's pin means clicking outside the first, which Radix
               // would otherwise dismiss. That made two pinned chains unreachable by the very
-              // gesture meant to produce them. So a pinned popover ignores a pointer-down that
+              // gesture meant to produce them. So a pinned popover ignores an interaction that
               // lands inside any other popover, and only that: a click on the page background
               // still dismisses it, keeping the ordinary click-away exit everything else has.
               if (!popover.pinned) return;

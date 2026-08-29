@@ -2236,7 +2236,7 @@ describe("Popover — pinning a chain", () => {
     pin("Two1");
 
     await openLocked(user, "TwoB0");
-    pin("TwoB0");
+    await user.click(within(dialogFor("TwoB0")).getByRole("button", { name: "Pin" }));
 
     // Both chains are still up, and each shows its OWN Unpin at its own deepest level.
     expect(screen.getByText("Definition Two0")).toBeInTheDocument();
@@ -2251,6 +2251,31 @@ describe("Popover — pinning a chain", () => {
     });
     expect(within(dialogFor("TwoB0")).getByRole("button", { name: "Unpin" })).toBeInTheDocument();
     expect(screen.getByText("Definition TwoB0")).toBeInTheDocument();
+  });
+
+  it("a pinned chain still dismisses on a click landing outside every popover", async () => {
+    // The other half of the rule above, and the half that decides which rule this is. A pinned
+    // popover ignores an interaction inside ANOTHER popover — that is what lets a second chain be
+    // pinned. It must not generalise to ignoring interactions altogether: clicking the page itself
+    // is how everything else in the app is dismissed, and a pinned popover that survived it would
+    // be a thing on screen with no way off it but a control the player has to find, or Escape.
+    const { user } = setup();
+    render(
+      <>
+        <button type="button">Elsewhere</button>
+        {buildChain(["Bg0"])}
+      </>,
+    );
+
+    await openLocked(user, "Bg0");
+    pin("Bg0");
+    expect(within(dialogFor("Bg0")).getByRole("button", { name: "Unpin" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Elsewhere" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Definition Bg0")).not.toBeInTheDocument();
+    });
   });
 
   it("dismissing only the deepest level of a pinned chain hands the unpin control to the level above", async () => {
