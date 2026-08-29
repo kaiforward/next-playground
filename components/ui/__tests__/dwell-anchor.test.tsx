@@ -14,6 +14,14 @@ import { Popover, PopoverContent, PopoverTrigger, DWELL_OPEN_DELAY_MS } from "@/
 // Interception, not mocking of our own code: `@radix-ui/react-popover`'s `Anchor` is wrapped only
 // to capture the `virtualRef` prop Popover hands it — every one of Popover's own trigger/content
 // components, and all of their pointer-count/leave-grace machinery, run for real.
+//
+// WHAT THIS CANNOT CATCH, and it has already missed it once: this calls the captured
+// `getBoundingClientRect` itself, so it proves the rect is right WHEN CALLED — never that Radix
+// registered the anchor and calls it at all. A version of this component registered its anchor
+// before the trigger did, the trigger's own temporary `PopperAnchor` overwrote the registration
+// with a null ref, and Radix positioned every popover at the viewport origin. Every assertion
+// below passed throughout. Anchor registration is only observable in a real browser; that is the
+// owner's smoke, not this file.
 
 type Measurable = { getBoundingClientRect: () => DOMRect };
 let capturedVirtualRef: { current: Measurable } | null = null;

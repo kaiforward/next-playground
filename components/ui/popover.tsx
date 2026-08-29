@@ -694,7 +694,10 @@ export function Popover({
   // Stable identity across renders — Radix compares `virtualRef.current` by reference to decide
   // whether the anchor changed, and this object never needs to: its `getBoundingClientRect`
   // always reads the live refs above rather than closing over a value from the render that
-  // created it. Rendered unconditionally whenever `dwell` is set (see the JSX below) — NEVER
+  // created it. That is only safe because this Anchor is mounted AFTER the trigger and so
+  // registers last (see the JSX below): Radix's `PopperAnchor` notifies on a reference change and
+  // never cleans up, so a registration lost to a later one can never be recovered by an object
+  // whose identity does not change. Rendered unconditionally whenever `dwell` is set (see the JSX below) — NEVER
   // conditionally, because toggling whether a custom `Anchor` exists in the tree flips Radix's own
   // `hasCustomAnchor` and changes whether `PopoverTrigger` wraps itself in an extra Popper
   // component, which changes the trigger's position in the Fiber tree and makes React tear down
@@ -1018,8 +1021,17 @@ export function Popover({
             comment for why toggling it is unsafe). What changes across opens is only which rect
             `getBoundingClientRect` reports: the cursor point while `cursorAnchoredRef` is raised,
             the trigger's own rect otherwise. */}
-        {dwell && <PopoverPrimitive.Anchor virtualRef={dwellAnchorVirtualRef} />}
         {children}
+        {/* AFTER `children`, and that order is load-bearing. Radix's `PopperAnchor` notifies the
+            popper context only when the anchor changes BY REFERENCE, and its effect has no
+            cleanup. `PopoverTrigger` wraps itself in its own `PopperAnchor` whenever
+            `hasCustomAnchor` is false — which it is on the first render, because the flag is only
+            raised in this Anchor's own effect. Mounted before the trigger, our effect runs first,
+            the trigger's temporary anchor then overwrites the registration with its own (null at
+            that moment) ref, and ours never re-registers because its local ref still holds this
+            object and so sees no change — leaving Radix positioning against nothing, at the
+            viewport origin. Mounted after, our effect runs last and wins. */}
+        {dwell && <PopoverPrimitive.Anchor virtualRef={dwellAnchorVirtualRef} />}
       </PopoverContext.Provider>
     </PopoverPrimitive.Root>
   );
