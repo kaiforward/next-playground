@@ -19,8 +19,13 @@ import {
 import { twMerge } from "tailwind-merge";
 import { Button } from "./button";
 import { opacityForDepth } from "./depth-opacity";
-import { placeAtCursor } from "./dwell-placement";
 import { PinIcon } from "./icons";
+
+/** The shape Radix's `virtualRef` anchor prop needs — an object whose `getBoundingClientRect`
+ *  Popper reads on every reposition, real or virtual. */
+interface Measurable {
+  getBoundingClientRect(): DOMRect;
+}
 
 /**
  * The richer of the two hover surfaces — the second tier beside the plain
@@ -67,12 +72,28 @@ import { PinIcon } from "./icons";
  *   instead of plain hover. Ignores `openDelay` in favour of the fixed `DWELL_OPEN_DELAY_MS`, and
  *   opens into a `filling` state — positioned at the pointer, following it, pointer events off —
  *   before locking after `DWELL_MS`: position freezes and the popover starts taking the pointer.
- *   A thin `DwellBar` renders across the top while filling and is gone once locked. Position is
- *   set on the content element directly (`placeAtCursor`, `components/ui/dwell-placement.ts`)
- *   rather than through Radix's anchor, since the anchor is the trigger and dwell mode anchors to
- *   the cursor instead. `dwellState` on the context is `null` whenever `dwell` is not set, which
- *   is how `PopoverContent` knows not to render the bar or touch pointer-events for the five
- *   existing hover-mode consumers.
+ *   A thin `DwellBar` renders across the top while filling and is gone once locked.
+ *
+ *   Placement while `filling`/`locked` is Radix's own: a `PopoverPrimitive.Anchor` given a
+ *   `virtualRef` (a `{ getBoundingClientRect }` object rather than a real DOM node — Radix's
+ *   supported way to anchor a popper to an arbitrary point) whose rect tracks the pointer, letting
+ *   Radix's own placement, collision detection and edge-flipping run — not our own content element
+ *   set its own `position`/`top`/`left`, which is what an earlier version of this mode did, and
+ *   which fought Radix's real positioning: Radix applies its `transform` to a *wrapper* div one
+ *   level above the content it portals, and a `position: fixed` element inside a transformed
+ *   ancestor is positioned relative to that ancestor, not the viewport — which is why that earlier
+ *   version rendered consistently offset from the cursor. `updatePositionStrategy="always"` while
+ *   `filling` makes Radix re-read the anchor every animation frame (its documented mechanism for
+ *   tracking a moving virtual point, the same one context menus use to follow the cursor);
+ *   dropping back to the default `"optimized"` on lock stops the polling, and since nothing
+ *   updates the virtual rect after that either, the position freezes — that is the entire
+ *   mechanism behind "stops following". `cursorAnchored` (per-popover state, decided once at open
+ *   time) is what renders the virtual `Anchor` at all: raised for a pointer-driven open, never
+ *   raised for a keyboard open, so a keyboard-opened popover has no custom anchor in the tree at
+ *   all and Radix falls back to its own default — anchoring `PopoverTrigger` to itself — exactly
+ *   the "keyboard opens a dwell popover locked" bullet below already required. `dwellState` on the
+ *   context is `null` whenever `dwell` is not set, which is how `PopoverContent` knows not to
+ *   render the bar or touch pointer-events for the five existing hover-mode consumers.
  * - The dwell stack's own lifecycle, layered on top of `dwellState` rather than the plain
  *   `CLOSE_GRACE_MS` a hover-mode popover uses: the pointer entering a `locked` popover at depth
  *   *d* schedules the close of everything deeper than *d* after `RETURN_GRACE_MS`, replaced (not
@@ -108,8 +129,11 @@ import { PinIcon } from "./icons";
  *   descendants alike, not only the one the button was clicked on — from the registry in one go
  *   (`pinStack`): the array is emptied, notifying `subscribeStackLength`, and each detached entry's
  *   own `pinned` React state flips true. A `pinned` popover stops responding to the return and leave
- *   graces (every pointer handler above that touches `cancelReturnClose`/`scheduleReturnClose`/
- *   `cancelLeaveClose`/`scheduleLeaveClose` is gated on it), holds full opacity regardless of the
+ *   graces (every pointer handler above that touches `scheduleReturnClose` or the stack-hover
+ *   count — `markStackEntered`/`markStackLeft`, which is what now calls `cancelLeaveClose`/
+ *   `scheduleLeaveClose` — is gated on it, and pinning itself releases whatever contribution to
+ *   that count the popover was still holding, so it can never permanently block the leave grace
+ *   from arming for a later, unrelated chain), holds full opacity regardless of the
  *   live stack's length (`PopoverContent`'s own opacity calc short-circuits on it, since a detached
  *   popover's stale `depth` against the CURRENT stack's length would compute a meaningless number),
  *   and survives until dismissed — Escape and an outside click still reach it, since neither routes
@@ -206,6 +230,20 @@ export const RETURN_GRACE_MS = 140;
 /** How long the whole open stack survives once the pointer rests on neither a trigger nor a live
  *  `dwell` popover anywhere in it. */
 export const LEAVE_GRACE_MS = 90;
+/** Vertical clearance between the cursor and a cursor-anchored `dwell` popover's near edge — only
+ *  for a pointer-driven open (`cursorAnchored`; a keyboard-opened one anchors to the trigger
+ *  instead and uses the ordinary `sideOffset` every other popover does). Applied as Radix's own
+ *  `sideOffset` (the gap between the anchor and the content along `side`, `"bottom"` here), so with
+ *  the popover staying horizontally CENTRED on the cursor (`align` is left at `popover.align`,
+ *  never overridden — a first version that switched it to `"start"` moved the popover right by
+ *  half its own width, which read as the positioning regressing all over again) its top edge sits
+ *  clear of the cursor rather than under it. Floating-ui's `offset` middleware (which Radix's
+ *  `PopperContent` runs `flip` after) re-reads the CURRENT placement every time it runs, including
+ *  after a flip, so this stays a gap on the outside of whichever side the popover actually lands
+ *  on — a popover flipped above the cursor sits `DWELL_CURSOR_CLEARANCE_PX` above it, not under it,
+ *  the same way `sideOffset` already behaves correctly on flip for every trigger-anchored popover
+ *  in this file. */
+export const DWELL_CURSOR_CLEARANCE_PX = 12;
 
 /** One popover's registry entry: `closeSelf` is what exclusivity has always compared and called;
  *  `markPinned` is the same kind of stable-identity closure, added for pinning — the one way the
@@ -387,6 +425,48 @@ function scheduleLeaveClose() {
   }, LEAVE_GRACE_MS);
 }
 
+// How many of the dwell stack's own tracked pointer regions (any popover's trigger, or a LOCKED
+// popover's own content) the pointer is currently over. Not a set of which ones — just a live
+// count — since more than one such region ever reporting "entered" at once only happens for the
+// duration of a genuine transit between two of them, never a rest.
+//
+// This is what `noteStackEnter`/`noteStackLeave` (below) use to decide whether the whole-stack
+// leave grace should actually arm: only on the transition to zero, rather than unconditionally on
+// every leave the way `scheduleLeaveClose` alone used to be called. That distinction is the fix
+// for a real bug (`docs/build-plans/nested-tooltips.md` found no name for it, so: a nested
+// popover's own TRIGGER sits inside its ancestor's CONTENT — reaching the ancestor for a second
+// look at it, from the child, plausibly leaves the child's trigger's bounds a beat AFTER the
+// ancestor's content has already been entered, not before. With schedule-on-every-leave,
+// cancel-on-every-enter, that late leave re-arms a whole-stack close with nothing left to cancel
+// it, closing the ancestor too — the transit workaround `RETURN_GRACE_MS` exists for on the way
+// IN has no counterpart on the way back OUT. Counting makes the arm/disarm decision depend on
+// whether ANYTHING is currently entered, not on which of two racing events happened last.
+let stackHoverCount = 0;
+
+/** A tracked region entered: always cancels any pending whole-stack close, matching a real
+ *  cursor's cursor arriving somewhere in the stack regardless of the count's own value. */
+function noteStackEnter() {
+  stackHoverCount++;
+  cancelLeaveClose();
+}
+
+/** A tracked region left: only arms the whole-stack close grace once NOTHING in the stack is
+ *  entered any more — the count reaching zero, not merely this one region losing the pointer. */
+function noteStackLeave() {
+  stackHoverCount = Math.max(0, stackHoverCount - 1);
+  if (stackHoverCount === 0) scheduleLeaveClose();
+}
+
+/** Releases whatever outstanding contribution to `stackHoverCount` a popover is carrying, without
+ *  arming the leave grace even if that brings the count to zero — used only where a popover stops
+ *  being able to balance its own enters and leaves (unmounting mid-hover, or being pinned, both
+ *  below): "quietly correct the accounting" is the safe direction here, the same one the timer
+ *  clearing elsewhere in this file already uses — leaving something open a little longer is fine,
+ *  closing something that shouldn't is not. */
+function releaseStackHover(count: number) {
+  stackHoverCount = Math.max(0, stackHoverCount - count);
+}
+
 // Focusable-in-a-popover selector. Deliberately attribute-based (`:not([disabled])` rather than
 // `:not(:disabled)`) so it reads the same in every DOM implementation the tests run in.
 const FOCUSABLE_IN_POPOVER = [
@@ -450,10 +530,20 @@ interface PopoverContextValue {
    *  renders no bar and leaves pointer-events alone. `"filling"` while the lock timer is running,
    *  `"locked"` once it has fired. */
   dwellState: "filling" | "locked" | null;
-  /** The most recent pointer position over the trigger, written by `PopoverTrigger`. The only
-   *  thing `PopoverContent` has to go on for where to place itself the instant a `dwell` popover
-   *  opens, before any `pointermove` of its own has fired. */
+  /** The most recent pointer position over the trigger, written by `PopoverTrigger`. What
+   *  `setOpen` seeds the cursor-anchor's own live position ref from the instant a `dwell` popover
+   *  opens by pointer, before the document-level `pointermove` tracking effect has run even once. */
   dwellPointerRef: MutableRefObject<{ x: number; y: number } | null>;
+  /** The trigger's own DOM node, written by `PopoverTrigger` as it mounts/unmounts. What the
+   *  cursor-anchor's virtual `getBoundingClientRect` falls back to reading for a keyboard-opened
+   *  `dwell` popover. */
+  triggerRef: MutableRefObject<HTMLElement | null>;
+  /** Whether THIS popover's current open is anchored to the cursor — raised for a pointer-driven
+   *  open, left false for a keyboard one. `PopoverContent` reads it only to record, as real DOM
+   *  state, which anchor mode is actually live (`data-dwell-anchor`) — the placement decision
+   *  itself is made by what `dwellAnchorVirtualRef`'s `getBoundingClientRect` reports, which this
+   *  flag (via its ref mirror) drives. */
+  cursorAnchored: boolean;
   /** Written by the root as the popover closes, read by `PopoverContent`'s close-side focus
    *  handling. The live flags behind it stay private to the root — this is the one thing the
    *  content needs off them, and only after the decision has already been made. */
@@ -475,6 +565,13 @@ interface PopoverContextValue {
    *  already-open descendants alike) from the registry in one go. Exposed so `PopoverContent` can
    *  wire it to the pin control it renders in `dwell` mode. */
   pinChain: () => void;
+  /** A tracked region of THIS popover (its trigger or its own locked content) entered/left by the
+   *  pointer — what `PopoverTrigger` and `PopoverContent` call instead of the module-level
+   *  `cancelLeaveClose`/`scheduleLeaveClose` directly, so the whole-stack leave grace arms only
+   *  once NOTHING in the stack is entered, not on whichever of two racing leave/enter events last
+   *  happened to fire (see `noteStackEnter`/`noteStackLeave`'s own comments). */
+  markStackEntered: () => void;
+  markStackLeft: () => void;
   scheduleOpen: () => void;
   cancelScheduledOpen: () => void;
   openViaFocus: () => void;
@@ -577,6 +674,44 @@ export function Popover({
   const [dwellState, setDwellState] = useState<"filling" | "locked" | null>(null);
   const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dwellPointerRef = useRef<{ x: number; y: number } | null>(null);
+  /** The trigger's own DOM node, written by `PopoverTrigger`. What the virtual anchor below falls
+   *  back to reading when this open is NOT cursor-anchored — a keyboard open, or before any open
+   *  has happened at all — so a keyboard-opened `dwell` popover gets exactly the placement Radix's
+   *  own default (self-)anchoring would have given it. */
+  const triggerRef = useRef<HTMLElement | null>(null);
+  /** The cursor-anchored `virtualRef`'s own live position — a plain ref rather than React state,
+   *  since Radix re-reads it every animation frame while `filling` (`updatePositionStrategy`
+   *  below) and nothing here needs a re-render when it moves. Frozen at whatever it last was the
+   *  instant the pointermove effect below stops running, which is what "stops following" on lock
+   *  means: nothing writes to it again until the next open. */
+  const dwellAnchorPointRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  /** Whether THIS open is anchored to the cursor at all — raised only for a pointer-driven open,
+   *  left false for a keyboard one (see `setOpen`'s `openedViaKeyboard` branch). A ref mirror of
+   *  `cursorAnchored` state below (same pattern as `pinned`/`pinnedRef`): the virtual anchor's
+   *  `getBoundingClientRect` closure is created once and must read the CURRENT value on every
+   *  call, which a closed-over `cursorAnchored` from the render that created it could never do. */
+  const cursorAnchoredRef = useRef(false);
+  // Stable identity across renders — Radix compares `virtualRef.current` by reference to decide
+  // whether the anchor changed, and this object never needs to: its `getBoundingClientRect`
+  // always reads the live refs above rather than closing over a value from the render that
+  // created it. Rendered unconditionally whenever `dwell` is set (see the JSX below) — NEVER
+  // conditionally, because toggling whether a custom `Anchor` exists in the tree flips Radix's own
+  // `hasCustomAnchor` and changes whether `PopoverTrigger` wraps itself in an extra Popper
+  // component, which changes the trigger's position in the Fiber tree and makes React tear down
+  // and recreate the actual trigger DOM node — losing whatever the pointer was doing to it mid
+  // gesture. Keeping one virtual anchor mounted for the popover's whole life and only ever
+  // changing what rect it *reports* avoids that entirely.
+  const dwellAnchorVirtualRef = useRef<Measurable>({
+    getBoundingClientRect: () =>
+      cursorAnchoredRef.current
+        ? new DOMRect(dwellAnchorPointRef.current.x, dwellAnchorPointRef.current.y, 0, 0)
+        : (triggerRef.current?.getBoundingClientRect() ?? new DOMRect(0, 0, 0, 0)),
+  });
+  const [cursorAnchored, setCursorAnchoredState] = useState(false);
+  function setCursorAnchored(next: boolean) {
+    cursorAnchoredRef.current = next;
+    setCursorAnchoredState(next);
+  }
   /** Raised by `openViaFocus` immediately before a `setOpen(true)` it wants opened straight into
    *  `locked` — read and cleared by `setOpen` itself in the same synchronous call, so it can never
    *  leak into a later, unrelated open (a hover-scheduled one included). */
@@ -585,6 +720,23 @@ export function Popover({
   // Read by the unmount cleanup below, which cannot depend on `pinned` directly without re-running
   // on every pin (the effect deliberately only depends on `closeSelf` — see its own comment).
   const pinnedRef = useRef(false);
+  /** How many of THIS popover's own tracked regions (its trigger, its content) currently hold an
+   *  outstanding increment on the module-level `stackHoverCount` — 0 or 1 in ordinary use (trigger
+   *  and content are never both under the pointer at once), tracked as a count rather than a flag
+   *  only so `markStackEntered`/`markStackLeft` can be called at either site without either needing
+   *  to know whether the other already has. What `setPinned` and the unmount cleanup below use to
+   *  release this popover's own contribution when it stops being able to balance its own future
+   *  enters and leaves. */
+  const stackHoverLocalRef = useRef(0);
+  function markStackEntered() {
+    stackHoverLocalRef.current++;
+    noteStackEnter();
+  }
+  function markStackLeft() {
+    if (stackHoverLocalRef.current === 0) return;
+    stackHoverLocalRef.current--;
+    noteStackLeave();
+  }
 
   function clearDwellTimer() {
     if (dwellTimerRef.current !== null) {
@@ -609,6 +761,16 @@ export function Popover({
   function setPinned(next: boolean) {
     pinnedRef.current = next;
     setPinnedState(next);
+    // Pinning stops both `PopoverTrigger` and `PopoverContent` from ever calling
+    // `markStackEntered`/`markStackLeft` again for this popover (every call site below is gated on
+    // `!pinned`) — so any outstanding contribution it made to `stackHoverCount` before this instant
+    // would otherwise never be released, permanently inflating the count and blocking the
+    // whole-stack leave grace from ever arming again for any FUTURE chain (the count is
+    // module-level, shared across the whole app, the same way `openStack` itself is).
+    if (next) {
+      releaseStackHover(stackHoverLocalRef.current);
+      stackHoverLocalRef.current = 0;
+    }
   }
   setPinnedRef.current = setPinned;
   const [markPinned] = useState<() => void>(() => () => setPinnedRef.current(true));
@@ -643,9 +805,19 @@ export function Popover({
         clearDwellTimer();
         if (openedViaKeyboard) {
           // Enter/focus already expressed intent unambiguously — see the docblock's "keyboard
-          // opens a dwell popover locked" bullet. Straight to `locked`, no `filling` in between.
+          // opens a dwell popover locked" bullet. Straight to `locked`, no `filling` in between,
+          // and no cursor anchor either — `cursorAnchored` stays false, so the virtual anchor's
+          // `getBoundingClientRect` reports the trigger's own rect and Radix places the popover
+          // exactly where its own default anchor-to-trigger behaviour would have.
+          setCursorAnchored(false);
           setDwellState("locked");
         } else {
+          // Seeded from the trigger's own last-recorded pointer position (`dwellPointerRef`,
+          // written by `PopoverTrigger`) so the anchor starts exactly where the pointer already
+          // is, before the pointermove effect below has run even once.
+          const seed = dwellPointerRef.current;
+          if (seed) dwellAnchorPointRef.current = seed;
+          setCursorAnchored(true);
           setDwellState("filling");
           dwellTimerRef.current = setTimeout(() => {
             dwellTimerRef.current = null;
@@ -658,6 +830,7 @@ export function Popover({
       if (dwell) {
         clearDwellTimer();
         setDwellState(null);
+        setCursorAnchored(false);
         // Pinning is a property of a locked popover, not a state of its own (see the docblock) — a
         // reopen after this one closes starts unpinned, exactly like a fresh popover, rather than
         // silently reopening already detached from the registry.
@@ -707,9 +880,33 @@ export function Popover({
         cancelReturnClose();
         cancelLeaveClose();
       }
+      // Same unmount-under-a-live-pointer gap as the timers above, for `stackHoverCount`: no
+      // `pointerleave` ever fires for a row that disappears beneath the cursor, so without this an
+      // outstanding contribution this popover made would stay counted forever, permanently
+      // blocking the whole-stack leave grace from arming again. A no-op if `setPinned` already
+      // released it (pinning zeroes `stackHoverLocalRef` on the way in).
+      releaseStackHover(stackHoverLocalRef.current);
+      stackHoverLocalRef.current = 0;
     },
     [closeSelf],
   );
+
+  // Keeps the virtual anchor's rect tracking the pointer while `filling` — document-level, not the
+  // trigger's own `onPointerMove`, because the cursor travels well past the trigger's bounds on its
+  // way toward content that (while filling) has `pointer-events: none` and never receives it at
+  // all. A plain ref write, not `setState`: nothing here needs to re-render on every pointer move,
+  // since `updatePositionStrategy="always"` on `PopoverContent` is what makes Radix re-read this
+  // ref every animation frame. Stopping (on `dwellState` leaving `"filling"`, lock included) is the
+  // entire "stops following" mechanism — nothing writes to `dwellAnchorPointRef` again until the
+  // next open re-seeds it.
+  useEffect(() => {
+    if (dwellState !== "filling") return;
+    const handlePointerMove = (event: PointerEvent) => {
+      dwellAnchorPointRef.current = { x: event.clientX, y: event.clientY };
+    };
+    document.addEventListener("pointermove", handlePointerMove);
+    return () => document.removeEventListener("pointermove", handlePointerMove);
+  }, [dwellState]);
 
   function scheduleOpen() {
     // The hover path, and only the hover path, runs through here — click and keyboard focus open
@@ -795,12 +992,16 @@ export function Popover({
     dwell,
     dwellState,
     dwellPointerRef,
+    triggerRef,
+    cursorAnchored,
     closeReasonRef,
     suppressNextTriggerFocusRef,
     contentRef,
     pendingEnterRef,
     pinned,
     pinChain: pinStack,
+    markStackEntered,
+    markStackLeft,
     scheduleOpen,
     cancelScheduledOpen,
     openViaFocus,
@@ -811,7 +1012,15 @@ export function Popover({
 
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
-      <PopoverContext.Provider value={context}>{children}</PopoverContext.Provider>
+      <PopoverContext.Provider value={context}>
+        {/* Mounted whenever `dwell` is set — unconditionally, for the whole popover's life, never
+            toggled by open/close or by which gesture opened it (see `dwellAnchorVirtualRef`'s own
+            comment for why toggling it is unsafe). What changes across opens is only which rect
+            `getBoundingClientRect` reports: the cursor point while `cursorAnchoredRef` is raised,
+            the trigger's own rect otherwise. */}
+        {dwell && <PopoverPrimitive.Anchor virtualRef={dwellAnchorVirtualRef} />}
+        {children}
+      </PopoverContext.Provider>
     </PopoverPrimitive.Root>
   );
 }
@@ -849,11 +1058,21 @@ export const PopoverTrigger = forwardRef<
     // it — a press that never becomes a click (press, drag off, release)
     // must not leave keyboard-open dead for the rest of the row's life.
     const pointerActiveRef = useRef(false);
+    // Feeds the cursor-anchor's keyboard-open fallback (`popover.triggerRef`, read by
+    // `dwellAnchorVirtualRef`'s `getBoundingClientRect`) — kept in sync with whatever ref the
+    // consumer forwarded, the same two-destination-write `PopoverContent`'s `setContentNode` does.
+    const setTriggerNode = useCallback(
+      (node: HTMLButtonElement | null) => {
+        popover.triggerRef.current = node;
+        assignForwardedRef(forwardedRef, node);
+      },
+      [popover.triggerRef, forwardedRef],
+    );
 
     return (
       <PopoverPrimitive.Trigger
         asChild
-        ref={forwardedRef}
+        ref={setTriggerNode}
         // The gesture is announced rather than left to be discovered: a screen reader reads the
         // shortcut with the trigger's own name, which is the only place a keyboard user would
         // learn that this row has a popover and how to get into it. Before `{...props}`, so a
@@ -872,9 +1091,9 @@ export const PopoverTrigger = forwardRef<
             // its own popover has opened — `dwellState` can't answer that (it is null until open),
             // which is exactly why `dwell` is on the context independently of it. Pinned is the one
             // exception: a pinned popover no longer has a stack entry for a leave grace to defend,
-            // and cancelling the shared timer here would cancel whatever a DIFFERENT, still-live
-            // chain currently has pending on it.
-            if (popover.dwell && !popover.pinned) cancelLeaveClose();
+            // and marking it entered here would count towards a DIFFERENT, still-live chain's
+            // `stackHoverCount` instead of this (detached) one's own.
+            if (popover.dwell && !popover.pinned) popover.markStackEntered();
           },
         )}
         onPointerMove={composeHandlers<React.PointerEvent<HTMLButtonElement>>(
@@ -888,14 +1107,21 @@ export const PopoverTrigger = forwardRef<
           () => {
             pointerActiveRef.current = false;
             popover.cancelScheduledOpen();
-            if (!popover.open) return;
-            // A `dwell` popover never runs the plain `CLOSE_GRACE_MS` pointer-leave close — only
-            // the whole-stack leave grace applies to it. Every other (non-`dwell`) consumer keeps
-            // exactly its existing `scheduleClose` behaviour, untouched. A pinned popover runs
-            // neither: it survives until dismissed, so its trigger's own pointer-leave is inert.
+            // Unconditional on `popover.open`, unlike the plain (non-`dwell`) close below — the
+            // enter above marks this trigger entered whether or not its popover has opened yet, so
+            // the leave has to balance that same contribution whether or not it opened in between.
+            // Skipping this when `!open` (as an earlier version did) leaves a permanent +1 on the
+            // shared `stackHoverCount` for every dwell trigger a pointer passes over without
+            // lingering long enough to open — exactly the everyday case of scanning a table of
+            // underlined terms — and the whole-stack leave grace would stop arming correctly after
+            // only a handful of those.
             if (popover.dwell) {
-              if (!popover.pinned) scheduleLeaveClose();
-            } else {
+              if (!popover.pinned) popover.markStackLeft();
+            } else if (popover.open) {
+              // A `dwell` popover never runs the plain `CLOSE_GRACE_MS` pointer-leave close — only
+              // the whole-stack leave grace applies to it. Every other (non-`dwell`) consumer keeps
+              // exactly its existing `scheduleClose` behaviour, untouched, including this `!open`
+              // guard (there is nothing open to close).
               popover.scheduleClose();
             }
           },
@@ -990,9 +1216,11 @@ function DwellBar({ durationMs }: { durationMs: number }) {
 interface PopoverContentProps
   extends Omit<PopoverPrimitive.PopoverContentProps, "side" | "align"> {}
 
-/** Writes a node to a forwarded ref of either shape, so the content element can be handed to a
- *  consumer's ref AND kept on the popover's own `contentRef` at the same time. */
-function assignForwardedRef(ref: ForwardedRef<HTMLDivElement>, node: HTMLDivElement | null) {
+/** Writes a node to a forwarded ref of either shape, so an element can be handed to a consumer's
+ *  ref AND kept on one of the popover's own internal refs (`contentRef`, `triggerRef`) at the same
+ *  time. Generic over the element type — `PopoverTrigger` uses it for a button, `PopoverContent`
+ *  for a div. */
+function assignForwardedRef<T>(ref: ForwardedRef<T>, node: T | null) {
   if (typeof ref === "function") ref(node);
   else if (ref) ref.current = node;
 }
@@ -1013,7 +1241,7 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
     ref,
   ) => {
     const popover = usePopoverContext("PopoverContent");
-    const { contentRef, pendingEnterRef, dwellState, dwellPointerRef } = popover;
+    const { contentRef, pendingEnterRef, dwellState } = popover;
 
     // The depth cue: how far this popover sits from the top of the CURRENT stack, recomputed
     // whenever the stack's length changes (`subscribeStackLength`) rather than only on this
@@ -1026,48 +1254,27 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
     const depthFromTop = Math.max(0, stackLength - 1 - popover.depth);
     const opacity = popover.pinned ? 1 : opacityForDepth(depthFromTop);
 
-    // Cursor-anchored placement while `filling`: seeded from the last position `PopoverTrigger`
-    // recorded, then kept live off a document-level `pointermove` listener — document-level, not
-    // the trigger's own, because the cursor travels well past the trigger's bounds on its way to
-    // a content box that (while filling) doesn't receive the pointer at all. Frozen at whatever it
-    // last was once `locked` — that's what "stops following" means — and cleared entirely once the
-    // popover closes, so a later reopen never starts from a stale position.
-    const [fillingPosition, setFillingPosition] = useState<{ top: number; left: number } | null>(
-      null,
-    );
-
-    useEffect(() => {
-      if (dwellState !== "filling") return;
-      const applyPosition = (clientX: number, clientY: number) => {
-        const node = contentRef.current;
-        const size = node
-          ? { width: node.offsetWidth, height: node.offsetHeight }
-          : { width: 0, height: 0 };
-        const viewport = { width: window.innerWidth, height: window.innerHeight };
-        setFillingPosition(placeAtCursor({ x: clientX, y: clientY }, size, viewport));
-      };
-      const initial = dwellPointerRef.current;
-      if (initial) applyPosition(initial.x, initial.y);
-      const handlePointerMove = (event: PointerEvent) => {
-        applyPosition(event.clientX, event.clientY);
-      };
-      document.addEventListener("pointermove", handlePointerMove);
-      return () => document.removeEventListener("pointermove", handlePointerMove);
-    }, [dwellState, contentRef, dwellPointerRef]);
-
-    useEffect(() => {
-      if (dwellState === null) setFillingPosition(null);
-    }, [dwellState]);
+    // Placement itself is entirely Radix's now — the virtual cursor `Anchor` `Popover` mounts and
+    // tracks (see its own docblock and comments). Nothing left here sets `position`/`top`/`left`;
+    // the only per-dwell-state style this component still owns is turning the pointer off while
+    // `filling`, so a passing hover on the way to the lock can't be clicked through.
+    //
+    // `updatePositionStrategy="always"` while `filling` is what makes Radix re-read the virtual
+    // anchor's `getBoundingClientRect` every animation frame, so the popper keeps up with the
+    // pointer live; back to the default `"optimized"` once `locked`, since nothing is moving the
+    // anchor any more and continuous polling would just be wasted work.
+    const updatePositionStrategy = dwellState === "filling" ? "always" : "optimized";
 
     const dwellStyle: CSSProperties | undefined =
-      dwellState === null
-        ? undefined
-        : {
-            ...(fillingPosition
-              ? { position: "fixed", top: fillingPosition.top, left: fillingPosition.left, transform: "none" }
-              : null),
-            pointerEvents: dwellState === "filling" ? "none" : undefined,
-          };
+      dwellState === null ? undefined : { pointerEvents: dwellState === "filling" ? "none" : undefined };
+
+    // Clears the cursor vertically rather than opening under it — see `DWELL_CURSOR_CLEARANCE_PX`'s
+    // own comment. Only the `sideOffset` changes; `align` is left at `popover.align` (never
+    // overridden to `"start"`) so the popover stays horizontally centred on the cursor, the same as
+    // every other popover is centred on its anchor. Only while cursor-anchored; a keyboard-opened
+    // `dwell` popover and every non-dwell consumer keep the ordinary `sideOffset` a trigger-anchored
+    // popover already used.
+    const effectiveSideOffset = popover.cursorAnchored ? DWELL_CURSOR_CLEARANCE_PX : sideOffset;
 
     // Attaching the content element is also where an enter that had to open the popover first gets
     // paid off — this is the first instant the content exists. Deliberately not an effect keyed
@@ -1091,21 +1298,33 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
           ref={setContentNode}
           side={popover.side}
           align={popover.align}
-          sideOffset={sideOffset}
+          sideOffset={effectiveSideOffset}
+          updatePositionStrategy={updatePositionStrategy}
+          // Real state this component decided at open time (`Popover`'s `cursorAnchored`), not a
+          // bespoke test hook — which anchor mode is live is exactly what a devtools inspection
+          // needs to explain where the popper's own transform is coming from. `undefined` outside
+          // `dwell` mode, so the five existing hover-mode consumers carry no such attribute at all.
+          data-dwell-anchor={
+            dwellState === null ? undefined : popover.cursorAnchored ? "cursor" : "trigger"
+          }
           style={{ ...style, ...dwellStyle, opacity }}
           onPointerEnter={composeHandlers<React.PointerEvent<HTMLDivElement>>(onPointerEnter, () => {
             popover.cancelScheduledClose();
             // A pinned popover has no registry entry left to defend, so the return grace below and
-            // the shared leave timer above must both stay untouched — cancelling either here would
-            // reach into whatever a DIFFERENT, still-live chain currently has pending on them.
+            // the shared hover count above must both stay untouched — marking it entered here would
+            // count towards whatever a DIFFERENT, still-live chain currently has pending on them.
             if (!popover.dwell || popover.pinned) return;
+            // Only a `locked` popover's content ever genuinely receives this — a `filling` one has
+            // `pointer-events: none` in a real browser and would never dispatch it in the first
+            // place. Gated the same way on both enter and leave (the leave handler below always
+            // was, defensively) so the two stay a matched pair: an entered content this component
+            // never counted as entered would have nothing for the leave to balance either.
+            if (dwellState !== "locked") return;
             // Resting on any `dwell` popover in the stack means the pointer is not off it, whatever
-            // depth it is at.
-            cancelLeaveClose();
-            // Only a `locked` popover schedules the return-close of what's deeper than it — a
-            // `filling` one has `pointer-events: none` in a real browser and would never dispatch
-            // this in the first place; the check is defensive rather than load-bearing there.
-            if (dwellState === "locked") scheduleReturnClose(popover.depth);
+            // depth it is at — `markStackEntered` cancels the whole-stack leave grace as part of
+            // recording that.
+            popover.markStackEntered();
+            scheduleReturnClose(popover.depth);
           })}
           onPointerLeave={composeHandlers<React.PointerEvent<HTMLDivElement>>(onPointerLeave, () => {
             // A `dwell` popover never runs the plain `CLOSE_GRACE_MS` pointer-leave close — only the
@@ -1113,7 +1332,7 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
             // exactly its existing `scheduleClose` behaviour, untouched. A pinned popover runs
             // neither: it survives until dismissed.
             if (popover.dwell) {
-              if (!popover.pinned && dwellState === "locked") scheduleLeaveClose();
+              if (!popover.pinned && dwellState === "locked") popover.markStackLeft();
             } else {
               popover.scheduleClose();
             }

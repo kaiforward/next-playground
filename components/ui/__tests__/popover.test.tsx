@@ -1501,6 +1501,36 @@ describe("Popover — the dwell stack lifecycle (return grace, leave grace, dept
     expect(screen.getByText("Definition A")).toBeInTheDocument();
   });
 
+  it("a late leave of the child's own trigger, arriving after the parent's content was already entered, closes only the child — not the whole stack", async () => {
+    // The child's TRIGGER (`renderChain`'s "Term A1" button) sits inside the PARENT's content, so a
+    // real return trip from the child back to the parent plausibly leaves the child trigger's own
+    // bounds a beat AFTER already having entered the parent's content, not before — `user.hover`'s
+    // scripted jumps never produce that ordering (it only fires enter/leave on its own target), so
+    // this dispatches the two events directly, in that order, to pin the ordering itself.
+    //
+    // Before the fix, this closed the WHOLE stack: the parent's `onPointerEnter` cancelled the
+    // pending whole-stack leave grace and armed the (correct) return grace targeting the child, but
+    // the child trigger's `onPointerLeave` — arriving after — unconditionally re-armed the
+    // whole-stack grace with nothing left to cancel it, and `LEAVE_GRACE_MS` (90) is shorter than
+    // `RETURN_GRACE_MS` (140), so the whole-stack close fired first and took the parent with it.
+    const { user } = setup();
+    renderChain();
+
+    await openLocked(user, "Term A");
+    await openLocked(user, "Term A1");
+
+    fireEvent.pointerEnter(screen.getByText("Definition A"));
+    fireEvent.pointerLeave(screen.getByRole("button", { name: "Term A1" }));
+
+    await wait(Math.max(RETURN_GRACE_MS, LEAVE_GRACE_MS) + 150);
+    // The parent survives — the bug this pins.
+    expect(screen.getByText("Definition A")).toBeInTheDocument();
+    // The child still closes on schedule — the return grace this fix must not break: resting on a
+    // parent for longer than `RETURN_GRACE_MS` closes what's deeper than it, exactly as the
+    // "resting on a parent" test above already covers for a clean (non-racing) hover sequence.
+    expect(screen.queryByText("Definition A1")).not.toBeInTheDocument();
+  });
+
   it("re-entering a child within the return grace cancels the pending close", async () => {
     const { user } = setup();
     renderChain();
@@ -1633,13 +1663,14 @@ describe("Popover — keyboard access in the dwell mode", () => {
     fireEvent.keyDown(trigger, { key: "Enter" });
     const dialog = await screen.findByRole("dialog");
 
-    // The cursor-anchored `filling` state sets an inline `position: fixed` on the content element
-    // itself (`dwellStyle` in `PopoverContent`) — real DOM state this component sets, not a
-    // stylesheet-dependent value jsdom can't see. A keyboard open never enters `filling`, so that
-    // style is never applied at all, and the content keeps Radix's own anchor-to-trigger
-    // placement instead. This is the honest observable available in jsdom (no layout, so the
-    // resulting pixels themselves cannot be asserted) — see this task's own report for why.
-    expect(dialog.style.position).not.toBe("fixed");
+    // Placement is Radix's own now, off a virtual cursor `Anchor` `Popover` mounts only for a
+    // pointer-driven open (`cursorAnchored` in `popover.tsx`) — jsdom has no layout, so the
+    // resulting pixels can't be asserted (see this task's own report for why), but which anchor
+    // mode is live is a real decision this component makes and records on the content element
+    // itself (`data-dwell-anchor`), not a value derived from layout. A keyboard open never sets
+    // `cursorAnchored`, so the virtual anchor is never even mounted and the content keeps Radix's
+    // own default of anchoring the popper to the trigger instead.
+    expect(dialog).toHaveAttribute("data-dwell-anchor", "trigger");
   });
 
   it("Escape with a three-deep stack closes only the innermost, and a second Escape closes the next — each returning focus to its own trigger", async () => {
