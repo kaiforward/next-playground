@@ -13,6 +13,7 @@ import type { SupplyRegime } from "@/lib/engine/population";
 import { splitNeedsLedger } from "@/components/system/needs-view";
 import { NeedCells, NeedsTable } from "@/components/system/needs-table";
 import { NeedPopoverBody, NeedPopoverMeta } from "@/components/system/need-popover-body";
+import { TermLabel } from "@/components/ui/term-label";
 
 /** The trigger here is a focusable `<tr>`, not a word — nothing else names what the popover is
  *  about, so it carries the header title `NeedPopoverBody` used to render for itself. */
@@ -99,7 +100,7 @@ export function ProvisionBlock({ read, needs }: { read: SystemProvisionRead; nee
   return (
     <Card variant="bordered" padding="md">
       <div className="mb-3 flex items-center justify-between">
-        <SectionHeader as="h4">Provisioned</SectionHeader>
+        <SectionHeader as="h4"><TermLabel id="provision">Provisioned</TermLabel></SectionHeader>
         {read.assessed ? (
           <Badge color={bandTone(read.band)}>{bandLabel(read.band)}</Badge>
         ) : (

@@ -24,7 +24,7 @@ export interface VitalTileProps {
   /** Small suffix after the value (e.g. "%", "M"). */
   unit?: string;
   meter?: VitalMeter;
-  /** Trailing hint content (e.g. "unrest 0.18"). */
+  /** Trailing hint content (e.g. the Provisioned tile's band name). */
   hint?: ReactNode;
   /** Body content between the value and the hint row — e.g. a `CompositionBar` (`components/ui/composition-bar.tsx`). */
   children?: ReactNode;

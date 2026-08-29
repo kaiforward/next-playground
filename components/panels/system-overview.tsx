@@ -22,12 +22,13 @@ import { CompositionBar } from "@/components/ui/composition-bar";
 import { BADGE_COLOR_VAR } from "@/components/ui/badge";
 import { bandLabel, bandTone } from "@/components/system/provision-view";
 import { useLinkComponent } from "@/components/ui/link-provider";
+import { TermLabel } from "@/components/ui/term-label";
 import type { GovernmentType } from "@/lib/types/game";
 
 // ── Quiet context strip — a tight 2-up key/value row, deliberately smaller
 // than the vitals grid (no tall StatList). ──
 
-function ContextRow({ label, children }: { label: string; children: ReactNode }) {
+function ContextRow({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-2 text-xs">
       <span className="text-text-tertiary">{label}</span>
@@ -87,7 +88,6 @@ export function SystemOverview({ systemId }: { systemId: string }) {
               value={String(Math.round(stability.pct))}
               unit="%"
               meter={{ pct: stability.pct, color: "var(--color-status-cyan)" }}
-              hint={`unrest ${stability.unrest.toFixed(2)}`}
             />
             <VitalTile
               label="Development"
@@ -137,7 +137,7 @@ export function SystemOverview({ systemId }: { systemId: string }) {
                   color: BADGE_COLOR_VAR[bandTone(provision.band)],
                   markerPct: provision.expectationPct,
                 }}
-                hint={bandLabel(provision.band)}
+                hint={<TermLabel id="provisionBands">{bandLabel(provision.band)}</TermLabel>}
               />
             ) : (
               <VitalTile
@@ -188,7 +188,7 @@ export function SystemOverview({ systemId }: { systemId: string }) {
       {/* Context strip — quiet, tight 2-up. Region + Gateway already surface in the panel header. */}
       <Card variant="bordered" padding="sm" className="mb-6">
         <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-          <ContextRow label="Faction">
+          <ContextRow label={<TermLabel id="faction">Faction</TermLabel>}>
             {factionInfo ? (
               <span className="inline-flex items-center gap-1.5">
                 <span
@@ -202,10 +202,10 @@ export function SystemOverview({ systemId }: { systemId: string }) {
               <span className="text-text-tertiary">—</span>
             )}
           </ContextRow>
-          <ContextRow label="Government">
+          <ContextRow label={<TermLabel id="government">Government</TermLabel>}>
             <span className="capitalize">{govDef.name}</span>
           </ContextRow>
-          <ContextRow label="Danger">
+          <ContextRow label={<TermLabel id="danger">Danger</TermLabel>}>
             <SystemDangerBadge systemId={systemId} baseDanger={govDef.dangerBaseline} />
           </ContextRow>
           <ContextRow label="Astrography">

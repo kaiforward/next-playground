@@ -1,5 +1,6 @@
 import type { PopNeedData } from "@/lib/types/api";
 import { needSeverity, SEVERITY_GLYPH, SEVERITY_TEXT } from "@/components/system/needs-view";
+import { TermLabel } from "@/components/ui/term-label";
 
 // Tier swatch colours match the dataviz-validated categorical set (base copper /
 // technician deep-cyan / engineer purple) used elsewhere for consumer tiers.
@@ -49,7 +50,7 @@ export function NeedPopoverBody({
           </div>
         ))}
       </div>
-      <p className="border-t border-border/60 pt-1 text-text-secondary">Doing worse than this population is used to breeds unrest — famine and critical shortages always do.</p>
+      <p className="border-t border-border/60 pt-1 text-text-secondary">Doing worse than this <TermLabel id="population">population</TermLabel> is used to breeds <TermLabel id="unrest">unrest</TermLabel> — <TermLabel id="famine">famine</TermLabel> and critical shortages always do.</p>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { PopoverTriggerLabel } from "@/components/ui/popover-trigger-label";
 import { PopulationSummary } from "@/components/system/population-summary";
 import { ProvisionBlock } from "@/components/system/provision-block";
 import { HabitabilityPopoverBody } from "@/components/system/habitability-popover-body";
+import { TermLabel } from "@/components/ui/term-label";
 import {
   stabilityView,
   DIRECTION_GLYPH,
@@ -110,7 +111,7 @@ export function StabilityBlock({
   return (
     <Card variant="bordered" padding="md">
       <div className="mb-3 flex items-center justify-between">
-        <SectionHeader as="h4">Stability</SectionHeader>
+        <SectionHeader as="h4"><TermLabel id="stability">Stability</TermLabel></SectionHeader>
         <StabilityBadge unrest={unrest} />
       </div>
 
@@ -137,7 +138,7 @@ export function StabilityBlock({
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span aria-hidden className="inline-block h-2.5 w-0.5 bg-status-red" />
-          Strike below {view.strikePct}%
+          <TermLabel id="strike">Strike</TermLabel> below {view.strikePct}%
         </span>
       </div>
 

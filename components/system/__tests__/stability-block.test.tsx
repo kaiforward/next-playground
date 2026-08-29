@@ -37,7 +37,9 @@ describe("StabilityBlock — two moments on one track: stability now, and where 
     expect(screen.getByText("85%")).toBeInTheDocument(); // stability now
     expect(screen.getByText("Now 85%")).toBeInTheDocument();
     expect(screen.getByText("Heading for 0%")).toBeInTheDocument();
-    expect(screen.getByText("Strike below 35%")).toBeInTheDocument();
+    // "Strike" is its own TermLabel trigger now, so the key line's text is split across
+    // elements — assert on the assembled text rather than a single node's own text.
+    expect(container.textContent).toContain("Strike below 35%");
     expect(marks(container)).toHaveLength(2); // both track markers
     expect(screen.getByText(/Falling/)).toBeInTheDocument();
     // `trend` describes UNREST. Printed as-is it would tell the owner a collapsing world is rising.
@@ -56,7 +58,7 @@ describe("StabilityBlock — two moments on one track: stability now, and where 
     const { container } = render(
       <StabilityBlock unrest={0.4} striking={false} unrestBreakdown={unrestBreakdown} />,
     );
-    expect(screen.getByText("Strike below 28%")).toBeInTheDocument(); // 1 - 0.72
+    expect(container.textContent).toContain("Strike below 28%"); // 1 - 0.72
     // `ContributorBars` has no per-bar marker to draw, so the absence here is structural, not
     // merely unasserted. The design reasoning still holds: a tick across each bar would have
     // claimed a per-cause threshold, but `settled` here is 0.42 from three causes none of which
@@ -78,7 +80,7 @@ describe("StabilityBlock — two moments on one track: stability now, and where 
       <StabilityBlock unrest={0.12} striking={false} unrestBreakdown={unrestBreakdown} />,
     );
     expect(screen.getByText("88%")).toBeInTheDocument(); // the headline still reads live unrest
-    expect(screen.getByText("Strike below 42%")).toBeInTheDocument(); // 1 - 0.58
+    expect(container.textContent).toContain("Strike below 42%"); // 1 - 0.58
     expect(screen.getByText("Heading for — not yet assessed")).toBeInTheDocument();
     expect(screen.getByText(/Goods shortfall is not assessed yet/)).toBeInTheDocument();
     // The withheld cause must not read as "no goods problem" by silent absence…
@@ -121,8 +123,10 @@ describe("StabilityBlock — two moments on one track: stability now, and where 
       trend: "rising",
       strikeThreshold: 0.65,
     };
-    render(<StabilityBlock unrest={0.7} striking={true} unrestBreakdown={unrestBreakdown} />);
-    expect(screen.getByText("Strike below 35%")).toBeInTheDocument(); // 1 - 0.65
+    const { container } = render(
+      <StabilityBlock unrest={0.7} striking={true} unrestBreakdown={unrestBreakdown} />,
+    );
+    expect(container.textContent).toContain("Strike below 35%"); // 1 - 0.65
     expect(screen.getByText(/Production suppressed/)).toBeInTheDocument();
   });
 });
