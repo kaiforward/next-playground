@@ -100,7 +100,16 @@ interface Measurable {
  *   raced) by reaching any still-deeper popover — the workaround for a mechanical artifact
  *   (`docs/build-plans/nested-tooltips.md` -> N2), not observed behaviour: a child opens offset
  *   from the cursor, so the trip from a term to its own popover crosses the parent's body for a
- *   few pixels, indistinguishable from a genuine return without a time window. The pointer resting
+ *   few pixels, indistinguishable from a genuine return without a time window. That enter is only
+ *   half of it, and the rarer half: a nested popover's content renders INSIDE its parent's
+ *   content, so returning from a child to its parent never leaves the parent's subtree and fires
+ *   no `pointerenter` on it. The child's own `pointerleave` is the event that does arrive, so a
+ *   `locked` popover at depth *d* > 0 schedules `closeFromDepth(d - 1)` on its own leave — closing
+ *   itself and everything deeper. The enter path still covers a genuine DOM-boundary re-entry
+ *   (returning from a sibling chain), and either one replaces the other's timer rather than racing
+ *   it. Depth 0 is excluded: `closeFromDepth(-1)` is the close-everything sentinel, and leaving the
+ *   outermost popover belongs to the leave grace below, which is the one that knows whether the
+ *   pointer reached anything else in the stack. The pointer resting
  *   on neither a trigger nor a live `dwell` popover anywhere in the stack closes the whole stack
  *   after `LEAVE_GRACE_MS`. Both timers are module-level, like `openStack` itself: they govern the
  *   whole stack, not any one popover's own lifecycle, and a `dwell` popover never runs the plain
@@ -697,12 +706,12 @@ export function Popover({
   // created it. That is only safe because this Anchor is mounted AFTER the trigger and so
   // registers last (see the JSX below): Radix's `PopperAnchor` notifies on a reference change and
   // never cleans up, so a registration lost to a later one can never be recovered by an object
-  // whose identity does not change. Rendered unconditionally whenever `dwell` is set (see the JSX below) — NEVER
-  // conditionally, because toggling whether a custom `Anchor` exists in the tree flips Radix's own
-  // `hasCustomAnchor` and changes whether `PopoverTrigger` wraps itself in an extra Popper
-  // component, which changes the trigger's position in the Fiber tree and makes React tear down
-  // and recreate the actual trigger DOM node — losing whatever the pointer was doing to it mid
-  // gesture. Keeping one virtual anchor mounted for the popover's whole life and only ever
+  // whose identity does not change. Rendered unconditionally whenever `dwell` is set (see the JSX
+  // below) — NEVER conditionally, because toggling whether a custom `Anchor` exists in the tree
+  // flips Radix's own `hasCustomAnchor` and changes whether `PopoverTrigger` wraps itself in an
+  // extra Popper component, which changes the trigger's position in the Fiber tree and makes React
+  // tear down and recreate the actual trigger DOM node — losing whatever the pointer was doing to
+  // it mid gesture. Keeping one virtual anchor mounted for the popover's whole life and only ever
   // changing what rect it *reports* avoids that entirely.
   const dwellAnchorVirtualRef = useRef<Measurable>({
     getBoundingClientRect: () =>
@@ -1016,14 +1025,15 @@ export function Popover({
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
       <PopoverContext.Provider value={context}>
+        {children}
         {/* Mounted whenever `dwell` is set — unconditionally, for the whole popover's life, never
             toggled by open/close or by which gesture opened it (see `dwellAnchorVirtualRef`'s own
             comment for why toggling it is unsafe). What changes across opens is only which rect
             `getBoundingClientRect` reports: the cursor point while `cursorAnchoredRef` is raised,
-            the trigger's own rect otherwise. */}
-        {children}
-        {/* AFTER `children`, and that order is load-bearing. Radix's `PopperAnchor` notifies the
-            popper context only when the anchor changes BY REFERENCE, and its effect has no
+            the trigger's own rect otherwise.
+
+            And it sits AFTER `children`, an order that is load-bearing. Radix's `PopperAnchor`
+            notifies the popper context only when the anchor changes BY REFERENCE, and its effect has no
             cleanup. `PopoverTrigger` wraps itself in its own `PopperAnchor` whenever
             `hasCustomAnchor` is false — which it is on the first render, because the flag is only
             raised in this Anchor's own effect. Mounted before the trigger, our effect runs first,
