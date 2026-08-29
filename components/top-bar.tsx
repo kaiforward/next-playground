@@ -15,6 +15,7 @@ import { useFactionVitals } from "@/lib/hooks/use-faction-vitals";
 import { foundingWorkingBalance } from "@/lib/engine/treasury";
 import { formatMagnitude, formatSignedMagnitude } from "@/lib/utils/format";
 import { formatDate, formatTimeOfDay } from "@/lib/utils/calendar";
+import { TermLabel } from "@/components/ui/term-label";
 
 /* ------------------------------------------------------------------ */
 /*  Player faction flag + stats                                       */
@@ -74,7 +75,7 @@ function PlayerFactionStats({ factionId }: { factionId: string }) {
             treasury.net < 0 ? "text-status-red-light" : "text-status-green-light"
           }`}
         >
-          {formatSignedMagnitude(treasury.net)}/cy
+          {formatSignedMagnitude(treasury.net)}/cyc
         </span>
       </span>
       <span className="flex items-center gap-1.5 whitespace-nowrap" title="Systems owned">
@@ -90,7 +91,7 @@ function PlayerFactionStats({ factionId }: { factionId: string }) {
 /*  Tick / TPS readout                                                */
 /* ------------------------------------------------------------------ */
 
-function TickReadout() {
+export function TickReadout() {
   const { currentTick, achievedTps } = useTickContext();
   return (
     <div className="flex items-center gap-1.5 text-xs font-mono text-text-secondary whitespace-nowrap">
@@ -98,7 +99,8 @@ function TickReadout() {
       {/* The raw tick survives only in the title — the shipped UI reads the fictional calendar. */}
       <span title={`tick ${currentTick}`}>
         <span className="text-secondary">{formatDate(currentTick)}</span>{" "}
-        <span className="text-text-primary">{formatTimeOfDay(currentTick)}</span>
+        <span className="text-text-primary">{formatTimeOfDay(currentTick)}</span>{" "}
+        <TermLabel id="ust" />
       </span>
       <span className="text-text-tertiary">·</span>
       <span>

@@ -2,6 +2,7 @@
 
 import { PopoverContent } from "@/components/ui/popover";
 import { CheckboxInput } from "@/components/form/checkbox-input";
+import { TermLabel } from "@/components/ui/term-label";
 import { ALERT_CATEGORIES } from "@/lib/constants/alerts";
 import { ALERT_CATEGORY_IDS, type AlertCategoryId, type AlertTier } from "@/lib/types/alerts";
 import type { AlertCategorySettings } from "@/lib/types/alerts";
@@ -83,7 +84,15 @@ export function AlertSettings({ categories, onChangeCategory }: AlertSettingsPro
           return (
             <section key={tier} className="border-b border-border py-1.5 last:border-b-0">
               <h4 className="flex items-baseline gap-2 px-2.5 pb-1 font-display text-xs uppercase tracking-[0.1em] text-text-tertiary">
-                {TIER_HEADING[tier]}
+                {/* The scale's own term links once, on its first (Critical) heading — Important and
+                    Opportunities share the same "critical, important, informational" definition, and
+                    a trigger on every heading would repeat one term three times over on a single
+                    surface. */}
+                {tier === "critical" ? (
+                  <TermLabel id="alertTiers">{TIER_HEADING[tier]}</TermLabel>
+                ) : (
+                  TIER_HEADING[tier]
+                )}
                 {note && <span className="normal-case tracking-normal opacity-85">{note}</span>}
               </h4>
               <div role="group" aria-label={`${TIER_HEADING[tier]} alert categories`}>
