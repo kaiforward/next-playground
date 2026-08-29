@@ -36,7 +36,9 @@ import { Badge, type BadgeColor } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InfoIcon } from "@/components/ui/icons";
-import { Tooltip, TooltipTrigger, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { PopoverTriggerLabel } from "@/components/ui/popover-trigger-label";
+import { TermLabel } from "@/components/ui/term-label";
 import { useDialog } from "@/components/ui/dialog";
 import { CompositionBar } from "@/components/ui/composition-bar";
 import { depositRows, depositRowProblems, depositTypeProblems, idleLevelSplit, staffedLevels, type DepositRow, type DepositTypeRow } from "@/components/system/industry-rows";
@@ -163,33 +165,42 @@ function PoolHead({ title, sub, right }: { title: string; sub?: string; right: R
 function YieldTag({ row }: { row: DepositRow }) {
   const pct = Math.round(row.yieldMult * 100);
   return (
-    <Tooltip>
-      <TooltipTriggerLabel className="block w-full text-right">
-        <span className={`block font-mono text-[11px] ${QUALITY_BAND_TEXT[row.band]}`}>{pct}%</span>
-      </TooltipTriggerLabel>
-      <TooltipContent className="w-64 text-xs"><YieldTooltipBody row={row} /></TooltipContent>
-    </Tooltip>
+    <PopoverTriggerLabel className="block w-full text-right" contentClassName="w-64 text-xs" content={<YieldTooltipBody row={row} />}>
+      <span className={`block font-mono text-[11px] ${QUALITY_BAND_TEXT[row.band]}`}>{pct}%</span>
+    </PopoverTriggerLabel>
   );
 }
 
-/** The yield tag's tooltip body: combined figure · per-body worked breakdown · next slot. */
+/** The yield tag's tooltip body: combined figure · per-body worked breakdown · next slot. The
+ *  panel's first real chain — "Combined yield", each body archetype, "slot"/"slots" and the
+ *  quality-band percentages all open their own glossary definition. */
 export function YieldTooltipBody({ row }: { row: DepositRow }) {
   return (
     <div className="space-y-1">
-      <p className="font-mono text-text-primary">Combined yield: {Math.round(row.yieldMult * 100)}%</p>
+      <p className="font-mono text-text-primary">
+        <TermLabel id="realisedYield">Combined yield</TermLabel>: {Math.round(row.yieldMult * 100)}%
+      </p>
       {row.workedByBody.length > 0 && (
         <div className="space-y-0.5 border-t border-border/60 pt-1">
           {row.workedByBody.map((b, i) => (
             <p key={`${b.bodyType}-${i}`} className="font-mono text-text-secondary">
-              {bodyLabel(b.bodyType)}: {b.worked} {b.worked === 1 ? "slot" : "slots"} · {Math.round(b.groundValue * 100)}%
+              <TermLabel id="archetype">{bodyLabel(b.bodyType)}</TermLabel>: {b.worked}{" "}
+              <TermLabel id="resourceSlot">{b.worked === 1 ? "slot" : "slots"}</TermLabel> ·{" "}
+              <TermLabel id="qualityBand">{Math.round(b.groundValue * 100)}%</TermLabel>
             </p>
           ))}
         </div>
       )}
       <p className="border-t border-border/60 pt-1 text-text-tertiary">
-        {row.marginal
-          ? `Next slot: ${Math.round(row.marginal.groundValue * 100)}% on ${bodyLabel(row.marginal.bodyType)}`
-          : "All deposit slots worked"}
+        {row.marginal ? (
+          <>
+            Next <TermLabel id="resourceSlot">slot</TermLabel>:{" "}
+            <TermLabel id="qualityBand">{Math.round(row.marginal.groundValue * 100)}%</TermLabel> on{" "}
+            <TermLabel id="archetype">{bodyLabel(row.marginal.bodyType)}</TermLabel>
+          </>
+        ) : (
+          <>All deposit <TermLabel id="resourceSlot">slots</TermLabel> worked</>
+        )}
       </p>
     </div>
   );
@@ -507,10 +518,13 @@ function DepositTable({
                 <td className={styles.cell({ className: "text-text-primary" })}>
                   <span className="flex items-center gap-1.5">
                     <HealthGlyph health={row.health} className="text-[9px]" />
-                    <Tooltip>
-                      <TooltipTriggerLabel className="capitalize">{row.resource}</TooltipTriggerLabel>
-                      <TooltipContent className="w-56"><DepositTooltipBody row={row} contributors={contributorsFor(row.resource)} /></TooltipContent>
-                    </Tooltip>
+                    <PopoverTriggerLabel
+                      className="capitalize"
+                      contentClassName="w-56"
+                      content={<DepositTooltipBody row={row} contributors={contributorsFor(row.resource)} />}
+                    >
+                      {row.resource}
+                    </PopoverTriggerLabel>
                   </span>
                   <ProblemLine items={items} popNeed={rowPopNeed} />
                 </td>
@@ -566,10 +580,9 @@ function ProblemLine({ items, popNeed }: { items: ProblemItem[]; popNeed?: PopNe
           <Fragment key={`${item.kind}-${item.label}`}>
             {i > 0 && <span className="text-text-tertiary">·</span>}
             {item.kind === "pops" && popNeed ? (
-              <Tooltip>
-                <TooltipTriggerLabel>{chip}</TooltipTriggerLabel>
-                <TooltipContent className="w-64"><NeedTooltipContent need={popNeed} /></TooltipContent>
-              </Tooltip>
+              <PopoverTriggerLabel contentClassName="w-64" content={<NeedTooltipContent need={popNeed} />}>
+                {chip}
+              </PopoverTriggerLabel>
             ) : (
               chip
             )}
@@ -610,10 +623,9 @@ function BuildingRow({
       <td className={styles.cell({ className: "text-text-primary" })}>
         <span className="flex items-center gap-1.5">
           <HealthGlyph health={health} className="text-[9px]" />
-          <Tooltip>
-            <TooltipTriggerLabel>{label(b.buildingType)}</TooltipTriggerLabel>
-            <TooltipContent className="w-64"><BuildingTooltipBody b={b} labour={labour} supply={supply} /></TooltipContent>
-          </Tooltip>
+          <PopoverTriggerLabel contentClassName="w-64" content={<BuildingTooltipBody b={b} labour={labour} supply={supply} />}>
+            {label(b.buildingType)}
+          </PopoverTriggerLabel>
         </span>
         <ProblemLine items={items} popNeed={popNeed} />
       </td>
@@ -868,10 +880,14 @@ function LabourCard({
             return <span key={w.key} className="inline-flex items-center gap-1.5">{chip}</span>;
           }
           return (
-            <Tooltip key={w.key}>
-              <TooltipTriggerLabel className="inline-flex items-center gap-1.5">{chip}</TooltipTriggerLabel>
-              <TooltipContent className="w-56"><BasketTooltipBody grade={w.key} basket={w.basket} /></TooltipContent>
-            </Tooltip>
+            <PopoverTriggerLabel
+              key={w.key}
+              className="inline-flex items-center gap-1.5"
+              contentClassName="w-56"
+              content={<BasketTooltipBody grade={w.key} basket={w.basket} />}
+            >
+              {chip}
+            </PopoverTriggerLabel>
           );
         })}
         <span className="inline-flex items-center gap-1.5">
@@ -1005,14 +1021,10 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
         </div>
         {unmet.length > 0 && (
           <div className="mt-1.5">
-            <Tooltip>
-              <TooltipTriggerLabel className="inline-flex items-center gap-1.5 border border-border bg-surface-active px-2 py-0.5 text-[11px]">
-                <span aria-hidden className={`font-mono text-[10px] ${SEVERITY_TEXT[needSeverity(unmet[0].satisfaction)]}`}>{SEVERITY_GLYPH[needSeverity(unmet[0].satisfaction)]}</span>
-                Pops short: <strong>{unmet[0].goodName}</strong>
-                {unmet[1] && <> · {unmet[1].goodName}</>}
-                {unmet.length > 2 && <span className="text-text-tertiary">+{unmet.length - 2}</span>}
-              </TooltipTriggerLabel>
-              <TooltipContent className="w-80">
+            <PopoverTriggerLabel
+              className="inline-flex items-center gap-1.5 border border-border bg-surface-active px-2 py-0.5 text-[11px]"
+              contentClassName="w-80"
+              content={
                 <div className="space-y-1 text-xs">
                   <NeedsTable density="tooltip">
                     {unmet.map((n) => (
@@ -1021,8 +1033,13 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
                   </NeedsTable>
                   <p className="border-t border-border/60 pt-1 text-text-secondary">Doing worse than this population is used to breeds unrest — famine and critical shortages always do.</p>
                 </div>
-              </TooltipContent>
-            </Tooltip>
+              }
+            >
+              <span aria-hidden className={`font-mono text-[10px] ${SEVERITY_TEXT[needSeverity(unmet[0].satisfaction)]}`}>{SEVERITY_GLYPH[needSeverity(unmet[0].satisfaction)]}</span>
+              Pops short: <strong>{unmet[0].goodName}</strong>
+              {unmet[1] && <> · {unmet[1].goodName}</>}
+              {unmet.length > 2 && <span className="text-text-tertiary">+{unmet.length - 2}</span>}
+            </PopoverTriggerLabel>
           </div>
         )}
         <p className="mt-1.5 flex gap-3 font-mono text-[11px]">
