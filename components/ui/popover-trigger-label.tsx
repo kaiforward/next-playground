@@ -14,9 +14,6 @@ export interface PopoverTriggerLabelProps {
   /** Extra classes on the trigger button — merged onto `triggerLabelStyles` the same way
    *  `TooltipTriggerLabel`'s own `className` prop is. */
   className?: string;
-  /** Extra classes on the popover body — sizing (`w-56`, `w-80`, ...), the same passthrough
-   *  `TooltipContent`'s own `className` prop gives a `Tooltip` consumer. */
-  contentClassName?: string;
 }
 
 /**
@@ -37,7 +34,7 @@ export interface PopoverTriggerLabelProps {
  * otherwise each hand-roll as `<Popover dwell><PopoverTrigger><button
  * className={triggerLabelStyles(...)}>`.
  */
-export function PopoverTriggerLabel({ children, content, className, contentClassName }: PopoverTriggerLabelProps) {
+export function PopoverTriggerLabel({ children, content, className }: PopoverTriggerLabelProps) {
   return (
     <Popover dwell>
       <PopoverTrigger>
@@ -45,7 +42,7 @@ export function PopoverTriggerLabel({ children, content, className, contentClass
           {children}
         </button>
       </PopoverTrigger>
-      <PopoverContent className={contentClassName}>{content}</PopoverContent>
+      <PopoverContent>{content}</PopoverContent>
     </Popover>
   );
 }

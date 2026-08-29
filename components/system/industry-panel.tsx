@@ -38,6 +38,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { InfoIcon } from "@/components/ui/icons";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { PopoverTriggerLabel } from "@/components/ui/popover-trigger-label";
+import { PopoverHeader } from "@/components/ui/popover";
 import { TermLabel } from "@/components/ui/term-label";
 import { useDialog } from "@/components/ui/dialog";
 import { CompositionBar } from "@/components/ui/composition-bar";
@@ -165,7 +166,7 @@ function PoolHead({ title, sub, right }: { title: string; sub?: string; right: R
 function YieldTag({ row }: { row: DepositRow }) {
   const pct = Math.round(row.yieldMult * 100);
   return (
-    <PopoverTriggerLabel className="block w-full text-right" contentClassName="w-64 text-xs" content={<YieldPopoverBody row={row} />}>
+    <PopoverTriggerLabel className="block w-full text-right" content={<YieldPopoverBody row={row} />}>
       <span className={`block font-mono text-[11px] ${QUALITY_BAND_TEXT[row.band]}`}>{pct}%</span>
     </PopoverTriggerLabel>
   );
@@ -240,15 +241,15 @@ function Th({ children, right = false }: { children: React.ReactNode; right?: bo
 export function DepositPopoverBody({ row, contributors }: { row: DepositRow; contributors: BuildingEntry[] }) {
   return (
     <div className="space-y-1">
-      <p className="font-display text-[12px] font-semibold capitalize text-text-primary">{row.resource}</p>
-      <p className="font-mono text-[10px] text-text-tertiary">
+      <PopoverHeader title={<span className="capitalize">{row.resource}</span>} />
+      <p className="whitespace-nowrap font-mono text-[10px] text-text-tertiary">
         {QUALITY_BAND_LABEL[row.band]} · {row.built}/{row.depositCounts} slots built · {row.staffed.toFixed(1)} staffed
       </p>
       {contributors.length > 0 && (
-        <div className="space-y-0.5 border-t border-border/60 pt-1.5">
+        <div className="space-y-0.5 overflow-x-auto border-t border-border/60 pt-1.5">
           <p className="font-mono text-[9px] uppercase tracking-wider text-text-tertiary/80">extracted goods</p>
           {contributors.map((b) => (
-            <div key={b.buildingType} className="flex items-center justify-between gap-3 text-[11px]">
+            <div key={b.buildingType} className="flex items-center justify-between gap-3 whitespace-nowrap text-[11px]">
               <span className="text-text-primary">{label(b.buildingType)}</span>
               <span className="font-mono text-text-secondary">{b.output !== undefined ? formatUnitsShort(b.output) : "0"}/cyc</span>
             </div>
@@ -289,9 +290,9 @@ function BuildingPopoverBody({
 
   return (
     <div className="space-y-1.5">
-      <p className="font-display text-[12px] font-semibold text-text-primary">{label(b.buildingType)}</p>
+      <PopoverHeader title={label(b.buildingType)} />
       {(tierLabel || b.count > 0) && (
-        <p className="font-mono text-[10px] text-text-tertiary">
+        <p className="whitespace-nowrap font-mono text-[10px] text-text-tertiary">
           {tierLabel && !isAcademy && !isComplex && !isSupport ? `tier ${b.tier} · ${tierLabel} · ` : ""}×{formatMagnitude(b.count)} built
         </p>
       )}
@@ -299,7 +300,7 @@ function BuildingPopoverBody({
 
       {complexFamily && (
         <div className="space-y-0.5 border-t border-border/60 pt-1.5">
-          <p className="font-mono text-[9px] uppercase tracking-wider text-text-tertiary/80">
+          <p className="whitespace-nowrap font-mono text-[9px] uppercase tracking-wider text-text-tertiary/80">
             family yield — <span className="text-text-secondary">×{Number(familyBuff.toFixed(2))}</span>
             {b.count < 1 ? ` of ×${complexFamily.buffMult} at full strength` : ""}
           </p>
@@ -310,12 +311,16 @@ function BuildingPopoverBody({
       )}
 
       {isProducer && grades.length > 0 && (
-        <div className="space-y-0.5 border-t border-border/60 pt-1.5">
+        <div className="space-y-0.5 overflow-x-auto border-t border-border/60 pt-1.5">
           <p className="font-mono text-[9px] uppercase tracking-wider text-text-tertiary/80">staffing — filled / needed</p>
           {grades.map((g) => (
-            <div key={g.grade} className="flex items-center gap-1.5">
+            <div key={g.grade} className="flex items-center gap-1.5 whitespace-nowrap">
               <span aria-hidden className={`w-3 font-mono text-[9px] ${GRADE[g.grade].text}`}>{GRADE[g.grade].tag}</span>
-              <div className="relative h-1.5 flex-1 overflow-hidden border border-border bg-surface-active">
+              {/* `min-w` floors this bar's own width — under `w-max` the popover shrinks to its
+                  widest row, and an empty flex-1 track has no content of its own to claim any of
+                  that width from, so without a floor it could render at (near) zero width in a
+                  popover with nothing wider to push the container out. */}
+              <div className="relative h-1.5 min-w-16 flex-1 overflow-hidden border border-border bg-surface-active">
                 <div className={`absolute inset-y-0 left-0 ${GRADE[g.grade].bar}`} style={{ width: `${barWidthPct(g.fulfil)}%` }} />
               </div>
               <span className={`w-[70px] text-right font-mono text-[10px] ${g.wall ? "text-status-red-light" : "text-text-secondary"}`}>
@@ -333,7 +338,7 @@ function BuildingPopoverBody({
             {recipeInputs.map((input) => {
               const short = supply?.throttledBy.includes(input) ?? false;
               return (
-                <span key={input} className={`font-mono text-[11px] ${short ? "text-status-amber-light" : "text-status-green-light"}`}>
+                <span key={input} className={`whitespace-nowrap font-mono text-[11px] ${short ? "text-status-amber-light" : "text-status-green-light"}`}>
                   {short ? "⚠" : "✓"} {label(input)}{short && supply ? ` ${Math.round(supply.inputGate * 100)}%` : ""}
                 </span>
               );
@@ -520,7 +525,6 @@ function DepositTable({
                     <HealthGlyph health={row.health} className="text-[9px]" />
                     <PopoverTriggerLabel
                       className="capitalize"
-                      contentClassName="w-56"
                       content={<DepositPopoverBody row={row} contributors={contributorsFor(row.resource)} />}
                     >
                       {row.resource}
@@ -580,7 +584,7 @@ function ProblemLine({ items, popNeed }: { items: ProblemItem[]; popNeed?: PopNe
           <Fragment key={`${item.kind}-${item.label}`}>
             {i > 0 && <span className="text-text-tertiary">·</span>}
             {item.kind === "pops" && popNeed ? (
-              <PopoverTriggerLabel contentClassName="w-64" content={<NeedPopoverBody need={popNeed} />}>
+              <PopoverTriggerLabel content={<NeedPopoverBody need={popNeed} />}>
                 {chip}
               </PopoverTriggerLabel>
             ) : (
@@ -623,7 +627,7 @@ function BuildingRow({
       <td className={styles.cell({ className: "text-text-primary" })}>
         <span className="flex items-center gap-1.5">
           <HealthGlyph health={health} className="text-[9px]" />
-          <PopoverTriggerLabel contentClassName="w-64" content={<BuildingPopoverBody b={b} labour={labour} supply={supply} />}>
+          <PopoverTriggerLabel content={<BuildingPopoverBody b={b} labour={labour} supply={supply} />}>
             {label(b.buildingType)}
           </PopoverTriggerLabel>
         </span>
@@ -813,9 +817,9 @@ function BasketPopoverBody({ grade, basket }: { grade: "skill1" | "skill2"; bask
   return (
     <div className="space-y-1">
       <p className="text-[11px] leading-snug text-text-secondary">Each {noun} adds demand for:</p>
-      <div className="space-y-0.5">
+      <div className="space-y-0.5 overflow-x-auto">
         {basket.map((entry) => (
-          <div key={entry.goodId} className="flex items-center justify-between gap-3">
+          <div key={entry.goodId} className="flex items-center justify-between gap-3 whitespace-nowrap">
             <span className="text-[11px] text-text-primary">{label(entry.goodId)}</span>
             {/* Fixed decimals — per-head rates sit below formatMagnitude's 0.1 cutoff at ECONOMY_SCALE=1. */}
             <span className="font-mono text-[10px] text-text-secondary">{entry.perHead.toFixed(3)}/cyc</span>
@@ -883,7 +887,6 @@ function LabourCard({
             <PopoverTriggerLabel
               key={w.key}
               className="inline-flex items-center gap-1.5"
-              contentClassName="w-56"
               content={<BasketPopoverBody grade={w.key} basket={w.basket} />}
             >
               {chip}
@@ -1023,9 +1026,8 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           <div className="mt-1.5">
             <PopoverTriggerLabel
               className="inline-flex items-center gap-1.5 border border-border bg-surface-active px-2 py-0.5 text-[11px]"
-              contentClassName="w-80"
               content={
-                <div className="space-y-1 text-xs">
+                <div className="space-y-1">
                   <NeedsTable density="tooltip">
                     {unmet.map((n) => (
                       <tr key={n.goodId}><NeedCells n={n} density="tooltip" /></tr>

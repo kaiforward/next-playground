@@ -1,4 +1,5 @@
 import { PopoverTriggerLabel } from "@/components/ui/popover-trigger-label";
+import { PopoverHeader } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { TermLabel } from "@/components/ui/term-label";
 import { QUALITY_BAND_TEXT } from "@/lib/constants/ui";
@@ -13,10 +14,10 @@ import type { PotentialYieldRowView } from "@/lib/utils/substrate";
 export function PotentialYieldPopoverBody({ row }: { row: PotentialYieldRowView }) {
   return (
     <div className="space-y-1">
-      <p className="font-display text-sm font-semibold capitalize text-text-primary">{row.resource}</p>
-      <div className="space-y-1 border-t border-border/60 pt-1">
+      <PopoverHeader title={<span className="capitalize">{row.resource}</span>} />
+      <div className="space-y-1 overflow-x-auto">
         {row.byBody.map((b, i) => (
-          <div key={`${b.bodyId}-${i}`} className="flex items-center justify-between gap-2 font-mono text-xs">
+          <div key={`${b.bodyId}-${i}`} className="flex items-center justify-between gap-2 whitespace-nowrap font-mono">
             <span className="flex items-center gap-1.5 text-text-secondary">
               <TermLabel id="archetype">{b.archetypeName}</TermLabel>
               {/* Not a `TermLabel`: nesting the trigger's button styling (copper underline,
@@ -24,7 +25,7 @@ export function PotentialYieldPopoverBody({ row }: { row: PotentialYieldRowView 
                   adds an underline the pill isn't built for. Left unmarked. */}
               {b.locked && <Badge color="slate" variant="outline">Locked</Badge>}
             </span>
-            <span className="whitespace-nowrap text-text-tertiary">
+            <span className="text-text-tertiary">
               {b.slotCount} <TermLabel id="resourceSlot">{b.slotCount === 1 ? "slot" : "slots"}</TermLabel> ·{" "}
               <TermLabel id="qualityBand">{Math.round(b.groundValue * 100)}%</TermLabel>
             </span>
@@ -65,7 +66,6 @@ export function PotentialYieldTable({ rows }: { rows: PotentialYieldRowView[] })
             <td className="px-1.5 py-1 text-text-primary">
               <PopoverTriggerLabel
                 className="capitalize"
-                contentClassName="w-64 text-xs"
                 content={<PotentialYieldPopoverBody row={row} />}
               >
                 {row.resource}

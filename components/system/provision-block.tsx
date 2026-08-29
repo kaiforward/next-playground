@@ -22,7 +22,7 @@ function NeedRow({ n }: { n: PopNeedData }) {
           <NeedCells n={n} density="panel" />
         </tr>
       </PopoverTrigger>
-      <PopoverContent className="w-64"><NeedPopoverBody need={n} /></PopoverContent>
+      <PopoverContent><NeedPopoverBody need={n} /></PopoverContent>
     </Popover>
   );
 }

@@ -8,6 +8,7 @@ import {
   LEAVE_GRACE_MS,
   Popover,
   PopoverContent,
+  PopoverHeader,
   PopoverTrigger,
   RETURN_GRACE_MS,
   usePopoverDepth,
@@ -1864,9 +1865,19 @@ describe("Popover — pinning a chain", () => {
   // A plain DOM click rather than `user.click` deliberately: the pointer's own transit toward the
   // Pin button (leaving whatever was hovered before it) is a real pointer-leave in its own right —
   // exercised on purpose by entry 6's own test below — and is not what THIS helper exists to drive.
+  //
+  // `label` must name the chain's DEEPEST currently-open level — the pin/unpin control renders only
+  // there (it follows the pointer down as the chain grows), not at every open ancestor.
   function pin(label: string) {
     const pinButton = within(dialogFor(label)).getByRole("button", { name: "Pin" });
     fireEvent.click(pinButton);
+  }
+
+  // Same DOM-click rationale as `pin` above, for the same reason: `label` names the chain's deepest
+  // currently-open (and now pinned) level, where the toggle now reads "Unpin".
+  function unpin(label: string) {
+    const unpinButton = within(dialogFor(label)).getByRole("button", { name: "Unpin" });
+    fireEvent.click(unpinButton);
   }
 
   it("a pinned chain survives the pointer leaving it entirely", async () => {
@@ -1875,7 +1886,9 @@ describe("Popover — pinning a chain", () => {
 
     await openLocked(user, "Survive0");
     await openLocked(user, "Survive1");
-    pin("Survive0");
+    // The pin control renders only at the deepest open level — it follows the pointer down as the
+    // chain grows, so Survive1 (not the ancestor Survive0) is where it lives once both are open.
+    pin("Survive1");
 
     // Off the entire stack — nowhere else is hovered. Without pinning this is exactly the sequence
     // the "leaving the whole stack closes every depth" test (above) fires the leave grace from.
@@ -1937,7 +1950,8 @@ describe("Popover — pinning a chain", () => {
 
     await openLocked(user, "Fresh0");
     await openLocked(user, "Fresh1");
-    pin("Fresh0");
+    // Deepest open level — see the "pin control renders only at the deepest level" comment above.
+    pin("Fresh1");
 
     // A brand new depth-0 chain, opened only after the first one is pinned and so no longer holds
     // depth 0 in the registry.
@@ -1963,7 +1977,8 @@ describe("Popover — pinning a chain", () => {
     await openLocked(user, "Op1");
     await openLocked(user, "Op2");
     await openLocked(user, "Op3");
-    pin("Op0");
+    // Deepest open level — see the "pin control renders only at the deepest level" comment above.
+    pin("Op3");
 
     // Only opened — and so only occupying the registry — once the first chain is pinned and clear
     // of it, exactly as the previous proof's own sequencing requires.
@@ -1997,7 +2012,8 @@ describe("Popover — pinning a chain", () => {
 
     await openLocked(user, "Ghost0");
     await openLocked(user, "Ghost1");
-    pin("Ghost0");
+    // Deepest open level — see the "pin control renders only at the deepest level" comment above.
+    pin("Ghost1");
 
     // Q claims depth 0 legitimately, once the pinned chain is clear of the registry.
     await openLocked(user, "GhostQ");
@@ -2035,7 +2051,8 @@ describe("Popover — pinning a chain", () => {
 
     await openLocked(user, "Precond0");
     await openLocked(user, "Precond1");
-    pin("Precond0");
+    // Deepest open level — see the "pin control renders only at the deepest level" comment above.
+    pin("Precond1");
 
     // The live, unpinned chain — opened only once the pinned one is clear of the registry.
     await openLocked(user, "Live0");
@@ -2119,11 +2136,128 @@ describe("Popover — pinning a chain", () => {
     expect(pinButton).toHaveFocus();
 
     // Activated by keyboard, found only by its accessible name — never by a class, a test id or the
-    // glyph it renders. A working pin removes the control (a locked-and-unpinned popover is the
-    // only state that renders it), so its disappearance is the operable half of this proof.
+    // glyph it renders. A working pin turns the SAME control into an "Unpin" toggle rather than
+    // removing it (§ Issue 4 — the button stays so a pinned chain can be released from the same
+    // place, without falling back to Escape), so both halves of that toggle are the operable proof
+    // here: "Pin" is gone, "Unpin" has taken its place, and focus is still on the same element.
     await user.keyboard("{Enter}");
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: "Pin" })).not.toBeInTheDocument();
     });
+    const unpinButton = screen.getByRole("button", { name: "Unpin" });
+    expect(unpinButton).toHaveFocus();
+    expect(unpinButton).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("the pin control is a toggle: activating Unpin reattaches the chain and aria-pressed follows it", async () => {
+    const { user } = setup();
+    render(buildChain(["Toggle0", "Toggle1"]));
+
+    await openLocked(user, "Toggle0");
+    await openLocked(user, "Toggle1");
+
+    // Deepest open level — see the "pin control renders only at the deepest level" comment above.
+    const pinnedButton = within(dialogFor("Toggle1")).getByRole("button", { name: "Pin" });
+    expect(pinnedButton).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(pinnedButton);
+
+    const unpinButton = within(dialogFor("Toggle1")).getByRole("button", { name: "Unpin" });
+    expect(unpinButton).toHaveAttribute("aria-pressed", "true");
+    // Still nothing named "Pin" anywhere in this chain — it is the SAME control, renamed, not a
+    // second one appearing alongside it.
+    expect(within(dialogFor("Toggle1")).queryByRole("button", { name: "Pin" })).not.toBeInTheDocument();
+
+    // Unpin from the same place: the control flips straight back, no Escape involved.
+    fireEvent.click(unpinButton);
+    await waitFor(() => {
+      expect(within(dialogFor("Toggle1")).getByRole("button", { name: "Pin" })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+    });
+    expect(screen.getByText("Definition Toggle0")).toBeInTheDocument();
+    expect(screen.getByText("Definition Toggle1")).toBeInTheDocument();
+  });
+
+  it("unpinning restores the chain: it survives an unrelated hover, then closes normally once the pointer truly leaves", async () => {
+    // The fiddly part this task books: pinning released this chain's `stackHoverCount`
+    // contribution, and nothing re-primes it via a real `pointerenter` on unpin — the pointer never
+    // crosses a boundary, it was already resting on the content the Unpin button lives in. Without
+    // `unmarkPinned` restoring that contribution, the leave grace below would never arm (the eventual
+    // `pointerleave` would find its own local count already at 0 and no-op), and this chain would
+    // never close on its own again.
+    const { user } = setup();
+    render(
+      <>
+        {buildChain(["Restore0", "Restore1"])}
+        {buildChain(["RestoreRival"])}
+      </>,
+    );
+
+    await openLocked(user, "Restore0");
+    await openLocked(user, "Restore1");
+    pin("Restore1");
+    unpin("Restore1");
+
+    // Confirms the chain is genuinely back on the live registry, not merely still visible: the
+    // fresh chain here claims depth 0 and — being a live rival, not one this test's own chain still
+    // holds — must close it, exactly as ordinary (never-pinned) exclusivity would.
+    await openLocked(user, "RestoreRival");
+    await waitFor(() => {
+      expect(screen.queryByText("Definition Restore0")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Definition RestoreRival")).toBeInTheDocument();
+  });
+
+  it("unpinning restores the leave grace: leaving the reattached chain entirely closes it", async () => {
+    const { user } = setup();
+    render(buildChain(["Grace0", "Grace1"]));
+
+    await openLocked(user, "Grace0");
+    await openLocked(user, "Grace1");
+    pin("Grace1");
+    unpin("Grace1");
+
+    // Off the entire (now reattached) stack — nowhere else is hovered.
+    await user.unhover(screen.getByText("Definition Grace1"));
+    await waitFor(
+      () => {
+        expect(screen.queryByText("Definition Grace0")).not.toBeInTheDocument();
+      },
+      { timeout: LEAVE_GRACE_MS + 500 },
+    );
+    expect(screen.queryByText("Definition Grace1")).not.toBeInTheDocument();
+  });
+
+  it("a header's own title never displaces ArrowDown's target — a nested term trigger still gets it first", async () => {
+    // Issue 2's header sits BEFORE the body in DOM order; the pin control still sits AFTER
+    // `{children}` (see `PopoverContent`'s own comment on why). This proves the header's presence
+    // doesn't change which element `focusIntoContent`/ArrowDown reaches first — the nested trigger,
+    // never the header and never the pin control.
+    const { user } = setup();
+    render(
+      <Popover dwell>
+        <PopoverTrigger>
+          <button type="button">Headered</button>
+        </PopoverTrigger>
+        <PopoverContent aria-label="Definition Headered">
+          <PopoverHeader title="A Title" />
+          <Popover dwell>
+            <PopoverTrigger>
+              <button type="button">Nested term</button>
+            </PopoverTrigger>
+            <PopoverContent aria-label="Definition Nested">
+              <p>Definition Nested</p>
+            </PopoverContent>
+          </Popover>
+        </PopoverContent>
+      </Popover>,
+    );
+
+    await user.tab();
+    await screen.findByText("A Title");
+    await user.keyboard("{ArrowDown}");
+
+    expect(screen.getByRole("button", { name: "Nested term" })).toHaveFocus();
   });
 });

@@ -52,7 +52,7 @@ function PartnerList({ label, partners }: { label: string; partners: TradeFlowPa
   return (
     <div className="space-y-0.5">
       <p className="font-display text-[10px] uppercase tracking-wider text-text-tertiary">{label}</p>
-      <dl className="space-y-0.5 text-xs">
+      <dl className="space-y-0.5">
         {partners.map((p) => (
           <div key={p.systemId} className="flex justify-between gap-3">
             <dt className="truncate text-text-secondary">{p.systemName}</dt>
@@ -86,7 +86,7 @@ function externalSegments(g: LogisticsGoodRow): BarSegment[] {
 function internalPopoverBody(g: LogisticsGoodRow): React.ReactNode {
   const totalConsumption = g.consumption + g.inputDemand;
   return (
-    <dl className="space-y-0.5 whitespace-nowrap text-xs">
+    <dl className="space-y-0.5 whitespace-nowrap">
       <div className="flex justify-between gap-3">
         <dt className="text-text-tertiary">Produces</dt>
         <dd className="font-mono text-status-green-light">{g.production.toFixed(1)}/cyc</dd>
@@ -128,12 +128,10 @@ function BarCell({
   segments,
   maxValue,
   popoverContent,
-  popoverClassName,
 }: {
   segments: BarSegment[];
   maxValue: number;
   popoverContent?: React.ReactNode;
-  popoverClassName?: string;
 }) {
   const track = <DivergingBarTrack segments={segments} maxValue={maxValue} />;
   if (!popoverContent) return track;
@@ -147,7 +145,7 @@ function BarCell({
           {track}
         </div>
       </PopoverTrigger>
-      <PopoverContent className={popoverClassName}>{popoverContent}</PopoverContent>
+      <PopoverContent>{popoverContent}</PopoverContent>
     </Popover>
   );
 }
@@ -172,7 +170,6 @@ function GoodRow({
           segments={internalSegments(g)}
           maxValue={internalMax}
           popoverContent={internalPopoverBody(g)}
-          popoverClassName="w-56"
         />
       </td>
       <td className={`px-1 py-1 text-right align-middle font-mono text-xs ${netClass(g.internalNet)}`}>

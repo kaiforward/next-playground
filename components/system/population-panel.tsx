@@ -31,7 +31,6 @@ function GrowthLine({ growthMultiplier, fillOrder }: { growthMultiplier: number;
   return (
     <PopoverTriggerLabel
       className="text-xs"
-      contentClassName="w-64"
       content={<HabitabilityPopoverBody growthMultiplier={growthMultiplier} fillOrder={fillOrder} />}
     >
       Habitability: <span className="font-mono text-text-secondary">{Math.round(growthMultiplier * 100)}%</span>

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { twMerge } from "tailwind-merge";
 import { tv } from "tailwind-variants";
 import { TERMS, type TermId } from "@/lib/glossary/terms";
-import { Popover, PopoverContent, PopoverTrigger } from "./popover";
+import { Popover, PopoverContent, PopoverHeader, PopoverTrigger } from "./popover";
 import { triggerLabelStyles } from "./tooltip";
 
 /**
@@ -33,7 +33,7 @@ const termLabelStyles = tv({
 function TermBody({ id }: { id: TermId }) {
   const definition = TERMS[id];
   return (
-    <p className="text-sm text-text-secondary">
+    <p className="text-text-secondary">
       {definition.body.map((segment, index) =>
         segment.kind === "text" ? (
           <span key={index}>{segment.text}</span>
@@ -70,7 +70,7 @@ export function TermLabel({ id, children }: TermLabelProps) {
         </button>
       </PopoverTrigger>
       <PopoverContent aria-label={definition.term}>
-        <p className="mb-1 font-display font-semibold text-text-primary">{definition.term}</p>
+        <PopoverHeader title={definition.term} />
         <TermBody id={id} />
       </PopoverContent>
     </Popover>

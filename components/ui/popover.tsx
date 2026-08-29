@@ -131,25 +131,55 @@ interface Measurable {
  *   is never read, however recently the pointer visited. Reaching an already-`filling` popover this way
  *   (Tab back onto a trigger whose popover a stray hover left mid-fill) finishes the dwell early rather
  *   than waiting out whatever remained of it.
- * - **Pinning.** `PopoverContent` renders an icon-only pin button (`components/ui/icons.tsx`'s
- *   `PinIcon`, via `Button`) once a `dwell` popover is `locked`, carrying an accessible name rather
- *   than a visible label. `pinChain()` (on context, wired to the button's `onClick`) detaches every
- *   entry currently in `openStack` — this popover's whole chain, ancestors and already-open
- *   descendants alike, not only the one the button was clicked on — from the registry in one go
- *   (`pinStack`): the array is emptied, notifying `subscribeStackLength`, and each detached entry's
- *   own `pinned` React state flips true. A `pinned` popover stops responding to the return and leave
- *   graces (every pointer handler above that touches `scheduleReturnClose` or the stack-hover
- *   count — `markStackEntered`/`markStackLeft`, which is what now calls `cancelLeaveClose`/
- *   `scheduleLeaveClose` — is gated on it, and pinning itself releases whatever contribution to
- *   that count the popover was still holding, so it can never permanently block the leave grace
- *   from arming for a later, unrelated chain), holds full opacity regardless of the
- *   live stack's length (`PopoverContent`'s own opacity calc short-circuits on it, since a detached
- *   popover's stale `depth` against the CURRENT stack's length would compute a meaningless number),
- *   and survives until dismissed — Escape and an outside click still reach it, since neither routes
- *   through this file's own machinery at all (Radix's own `DismissableLayer`/`FocusScope` per
- *   `Popover.Root`). A term inside a pinned popover reads depth 0 from `usePopoverDepth` rather than
- *   one more than its pinned ancestor's, so it starts a fresh chain instead of extending the pinned
- *   one.
+ * - **Pinning.** `PopoverContent` renders an icon-only pin/unpin toggle (`components/ui/icons.tsx`'s
+ *   `PinIcon`, via `Button`) once a `dwell` popover is `locked` — but only at the DEEPEST level
+ *   currently showing one, never at every level of the chain at once. For a live (unpinned) chain
+ *   that is whichever popover currently sits at the top of `openStack` (`depthFromTop === 0` below);
+ *   for a pinned chain it is whichever entry was deepest AT THE INSTANT it was pinned (`pinnedIsDeepest`,
+ *   set once by `pinStack` and never recomputed afterwards — a pinned chain's shape is frozen). The
+ *   control follows the pointer down as the chain grows, so there is never a question of which level
+ *   a click pins or unpins from.
+ *
+ *   `pinChain()` (on context, wired to the button's `onClick` while unpinned) detaches every entry
+ *   currently in `openStack` — this popover's whole chain, ancestors and already-open descendants
+ *   alike, not only the one the button was clicked on — from the registry in one go (`pinStack`): the
+ *   array is emptied, notifying `subscribeStackLength`, moved to the module-level `pinnedChain` (so
+ *   `unpinChain` below has something to reverse), and each detached entry's own `pinned` React state
+ *   flips true. A `pinned` popover stops responding to the return and leave graces (every pointer
+ *   handler above that touches `scheduleReturnClose` or the stack-hover count —
+ *   `markStackEntered`/`markStackLeft`, which is what now calls `cancelLeaveClose`/`scheduleLeaveClose`
+ *   — is gated on it, and pinning itself releases whatever contribution to that count the popover was
+ *   still holding, captured first so `unpinChain` can put it back — see below), holds full opacity
+ *   regardless of the live stack's length (`PopoverContent`'s own opacity calc short-circuits on it,
+ *   since a detached popover's stale `depth` against the CURRENT stack's length would compute a
+ *   meaningless number), and survives until dismissed — Escape and an outside click still reach it,
+ *   since neither routes through this file's own machinery at all (Radix's own
+ *   `DismissableLayer`/`FocusScope` per `Popover.Root`). A term inside a pinned popover reads depth 0
+ *   from `usePopoverDepth` rather than one more than its pinned ancestor's, so it starts a fresh chain
+ *   instead of extending the pinned one.
+ *
+ *   **Unpinning is not a request to close.** `unpinChain()` (wired to the same button once pinned) is
+ *   `pinStack`'s exact inverse: it pushes every entry in `pinnedChain` back into `openStack`, in their
+ *   original order, and flips each back to unpinned. Escape remains a way to close the chain, but it
+ *   is no longer the ONLY way out of a pinned one — the button that pinned it un-pins it too, from the
+ *   same place. If a fresh, unrelated chain has since claimed depth 0 (a pinned chain and a live one
+ *   can coexist — see below), that rival is closed first, via the exact same "claim beats incumbent"
+ *   path `claimOpen` already runs for any depth-0 contest (`closeRivalAt`, factored out of `claimOpen`
+ *   so both callers share it rather than each reimplementing "close whatever is there first").
+ *
+ *   Unpinning has to restore each entry's `stackHoverCount` contribution, not just its `pinned` flag —
+ *   otherwise the very next whole-stack leave grace is wrong. The pointer is, in the ordinary case,
+ *   still resting on the content the unpin button lives in at the instant it is clicked, but pinning
+ *   already zeroed that popover's contribution to the shared count and a pinned popover never touches
+ *   the count again while pinned — so nothing re-increments it on the way back in, and no DOM
+ *   `pointerenter` will ever fire to do it either: the pointer never crosses a boundary, it was
+ *   already there. `setPinned(true)` captures each entry's own outstanding contribution
+ *   (`pinnedHoverRef`, 0 or 1 same as `stackHoverLocalRef` itself) before releasing it; `unmarkPinned`
+ *   reads that capture back and calls `noteStackEnter()` once for each unit, putting `stackHoverCount`
+ *   back exactly where it would be had the popover never been detached at all. Skipped for the
+ *   ordinary close-time reset (`setOpen`'s `dwell` branch also calls `setPinned(false)` on every
+ *   close, pinned or not) — that path clears the capture without restoring anything, since a closing
+ *   popover has no live pointer contact left to account for.
  *
  *   Detaching mid-grace matters: `scheduleReturnClose`/`scheduleLeaveClose` read `openStack` LIVE
  *   when they fire, so `pinStack` cancels both before emptying the array — otherwise a grace already
@@ -256,12 +286,15 @@ export const LEAVE_GRACE_MS = 90;
 export const DWELL_CURSOR_CLEARANCE_PX = 12;
 
 /** One popover's registry entry: `closeSelf` is what exclusivity has always compared and called;
- *  `markPinned` is the same kind of stable-identity closure, added for pinning — the one way the
- *  registry can tell a popover to detach itself (flip its own `pinned` state) without the registry
- *  needing to know anything about React state itself. */
+ *  `markPinned`/`unmarkPinned` are the same kind of stable-identity closures, added for pinning — the
+ *  one way the registry can tell a popover to detach itself (or reattach) without the registry
+ *  needing to know anything about React state itself. `markPinned` takes whether THIS entry was the
+ *  deepest in the chain at the instant of pinning — what `PopoverContent` uses to decide whether it,
+ *  and not some shallower ancestor also carrying `pinned: true`, renders the unpin control. */
 interface StackEntry {
   closeSelf: () => void;
-  markPinned: () => void;
+  markPinned: (isDeepest: boolean) => void;
+  unmarkPinned: () => void;
 }
 
 // Module-level "which popovers are open" stack, indexed by depth
@@ -284,7 +317,13 @@ let openStack: Array<StackEntry> = [];
 // it on sight.
 let takeoverInProgress = false;
 
-function claimOpen(entry: StackEntry, depth: number) {
+/**
+ * Closes whatever currently holds `depth` in the registry, if it isn't `entry` itself — the "a new
+ * claim beats an incumbent" rule both `claimOpen` (a fresh open contesting a live depth) and
+ * `unpinChain` (re-attaching a pinned chain that might find depth 0 occupied by a rival that opened
+ * in the meantime) need, factored out once there were two callers rather than left as a second copy.
+ */
+function closeRivalAt(depth: number, entry: StackEntry) {
   const incumbent = openStack[depth];
   if (incumbent && incumbent.closeSelf !== entry.closeSelf) {
     takeoverInProgress = true;
@@ -297,6 +336,10 @@ function claimOpen(entry: StackEntry, depth: number) {
       takeoverInProgress = false;
     }
   }
+}
+
+function claimOpen(entry: StackEntry, depth: number) {
+  closeRivalAt(depth, entry);
   openStack[depth] = entry;
   openStack.length = depth + 1;
   notifyStackLengthChange();
@@ -351,10 +394,38 @@ function releaseOpen(closeSelf: () => void) {
 function pinStack() {
   const entries = openStack;
   openStack = [];
+  pinnedChain = entries;
   cancelReturnClose();
   cancelLeaveClose();
   notifyStackLengthChange();
-  for (const entry of entries) entry.markPinned();
+  const deepestIndex = entries.length - 1;
+  entries.forEach((entry, i) => entry.markPinned(i === deepestIndex));
+}
+
+// The most recently pinned chain, in original depth order — empty whenever nothing is pinned.
+// `unpinChain`'s only input; overwritten (not appended to) by the NEXT `pinStack` call, since only
+// one chain has ever been detachable at a time (pinning a second chain while a first is still pinned
+// is not a flow the trigger — one button per currently-open chain — can even reach).
+let pinnedChain: Array<StackEntry> = [];
+
+/**
+ * `pinStack`'s exact inverse: re-attaches every entry in `pinnedChain` to `openStack`, in their
+ * original order, and flips each back to unpinned. A no-op if nothing is pinned (the button that
+ * calls this only exists while something is).
+ *
+ * A fresh, unpinned chain may have claimed depth 0 in the meantime — pinning and unpinning are both
+ * player-paced, and nothing stops a new hover starting a chain of its own while this one sat detached
+ * — so whatever now holds depth 0 is closed first via `closeRivalAt`, the exact same "claim beats
+ * incumbent" rule `claimOpen` already applies to any depth-0 contest.
+ */
+function unpinChain() {
+  const entries = pinnedChain;
+  if (entries.length === 0) return;
+  pinnedChain = [];
+  closeRivalAt(0, entries[0]);
+  openStack = entries.slice();
+  notifyStackLengthChange();
+  for (const entry of entries) entry.unmarkPinned();
 }
 
 // Reactive mirror of `openStack.length`. The stack itself is deliberately not React state (see its
@@ -571,10 +642,21 @@ interface PopoverContextValue {
    *  regardless of the live stack's length, and a nested popover reads its own depth as 0 rather
    *  than one more than this one's (`usePopoverDepth`). */
   pinned: boolean;
+  /** Whether THIS popover was the deepest entry in its chain at the instant it was pinned — decided
+   *  once by `pinStack` and never recomputed afterwards, since a pinned chain's shape is frozen.
+   *  Meaningless while `pinned` is false; `PopoverContent` only reads it gated on `pinned` being
+   *  true, alongside `depthFromTop === 0` for the live (unpinned) case. Together they are what limits
+   *  the pin/unpin control to a single level of the chain — the one the pointer most recently reached
+   *  — rather than rendering one per open level. */
+  pinnedIsDeepest: boolean;
   /** Detaches every entry currently in the open stack (this popover's whole chain, ancestors and
    *  already-open descendants alike) from the registry in one go. Exposed so `PopoverContent` can
    *  wire it to the pin control it renders in `dwell` mode. */
   pinChain: () => void;
+  /** `pinChain`'s exact inverse — re-attaches the most recently pinned chain and flips every entry
+   *  back to unpinned. What the SAME control calls once `pinned` is true, so unpinning never requires
+   *  Escape. */
+  unpinChain: () => void;
   /** A tracked region of THIS popover (its trigger or its own locked content) entered/left by the
    *  pointer — what `PopoverTrigger` and `PopoverContent` call instead of the module-level
    *  `cancelLeaveClose`/`scheduleLeaveClose` directly, so the whole-stack leave grace arms only
@@ -733,6 +815,15 @@ export function Popover({
   // Read by the unmount cleanup below, which cannot depend on `pinned` directly without re-running
   // on every pin (the effect deliberately only depends on `closeSelf` — see its own comment).
   const pinnedRef = useRef(false);
+  // Set once, alongside `pinned` itself, by `markPinned`'s own `isDeepest` argument — whether THIS
+  // popover was the chain's deepest entry at the instant of pinning. `PopoverContent` gates the
+  // pin/unpin control on it (while pinned) so only one level of a pinned chain ever renders the
+  // control, matching the live (unpinned) case's own `depthFromTop === 0` gate.
+  const [pinnedIsDeepest, setPinnedIsDeepestState] = useState(false);
+  // What this popover's own `stackHoverLocalRef` was holding the instant it was pinned — captured so
+  // `unmarkPinned` can put it back on unpin (see the docblock's "Unpinning has to restore..."
+  // paragraph). Zero whenever this popover is not currently pinned.
+  const pinnedHoverRef = useRef(0);
   /** How many of THIS popover's own tracked regions (its trigger, its content) currently hold an
    *  outstanding increment on the module-level `stackHoverCount` — 0 or 1 in ordinary use (trigger
    *  and content are never both under the pointer at once), tracked as a count rather than a flag
@@ -768,25 +859,52 @@ export function Popover({
   const [closeSelf] = useState<() => void>(() => () => setOpenRef.current(false));
 
   // Same stable-identity bridge as `closeSelf`/`setOpenRef` above, for the same reason: the registry
-  // (`pinStack`) holds `markPinned` by reference across renders, so it has to be created once and
-  // read through a ref rather than closing over a fresh setter every render.
-  const setPinnedRef = useRef<(next: boolean) => void>(() => {});
-  function setPinned(next: boolean) {
+  // (`pinStack`/`unpinChain`) holds `markPinned`/`unmarkPinned` by reference across renders, so each
+  // has to be created once and read through a ref rather than closing over a fresh setter every
+  // render.
+  const setPinnedRef = useRef<(next: boolean, isDeepest: boolean) => void>(() => {});
+  function setPinned(next: boolean, isDeepest = false) {
     pinnedRef.current = next;
     setPinnedState(next);
+    setPinnedIsDeepestState(next && isDeepest);
     // Pinning stops both `PopoverTrigger` and `PopoverContent` from ever calling
     // `markStackEntered`/`markStackLeft` again for this popover (every call site below is gated on
     // `!pinned`) — so any outstanding contribution it made to `stackHoverCount` before this instant
     // would otherwise never be released, permanently inflating the count and blocking the
     // whole-stack leave grace from ever arming again for any FUTURE chain (the count is
-    // module-level, shared across the whole app, the same way `openStack` itself is).
+    // module-level, shared across the whole app, the same way `openStack` itself is). Captured into
+    // `pinnedHoverRef` rather than merely released, so `unmarkPinned` below can put it back — an
+    // ordinary close-time reset (`next: false` with nothing to restore) leaves it at 0, which is
+    // exactly what a popover with no outstanding hover contact to restore should have.
     if (next) {
+      pinnedHoverRef.current = stackHoverLocalRef.current;
       releaseStackHover(stackHoverLocalRef.current);
       stackHoverLocalRef.current = 0;
+    } else {
+      pinnedHoverRef.current = 0;
     }
   }
   setPinnedRef.current = setPinned;
-  const [markPinned] = useState<() => void>(() => () => setPinnedRef.current(true));
+  const [markPinned] = useState<() => (isDeepest: boolean) => void>(
+    () => (isDeepest: boolean) => setPinnedRef.current(true, isDeepest),
+  );
+
+  const unmarkPinnedRef = useRef<() => void>(() => {});
+  function unmarkPinned() {
+    // Read before `setPinned` clears it, so the restore below still has the number it needs.
+    const restore = pinnedHoverRef.current;
+    setPinnedRef.current(false, false);
+    // Puts `stackHoverCount` back exactly where it would be had this popover never been detached:
+    // no `pointerenter`/`pointerleave` will ever fire for a pointer that never actually crossed a
+    // boundary (it was already resting on this content when the button that un-pinned it was
+    // clicked), so nothing else would ever re-increment this popover's own contribution.
+    if (restore > 0) {
+      stackHoverLocalRef.current += restore;
+      for (let i = 0; i < restore; i++) noteStackEnter();
+    }
+  }
+  unmarkPinnedRef.current = unmarkPinned;
+  const [markUnpinned] = useState<() => () => void>(() => () => unmarkPinnedRef.current());
 
   function clearOpenTimer() {
     if (openTimerRef.current !== null) {
@@ -809,7 +927,7 @@ export function Popover({
       // hover-scheduled open that happens to land right after a keyboard one never inherits it.
       const openedViaKeyboard = keyboardOpenRef.current;
       keyboardOpenRef.current = false;
-      claimOpen({ closeSelf, markPinned }, depth);
+      claimOpen({ closeSelf, markPinned, unmarkPinned: markUnpinned }, depth);
       // A fresh session records nothing yet, so a content unmount partway through one — a Tracker
       // row dropping out of the list under an open popover — can never replay the previous close's
       // decision and pull focus onto a trigger that is going away too.
@@ -1012,7 +1130,9 @@ export function Popover({
     contentRef,
     pendingEnterRef,
     pinned,
+    pinnedIsDeepest,
     pinChain: pinStack,
+    unpinChain,
     markStackEntered,
     markStackLeft,
     scheduleOpen,
@@ -1277,6 +1397,16 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
     const depthFromTop = Math.max(0, stackLength - 1 - popover.depth);
     const opacity = popover.pinned ? 1 : opacityForDepth(depthFromTop);
 
+    // The pin/unpin control renders at exactly one level of a chain, never one per open level: the
+    // live top of `openStack` while unpinned (`depthFromTop === 0`), or whichever entry was deepest
+    // at the instant of pinning while pinned (`pinnedIsDeepest`, frozen by `pinStack` and never
+    // recomputed). The control follows the pointer down as the chain grows, so there is never a
+    // question of which level a click pins or unpins from.
+    const showPinControl =
+      popover.dwell &&
+      dwellState === "locked" &&
+      (popover.pinned ? popover.pinnedIsDeepest : depthFromTop === 0);
+
     // Placement itself is entirely Radix's now — the virtual cursor `Anchor` `Popover` mounts and
     // tracks (see its own docblock and comments). Nothing left here sets `position`/`top`/`left`;
     // the only per-dwell-state style this component still owns is turning the pointer off while
@@ -1428,7 +1558,17 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
             });
           })}
           className={twMerge(
-            "z-50 w-64 border border-border-strong border-l-2 border-l-accent bg-surface p-3 text-left shadow-lg animate-in fade-in-0 zoom-in-95",
+            // `w-max` + a `max-w` ceiling (clamped to the viewport) rather than a fixed width: the
+            // browser measures each popover's own widest row instead of every call site picking one
+            // of a handful of hand-tuned widths (`w-56`/`w-64`/`w-80`) that drift out of sync with
+            // whatever content actually landed there. The ceiling does double duty — it is also what
+            // makes a prose body (a glossary `TermBody` definition) wrap into a readable paragraph
+            // instead of stretching to its own single-line max-content width. `text-xs` is the one
+            // body size this whole surface uses; a game this dense in small text has no reason for a
+            // popover body to default to anything else, and every finer distinction a body still
+            // wants (a `text-[10px]` caption, a `text-[9px]` micro-label) stays a deliberate,
+            // explicit override on top of this rather than the default itself varying by call site.
+            "z-50 w-max max-w-[min(24rem,calc(100vw-2rem))] border border-border-strong border-l-2 border-l-accent bg-surface p-3 text-left text-xs shadow-lg animate-in fade-in-0 zoom-in-95",
             className,
           )}
           {...props}
@@ -1437,15 +1577,18 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
           {children}
           {/* After `children`, not before: `focusIntoContent`/ArrowDown focuses the FIRST
              focusable element in the content, and that has to stay whatever the popover's own
-             body puts first (a nested term trigger included) — not this control. */}
-          {popover.dwell && dwellState === "locked" && !popover.pinned && (
+             body puts first (a nested term trigger included) — not this control, and not a
+             `PopoverHeader` title either, since a header renders as ordinary `children` content
+             ahead of whatever the body nests inside it. */}
+          {showPinControl && (
             <Button
               type="button"
               variant="ghost"
               size="iconXs"
-              aria-label="Pin"
+              aria-label={popover.pinned ? "Unpin" : "Pin"}
+              aria-pressed={popover.pinned}
               className="absolute right-1 top-1"
-              onClick={() => popover.pinChain()}
+              onClick={() => (popover.pinned ? popover.unpinChain() : popover.pinChain())}
             >
               <PinIcon className="h-3 w-3" aria-hidden="true" />
             </Button>
@@ -1456,3 +1599,42 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
   },
 );
 PopoverContent.displayName = "PopoverContent";
+
+export interface PopoverHeaderProps {
+  /** The header's own heading — what several popover bodies used to render as their own first
+   *  `<p className="font-display ...">` line (`PotentialYieldPopoverBody`, `DepositPopoverBody`,
+   *  `BuildingPopoverBody`, `NeedPopoverBody`, `TermLabel`'s own body), each a slightly different
+   *  hand-rolled heading competing with this one. */
+  title: ReactNode;
+  /** Extra content on the header's own row, right of the title — a status figure, a badge — laid out
+   *  to the LEFT of the space this header reserves for the pin control, never underneath it. */
+  meta?: ReactNode;
+  className?: string;
+}
+
+/**
+ * A popover body's optional heading row: a title, room for one more figure beside it, and a gutter
+ * on the right sized to the pin/unpin control `PopoverContent` may render over this same top-right
+ * corner — reserved unconditionally (whether or not THIS particular popover currently shows the
+ * control) so the header's own layout never shifts depending on chain depth. `pr-6` is
+ * `right-1` (0.25rem) plus the button's own `iconXs` width (`h-5 w-5`, 1.25rem) — the exact footprint
+ * `PopoverContent`'s `absolute right-1 top-1` button occupies.
+ *
+ * Purely presentational — this file has no opinion on whether a body uses it, and a body with
+ * nothing worth naming (`YieldPopoverBody`, whose first line is already a labelled figure, or
+ * `HabitabilityPopoverBody`, whose own headline states its own percentage) is free to render nothing
+ * here at all.
+ */
+export function PopoverHeader({ title, meta, className }: PopoverHeaderProps) {
+  return (
+    <div
+      className={twMerge(
+        "mb-1.5 flex items-baseline justify-between gap-3 border-b border-border/60 pb-1 pr-6",
+        className,
+      )}
+    >
+      <span className="whitespace-nowrap font-display font-semibold text-text-primary">{title}</span>
+      {meta}
+    </div>
+  );
+}

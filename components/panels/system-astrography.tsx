@@ -93,7 +93,6 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
                       body, not a `TermLabel`. */}
                   <dt className="font-display text-text-tertiary">
                     <PopoverTriggerLabel
-                      contentClassName="w-64"
                       content={
                         <HabitabilityPopoverBody
                           growthMultiplier={habitability.growthMultiplier}

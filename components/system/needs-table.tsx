@@ -15,16 +15,16 @@ export type NeedsTableDensity = "panel" | "tooltip";
 
 const DENSITY: Record<NeedsTableDensity, { th: string; name: string; glyph: string; value: string }> = {
   panel: {
-    th: "border-b border-border-strong px-1.5 py-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary",
-    name: "px-1.5 py-1 text-xs text-text-primary",
+    th: "whitespace-nowrap border-b border-border-strong px-1.5 py-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary",
+    name: "whitespace-nowrap px-1.5 py-1 text-xs text-text-primary",
     glyph: "mr-1.5 font-mono text-[10px]",
-    value: "px-1.5 py-1 text-right font-mono text-[11px]",
+    value: "whitespace-nowrap px-1.5 py-1 text-right font-mono text-[11px]",
   },
   tooltip: {
-    th: "border-b border-border/60 px-1 py-0.5 font-display text-[9px] font-semibold uppercase tracking-wider text-text-tertiary",
-    name: "px-1 py-0.5 text-text-primary",
+    th: "whitespace-nowrap border-b border-border/60 px-1 py-0.5 font-display text-[9px] font-semibold uppercase tracking-wider text-text-tertiary",
+    name: "whitespace-nowrap px-1 py-0.5 text-text-primary",
     glyph: "mr-1 font-mono text-[9px]",
-    value: "px-1 py-0.5 text-right font-mono",
+    value: "whitespace-nowrap px-1 py-0.5 text-right font-mono",
   },
 };
 
@@ -51,15 +51,20 @@ export function NeedCells({ n, density }: { n: PopNeedData; density: NeedsTableD
 export function NeedsTable({ density, children }: { density: NeedsTableDensity; children: ReactNode }) {
   const d = DENSITY[density];
   return (
-    <table className="w-full border-collapse">
-      <thead>
-        <tr>
-          {HEADERS.map((h, i) => (
-            <th key={h} className={`${d.th} ${i > 0 ? "text-right" : "text-left"}`}>{h}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>{children}</tbody>
-    </table>
+    // `overflow-x-auto` is a backstop, not the expected case — every cell is already
+    // `whitespace-nowrap`, so a popover sizing itself to `w-max` grows to fit this table rather than
+    // this table ever needing to scroll inside it.
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse">
+        <thead>
+          <tr>
+            {HEADERS.map((h, i) => (
+              <th key={h} className={`${d.th} ${i > 0 ? "text-right" : "text-left"}`}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{children}</tbody>
+      </table>
+    </div>
   );
 }
