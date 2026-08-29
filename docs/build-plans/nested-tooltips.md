@@ -102,7 +102,7 @@ Counted from the tree, not from memory:
 
 | Surface | Count | `file:line` |
 |---|---|---|
-| `TooltipTriggerLabel` term triggers | 17 | `system-astrography.tsx` (3), `industry-panel.tsx` (9), `population-panel.tsx` (3), `potential-yield-table.tsx` (2) |
+| `TooltipTriggerLabel` term triggers | 10 | `system-astrography.tsx` (2), `industry-panel.tsx` (6), `population-panel.tsx` (1), `potential-yield-table.tsx` (1) — counted as `<TooltipTriggerLabel` opening tags. An earlier count of 17 came from grepping the bare name, which also matches each closing tag and the import line. |
 | `<Tooltip>` roots, all sites | 13 | `quick-add-button.tsx:24`, `system-astrography.tsx:93,127`, `industry-panel.tsx:166,510,569,613,726,1008`, `logistics-panel.tsx:141`, `population-panel.tsx:32`, `potential-yield-table.tsx:61`, `provision-block.tsx:19` |
 | Existing `Popover` consumers | 5 | `alert-flyout.tsx`, `alert-run.tsx`, `alert-settings.tsx`, `system-rings.tsx`, `tracker-row.tsx` |
 | Control help that must stay a tooltip | 3 files | `form/checkbox-input.tsx`, `form/radio-option-group.tsx`, `map/map-overlay-controls.tsx` |
@@ -212,10 +212,16 @@ tooltip's content is the control's `aria-describedby` description, announced wit
 Converting control help would make its text unreachable to a screen reader at the moment it is needed;
 leaving a term as a tooltip makes its content unenterable, which is the whole feature.
 
-By that rule, from E5: the 17 `TooltipTriggerLabel` term triggers convert, as do the three
-content-rich row-triggered bodies (`provision-block.tsx:19`, `logistics-panel.tsx:141`,
-`industry-panel.tsx:726`). Control help stays: `form/checkbox-input.tsx`,
-`form/radio-option-group.tsx`, `map/map-overlay-controls.tsx`, and `quick-add-button.tsx:24`.
+By that rule, from E5: the 10 `TooltipTriggerLabel` term triggers convert, as do the two
+content-rich row-triggered bodies (`provision-block.tsx:20`, `logistics-panel.tsx:142`). Control help
+stays: `form/checkbox-input.tsx:38`, `form/radio-option-group.tsx:112`,
+`map/map-overlay-controls.tsx:125`, `quick-add-button.tsx:25`, and `industry-panel.tsx:727`
+(`LegendTooltip`).
+
+`TooltipTrigger asChild` is not itself the tell. It marks a trigger whose shape is a row or a wrapper
+rather than a text label, and it appears on both sides of the line — on the two content-rich bodies
+that convert and on the control help that does not. The rule is applied to what the content
+describes.
 
 **The existing five `Popover` consumers** (`alert-flyout`, `alert-run`, `alert-settings`,
 `system-rings`, `tracker-row`) must come through the exclusivity change behaving as they do now. They
@@ -517,9 +523,12 @@ same way, so no icon is hand-drawn. No new component.
 Files: `components/system/industry-panel.tsx`,
 `components/system/__tests__/industry-panel.test.tsx`
 
-Interface: no new exported surface. The 9 `TooltipTriggerLabel` term triggers in
-`components/system/industry-panel.tsx` become `TermLabel`, and the row-triggered content-rich body at
-`:726` becomes a `dwell` popover. `YieldTooltipBody` (`components/system/industry-panel.tsx:176`)
+Interface: no new exported surface. The 6 `TooltipTriggerLabel` term triggers in
+`components/system/industry-panel.tsx` (`:167`, `:511`, `:570`, `:614`, `:872`, `:1009`) become
+`TermLabel`. **`LegendTooltip` (`:726`) does NOT convert** — it is an icon button carrying
+`aria-label="Legend"`, control help by the spec's own rule, the same shape as the map overlay legend
+already listed as staying a tooltip. An earlier draft of this plan wrongly listed it among the
+content-rich row bodies. `YieldTooltipBody` (`components/system/industry-panel.tsx:176`)
 keeps its shape and gains `TermLabel` markup on the terms it already names — combined yield, the body
 archetypes, slots, the quality-band percentages — which is what makes the panel's first real chain.
 The remaining `<Tooltip>` roots in the file that describe controls are left alone.
@@ -559,11 +568,16 @@ Files: `components/panels/system-astrography.tsx`,
 `components/system/population-panel.tsx`, `components/system/potential-yield-table.tsx`,
 `components/system/provision-block.tsx`, `components/system/logistics-panel.tsx`
 
-Interface: no new exported surface. The remaining 8 term triggers convert to `TermLabel`
-(`system-astrography.tsx` 3, `population-panel.tsx` 3, `potential-yield-table.tsx` 2), and the two
-remaining row-triggered content-rich bodies (`provision-block.tsx:19`, `logistics-panel.tsx:141`)
-become `dwell` popovers. `quick-add-button.tsx:24`, `form/checkbox-input.tsx`,
-`form/radio-option-group.tsx` and `map/map-overlay-controls.tsx` are deliberately untouched.
+Interface: no new exported surface. The remaining 4 term triggers convert to `TermLabel`
+(`system-astrography.tsx` 2, `population-panel.tsx` 1, `potential-yield-table.tsx` 1), and the two
+row-triggered content-rich bodies become `dwell` popovers: `provision-block.tsx:20`, whose trigger is
+a focusable `<tr>` describing that row's need, and `logistics-panel.tsx:142`, whose trigger is a
+focusable wrapper round a `DivergingBarTrack`. Both use `TooltipTrigger asChild` because their
+trigger is a row rather than a text label — `asChild` marks the trigger's shape, not whether the
+content is control help, so the popover/tooltip rule is applied to what the content describes.
+Deliberately untouched, all control help: `quick-add-button.tsx:25`, `form/checkbox-input.tsx:38`,
+`form/radio-option-group.tsx:112`, `map/map-overlay-controls.tsx:125`, and
+`industry-panel.tsx:727` (`LegendTooltip`).
 
 Proves:
 - Each converted panel opens a term's definition and, where the body names another term, a second
