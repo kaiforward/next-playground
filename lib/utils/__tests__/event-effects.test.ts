@@ -68,7 +68,7 @@ describe("summarisePhaseEffects", () => {
     });
 
     it("dedupes: a null-goodId 'All demand up' suppresses redundant per-good up phrases", () => {
-      // pirate_raid shape: all-goods anchor up + weapons anchor up.
+      // A phase carrying both an all-goods anchor up and a per-good anchor up on the same side.
       const result = summarisePhaseEffects(
         phase([anchor(1.67, null), anchor(2.0, "weapons")]),
       );
@@ -127,20 +127,6 @@ describe("summarisePhaseEffects", () => {
 
     it("returns 'Minor market effects' when no recognised modifiers are present", () => {
       expect(summarisePhaseEffects(phase([]))).toBe("Minor market effects");
-    });
-
-    it("ignores legacy economy modifier types (regression guard for the removed supply/demand_target paths)", () => {
-      // Post-anchor-shift, an economy equilibrium_shift has no summary branch and
-      // must be silently ignored rather than producing supply/demand wording.
-      const legacy: ModifierTemplate = {
-        domain: "economy",
-        type: "equilibrium_shift",
-        target: "system",
-        goodId: "ore",
-        parameter: "supply_target",
-        value: 1.8,
-      };
-      expect(summarisePhaseEffects(phase([legacy]))).toBe("Minor market effects");
     });
   });
 

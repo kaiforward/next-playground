@@ -21,8 +21,8 @@ const CURRENT_TICK = 100;
 function baseEvent(overrides: Partial<WorldEvent>): WorldEvent {
   return {
     id: "ev",
-    type: "mining_boom",
-    phase: "peak",
+    type: "border_conflict",
+    phase: "skirmish",
     systemId: null,
     regionId: null,
     startTick: 0,
@@ -55,8 +55,8 @@ describe("getActiveEvents", () => {
       // 80 + 50 - 100 = 30 ticks remaining.
       baseEvent({
         id: "ev-active",
-        type: "mining_boom",
-        phase: "peak",
+        type: "border_conflict",
+        phase: "skirmish",
         systemId: sysA.id,
         phaseStartTick: 80,
         phaseDuration: 50,
@@ -64,8 +64,8 @@ describe("getActiveEvents", () => {
       // 10 + 20 - 100 = -70, clamped to 0.
       baseEvent({
         id: "ev-expired",
-        type: "solar_storm",
-        phase: "storm",
+        type: "pact_under_negotiation",
+        phase: "negotiation",
         systemId: sysB.id,
         phaseStartTick: 10,
         phaseDuration: 20,
@@ -78,17 +78,17 @@ describe("getActiveEvents", () => {
 
     const evActive = active.find((e) => e.id === "ev-active")!;
     expect(evActive.systemName).toBe(sysA.name);
-    expect(evActive.name).toBe(EVENT_DEFINITIONS.mining_boom.name);
+    expect(evActive.name).toBe(EVENT_DEFINITIONS.border_conflict.name);
     expect(evActive.phaseDisplayName).toBe(
-      EVENT_DEFINITIONS.mining_boom.phases.find((p) => p.name === "peak")!.displayName,
+      EVENT_DEFINITIONS.border_conflict.phases.find((p) => p.name === "skirmish")!.displayName,
     );
     expect(evActive.ticksRemaining).toBe(30);
 
     const evExpired = active.find((e) => e.id === "ev-expired")!;
     expect(evExpired.systemName).toBe(sysB.name);
-    expect(evExpired.name).toBe(EVENT_DEFINITIONS.solar_storm.name);
+    expect(evExpired.name).toBe(EVENT_DEFINITIONS.pact_under_negotiation.name);
     expect(evExpired.phaseDisplayName).toBe(
-      EVENT_DEFINITIONS.solar_storm.phases.find((p) => p.name === "storm")!.displayName,
+      EVENT_DEFINITIONS.pact_under_negotiation.phases.find((p) => p.name === "negotiation")!.displayName,
     );
     expect(evExpired.ticksRemaining).toBe(0);
   });

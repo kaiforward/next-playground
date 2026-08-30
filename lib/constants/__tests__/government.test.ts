@@ -23,7 +23,6 @@ describe("GOVERNMENT_TYPES", () => {
     const requiredKeys: ReadonlyArray<keyof GovernmentDefinition> = [
       "name", "description",
       "dangerBaseline",
-      "eventWeights",
     ];
 
     for (const type of ALL_GOVERNMENT_TYPES) {
@@ -34,13 +33,6 @@ describe("GOVERNMENT_TYPES", () => {
       expect(typeof def.name).toBe("string");
       expect(typeof def.description).toBe("string");
       expect(typeof def.dangerBaseline).toBe("number");
-    }
-  });
-
-  it("does not reference the removed `war` event in any eventWeights", () => {
-    for (const type of ALL_GOVERNMENT_TYPES) {
-      const weights = GOVERNMENT_TYPES[type].eventWeights;
-      expect(weights["war"], `${type} must not weight the removed 'war' event`).toBeUndefined();
     }
   });
 });

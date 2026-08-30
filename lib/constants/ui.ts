@@ -44,20 +44,6 @@ export const EVENT_TYPE_BADGE_COLOR: Record<
   keyof typeof EVENT_DEFINITIONS,
   "red" | "amber" | "purple" | "green" | "blue" | "slate"
 > = {
-  inner_system_conflict: "red",
-  plague: "amber",
-  trade_festival: "purple",
-  conflict_spillover: "red",
-  plague_risk: "amber",
-  mining_boom: "green",
-  ore_glut: "green",
-  supply_shortage: "amber",
-  pirate_raid: "red",
-  solar_storm: "blue",
-  refugee_crisis: "amber",
-  trade_embargo: "purple",
-  tech_breakthrough: "green",
-  asteroid_strike: "red",
   border_conflict: "red",
   pact_under_negotiation: "purple",
   alliance_dissolved: "amber",
@@ -65,45 +51,13 @@ export const EVENT_TYPE_BADGE_COLOR: Record<
 
 
 import type { LucideIcon } from "lucide-react";
-import {
-  Swords,
-  Biohazard,
-  Sparkles,
-  Bomb,
-  TriangleAlert,
-  Pickaxe,
-  Boxes,
-  PackageX,
-  Skull,
-  Zap,
-  Users,
-  ShieldBan,
-  Lightbulb,
-  Flame,
-  Crosshair,
-  Handshake,
-  HeartCrack,
-} from "lucide-react";
+import { Crosshair, Handshake, HeartCrack } from "lucide-react";
 
 /** Lucide icon component per event type, consumed by EventIcon component. */
 export const EVENT_TYPE_ICON: Record<
   keyof typeof EVENT_DEFINITIONS,
   LucideIcon
 > = {
-  inner_system_conflict: Swords,
-  plague: Biohazard,
-  trade_festival: Sparkles,
-  conflict_spillover: Bomb,
-  plague_risk: TriangleAlert,
-  mining_boom: Pickaxe,
-  ore_glut: Boxes,
-  supply_shortage: PackageX,
-  pirate_raid: Skull,
-  solar_storm: Zap,
-  refugee_crisis: Users,
-  trade_embargo: ShieldBan,
-  tech_breakthrough: Lightbulb,
-  asteroid_strike: Flame,
   border_conflict: Crosshair,
   pact_under_negotiation: Handshake,
   alliance_dissolved: HeartCrack,

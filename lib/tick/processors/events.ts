@@ -98,7 +98,8 @@ export async function runEventsProcessor(
 
     if (DEBUG) {
       for (const { snap, nextPhase, duration } of advancing) {
-        const def = definitions[snap.type]!;
+        const def = definitions[snap.type];
+        if (!def) continue;
         console.log(
           `[events] ${def.name} at ${snap.systemName ?? "Unknown"}: ${snap.phase} → ${nextPhase.name} (${duration} ticks)`,
         );

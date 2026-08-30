@@ -136,19 +136,19 @@ describe("runEventsProcessor", () => {
     expect(world.events).toEqual([]); // no strays left behind, spawned or otherwise
   });
 
-  it("moves no market stock when an event advances into a phase that formerly carried shocks", async () => {
-    // inner_system_conflict's "active" phase carried fuel/machinery supply shocks
-    // before the strip (lib/constants/events.ts). The shock machinery is gone —
-    // advancing into that phase must leave stock untouched, not merely unreached.
+  it("moves no market stock when an event advances phase", async () => {
+    // Shock machinery (ShockTemplate, EventPhaseDefinition.shocks) is gone entirely, with the
+    // definitions that once carried it — a phase advance must never touch market stock, only
+    // return modifier rows for another processor to apply.
     const ev: TickEvent = {
       id: "ev-1",
-      type: "inner_system_conflict",
-      phase: "escalation",
+      type: "border_conflict",
+      phase: "tension",
       systemId: "s1",
       regionId: "r1",
       startTick: 0,
       phaseStartTick: 0,
-      phaseDuration: 0, // elapsed immediately at tick 1 → advances into "active"
+      phaseDuration: 0, // elapsed immediately at tick 1 → advances into "skirmish"
       severity: 1,
       sourceEventId: null,
     };
@@ -163,8 +163,7 @@ describe("runEventsProcessor", () => {
     await runEventsProcessor(world, makeCtx(1), makeParams());
 
     const survivor = world.events.find((e) => e.id === "ev-1");
-    expect(survivor?.phase).toBe("active"); // the phase transition itself still happened
-    expect(EVENT_DEFINITIONS.inner_system_conflict.phases.find((p) => p.name === "active")?.shocks?.length).toBeGreaterThan(0); // premise: this phase still carries shock templates
+    expect(survivor?.phase).toBe("skirmish"); // the phase transition itself still happened
     expect(world.markets.find((m) => m.goodId === "fuel")?.stock).toBe(100);
     expect(world.markets.find((m) => m.goodId === "machinery")?.stock).toBe(100);
   });
@@ -217,23 +216,37 @@ describe("runEventsProcessor", () => {
   });
 
   it("never carries an event-notifications entry, even across a phase advance and an expiry", async () => {
-    // trade_festival's single phase carries a `notification` string (a doomed,
-    // spawner-only field the union still holds until Task 6) — advancing past it
-    // used to emit a notification. The channel is gone: the result carries only
-    // whatever `TickProcessorResult` defines today, never an events channel.
+    // The notification channel is gone entirely (GlobalEventMap.eventNotifications,
+    // EventPhaseDefinition.notification) — a phase advance and an expiry must never
+    // produce one, only whatever TickProcessorResult defines today.
     const advancing: TickEvent = {
       id: "ev-adv",
-      type: "trade_festival",
-      phase: "festival",
+      type: "border_conflict",
+      phase: "tension",
       systemId: "s1",
       regionId: "r1",
       startTick: 0,
       phaseStartTick: 0,
-      phaseDuration: 0, // expires immediately at tick 1 (its only phase)
+      phaseDuration: 0, // advances into "skirmish" at tick 1
       severity: 1,
       sourceEventId: null,
     };
-    const world = makeWorld({ systems: [makeSystem("s1", "r1")], events: [advancing] });
+    const expiring: TickEvent = {
+      id: "ev-exp",
+      type: "border_conflict",
+      phase: "de_escalation",
+      systemId: "s2",
+      regionId: "r1",
+      startTick: 0,
+      phaseStartTick: 0,
+      phaseDuration: 0, // its final phase — expires at tick 1
+      severity: 1,
+      sourceEventId: null,
+    };
+    const world = makeWorld({
+      systems: [makeSystem("s1", "r1"), makeSystem("s2", "r1")],
+      events: [advancing, expiring],
+    });
 
     const result = await runEventsProcessor(world, makeCtx(1), makeParams());
 

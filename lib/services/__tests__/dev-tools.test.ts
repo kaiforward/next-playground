@@ -68,8 +68,8 @@ describe("resetEconomy", () => {
     // threshold crossing, not a parked-above-threshold state.
     const fakeEvent: WorldEvent = {
       id: "fake-event-1",
-      type: "solar_storm",
-      phase: "storm",
+      type: "pact_under_negotiation",
+      phase: "negotiation",
       systemId: system.id,
       regionId: system.regionId,
       startTick: 0,

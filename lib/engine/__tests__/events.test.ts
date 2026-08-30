@@ -24,12 +24,9 @@ function makeDefinition(
   overrides: Partial<EventDefinition> = {},
 ): EventDefinition {
   return {
-    type: "inner_system_conflict",
+    type: "border_conflict",
     name: "Test Event",
     description: "A test event",
-    cooldown: 50,
-    maxActive: 5,
-    weight: 10,
     phases: [
       {
         name: "phase_one",
@@ -71,7 +68,7 @@ function makeSnapshot(
 ): EventSnapshot {
   return {
     id: "evt-1",
-    type: "inner_system_conflict",
+    type: "border_conflict",
     phase: "phase_one",
     systemId: "sys-1",
     regionId: "reg-1",
@@ -247,6 +244,16 @@ describe("aggregateModifiers", () => {
     ];
     const result = aggregateModifiers(mods, "fuel", defaultCaps);
     expect(result.productionMult).toBeCloseTo(0.4); // 0.5 × 0.8
+  });
+
+  it("multiplies consumption-rate modifiers into consumptionMult, independent of productionMult", () => {
+    const mods: ModifierRow[] = [
+      { domain: "economy", type: "rate_multiplier", targetType: "system", targetId: "sys-1", goodId: null, parameter: "consumption_rate", value: 0.5 },
+      { domain: "economy", type: "rate_multiplier", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "consumption_rate", value: 0.8 },
+    ];
+    const result = aggregateModifiers(mods, "fuel", defaultCaps);
+    expect(result.consumptionMult).toBeCloseTo(0.4); // 0.5 × 0.8
+    expect(result.productionMult).toBe(1); // the other rate arm is untouched
   });
 
   it("caps anchor to maxAnchorMult", () => {

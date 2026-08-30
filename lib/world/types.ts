@@ -742,7 +742,7 @@ export interface WorldEventModifier {
   eventId: string;
   /** "economy" today; open-ended for future layers (war, reputation). */
   domain: string;
-  /** "anchor_shift", "rate_multiplier", "equilibrium_shift". */
+  /** "anchor_shift", "rate_multiplier". */
   type: string;
   /** "system" or "region". */
   targetType: string;
