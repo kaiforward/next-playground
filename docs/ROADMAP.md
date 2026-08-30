@@ -13,24 +13,6 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 ## Queued
 
-- **[L] Events rework — strip to a lean core now, re-hook into mechanics later.** The current
-  system is the tick's worst scaler (~7× the cost for 4× the systems; its share of a mid-cycle
-  tick went 19.4% → 67.5% as everything around it was hollowed out — percentages are the portable
-  figure, absolute ms move with machine and load) for little gameplay: effects barely tie into the
-  mechanics they should stress. Decision first: what survives as the lean core. The full re-point
-  ([grand-strategy-vision.md](./planned/grand-strategy-vision.md) §4) — events as pressure on real
-  mechanics — waits until the logistics/pops/markets rows below exist to hook into.
-  Carries the two halves deferred at the habitability-seeding spec review (2026-08-23, "let's just
-  leave events as is and we'll revisit and do the split properly"): (1) split event types into
-  developed-only (plague, strikes-adjacent) vs universal (solar_storm, asteroid_strike — physical
-  events that hit any system); (2) the coverage cap is `totalSystems × EVENT_COVERAGE_TARGET`
-  (`lib/constants/events.ts:89-96`) spawned galaxy-wide while effects land on developed systems
-  only — the habitability retune cut the colonisable share ~2.5×, so the felt event rate per
-  inhabited world dropped by the same factor until this row re-bases the cap (accepted at that
-  review).
-  *Next step:* `/measure` felt events-per-developed-system and the processor's cost profile, then
-  the strip-down design decision.
-  *Don't:* fix the processor's performance standalone — the model decision rewrites it anyway.
 - **[M] Good-allocation cliff — how logistics splits a scarce good across demanding systems.**
   Gate 1 of supply-response measured per-good satisfaction as violently bimodal: on worlds below
   full Provision, individual goods sit at 0 or 1 with almost nothing between. Hypothesis: greedy
@@ -148,7 +130,12 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   Likely folds into the goods-pricing revisit above when that comes forward.
 
 After this queue: the events re-hook onto the new mechanics, then war / faction
-implementation — booked as rows when the queue thins. Arc-plumbing candidates for those inclusion
+implementation — booked as rows when the queue thins. Two standing rules govern every returning
+event (owner decisions, 2026-08-30): the **entry bar** — an event cannot ship unless the mechanic
+that makes it preventable or exploitable is named and shipped with it — and the **dice rule** — a
+small random roll may decide *when*, but frequency and severity must always carry a real modifier
+from world composition (a belt count, a border) or player neglect (underfunded healthcare), and
+the mitigation must be buildable. Arc-plumbing candidates for those inclusion
 passes (folded from the deleted `docs/planned/event-ideas.md`, which held them as items needing
 new engine capability beyond phase/modifier design — none designed, none prioritised against the
 rest of this queue):
