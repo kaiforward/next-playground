@@ -36,7 +36,6 @@ describe("ALERT_CATEGORIES — destinations", () => {
     population_collapse: "system:population",
     strike: "system:population",
     maintenance_unfunded: "faction:",
-    crisis: "events:",
     deprived_worlds: "system:population",
     unrest_rising: "system:population",
     survival_stock_falling: "system:logistics",
@@ -45,10 +44,8 @@ describe("ALERT_CATEGORIES — destinations", () => {
     no_housing_headroom: "system:population",
     build_blocked: "system:industry",
     industry_idle: "system:industry",
-    disruption: "events:",
     build_opportunity: "system:industry",
     colony_opportunity: "system:",
-    windfall: "events:",
   };
 
   it("sends every category to the destination the spec's table authored for it", () => {

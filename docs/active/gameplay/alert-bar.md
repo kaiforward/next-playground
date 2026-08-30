@@ -26,18 +26,19 @@ severity signal and is not comparable across categories or across a run. Severit
 by the authored tier colour; the flyout footer carries the denominator ("3 of 253 developed systems")
 for anyone who wants the rate.
 
-Everything is scoped to the player's faction: developed systems the player controls, and for the three
-event categories, events in those systems plus the relations-owned pair events where the player's
-faction is one of the pair. A rival's plague is real strategic information and belongs on some other
-surface; it is not a condition of yours, and it cannot be acted on.
+Everything is scoped to the player's faction: developed systems the player controls. A rival's
+condition is real strategic information and belongs on some other surface; it is not a condition
+of yours, and it cannot be acted on.
 
 ## The rule that decides what belongs
 
 An alert-bar row is a **condition**: it exists only while true. A Tracker row is a **thing**: it
 persists regardless. Everything condition-shaped belongs here, everything thing-shaped there, and the
 split is exhaustive — there is no third surface. A separate dismissible feed of discrete events was
-considered and dropped for exactly this reason: an event the player should act on is a condition, so it
-becomes an alert-bar category (Crisis, Disruption or Windfall) rather than a parallel scrolling list.
+considered and dropped for exactly this reason: an event the player should act on would be a
+condition, so it would belong here rather than in a parallel scrolling list — moot today since the
+only events left (the three relations-owned diplomacy arcs) are minimum-investment and surface only
+in the faction-diplomacy panel and the plain faction-events list, not on this bar.
 Two alert categories may name the same system — they are different warnings, not duplication, which is
 why instances rank within a category and never across.
 
@@ -93,7 +94,7 @@ overlapping chips do not show each other, or the live map, through.
 
 ## The categories
 
-Sixteen, each authored into one of three tiers at design time. Instances sort only *within* their
+Thirteen, each authored into one of three tiers at design time. Instances sort only *within* their
 category, by that category's own natural measure; categories sort only by their authored tier. There
 is no computed cross-domain score anywhere in this design — it is what lets housing, which carries no
 ROI at all, sit on the same bar as an industry proposal without inventing a weight to compare them.
@@ -103,7 +104,6 @@ ROI at all, sit on the same bar as an industry proposal without inventing a weig
 | critical | Dying worlds | A world is losing population fast enough to end it, famine or not. | Time to abandonment (soonest first). |
 | critical | Strike | Unrest has passed the point where workers walk out. | Suppression (most suppressed first). |
 | critical | Maintenance unfunded | The treasury couldn't pay for maintenance the last settlement was asked to fund. | n/a — one faction-level row, count always 0 or 1. |
-| critical | Crisis | An event severe enough to threaten a world (plague, pirate raid, asteroid strike, inner-system or border conflict). | Authored impact rank. |
 | important | Deprived worlds | Provision has fallen into the Deprived band. | Provision ascending. |
 | important | Unrest rising | Provision is below what the population expects, before anyone strikes. | Grievance depth. |
 | important | Survival stock falling | A world's food or water reserve is under three cycles from running out. | Time to empty (soonest first). |
@@ -112,10 +112,8 @@ ROI at all, sit on the same bar as an industry proposal without inventing a weig
 | important | No housing headroom | Overcrowded, nothing queued to fix it, and no room left to build more housing. | Population over cap. |
 | important | Build blocked | The production planner wanted to build here and couldn't. | Authored reason severity, worst first; the dropped opportunity's own value tiebreaks within one reason only. |
 | important | Industry idle | Built capacity that isn't running (no staff, no skill licence, or a recipe input never arrived). | Idle share. |
-| important | Disruption | An event that costs a world without threatening it (shortage, storm, embargo, glut, a dissolved alliance, spillover, plague risk, refugee crisis). | Authored impact rank. |
 | info | Build opportunity | A ranked build the planner recommends, only while build automation is off. | Survival-serving builds first, then the planner's own score. |
 | info | Colony opportunity | A controlled system worth establishing a colony at — physically viable and worth more than the labour its seed would drain — whether or not the treasury can currently fund it; only while colonisation automation is off. | value ÷ work, descending. |
-| info | Windfall | An event worth riding before it ends (trade festival, mining boom, tech breakthrough, a pact under negotiation). | Soonest to expire. |
 
 **The critical tier cannot be hidden.** Three important-tier categories default off (Unrest rising,
 Build blocked, Industry idle) because they are common and continuously true for states the player often
@@ -128,14 +126,12 @@ case: a system wanted to build and could not. A fit-search failure on a building
 than its labour currently reports as `no-labour` too, for lack of a dedicated sixth reason — a spec
 decision, not yet made.
 
-**Discrete events are separate from the standing conditions, and split three ways by authored valence**
-— Crisis, Disruption, Windfall — rather than one chip or seventeen. Each event type is banded at
-authoring time (`EVENT_BAND`, `lib/constants/ui.ts`), so an event chip's tier is authored exactly like
-every other category's. An event chip's count is **instances, not systems** — a region-target phase
-applies its modifiers to a whole region from one instance, and two event types (`pact_under_negotiation`,
-`alliance_dissolved`) spawn with no system at all, so counting systems would misreport both. Event chips
-also refresh on their own dispatch channel (`eventNotifications`, part of the worker's pacing frame),
-separately from the `economyTick` channel every other category moves on.
+**Events carry no alert-bar category at all.** The three relations-owned event types
+(`border_conflict`, `pact_under_negotiation`, `alliance_dissolved`) are minimum-investment content
+that surfaces only in the faction-diplomacy panel and the plain faction-events list — a dedicated
+Diplomacy category would mean authoring tiers and orderings for a system that faction mechanics
+will eventually supersede, for content this thin. Every category on the bar today moves on the
+`economyTick` channel; there is no separate event-notification dispatch channel.
 
 ## The flyout
 
@@ -173,7 +169,6 @@ walk a long category one instance at a time without the flyout closing between c
 | Demand unservable, Survival stock falling | system → Logistics tab |
 | Colony opportunity | system → Overview |
 | Maintenance unfunded | the player faction panel's Overview (the treasury card's home) — the row is faction-level, not a system |
-| Crisis, Disruption, Windfall | the system when the event has one, else the player faction panel's Events tab |
 
 A row's right-hand edge is left free for a later secondary action, so an opportunity row could grow a
 direct "build it" without redesigning the row.
@@ -253,11 +248,9 @@ context carries no market stock), so an input-starved factory is never torn down
 player fixing the supply chain, unlike a staffing or licence shortfall, which still clears by decay
 eating the level.
 
-Two authored lookup tables complete the picture: `EVENT_BAND` (`lib/constants/ui.ts`) assigns every
-event type a valence band and an impact rank, and `BUILD_DROP_SEVERITY`
-(`lib/constants/alerts.ts`) ranks Build blocked's five drop reasons worst-first. Both are presentation
-orderings, authored where two quantities are not otherwise comparable, rather than a value read out of
-the simulation.
+One authored lookup table completes the picture: `BUILD_DROP_SEVERITY` (`lib/constants/alerts.ts`)
+ranks Build blocked's five drop reasons worst-first — a presentation ordering, authored where two
+quantities are not otherwise comparable, rather than a value read out of the simulation.
 
 ## World state and saves
 

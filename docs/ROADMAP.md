@@ -13,6 +13,151 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 ## Queued
 
+- **[M] Good-allocation cliff — how logistics splits a scarce good across demanding systems.**
+  Gate 1 of supply-response measured per-good satisfaction as violently bimodal: on worlds below
+  full Provision, individual goods sit at 0 or 1 with almost nothing between. Hypothesis: greedy
+  fill — each receiving system takes its full demand while in-range supply lasts, so at most one
+  system gets a partial fill and everyone after gets zero. If confirmed, the fix is an allocation
+  policy weighing availability against the number of demanding systems (candidate policies listed
+  on the logistics gameplay pass row below; possibly player-configurable). Complements the band /
+  critical-good mechanics — partial-satisfaction states make `CRITICAL_SATISFACTION` a live line
+  instead of a formality. Sibling of the logistics gameplay pass below.
+  *Next step:* `/measure` the directed-logistics fill order to confirm or kill the greedy-drain
+  hypothesis before any policy design.
+- **[L] Logistics gameplay pass — real cost, hub/chain depth, the surface war will interdict.**
+  Logistics works mechanically but hauling costs nothing and nothing can threaten it — no game in
+  the pillar yet. This pass prices movement (the markets row below needs transport cost to make
+  per-system prices mean anything) and shapes the adversarial surface war later attacks.
+  Absorbs the former depth-check audit row: the pillar is still shallow — e.g. penalised
+  cross-unowned-space
+  logistics was inherited from a retired umbrella and never built. Its own pass before calling the
+  pillar done. Includes **hauling founding freight with real ships** — the staged manifest currently
+  teleports source→colony at completion; deferred at colonisation-economics to whenever logistics
+  carries real cargo. Also absorbs **unifying people-movement**: one-hop diffusion migration and the
+  faction-pool colonist delivery do the same task for different reasons and should become one routed
+  system when logistics carries people (decided at the abandonment measurement, 2026-08-10; the
+  interim famine gate on delivery is explicitly temporary scaffolding for this). Kai's design
+  leanings for the pass (all leanings, not decisions):
+  - **Hub/chain is the real hard part** (2026-08-03): difficulty should come from being part of a
+    *chain* — infrastructure, cost, labour, distance — not per-world stock thresholds. A
+    throughput/entrepôt world would request more inbound when its exports hit their limit (demand
+    propagating upstream through hubs) while producers near consumers ship direct. The point-to-point
+    matcher today has no hub concept.
+  - **Flow priority is a lever** (2026-08-03): the matcher's sink ordering (severity = shortfall ×
+    draw, worst-first) is designable — e.g. scaling need by relative size so a tiny colony's request
+    can outrank raw tonnage, with a mechanical player lever over priority.
+  - **Player exposure stays coarse**: sensible defaults for thresholds, never raw per-good
+    warehouse valves (unmanageable, illegible). At most one coarse in-fiction policy (a faction
+    stockpile stance); real control lives in automation toggles, budgets, directed orders.
+  - **Scarce-good allocation policy candidates** (2026-08-08, feeding the good-allocation-cliff row
+    above), if the greedy-drain hypothesis confirms: (a) spread available supply evenly across
+    demanding systems; (b) satisfy lowest-Provision systems first; (c) band-maximizing — scale
+    exports so as many systems as possible cross a higher satisfaction band without maxing any one out.
+  **Absorbs the former flow-visualisation row**, retired 2026-08-12: a logistics overlay already
+  ships on the map, and designing a second flow view before this pass changes what flows is
+  backwards. Its approved HTML prototype survives as an input —
+  [ui-ws2-map-modes.md](./planned/ui-ws2-map-modes.md) (P2, flow-viz).
+  **Input-proximity weighting in build-planner site ranking** (Kai, 2026-08-24): tier-1+
+  site scoring currently gates on input suppliers existing (`inputsAvailable`,
+  `lib/engine/directed-build.ts`) as a yes/no; weighting by route cost to those suppliers
+  would favour integrated hubs. Deliberately left out of the post-industry-land-cut ranking
+  recut because it overlaps this pass's hub/chain design — pick it up here.
+  **Carry necessity into the routing calculations too** (Kai, 2026-08-16). The same gap the build
+  planner has: logistics decides what to haul from shortfall quantity and route cost, and a unit of
+  unmet food ranks alongside a unit of unmet luxuries. The build side has shipped — the planner's
+  survival band (docs/active/gameplay/economy-autonomic-agency.md, "Survival first") — so this line
+  closes the remaining half. The concrete place it lands is the **good-allocation cliff** row above,
+  which owns the allocation policy; this line exists so the pillar pass does not design that policy
+  necessity-blind.
+- **[M] Faction gameplay direction — design pass only, before pop scope is committed.** Decide
+  what gameplay styles factions offer and how a faction manages its pops, so the pop expansion
+  below is cut to fit a chosen direction rather than guessed. Inputs: the government layer
+  revisit row (Unqueued — doctrine-driven discretionary spend, the control/integration design
+  space) and the reference-game reads already carried on the strata row below.
+  *Next step:* `/brainstorm`, producing a direction doc in `docs/planned/`. No implementation.
+- **[XL] Pop wealth and buying power** — pops hold wealth and must afford their basket, so demand becomes
+  partly monetary. Provision survives as a ratio and stays distinct (a world can hold the wealth and still
+  lack the goods). The former blocker — `demandRate` double-purposed as pricing anchor and logistics
+  deficit anchor — cleared with #211/#212 and the `TARGET_COVER` role split: pricing keeps the floored
+  `demandRate` denominator, logistics and founding read real demand. Unlocks the strata-as-private-builder
+  mechanic on the social-strata row below — wealth pops hold is what a private builder spends.
+  Also carries **housing quality as a happiness/wealth investment** (Kai, 2026-08-24): better housing
+  raised through pop wealth/happiness rather than (only) direct construction — the Vic3 read, where
+  standard-of-living is consumption-driven; design it here so it composes with the monetary basket.
+- **[L] Expanded pop tiers / social strata** — today's tiering is labour-grade only. Richer strata carry
+  their own baskets. Composes with adaptive expectation (per-class expectation is how Victoria 3 derives
+  its reference); nothing breaks if it never lands.
+  **Also carries the strata-as-private-builder mechanic** (scoped 2026-08-12): in both reference
+  games the strata are a *second builder* that is
+  neither the player nor automation — Victoria 3's investment pool splits the construction queue into
+  private and government by economic law; EU5's estates build regardless of the player's automation
+  settings and their builds cannot be cancelled. The interesting axis is **ownership, not output** —
+  same buildings and goods, but the returns bypass the treasury and tearing one down costs political
+  standing. Gated on real pop wealth (the row above, and the purse's Stage 3 monetisation staging),
+  since a stratum cannot invest what it does not hold.
+  *Don't:* give the private builder its own construction pool without deciding how it shares the
+  physical ceiling — a second unexamined pool breaks "money is fuel, not capacity".
+- **[L] Markets redesign — decide the model, then build it.** Markets are per-system today; pops
+  (once demand is monetary) buy from them and logistics moves goods between them. The opening
+  decision: a paradox-style construct (Vic3 national markets / EU5 market areas) vs our own model
+  of realistic trade behaviour within factions and between them — cross-faction markets included.
+  Deliberately last in this queue: the supply side (logistics cost) and the demand side (pop
+  wealth) must exist before market structure is decidable. The tick-performance row "Markets need
+  a real dirty/ownership model" is a constraint on whatever shape wins. The two rows below fold
+  into this work.
+  *Next step:* `/brainstorm` the model choice once pop wealth ships.
+- **[L] Goods-pricing revisit** — moved way back from the economy queue by explicit decision
+  (2026-08-03): pricing is only worth reworking when demand becomes partly monetary — pop wages
+  and real goods purchase, or inter-faction trade agreements / shared markets. Also absorbs
+  **separating `surplusDrawable`'s triple duty** (logistics donor cap / build input gate / founding
+  manifest cap — three consumers of one figure, deferred at colonisation-economics). Kai's observation
+  (2026-08-05, unmeasured): lots of edge cases with producers/consumers not reading the price based
+  on type properly, which is why at least one shipped mechanic routes around live prices rather than
+  reading them; `/measure` it when this row comes forward, since the row that named which mechanic is
+  gone. Carries an unresolved finding: an exporter's resting price pins at its ceiling (measured at
+  equilibrium: 3.00× / 3.00× / 2.50× for `electronics` / `luxuries` / `fuel` — a drawn exporter
+  rests at `EXPORT_RESERVE_COVER`, below the curve's saturation point, so the curve clamps, and
+  price stops being a health gauge on exactly the cohort that ships goods). Acceptable meanwhile:
+  exporters run drained by design, importers carry the dispersion.
+  *Don't:* lower the anchor (retracted: measured at 125 cycles, inside the ~300-cycle startup
+  transient — run unmodified to 416 cycles the galaxy reaches price median 1.23× on its own) or
+  raise the export reserve (withholds real stock from importers). If grading is wanted, the lever
+  is the curve's saturation point — which makes the `MarketCurve.k` item below this work's natural
+  first slice.
+- **[M] Per-good price response (`MarketCurve.k`)** — make "water spikes under scarcity, luxuries don't"
+  real by giving each good its own price-curve exponent, without touching demand. `DEFAULT_ELASTICITY`
+  is 1 for every good and `priceFloor`/`priceCeiling` is a pure tier lookup with zero per-good variation.
+  Likely folds into the goods-pricing revisit above when that comes forward.
+
+After this queue: the events re-hook onto the new mechanics, then war / faction
+implementation — booked as rows when the queue thins. Two standing rules govern every returning
+event (owner decisions, 2026-08-30): the **entry bar** — an event cannot ship unless the mechanic
+that makes it preventable or exploitable is named and shipped with it — and the **dice rule** — a
+small random roll may decide *when*, but frequency and severity must always carry a real modifier
+from world composition (a belt count, a border) or player neglect (underfunded healthcare), and
+the mitigation must be buildable. Arc-plumbing candidates for those inclusion
+passes (folded from the deleted `docs/planned/event-ideas.md`, which held them as items needing
+new engine capability beyond phase/modifier design — none designed, none prioritised against the
+rest of this queue):
+  - **Seasonal cycles** — deterministic, time-based arcs the events processor opens on a schedule
+    rather than a random roll (e.g. a periodic harvest/trade/solar-minimum rhythm). Needs a
+    time-based open trigger alongside the relations-driven one.
+  - **Branching phase outcomes** — a phase transition that picks from multiple successor phases by
+    roll or world-state condition, instead of always advancing linearly. Needs a phase
+    `successors: [{ phaseId, weight, condition? }]` field.
+  - **Dynamic modifier growth** — a modifier whose value changes each tick (grows, decays,
+    oscillates) instead of holding fixed within a phase. Needs a modifier `growth: { rate, curve }`.
+  - **Player-influenced resolution** — aggregate player/faction behaviour affecting a phase's
+    duration or outcome. Needs a per-system behaviour signal the processor can read.
+  - **Permanent phases** — a final phase that never expires, shifting equilibrium to a new
+    baseline rather than reverting. Needs a `permanent: true` phase field.
+  - **Moving event geography** — a target that shifts across the spatial graph over an event's
+    life, rather than a fixed system/region. Needs the events processor to track and migrate
+    positions.
+  - **Player-triggered events** — an analytics processor watching aggregate player behaviour and
+    opening arcs from detected patterns. Deferred pending the core simulation stabilising —
+    flagged as carrying real feedback-loop risk.
+
 ---
 
 ## Unqueued
@@ -80,18 +225,6 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   (78→140 near-empty outpost colonies by in-world year 20), and was retired by owner decision
   2026-08-23: dead bodies carry zero habitable land and dead systems are uncolonisable until the
   technology phase (see [habitability.md](./active/gameplay/habitability.md)).
-- **[M] Events revisit — the developed/universal split and the coverage re-base.** Deferred by
-  explicit decision at the habitability-seeding spec review (2026-08-23): "let's just leave
-  events as is and we'll revisit and do the split properly". Two halves: (1) split event types
-  into developed-only (plague, strikes-adjacent) vs universal (solar_storm, asteroid_strike —
-  physical events that hit any system); (2) the coverage cap is `totalSystems ×
-  EVENT_COVERAGE_TARGET` (`lib/constants/events.ts:89-96`) spawned galaxy-wide while effects
-  land on developed systems only — the habitability retune cuts the colonisable share ~2.5×,
-  so the felt event rate per inhabited world drops by the same factor until this row re-bases
-  the cap (accepted at that review). Folds naturally into the events re-point
-  ([grand-strategy-vision.md](./planned/grand-strategy-vision.md) §4).
-  *Next step:* design pass alongside the events re-point; measure felt events-per-developed-
-  system first.
 - **[M] Relief — a player-funded intervention buys a viable world out of the strike loop** by
   moving goods through the real logistics simulation, never by deleting unrest. Design:
   [supply-response.md](./planned/supply-response.md) "Relief" (the arc's other items all shipped).
@@ -146,41 +279,9 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   autonomic build, decay, Industry UI).
   *Don't:* re-size the existing constants to make a brake cap work — no single multiplier fits a
   16–843× per-good spread, and inflating them inflates every pricing band with them.
-- **[L] Goods-pricing revisit** — moved way back from the economy queue by explicit decision
-  (2026-08-03): pricing is only worth reworking when demand becomes partly monetary — pop wages
-  and real goods purchase, or inter-faction trade agreements / shared markets. Also absorbs
-  **separating `surplusDrawable`'s triple duty** (logistics donor cap / build input gate / founding
-  manifest cap — three consumers of one figure, deferred at colonisation-economics). Kai's observation
-  (2026-08-05, unmeasured): lots of edge cases with producers/consumers not reading the price based
-  on type properly, which is why at least one shipped mechanic routes around live prices rather than
-  reading them; `/measure` it when this row comes forward, since the row that named which mechanic is
-  gone. Carries an unresolved finding: an exporter's resting price pins at its ceiling (measured at
-  equilibrium: 3.00× / 3.00× / 2.50× for `electronics` / `luxuries` / `fuel` — a drawn exporter
-  rests at `EXPORT_RESERVE_COVER`, below the curve's saturation point, so the curve clamps, and
-  price stops being a health gauge on exactly the cohort that ships goods). Acceptable meanwhile:
-  exporters run drained by design, importers carry the dispersion.
-  *Don't:* lower the anchor (retracted: measured at 125 cycles, inside the ~300-cycle startup
-  transient — run unmodified to 416 cycles the galaxy reaches price median 1.23× on its own) or
-  raise the export reserve (withholds real stock from importers). If grading is wanted, the lever
-  is the curve's saturation point — which makes the `MarketCurve.k` item below this work's natural
-  first slice.
-- **[M] Good-allocation cliff — how logistics splits a scarce good across demanding systems.**
-  Gate 1 of supply-response measured per-good satisfaction as violently bimodal: on worlds below
-  full Provision, individual goods sit at 0 or 1 with almost nothing between. Hypothesis: greedy
-  fill — each receiving system takes its full demand while in-range supply lasts, so at most one
-  system gets a partial fill and everyone after gets zero. If confirmed, the fix is an allocation
-  policy weighing availability against the number of demanding systems (candidate policies listed
-  on the logistics-pillar depth check row below; possibly player-configurable). Complements the band /
-  critical-good mechanics — partial-satisfaction states make `CRITICAL_SATISFACTION` a live line
-  instead of a formality. Sibling of the logistics-pillar depth check below.
-  *Next step:* `/measure` the directed-logistics fill order to confirm or kill the greedy-drain
-  hypothesis before any policy design.
-- **[M] Per-good price response (`MarketCurve.k`)** — make "water spikes under scarcity, luxuries don't"
-  real by giving each good its own price-curve exponent, without touching demand. `DEFAULT_ELASTICITY`
-  is 1 for every good and `priceFloor`/`priceCeiling` is a pure tier lookup with zero per-good variation.
-  Likely folds into the goods-pricing revisit above when that comes forward.
-- **[M] Government layer revisit** — `GOVERNMENT_TYPES` carries only event weights and a danger baseline
-  since the flat `consumptionBoosts` term was deleted. Governments are economically inert until something
+- **[M] Government layer revisit** — `GOVERNMENT_TYPES` carries only a danger baseline (the flat
+  `consumptionBoosts` term and the events-rework strip's `eventWeights` are both gone). Governments
+  are economically inert until something
   replaces it as an economic axis. The leading candidate: **doctrine-driven allocation of discretionary
   spend** — a per-government budget split over the two spends a faction chooses (construction and
   founding; maintenance and logistics are obligations, not choices), so expansionist empires commit more
@@ -196,28 +297,6 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   population *demands*) — control scales what the *state extracts*; its value is the wider surface
   (occupation, distance, government types, doctrine allocation), not solving the founding-strike
   problem, which expectation already dissolves alone.
-- **[XL] Pop wealth and buying power** — pops hold wealth and must afford their basket, so demand becomes
-  partly monetary. Provision survives as a ratio and stays distinct (a world can hold the wealth and still
-  lack the goods). The former blocker — `demandRate` double-purposed as pricing anchor and logistics
-  deficit anchor — cleared with #211/#212 and the `TARGET_COVER` role split: pricing keeps the floored
-  `demandRate` denominator, logistics and founding read real demand. Unlocks the strata-as-private-builder
-  mechanic on the social-strata row above — wealth pops hold is what a private builder spends.
-  Also carries **housing quality as a happiness/wealth investment** (Kai, 2026-08-24): better housing
-  raised through pop wealth/happiness rather than (only) direct construction — the Vic3 read, where
-  standard-of-living is consumption-driven; design it here so it composes with the monetary basket.
-- **[L] Expanded pop tiers / social strata** — today's tiering is labour-grade only. Richer strata carry
-  their own baskets. Composes with adaptive expectation (per-class expectation is how Victoria 3 derives
-  its reference); nothing breaks if it never lands.
-  **Also carries the strata-as-private-builder mechanic** (scoped 2026-08-12): in both reference
-  games the strata are a *second builder* that is
-  neither the player nor automation — Victoria 3's investment pool splits the construction queue into
-  private and government by economic law; EU5's estates build regardless of the player's automation
-  settings and their builds cannot be cancelled. The interesting axis is **ownership, not output** —
-  same buildings and goods, but the returns bypass the treasury and tearing one down costs political
-  standing. Gated on real pop wealth (the row below, and the purse's Stage 3 monetisation staging),
-  since a stratum cannot invest what it does not hold.
-  *Don't:* give the private builder its own construction pool without deciding how it shares the
-  physical ceiling — a second unexamined pool breaks "money is fuel, not capacity".
 - **[S] Loose ends out of scope for band reconciliation, unpicked-up since** — noted but not designed:
   a legible EU5-style reserve/stockpile mechanic (visible policy-set stockpile, crisis
   release/requisition, war stores, rationed by access) — ties to purse Stage 2-3 monetisation and
@@ -281,11 +360,6 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   19.0% of a mid-cycle tick. Gating can't touch it: ship-arrivals and events both run every tick and both
   consume `TickSystem` rows. *Next step:* check what those two actually read (ids/names; ids/names/control/region)
   before assuming the full row is needed — narrow it, don't skip it.
-- **[M] The events processor scales worst in the tick, and is now two-thirds of it** — ~7× the cost for
-  4× the systems; its share went 19.4% → 67.5% as everything around it was hollowed out. At 10,000+ systems
-  this is the wall. *Next step:* fold into the events re-point ([grand-strategy-vision.md](./planned/grand-strategy-vision.md) §4)
-  rather than fixing standalone — that pass rewrites the model anyway.
-  Percentages are the portable figure; absolute ms move with machine and load, so re-baseline in-run.
 - **[M] Markets need a real dirty/ownership model** — the events adapter copies every market row in the
   galaxy every tick (~62,000 at 2,400 systems) and almost never writes one. The copy is **load-bearing**,
   not waste: it de-aliases rows the previous world still holds. *Next step:* a design pass on copy-on-write
@@ -402,46 +476,6 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   logistics; the player is a faction ruler, not a trader). Requested, never started. Known instances of
   the class already found this way: `quoteTrade`/spread/buy-sell columns (deleted), the map price mode
   (cut), `GOODS.volatility` (still present as unread metadata since the noise path was removed in #170).
-- **[M] Logistics-pillar depth check** — the pillar is still shallow; e.g. penalised cross-unowned-space
-  logistics was inherited from a retired umbrella and never built. Its own pass before calling the
-  pillar done. Includes **hauling founding freight with real ships** — the staged manifest currently
-  teleports source→colony at completion; deferred at colonisation-economics to whenever logistics
-  carries real cargo. Also absorbs **unifying people-movement**: one-hop diffusion migration and the
-  faction-pool colonist delivery do the same task for different reasons and should become one routed
-  system when logistics carries people (decided at the abandonment measurement, 2026-08-10; the
-  interim famine gate on delivery is explicitly temporary scaffolding for this). Kai's design
-  leanings for the pass (all leanings, not decisions):
-  - **Hub/chain is the real hard part** (2026-08-03): difficulty should come from being part of a
-    *chain* — infrastructure, cost, labour, distance — not per-world stock thresholds. A
-    throughput/entrepôt world would request more inbound when its exports hit their limit (demand
-    propagating upstream through hubs) while producers near consumers ship direct. The point-to-point
-    matcher today has no hub concept.
-  - **Flow priority is a lever** (2026-08-03): the matcher's sink ordering (severity = shortfall ×
-    draw, worst-first) is designable — e.g. scaling need by relative size so a tiny colony's request
-    can outrank raw tonnage, with a mechanical player lever over priority.
-  - **Player exposure stays coarse**: sensible defaults for thresholds, never raw per-good
-    warehouse valves (unmanageable, illegible). At most one coarse in-fiction policy (a faction
-    stockpile stance); real control lives in automation toggles, budgets, directed orders.
-  - **Scarce-good allocation policy candidates** (2026-08-08, feeding the good-allocation-cliff row
-    above), if the greedy-drain hypothesis confirms: (a) spread available supply evenly across
-    demanding systems; (b) satisfy lowest-Provision systems first; (c) band-maximizing — scale
-    exports so as many systems as possible cross a higher satisfaction band without maxing any one out.
-  **Absorbs the former flow-visualisation row**, retired 2026-08-12: a logistics overlay already
-  ships on the map, and designing a second flow view before this pass changes what flows is
-  backwards. Its approved HTML prototype survives as an input —
-  [ui-ws2-map-modes.md](./planned/ui-ws2-map-modes.md) (P2, flow-viz).
-  **Input-proximity weighting in build-planner site ranking** (Kai, 2026-08-24): tier-1+
-  site scoring currently gates on input suppliers existing (`inputsAvailable`,
-  `lib/engine/directed-build.ts`) as a yes/no; weighting by route cost to those suppliers
-  would favour integrated hubs. Deliberately left out of the post-industry-land-cut ranking
-  recut because it overlaps this pass's hub/chain design — pick it up here.
-  **Carry necessity into the routing calculations too** (Kai, 2026-08-16). The same gap the build
-  planner has: logistics decides what to haul from shortfall quantity and route cost, and a unit of
-  unmet food ranks alongside a unit of unmet luxuries. The build side has shipped — the planner's
-  survival band (docs/active/gameplay/economy-autonomic-agency.md, "Survival first") — so this line
-  closes the remaining half. The concrete place it lands is the **good-allocation cliff** row above,
-  which owns the allocation policy; this line exists so the pillar pass does not design that policy
-  necessity-blind.
 - **[S] §3.5 player-directed colony founding** — the mechanism (`employedGradientThreshold` speed-dial)
   ships **inert but tested**. Wire it when the player-agency phase reaches it.
 
@@ -562,8 +596,8 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   ever matters the lever is a finer economy cadence, not construction staleness.
 - **Map price mode** — cut 2026-07 as premature; a trader hangover; price is the *opportunity* tool
   for a trader and the player is a faction ruler. Event pills were stripped from the map at the
-  same time. Flow overlays survive as ambient world-legibility and are still queued (logistics-pillar
-  depth check row).
+  same time. Flow overlays survive as ambient world-legibility and are still queued (logistics gameplay
+  pass row).
 - **Retiring the idle channel for housing** — superseded 2026-07-27, never built. Targeted a minor
   collision (12 months to bite, spare level only); sizing colony housing to the seed dissolves it
   by construction. The actual colony-killer was the unrest channel, not this.

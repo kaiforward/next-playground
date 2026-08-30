@@ -1,19 +1,9 @@
-import type {
-  TickContext,
-  TickProcessorResult,
-  EventNotificationPayload,
-} from "../types";
+import type { TickContext, TickProcessorResult } from "../types";
 import type { EventPhaseDefinition, EventTypeId } from "@/lib/constants/events";
 import {
   checkPhaseTransition,
   buildModifiersForPhase,
-  buildShocksForPhase,
-  evaluateSpreadTargets,
-  selectEventsToSpawn,
   rollPhaseDuration,
-  type SystemSnapshot,
-  type ShockRow,
-  type SpawnDecision,
 } from "@/lib/engine/events";
 
 /**
@@ -28,78 +18,26 @@ const RELATIONS_OWNED_LIFECYCLE: ReadonlySet<EventTypeId> = new Set<EventTypeId>
   "alliance_dissolved",
 ]);
 import type {
-  EventCreate,
   EventsProcessorParams,
   EventsWorld,
   EventWithName,
-  NeighborWithName,
   PhaseAdvance,
-  SystemShock,
 } from "@/lib/tick/world/events-world";
 import { resolveHostConfig } from "@/lib/constants/economy-scale";
 
 const DEBUG = resolveHostConfig().debugEvents;
 
 /**
- * The `EventCreate` a spawn decision becomes. Both paths that create an event build the identical
- * row from a decision plus its type's first phase — a fresh spawn (`sourceEventId` null) and a
- * spread child (its parent's id) differ in that one field and nothing else. Both start the event
- * and its first phase on the current tick.
- */
-function eventCreateFor(
-  decision: SpawnDecision,
-  firstPhase: EventPhaseDefinition,
-  tick: number,
-  sourceEventId: string | null,
-): EventCreate {
-  return {
-    type: decision.type,
-    phase: decision.phase,
-    systemId: decision.systemId,
-    regionId: decision.regionId,
-    startTick: tick,
-    phaseStartTick: tick,
-    phaseDuration: decision.phaseDuration,
-    severity: decision.severity,
-    sourceEventId,
-    modifiers: buildModifiersForPhase(
-      firstPhase,
-      decision.systemId,
-      decision.regionId,
-      decision.severity,
-    ),
-  };
-}
-
-/**
- * Expand a system's ShockRow[] into SystemShock[], preserving each row's shock
- * mode. Yields nothing for a null systemId (a region-scoped event) or an empty
- * row set.
- */
-function expandShocks(rows: ShockRow[], systemId: string | null): SystemShock[] {
-  if (!systemId || rows.length === 0) return [];
-  return rows.map((r) => ({
-    systemId,
-    goodId: r.goodId,
-    parameter: r.parameter,
-    value: r.value,
-    mode: r.mode,
-  }));
-}
-
-/**
  * Pure processor body, run against the in-memory adapter — the one backend.
- * Knobs the body shouldn't hard-code (RNG, caps, batch size, definitions,
- * spawn gating) arrive via `params`.
+ * The only knob the body shouldn't hard-code is RNG (phase-duration rolls)
+ * and the definition table; both arrive via `params`.
  */
 export async function runEventsProcessor(
   world: EventsWorld,
   ctx: TickContext,
   params: EventsProcessorParams,
 ): Promise<TickProcessorResult> {
-  const { rng, caps, batchSize, spawnInterval, definitions, spawnEnabled } = params;
-
-  const notifications: EventNotificationPayload[] = [];
+  const { rng, definitions } = params;
 
   // ── 1. Fetch active events ────────────────────────────────────
   const events = await world.getEvents();
@@ -128,12 +66,9 @@ export async function runEventsProcessor(
     const result = checkPhaseTransition(ev, ctx.tick, def);
     if (result === "expire") {
       expiredIds.push(ev.id);
-      const sysName = ev.systemName ?? "Unknown";
-      notifications.push({
-        message: `${def.name} at ${sysName} has ended.`,
-        type: ev.type,
-        refs: ev.systemId ? { system: { id: ev.systemId, label: sysName } } : {},
-      });
+      if (DEBUG) {
+        console.log(`[events] ${def.name} at ${ev.systemName ?? "Unknown"} has ended.`);
+      }
       continue;
     }
 
@@ -145,7 +80,7 @@ export async function runEventsProcessor(
     }
   }
 
-  // Apply advances + transition shocks + spread, in that order
+  // Apply phase advances.
   if (advancing.length > 0) {
     const advances: PhaseAdvance[] = advancing.map((a) => ({
       eventId: a.snap.id,
@@ -156,122 +91,17 @@ export async function runEventsProcessor(
         a.nextPhase,
         a.snap.systemId,
         a.snap.regionId,
-        a.snap.severity,
       ),
     }));
     await world.advancePhases(advances);
 
-    const transitionShocks: SystemShock[] = [];
-    for (const a of advancing) {
-      transitionShocks.push(
-        ...expandShocks(
-          buildShocksForPhase(a.nextPhase, a.snap.severity),
-          a.snap.systemId,
-        ),
-      );
-    }
-    await world.applyShocks(transitionShocks);
-
-    // Notifications + logging for advancing events
-    for (const { snap, nextPhase, duration } of advancing) {
-      const def = definitions[snap.type]!;
-      const sysName = snap.systemName ?? "Unknown";
-      if (nextPhase.notification) {
-        notifications.push({
-          message: nextPhase.notification.replace("{systemName}", sysName),
-          type: snap.type,
-          refs: snap.systemId
-            ? { system: { id: snap.systemId, label: sysName } }
-            : {},
-        });
-      }
-      if (DEBUG) {
+    if (DEBUG) {
+      for (const { snap, nextPhase, duration } of advancing) {
+        const def = definitions[snap.type];
+        if (!def) continue;
         console.log(
-          `[events] ${def.name} at ${sysName}: ${snap.phase} → ${nextPhase.name} (${duration} ticks)`,
+          `[events] ${def.name} at ${snap.systemName ?? "Unknown"}: ${snap.phase} → ${nextPhase.name} (${duration} ticks)`,
         );
-      }
-    }
-
-    // Spread — only for root events (no sourceEventId) that have spread rules.
-    const spreadSources = advancing.filter(
-      (a) =>
-        a.nextPhase.spread &&
-        a.nextPhase.spread.length > 0 &&
-        !a.snap.sourceEventId &&
-        a.snap.systemId,
-    );
-
-    if (spreadSources.length > 0) {
-      const sourceSystemIds = spreadSources.map((a) => a.snap.systemId!);
-      const neighborMap = await world.getNeighborsBySystem(sourceSystemIds);
-
-      // Re-snapshot active events post-advance for accurate cap checks
-      const currentEvents = await world.getEvents();
-
-      interface SpreadCreate {
-        create: EventCreate;
-        nameForLog: string;
-        parentName: string;
-      }
-      const spreadCreates: SpreadCreate[] = [];
-
-      for (const { snap, nextPhase } of spreadSources) {
-        const neighbors: NeighborWithName[] =
-          neighborMap.get(snap.systemId!) ?? [];
-
-        const decisions = evaluateSpreadTargets(
-          nextPhase.spread!,
-          snap,
-          neighbors,
-          currentEvents,
-          { maxEventsGlobal: caps.maxEventsGlobal, maxEventsPerSystem: caps.maxEventsPerSystem },
-          definitions,
-          rng,
-        );
-
-        for (const d of decisions) {
-          const neighborName =
-            neighbors.find((n) => n.id === d.systemId)?.name ?? "Unknown";
-          spreadCreates.push({
-            create: eventCreateFor(d, definitions[d.type].phases[0], ctx.tick, snap.id),
-            nameForLog: neighborName,
-            parentName: snap.systemName ?? "Unknown",
-          });
-        }
-      }
-
-      if (spreadCreates.length > 0) {
-        await world.createEvents(spreadCreates.map((s) => s.create));
-
-        // Apply spread shocks (first-phase shocks for each new child).
-        const spreadShocks: SystemShock[] = [];
-        for (const { create } of spreadCreates) {
-          const childDef = definitions[create.type]!;
-          spreadShocks.push(
-            ...expandShocks(
-              buildShocksForPhase(childDef.phases[0], create.severity),
-              create.systemId,
-            ),
-          );
-        }
-        await world.applyShocks(spreadShocks);
-
-        for (const { create, nameForLog, parentName } of spreadCreates) {
-          const childDef = definitions[create.type]!;
-          const childPhase = childDef.phases[0];
-          if (childPhase.notification) {
-            notifications.push({
-              message: childPhase.notification.replace("{systemName}", nameForLog),
-              type: create.type,
-              refs: { system: { id: create.systemId, label: nameForLog } },
-            });
-          }
-          if (DEBUG) {
-            console.log(
-              `[events] Spread ${childDef.name} to ${nameForLog} from ${parentName} (severity: ${create.severity.toFixed(2)})`,
-            );
-          }
-        }
       }
     }
   }
@@ -282,82 +112,5 @@ export async function runEventsProcessor(
     if (DEBUG) console.log(`[events] Expired ${expiredIds.length} event(s)`);
   }
 
-  // ── 4. Spawn new events on spawn ticks ─────────────────────────
-  const isSpawnTick = ctx.tick % spawnInterval === 0;
-  if (isSpawnTick && spawnEnabled) {
-    // Re-snapshot post-expiry for accurate cap checking
-    const currentEvents = await world.getEvents();
-    const systems = await world.getSystems();
-    const systemSnapshots: SystemSnapshot[] = systems.map((s) => ({
-      id: s.id,
-      economyType: s.economyType,
-      regionId: s.regionId,
-    }));
-    const nameMap = new Map(systems.map((s) => [s.id, s.name]));
-
-    const selectStart = performance.now();
-    const decisions = selectEventsToSpawn(
-      definitions,
-      currentEvents,
-      systemSnapshots,
-      ctx.tick,
-      { maxEventsGlobal: caps.maxEventsGlobal, maxEventsPerSystem: caps.maxEventsPerSystem },
-      rng,
-      batchSize,
-    );
-    const selectMs = performance.now() - selectStart;
-
-    if (decisions.length > 0) {
-      const createStart = performance.now();
-      const spawnCreates: EventCreate[] = decisions.map((d) =>
-        eventCreateFor(d, definitions[d.type].phases[0], ctx.tick, null),
-      );
-
-      await world.createEvents(spawnCreates);
-
-      const spawnShocks: SystemShock[] = [];
-      for (const c of spawnCreates) {
-        const def = definitions[c.type]!;
-        spawnShocks.push(
-          ...expandShocks(buildShocksForPhase(def.phases[0], c.severity), c.systemId),
-        );
-      }
-      const shocksApplied = await world.applyShocks(spawnShocks);
-
-      const createMs = performance.now() - createStart;
-
-      for (const c of spawnCreates) {
-        const def = definitions[c.type]!;
-        const firstPhase = def.phases[0];
-        const sysName = nameMap.get(c.systemId) ?? "Unknown";
-        if (firstPhase.notification) {
-          notifications.push({
-            message: firstPhase.notification.replace("{systemName}", sysName),
-            type: c.type,
-            refs: { system: { id: c.systemId, label: sysName } },
-          });
-        }
-      }
-
-      if (DEBUG) {
-        const modifierCount = spawnCreates.reduce((n, c) => n + c.modifiers.length, 0);
-        console.log(
-          `[events] Spawn tick ${ctx.tick}: ${currentEvents.length} active, ${systems.length} systems, ` +
-            `caps={global:${caps.maxEventsGlobal},batch:${batchSize}}, ` +
-            `selected ${decisions.length} in ${selectMs.toFixed(0)}ms, ` +
-            `created ${decisions.length} events + ${modifierCount} modifiers + ${shocksApplied} shocks in ${createMs.toFixed(0)}ms`,
-        );
-      }
-    } else if (DEBUG) {
-      console.log(
-        `[events] Spawn tick ${ctx.tick}: ${currentEvents.length} active, ${systems.length} systems, ` +
-          `caps={global:${caps.maxEventsGlobal},batch:${batchSize}}, selected 0 in ${selectMs.toFixed(0)}ms`,
-      );
-    }
-  }
-
-  return {
-    globalEvents:
-      notifications.length > 0 ? { eventNotifications: notifications } : {},
-  };
+  return {};
 }

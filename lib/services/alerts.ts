@@ -1,9 +1,8 @@
 /**
- * Alert bar read service — all sixteen categories: the six state-derived ones (Dying worlds, Deprived
+ * Alert bar read service — all thirteen categories: the six state-derived ones (Dying worlds, Deprived
  * worlds, Strike, Unrest rising, Overcrowded, No housing headroom), Survival stock falling, Demand
- * unservable, Build blocked, Industry idle, the faction-level Maintenance unfunded, the two
- * automation-gated opportunity categories (Build opportunity, Colony opportunity), and the three
- * event bands (Crisis, Disruption, Windfall).
+ * unservable, Build blocked, Industry idle, the faction-level Maintenance unfunded, and the two
+ * automation-gated opportunity categories (Build opportunity, Colony opportunity).
  *
  * The system-scoped categories are scoped to the player faction's DEVELOPED systems, which is also
  * their `denominator` — the flyout footer's "N of D developed systems". A world with no player seat
@@ -11,14 +10,13 @@
  * for the same reason (lib/services/tracker.ts:34-37). Colony opportunity is scoped to a DIFFERENT
  * population — the player's controlled, not-yet-developed systems — and carries that count as its own
  * denominator, since a colony candidate is never in the developed set; it says so at its own block.
- * Two kinds of category count something else and carry no denominator at all: the three event
- * categories count EVENTS, and the faction-level Maintenance unfunded counts the FACTION — see
- * `AlertCategory`'s own contract for why neither is a share of any systems total.
+ * One category counts something else and carries no denominator at all: the faction-level Maintenance
+ * unfunded counts the FACTION — see `AlertCategory`'s own contract for why it is not a share of any
+ * systems total.
  *
- * Categories are emitted in the registry's authored tier + order: every `toSystemCategory(...)` /
- * `toEventCategory(...)` call below carries its own literal id, and the final array sorts on
- * `ALERT_CATEGORIES[id].tier` then `.order` — so the order is read from the registry, never
- * hand-duplicated here.
+ * Categories are emitted in the registry's authored tier + order: every `toSystemCategory(...)` call
+ * below carries its own literal id, and the final array sorts on `ALERT_CATEGORIES[id].tier` then
+ * `.order` — so the order is read from the registry, never hand-duplicated here.
  *
  * Within a category, `instances` sort ascending by `sortKey`: smaller sorts first, and every
  * category picks its own `sortKey` so ascending always reads worst-first — except the two
@@ -41,7 +39,7 @@ import { formatDuration } from "@/lib/utils/calendar";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { DEFAULT_ALERT_CATEGORIES } from "@/lib/constants/attention";
 import type { WorldSystem, World } from "@/lib/world/types";
-import { buildingsBySystem, marketsBySystem, systemNameById } from "@/lib/services/world-index";
+import { buildingsBySystem, marketsBySystem } from "@/lib/services/world-index";
 import { depositCountsOf } from "@/lib/engine/resources";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import {
@@ -59,12 +57,10 @@ import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { ALERT_CATEGORIES, BUILD_DROP_SEVERITY } from "@/lib/constants/alerts";
-import { EVENT_BAND } from "@/lib/constants/ui";
-import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import type { AlertTier, AlertCategoryId } from "@/lib/types/alerts";
 import type {
   AlertData, AlertCategory, AlertInstance, SystemScopedAlertCategory,
-  ControlledSystemsAlertCategory, EventAlertCategory, FactionAlertCategory,
+  ControlledSystemsAlertCategory, FactionAlertCategory,
 } from "@/lib/types/api";
 
 // No seat means no stored preference to read; the bar has nothing to show either way.
@@ -74,9 +70,7 @@ const EMPTY_ALERT_DATA: AlertData = {
 };
 
 /** Band order, worst first, for the final categories array — critical chips lead, then important,
- *  then info. Not the event bands' own `EVENT_BAND_ORDER` (lib/constants/ui.ts): that ranks Crisis /
- *  Disruption / Windfall against each other as event TYPES; this ranks the sixteen alert CATEGORIES
- *  against each other by their authored `AlertTier`. */
+ *  then info. Ranks the thirteen alert CATEGORIES against each other by their authored `AlertTier`. */
 const TIER_RANK: Record<AlertTier, number> = { critical: 0, important: 1, info: 2 };
 
 /** Cycles-to-empty threshold for Survival stock falling — authored from remedy time (one logistics
@@ -251,17 +245,9 @@ function toControlledSystemCategory(
   return { id, unit: "controlled_systems", count: instances.length, denominator, instances: sortedInstances(instances) };
 }
 
-/** A category whose count is EVENTS, with no denominator — an event count is not a share of the
- *  developed-systems total and can exceed it (a region phase covers many systems from one instance;
- *  the relations-spawned pair events have no system at all). */
-function toEventCategory(id: AlertCategoryId, instances: AlertInstance[]): EventAlertCategory {
-  return { id, unit: "events", count: instances.length, instances: sortedInstances(instances) };
-}
-
-/** The one faction-level category, counting the FACTION and carrying no denominator — the same bare
- *  count the event categories take, for the same reason: its count (0 or 1, one settlement per
- *  faction) is not a share of the developed-systems total, and rendering it against one would read
- *  "1 of 253 developed systems" about a row that names no system. */
+/** The one faction-level category, counting the FACTION and carrying no denominator: its count (0 or
+ *  1, one settlement per faction) is not a share of the developed-systems total, and rendering it
+ *  against one would read "1 of 253 developed systems" about a row that names no system. */
 function toFactionCategory(id: AlertCategoryId, instances: AlertInstance[]): FactionAlertCategory {
   return { id, unit: "faction", count: instances.length, instances: sortedInstances(instances) };
 }
@@ -604,68 +590,10 @@ export function getAlertData(): AlertData {
     }
   }
 
-  // ── The three event categories: Crisis / Disruption / Windfall. Scoped
-  // wider than `developed` — events in the player's developed systems, PLUS the relations-owned pair
-  // events (border_conflict, pact_under_negotiation, alliance_dissolved — the only WorldEvent rows
-  // carrying `metadata`) where the player's faction is one of the pair, regardless of which system
-  // (or no system at all) the event carries. The count is INSTANCES, not systems — a region-target
-  // phase applies to a whole region from one instance, and the two metadata-only types spawn with no
-  // system at all, so counting systems would misreport both. Crisis/Disruption sort by the authored
-  // impactRank (EVENT_BAND, lib/constants/ui.ts) ascending — band is already fixed by which category
-  // array an instance lands in, so this is compareEventSeverity's ordering restricted to one band,
-  // where it reduces to the impactRank comparison alone. Windfall sorts by ticksRemaining ascending,
-  // soonest to expire first. ──
-  const developedIds = new Set(developed.map((s) => s.id));
-  const crisis: AlertInstance[] = [];
-  const disruption: AlertInstance[] = [];
-  const windfall: AlertInstance[] = [];
-  for (const event of world.events) {
-    const belongsToPlayer =
-      event.metadata !== null
-        ? event.metadata.factionAId === player.controlledFactionId ||
-          event.metadata.factionBId === player.controlledFactionId
-        : event.systemId !== null && developedIds.has(event.systemId);
-    if (!belongsToPlayer) continue;
-
-    // EVENT_DEFINITIONS and EVENT_BAND are both total Records over the event-type union, so both
-    // index bare — only the phase LOOKUP inside a definition can miss (a row carrying a phase name
-    // its definition no longer lists), and that one keeps its guard.
-    const def = EVENT_DEFINITIONS[event.type];
-    const phaseLabel = def.phases.find((p) => p.name === event.phase)?.displayName ?? event.phase;
-    const eventName = def.name;
-    const name = event.systemId !== null ? (systemNameById().get(event.systemId) ?? event.systemId) : eventName;
-    const bandInfo = EVENT_BAND[event.type];
-
-    if (bandInfo.band === "crisis") {
-      crisis.push({
-        systemId: event.systemId,
-        name,
-        measure: `${eventName} — ${phaseLabel}`,
-        sortKey: bandInfo.impactRank,
-      });
-    } else if (bandInfo.band === "disruption") {
-      disruption.push({
-        systemId: event.systemId,
-        name,
-        measure: `${eventName} — ${phaseLabel}`,
-        sortKey: bandInfo.impactRank,
-      });
-    } else {
-      const ticksRemaining = Math.max(0, event.phaseStartTick + event.phaseDuration - world.meta.currentTick);
-      windfall.push({
-        systemId: event.systemId,
-        name,
-        measure: `${formatDuration(ticksRemaining)} remaining`,
-        sortKey: ticksRemaining,
-      });
-    }
-  }
-
   const categories: AlertCategory[] = [
     toSystemCategory("population_collapse", populationCollapse, denominator),
     toSystemCategory("strike", strike, denominator),
     toFactionCategory("maintenance_unfunded", maintenanceUnfunded),
-    toEventCategory("crisis", crisis),
     toSystemCategory("deprived_worlds", deprivedWorlds, denominator),
     toSystemCategory("unrest_rising", unrestRising, denominator),
     toSystemCategory("survival_stock_falling", survivalStockFalling, denominator),
@@ -674,10 +602,8 @@ export function getAlertData(): AlertData {
     toSystemCategory("no_housing_headroom", noHousingHeadroom, denominator),
     toSystemCategory("build_blocked", buildBlocked, denominator),
     toSystemCategory("industry_idle", industryIdle, denominator),
-    toEventCategory("disruption", disruption),
     toSystemCategory("build_opportunity", buildOpportunity, denominator),
     toControlledSystemCategory("colony_opportunity", colonyOpportunity, controlled.length),
-    toEventCategory("windfall", windfall),
   ];
 
   // Registry-driven order: tier first, then the authored `order` within it — read from

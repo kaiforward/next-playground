@@ -730,10 +730,6 @@ export interface WorldEvent {
   startTick: number;
   phaseStartTick: number;
   phaseDuration: number;
-  /** Intensity multiplier (spread events are weaker). */
-  severity: number;
-  /** Parent event, for spread events. */
-  sourceEventId: string | null;
   /** Only populated for relations-spawned events. */
   metadata: WorldEventMetadata | null;
 }
@@ -742,7 +738,7 @@ export interface WorldEventModifier {
   eventId: string;
   /** "economy" today; open-ended for future layers (war, reputation). */
   domain: string;
-  /** "anchor_shift", "rate_multiplier", "equilibrium_shift". */
+  /** "anchor_shift", "rate_multiplier". */
   type: string;
   /** "system" or "region". */
   targetType: string;

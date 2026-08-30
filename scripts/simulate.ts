@@ -930,10 +930,10 @@ export function formatTable(results: HarnessResults): string {
     lines.push("");
     lines.push(`Event Impact (top ${topEvents.length} of ${eventImpacts.length}):`);
 
-    const eWidths = [20, 16, 12, 5, 9, 30];
+    const eWidths = [20, 16, 12, 9, 30];
 
     lines.push(...renderTable(
-      ["Type", "System", "Ticks", "Sev", "Price Δ", "Top Movers"],
+      ["Type", "System", "Ticks", "Price Δ", "Top Movers"],
       eWidths,
       topEvents.map((e) => {
         const priceSign = e.weightedPriceImpactPct >= 0 ? "+" : "";
@@ -943,15 +943,14 @@ export function formatTable(results: HarnessResults): string {
           .map((g) => `${g.goodId} ${g.changePct >= 0 ? "+" : ""}${g.changePct.toFixed(0)}%`)
           .join(", ");
         return [
-          e.parentEventType !== null ? `  └ ${e.eventType}` : e.eventType,
+          e.eventType,
           e.systemName.length > eWidths[1] ? e.systemName.slice(0, eWidths[1] - 2) + ".." : e.systemName,
           `${e.startTick}-${e.endTick}`,
-          e.severity.toFixed(1),
           `${priceSign}${e.weightedPriceImpactPct.toFixed(1)}%`,
           topMovers || "-",
         ];
       }),
-      ["l", "l", "l", "r", "r", "l"],
+      ["l", "l", "l", "r", "l"],
     ));
   } else {
     lines.push("");

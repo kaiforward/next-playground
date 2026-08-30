@@ -1,151 +1,42 @@
 # Event Catalog
 
-Event arcs and shocks that work with the existing event system. Each entry is a new `EventDefinition` — no engine or processor changes required. Add to `lib/constants/events.ts` and they just work.
+The three event types that exist, all created by the relations processor — never by random
+spawning. See [events.md](./events.md) for the lifecycle these run inside and
+[faction-system.md](./faction-system.md#2-inter-faction-relations) for the relation-score
+thresholds that create them. For future event content — naturals returning, a strike arc, and the
+engine mechanics (branching phases, permanent phases, and the rest) a future arc might need — see
+`docs/ROADMAP.md`'s events re-hook line; nothing there is designed yet.
 
-For speculative event concepts and engine-mechanic ideas that aren't built yet, see [event-ideas.md (planned)](../../planned/event-ideas.md).
+## Border Conflict
 
-## Implemented
+Created when a faction pair's relation score drops to the unfriendly band (≤ -25). Targets a
+representative border system.
 
-These events are live in `lib/constants/events.ts`.
+| Phase | Duration (ticks) | Economy modifiers | Player-facing copy when no modifier applies |
+|---|---|---|---|
+| **Border Tension** | 15-25 | None | "Forces massing at the border" |
+| **Skirmish** | 25-35 | Production ×0.9 at the target system | — (real effect, shows the derived summary) |
+| **De-escalation** | 10-20 | None | "Forces standing down" |
 
-### War
+## Pact Under Negotiation
 
-Target: Industrial, tech, extraction, core systems. Multi-phase arc with spread.
+Created when a faction pair's relation score crosses +75. Single phase, no system or region
+target — a political-map signal only.
 
-| Phase | Duration | Economy Modifiers | Spread |
-|-------|----------|-------------------|--------|
-| **Tensions** | 30-60 | Fuel demand up (x1.4), machinery demand up (x1.5) | — |
-| **Escalation** | 20-40 | Fuel demand up (x1.8), machinery demand up (x1.8), production x0.5 | — |
-| **Active Conflict** | 80-150 | Fuel demand up (x2.5), machinery demand up (x2.0), production x0.2 | conflict_spillover |
-| **Aftermath** | 50-100 | Electronics demand up (x1.8), food demand up (x1.6), production x0.5 | — |
-| **Recovery** | 40-80 | Electronics demand up (x1.2), food demand up (x1.15) | — |
+| Phase | Duration (ticks) | Economy modifiers |
+|---|---|---|
+| **Negotiation** | 5-10 | None |
 
-Player opportunity: Stockpile machinery during tensions, sell during active conflict. Deliver food/electronics during aftermath.
+If the pair's score holds at or above +60 through the window, the alliance forms. Resolution is
+driven by the relations processor's own metadata, not by this phase ending.
 
-### Plague / Blight
+## Alliance Dissolving
 
-Target: Agricultural systems. Multi-phase arc with spread.
+Created when an allied pair's score drops below +50 while a pact is active. Single phase, no
+system or region target.
 
-| Phase | Duration | Economy Modifiers | Spread |
-|-------|----------|-------------------|--------|
-| **Outbreak** | 20-40 | Food production x0.15, food supply shock -80% | — |
-| **Spreading** | 40-80 | Food production x0.1, medicine demand up (x2.0) | plague_risk |
-| **Containment** | 30-60 | Food production x0.4, medicine demand up (x1.6) | — |
-| **Recovery** | 40-60 | Food production x0.7 | — |
+| Phase | Duration (ticks) | Economy modifiers |
+|---|---|---|
+| **Dissolving** | 5 (fixed) | None |
 
-Player opportunity: Rush food imports. Sell medicine. Secondary profit at neighbouring agricultural systems.
-
-### Trade Festival
-
-Target: Core systems. Single-phase event. Weight 8, cooldown 120.
-
-| Phase | Duration | Economy Modifiers |
-|-------|----------|-------------------|
-| **Festival** | 40-80 | Luxury demand up (x2.0), food demand up (x1.4), all-goods anchor up (x1.2) |
-
-Player opportunity: Sell luxuries and food at premium prices.
-
-### Mining Boom
-
-Target: Extraction systems. Multi-phase arc with spread. Weight 10, cooldown 100.
-
-| Phase | Duration | Economy Modifiers | Spread |
-|-------|----------|-------------------|--------|
-| **Discovery** | 20-30 | Ore anchor down (x0.56, cheaper), ore production x1.5 | — |
-| **Boom** | 60-100 | Ore anchor down (x0.40, cheapest), ore production x2.0, food demand up (x1.4), luxury demand up (x1.5) | ore_glut in region |
-| **Peak** | 40-60 | Ore production x1.8, food demand up (x1.6) | — |
-| **Depletion** | 60-100 | Ore production x0.5, ore anchor up (x1.43, pricier) | — |
-
-Player opportunity: Buy cheap ore during boom, sell to industrial systems. Sell food/luxuries to booming system. After depletion, the system is worse off — avoid buying ore there.
-
-### Supply Shortage
-
-Target: Any system. Single-phase shock event. Weight 8, cooldown 80.
-
-| Phase | Duration | Economy Modifiers |
-|-------|----------|-------------------|
-| **Shortage** | 30-60 | All-goods anchor up (x3.0, all prices sharply higher), food supply shock -50%, fuel supply shock -50% |
-
-Player opportunity: Deliver goods (especially food and fuel) for premium prices.
-
-### Pirate Raid
-
-Target: Any system. Two-phase arc. Weight 8, cooldown 80.
-
-| Phase | Duration | Economy Modifiers |
-|-------|----------|-------------------|
-| **Raiding** | 40-80 | All-goods anchor up (x1.67), weapons demand up (x2.0), electronics supply shock -25% |
-| **Crackdown** | 20-40 | Machinery demand up (x1.6) |
-
-Player opportunity: Buy discounted goods during raiding. Supply machinery during crackdown.
-
-### Solar Storm
-
-Target: Any system. Short, intense two-phase event. Weight 6, cooldown 40.
-
-| Phase | Duration | Economy Modifiers |
-|-------|----------|-------------------|
-| **Storm** | 15-30 | All production x0.05, electronics supply shock -50% |
-| **Clearing** | 10-20 | All production x0.3 |
-
-Player opportunity: Rush in during clearing to buy goods at disrupted prices before production recovers.
-
-### Conflict Spillover (child event)
-
-Spawned by War spread. Reduced severity (0.3x).
-
-### Plague Risk (child event)
-
-Spawned by Plague spread at neighbouring agricultural systems. Reduced severity (0.3x).
-
-### Ore Glut (child event)
-
-Spawned by Mining Boom spread. Reduced severity (0.4x). Ore supply surplus depresses local prices.
-
-### Refugee Crisis
-
-Target: Core, agricultural systems. Multi-phase arc with spread. Weight 8, cooldown 100.
-
-| Phase | Duration | Economy Modifiers | Spread |
-|-------|----------|-------------------|--------|
-| **Influx** | 20-40 | Food demand up (x1.6), medicine demand up (x1.4), food supply shock -30% | — |
-| **Overcrowding** | 40-80 | Food demand up (x2.0), medicine demand up (x1.8), production x0.7 | plague_risk in region |
-| **Settlement** | 30-60 | Food demand up (x1.3), medicine demand up (x1.15) | — |
-
-Player opportunity: Rush food and medicine imports during influx/overcrowding. High demand creates premium prices. Watch for plague spreading to agricultural neighbors.
-
-### Trade Embargo
-
-Target: Core, industrial systems. Multi-phase arc. Weight 6, cooldown 120.
-
-| Phase | Duration | Economy Modifiers |
-|-------|----------|-------------------|
-| **Imposed** | 20-40 | All-goods anchor up (x2.33, all prices up sharply), production x0.7 |
-| **Enforcement** | 40-80 | All-goods anchor up (x4.0, maximum cap, all prices maximally elevated), production x0.5, electronics supply shock -50%, machinery supply shock -50% |
-| **Easing** | 30-60 | All-goods anchor up (x1.5) |
-
-Player opportunity: Deliver electronics and machinery during enforcement for massive premiums. All goods are profitable due to blanket supply suppression.
-
-### Tech Breakthrough
-
-Target: Tech systems. Multi-phase arc (positive event). Weight 7, cooldown 120.
-
-| Phase | Duration | Economy Modifiers |
-|-------|----------|-------------------|
-| **Discovery** | 15-30 | Electronics production x1.5, machinery demand up (x1.4) |
-| **Innovation** | 40-80 | Electronics production x2.5, electronics anchor down (x0.56, cheaper), machinery demand up (x1.8) |
-| **Adoption** | 30-60 | Electronics production x1.5, electronics anchor down (x0.77, slightly cheaper), machinery demand up (x1.2) |
-
-Player opportunity: Buy cheap electronics during innovation phase, sell to systems that need them. Deliver machinery to the tech system for good prices.
-
-### Asteroid Strike
-
-Target: Extraction systems. Multi-phase arc. Weight 5, cooldown 80.
-
-| Phase | Duration | Economy Modifiers |
-|-------|----------|-------------------|
-| **Impact** | 10-20 | All production x0.05, ore supply shock -70%, fuel supply shock -50% |
-| **Aftermath** | 40-80 | All production x0.3, machinery demand up (x1.8) |
-| **Recovery** | 30-60 | All production x0.7 |
-
-Player opportunity: Deliver machinery during aftermath for high rewards.
+After the window the alliance pact is removed by the relations processor.

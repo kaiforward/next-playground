@@ -102,11 +102,19 @@ describe("runTickHarness: founding instruments", () => {
     // The event board is read at the tick the shortfall happened: a founder sparing less under an
     // active event is a shortfall the design accepts, and by run end that event is long gone.
     expect(stalls.materialsShort).toBeGreaterThan(0);
-    // Deliberate behaviour anchor, not a structural identity: it needs an event to land on a
-    // founder system inside this run (it does, on this seed), and it is what fails if the event
-    // board stops being read at the shortfall's own tick. If seed or event tuning flips it,
-    // re-anchor the fixture — do not delete the attribution check.
-    expect(stalls.materialsShortUnderEvent).toBeGreaterThan(0);
+    // Post-strip, the only events left are the relations trio, spawned by faction-pair scores
+    // crossing thresholds — typically hundreds of ticks in. This 240-tick CONFIG never reaches
+    // one, so no founder system is ever under an active event and the count is genuinely 0 —
+    // structurally unreachable on this fixture, not a broken wire. Re-anchor to a longer/differently-
+    // seeded run once a run is found where a founder system sits under a relations event; do not
+    // delete the attribution check. The attribution's own wiring — that a stall recorded while its
+    // source system is on the event board actually reaches `materialsShortUnderEvent`, and one that
+    // isn't does not — is proven at unit level where it can be forced to fire:
+    // lib/tick-harness/__tests__/build-analysis.test.ts "founding lifecycle — stall attribution >
+    // keeps the three causes apart, and counts a materials shortfall as neither" constructs both a
+    // materials-shortfall stall recorded under an event and one recorded without, and asserts the
+    // counter reads only the former.
+    expect(stalls.materialsShortUnderEvent).toBe(0);
     expect(stalls.materialsShortUnderEvent).toBeLessThanOrEqual(stalls.materialsShort);
   }, 60_000);
 

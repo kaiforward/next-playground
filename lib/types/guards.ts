@@ -150,13 +150,6 @@ export function isEventTypeId(value: string): value is EventTypeId {
   return value in EVENT_DEFINITIONS;
 }
 
-export function toEventTypeId(value: string): EventTypeId {
-  if (!isEventTypeId(value)) {
-    throw new Error(`Invalid event type: "${value}"`);
-  }
-  return value;
-}
-
 const SUN_CLASS_IDS: ReadonlySet<string> = new Set(Object.keys(SUN_CLASSES));
 const BODY_ARCHETYPE_IDS: ReadonlySet<string> = new Set(Object.keys(BODY_ARCHETYPES));
 

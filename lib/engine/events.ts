@@ -8,8 +8,6 @@ import type {
   EventDefinition,
   EventPhaseDefinition,
   EventTypeId,
-  ModifierTemplate,
-  SpreadRule,
 } from "@/lib/constants/events";
 
 // ── Types ───────────────────────────────────────────────────────
@@ -24,15 +22,6 @@ export interface EventSnapshot {
   startTick: number;
   phaseStartTick: number;
   phaseDuration: number;
-  severity: number;
-  sourceEventId: string | null;
-}
-
-/** Minimal system representation for spawn selection. */
-export interface SystemSnapshot {
-  id: string;
-  economyType: string;
-  regionId: string;
 }
 
 /** Result of a phase transition check. */
@@ -57,28 +46,12 @@ export interface AggregatedModifiers {
   consumptionMult: number;
 }
 
-/** Decision to spawn a new event. */
-export interface SpawnDecision {
-  type: EventTypeId;
-  systemId: string;
-  regionId: string;
-  phase: string;
-  phaseDuration: number;
-  severity: number;
-}
-
 /** Caps applied during aggregation. */
 export interface ModifierCaps {
   minAnchorMult: number;
   maxAnchorMult: number;
   minMultiplier: number;
   maxMultiplier: number;
-}
-
-/** Spawn constraints. */
-export interface SpawnCaps {
-  maxEventsGlobal: number;
-  maxEventsPerSystem: number;
 }
 
 // ── Phase transitions ───────────────────────────────────────────
@@ -107,30 +80,13 @@ export function checkPhaseTransition(
 // ── Modifier building ───────────────────────────────────────────
 
 /**
- * Scale a modifier template value by event severity.
- *
- * All modifier types lerp toward 1.0: `1 + (value - 1) × severity`.
- * For anchor_shift (a multiplier), 2.0 at severity 0.5 → 1.5; rate_multiplier
- * uses the same formula.
- */
-function scaleValue(
-  template: ModifierTemplate,
-  severity: number,
-): number {
-  // All types: lerp toward 1.0 (neutral)
-  return 1 + (template.value - 1) * severity;
-}
-
-/**
- * Build concrete modifier rows for a given phase.
- *
- * Resolves "system"/"region" targets to actual IDs and applies severity scaling.
+ * Build concrete modifier rows for a given phase, resolving "system"/"region"
+ * targets to actual IDs.
  */
 export function buildModifiersForPhase(
   phase: EventPhaseDefinition,
   systemId: string | null,
   regionId: string | null,
-  severity: number,
 ): ModifierRow[] {
   return phase.modifiers.map((template) => {
     const targetId = template.target === "system" ? systemId : regionId;
@@ -141,7 +97,7 @@ export function buildModifiersForPhase(
       targetId,
       goodId: template.goodId ?? null,
       parameter: template.parameter,
-      value: scaleValue(template, severity),
+      value: template.value,
     };
   });
 }
@@ -183,7 +139,7 @@ export function aggregateModifiers(
   };
 }
 
-// ── Spawn selection ─────────────────────────────────────────────
+// ── Phase duration ──────────────────────────────────────────────
 
 /**
  * Roll a phase duration from a [min, max] range using injected RNG.
@@ -195,240 +151,4 @@ export function rollPhaseDuration(
   const [min, max] = range;
   if (min > max) throw new Error(`Invalid duration range: [${min}, ${max}]`);
   return Math.floor(min + rng() * (max - min + 1));
-}
-
-/**
- * Select up to `batchSize` events to spawn in a single tick.
- *
- * Each pick checks the global cap, the per-type cap, the per-system cap and the per-(system, type)
- * cooldown, and filters systems by economy type; selection is weighted-random among the eligible
- * (definition, system) pairs. Running type/system counts are updated between picks so the caps are
- * respected within the batch. Cooldown tracking uses `systemTypeLastEnd` to prevent the same event
- * type re-spawning on a system too soon after expiry.
- */
-export function selectEventsToSpawn(
-  definitions: Record<string, EventDefinition>,
-  activeEvents: EventSnapshot[],
-  systems: SystemSnapshot[],
-  tick: number,
-  caps: SpawnCaps,
-  rng: () => number,
-  batchSize: number = 10,
-): SpawnDecision[] {
-  const results: SpawnDecision[] = [];
-
-  // Build mutable per-type count and per-system count from active events
-  const typeCount = new Map<string, number>();
-  const systemCount = new Map<string, number>();
-  const systemTypeLastEnd = new Map<string, number>();
-
-  for (const ev of activeEvents) {
-    typeCount.set(ev.type, (typeCount.get(ev.type) ?? 0) + 1);
-    if (ev.systemId) {
-      systemCount.set(ev.systemId, (systemCount.get(ev.systemId) ?? 0) + 1);
-    }
-    if (ev.systemId) {
-      const key = `${ev.systemId}:${ev.type}`;
-      const prev = systemTypeLastEnd.get(key) ?? 0;
-      if (ev.startTick > prev) systemTypeLastEnd.set(key, ev.startTick);
-    }
-  }
-
-  let totalActive = activeEvents.length;
-
-  for (let i = 0; i < batchSize; i++) {
-    // Global cap check (including events spawned in this batch)
-    if (totalActive >= caps.maxEventsGlobal) break;
-
-    // Build eligible candidates with current running counts
-    interface Candidate {
-      definition: EventDefinition;
-      system: SystemSnapshot;
-      weight: number;
-    }
-    const candidates: Candidate[] = [];
-
-    for (const def of Object.values(definitions)) {
-      if (def.weight <= 0) continue;
-      if ((typeCount.get(def.type) ?? 0) >= def.maxActive) continue;
-
-      for (const sys of systems) {
-        if (def.targetFilter?.economyTypes) {
-          if (!def.targetFilter.economyTypes.some((t) => t === sys.economyType)) continue;
-        }
-        if ((systemCount.get(sys.id) ?? 0) >= caps.maxEventsPerSystem) continue;
-        const cooldownKey = `${sys.id}:${def.type}`;
-        const lastStart = systemTypeLastEnd.get(cooldownKey);
-        if (lastStart !== undefined && tick - lastStart < def.cooldown) continue;
-
-        candidates.push({ definition: def, system: sys, weight: def.weight });
-      }
-    }
-
-    if (candidates.length === 0) break;
-
-    // Weighted random selection
-    const totalWeight = candidates.reduce((sum, c) => sum + c.weight, 0);
-    let roll = rng() * totalWeight;
-    let picked: Candidate | null = null;
-
-    for (const candidate of candidates) {
-      roll -= candidate.weight;
-      if (roll <= 0) {
-        picked = candidate;
-        break;
-      }
-    }
-
-    // Fallback for floating-point edge cases
-    if (!picked) {
-      picked = candidates[candidates.length - 1];
-    }
-
-    const firstPhase = picked.definition.phases[0];
-    const decision: SpawnDecision = {
-      type: picked.definition.type,
-      systemId: picked.system.id,
-      regionId: picked.system.regionId,
-      phase: firstPhase.name,
-      phaseDuration: rollPhaseDuration(firstPhase.durationRange, rng),
-      severity: 1.0,
-    };
-
-    results.push(decision);
-
-    // Update running counts for next iteration
-    totalActive++;
-    typeCount.set(decision.type, (typeCount.get(decision.type) ?? 0) + 1);
-    systemCount.set(decision.systemId, (systemCount.get(decision.systemId) ?? 0) + 1);
-    systemTypeLastEnd.set(`${decision.systemId}:${decision.type}`, tick);
-  }
-
-  return results;
-}
-
-// ── Shock building ──────────────────────────────────────────────
-
-/** A market shock ready for application (severity-scaled). */
-export interface ShockRow {
-  goodId: string;
-  parameter: "supply" | "demand";
-  value: number;
-  /** "absolute" = raw delta, "percentage" = fraction of current market value. */
-  mode: "absolute" | "percentage";
-}
-
-/**
- * Build severity-scaled shock deltas for a phase.
- * Returns empty array if the phase has no shocks.
- *
- * For absolute mode: value is rounded after severity scaling.
- * For percentage mode: value is a fraction (e.g. -0.3), not rounded — applied at market level.
- */
-export function buildShocksForPhase(
-  phase: EventPhaseDefinition,
-  severity: number,
-): ShockRow[] {
-  if (!phase.shocks || phase.shocks.length === 0) return [];
-  return phase.shocks.map((s) => {
-    const mode = s.mode ?? "absolute";
-    const scaledValue = mode === "percentage"
-      ? s.value * severity       // Fraction, not rounded
-      : Math.round(s.value * severity) || 0; // Avoid -0
-
-    return {
-      goodId: s.goodId,
-      parameter: s.parameter,
-      value: scaledValue,
-      mode,
-    };
-  });
-}
-
-// ── Spread evaluation ───────────────────────────────────────────
-
-/** Neighbor system info for spread evaluation. */
-export interface NeighborSnapshot {
-  id: string;
-  economyType: string;
-  regionId: string;
-}
-
-/**
- * Evaluate spread rules and return spawn decisions for neighboring systems.
- *
- * Logic per rule:
- * 1. Filter neighbors by targetFilter (sameRegion, economyTypes)
- * 2. Skip neighbors at per-system cap
- * 3. Skip neighbors that already have the child event type active
- * 4. Roll probability per eligible neighbor
- * 5. Return SpawnDecision with severity = rule.severity × source severity
- */
-export function evaluateSpreadTargets(
-  rules: SpreadRule[],
-  sourceEvent: EventSnapshot,
-  neighbors: NeighborSnapshot[],
-  activeEvents: EventSnapshot[],
-  caps: SpawnCaps,
-  definitions: Record<string, EventDefinition>,
-  rng: () => number,
-): SpawnDecision[] {
-  const decisions: SpawnDecision[] = [];
-
-  // Pre-compute per-system event counts and active event types per system
-  const systemEventCount = new Map<string, number>();
-  const systemActiveTypes = new Map<string, Set<string>>();
-  for (const ev of activeEvents) {
-    if (ev.systemId) {
-      systemEventCount.set(ev.systemId, (systemEventCount.get(ev.systemId) ?? 0) + 1);
-      if (!systemActiveTypes.has(ev.systemId)) {
-        systemActiveTypes.set(ev.systemId, new Set());
-      }
-      systemActiveTypes.get(ev.systemId)!.add(ev.type);
-    }
-  }
-
-  for (const rule of rules) {
-    const childDef = definitions[rule.eventType];
-    if (!childDef) continue;
-
-    for (const neighbor of neighbors) {
-      // Filter: sameRegion
-      if (rule.targetFilter?.sameRegion && neighbor.regionId !== sourceEvent.regionId) {
-        continue;
-      }
-
-      // Filter: economyTypes
-      if (rule.targetFilter?.economyTypes) {
-        if (!rule.targetFilter.economyTypes.some((t) => t === neighbor.economyType)) {
-          continue;
-        }
-      }
-
-      // Skip: per-system cap
-      if ((systemEventCount.get(neighbor.id) ?? 0) >= caps.maxEventsPerSystem) {
-        continue;
-      }
-
-      // Skip: child event type already active at this neighbor
-      if (systemActiveTypes.get(neighbor.id)?.has(rule.eventType)) {
-        continue;
-      }
-
-      // Roll probability
-      if (rng() >= rule.probability) continue;
-
-      const firstPhase = childDef.phases[0];
-      decisions.push({
-        type: rule.eventType,
-        systemId: neighbor.id,
-        regionId: neighbor.regionId,
-        phase: firstPhase.name,
-        phaseDuration: rollPhaseDuration(firstPhase.durationRange, rng),
-        severity: rule.severity * sourceEvent.severity,
-      });
-    }
-  }
-
-  return decisions;
 }

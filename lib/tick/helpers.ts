@@ -12,7 +12,4 @@ export function mergeGlobalEvents(
   if (src.economyTick) {
     target.economyTick = target.economyTick ? [...target.economyTick, ...src.economyTick] : [...src.economyTick];
   }
-  if (src.eventNotifications) {
-    target.eventNotifications = target.eventNotifications ? [...target.eventNotifications, ...src.eventNotifications] : [...src.eventNotifications];
-  }
 }

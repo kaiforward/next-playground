@@ -27,11 +27,7 @@ import type { EconomySnapshotSystem, WorldInspection } from "@/lib/services/dev-
 
 export interface DevCommandMap {
   advanceTicks: { payload: { count: number }; data: { newTick: number; elapsed: number } };
-  spawnEvent: {
-    payload: { systemId: string; eventType: string; severity?: number };
-    data: { eventId: string; type: string; phase: string };
-  };
-  resetEconomy: { payload: null; data: { marketsReset: number; eventsCleared: number } };
+  resetEconomy: { payload: null; data: { marketsReset: number } };
   economySnapshot: { payload: null; data: { systems: EconomySnapshotSystem[] } };
   inspectWorld: { payload: null; data: WorldInspection };
 }
@@ -53,13 +49,10 @@ export type DevCommandResultMessage = {
  * `Engine.dev`. Mirrors that module's own function signatures — only `advanceTicks` is async (it
  * awaits `TickLoop.runTicks`); the rest are synchronous reads/writes, kept that way here so
  * `game-worker.ts`'s `runWorldMutatingCommand` helper (the same tick-boundary queueing every other
- * world-mutating command goes through) can wrap `spawnEvent`/`resetEconomy` directly.
+ * world-mutating command goes through) can wrap `resetEconomy` directly.
  */
 export interface DevHandlers {
   advanceTicks(payload: { count: number }): Promise<CommandResult<DevCommandMap["advanceTicks"]["data"]>>;
-  spawnEvent(
-    payload: DevCommandMap["spawnEvent"]["payload"],
-  ): CommandResult<DevCommandMap["spawnEvent"]["data"]>;
   resetEconomy(): CommandResult<DevCommandMap["resetEconomy"]["data"]>;
   economySnapshot(): CommandResult<DevCommandMap["economySnapshot"]["data"]>;
   inspectWorld(): CommandResult<DevCommandMap["inspectWorld"]["data"]>;
@@ -70,7 +63,6 @@ export async function loadDevHandlers(): Promise<DevHandlers> {
   const devTools = await import("@/lib/services/dev-tools");
   return {
     advanceTicks: (payload) => devTools.advanceTicks(payload.count),
-    spawnEvent: (payload) => devTools.spawnEvent(payload),
     resetEconomy: () => devTools.resetEconomy(),
     economySnapshot: () => devTools.getEconomySnapshot(),
     inspectWorld: () => devTools.inspectWorld(),

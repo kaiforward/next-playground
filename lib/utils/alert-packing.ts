@@ -127,7 +127,7 @@ export const CRITICAL_STACK_SLIVER = 8;
  * The trailing "+N" chip's footprint — narrower than an ordinary chip since it carries no icon, just
  * a number. Same arithmetic as `chipWidth` with the icon and its `gap-1.5` removed: border 2px +
  * `px-[9px]` 18px + the label's own glyphs at `CHIP_DIGIT_WIDTH` each in 13px monospace. The widest
- * label the run can produce is `+12` — sixteen categories less the four critical ones it may never
+ * label the run can produce is `+10` — thirteen categories less the three critical ones it may never
  * fold — so three glyphs, giving 20 + 24 = 44, rounded up to 46: an underestimate lets `layoutRun`
  * certify a fit that overflows, while an overestimate only packs one step more conservatively than
  * it had to.

@@ -16,7 +16,7 @@ import { BUILDING_TYPES, HOUSING_TYPE, POP_CENTRE_DENSITY, INPUT_DEMAND_MULTIPLI
 import { GOOD_NAMES } from "@/lib/constants/goods";
 import { GOOD_NECESSITY, SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
-import { EVENT_DEFINITIONS } from "@/lib/constants/events";
+import type { EventPhaseDefinition } from "@/lib/constants/events";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { BODY_ARCHETYPES, ORBIT_ROLL_SPREAD } from "@/lib/constants/bodies";
 import { consumptionRate } from "@/lib/engine/physical-economy";
@@ -339,7 +339,17 @@ describe("transient event shocks — a shock's duration, not just its magnitude,
     // satisfaction level for the shock's duration (worse than reality, which has stock buffers).
     // "Whole cycles": the population processor runs once per CYCLE_LENGTH ticks, so the shock's
     // effect is applied as that many whole accumulateUnrest steps, rounding its duration UP.
-    const stormPhase = EVENT_DEFINITIONS.solar_storm.phases.find((p) => p.name === "storm")!;
+    // A synthetic phase, deliberately not sourced from EVENT_DEFINITIONS: no shipped definition
+    // carries a system-wide production crash, and the claim under test is the unrest math's
+    // tolerance for a transient shock of this shape, not any live definition's tuning.
+    const stormPhase: EventPhaseDefinition = {
+      name: "storm",
+      displayName: "Solar Storm",
+      durationRange: [15, 30],
+      modifiers: [
+        { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.05 },
+      ],
+    };
     const productionMultiplier = stormPhase.modifiers.find((m) => m.parameter === "production_rate")!.value;
     const eventCycles = Math.ceil(stormPhase.durationRange[1] / CYCLE_LENGTH);
 

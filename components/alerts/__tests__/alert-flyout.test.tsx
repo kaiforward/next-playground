@@ -12,7 +12,6 @@ import type {
   AlertCategory,
   AlertInstance,
   ControlledSystemsAlertCategory,
-  EventAlertCategory,
   FactionAlertCategory,
   SystemScopedAlertCategory,
 } from "@/lib/types/api";
@@ -59,10 +58,6 @@ const maintenanceUnfunded: FactionAlertCategory = {
   instances: [instance("The Terran Compact", "$1.2M short", null)],
 };
 
-function crisisWith(instances: AlertInstance[]): EventAlertCategory {
-  return { id: "crisis", unit: "events", count: instances.length, instances };
-}
-
 function manyInstances(n: number): AlertInstance[] {
   return Array.from({ length: n }, (_, i) => instance(`System ${i}`, `Provision ${i}%`, `sys-${i}`, i));
 }
@@ -103,22 +98,6 @@ describe("resolveAlertTarget — the row's destination, resolved off the categor
     });
   });
 
-  it("an event WITH a systemId resolves to that system's root (no authored tab)", () => {
-    const withSystem = crisisWith([instance("Border skirmish", "3 ticks left", "sys-z")]);
-    expect(resolveAlertTarget(withSystem, withSystem.instances[0])).toEqual({
-      kind: "system",
-      systemId: "sys-z",
-      tab: "",
-    });
-  });
-
-  it("an event with NO systemId resolves to the faction panel's Events tab — no map focus attempted", () => {
-    const regionLevel = crisisWith([instance("Alliance dissolved", "2 ticks left", null)]);
-    expect(resolveAlertTarget(regionLevel, regionLevel.instances[0])).toEqual({
-      kind: "faction",
-      tab: "events",
-    });
-  });
 });
 
 describe("alertFooterText — states the denominator for a system-scoped category, the unit otherwise, nothing for faction", () => {
@@ -128,10 +107,6 @@ describe("alertFooterText — states the denominator for a system-scoped categor
 
   it("controlled_systems states ITS OWN denominator, not the developed-systems one", () => {
     expect(alertFooterText(colonyOpportunity)).toBe("1 of 12 controlled systems");
-  });
-
-  it("events states the unit, no denominator", () => {
-    expect(alertFooterText(crisisWith(manyInstances(3)))).toBe("3 events");
   });
 
   it("faction returns null — a count that's always 1 by construction carries no information to state", () => {
@@ -197,15 +172,5 @@ describe("AlertFlyout — row activation", () => {
     expect(screen.getByRole("button", { name: /Rigel/ })).toBeInTheDocument();
     // The trigger, plus Sunnyvale and Rigel's own rows.
     expect(screen.getAllByRole("button")).toHaveLength(3);
-  });
-
-  it("an event row with no systemId calls onNavigate with the faction Events tab, never a system target", async () => {
-    const onNavigate = vi.fn();
-    const regionLevel = crisisWith([instance("Alliance dissolved", "2 ticks left", null)]);
-    const { user } = await renderOpenFlyout(regionLevel, onNavigate);
-
-    await user.click(screen.getByRole("button", { name: /Alliance dissolved/ }));
-
-    expect(onNavigate).toHaveBeenCalledWith({ kind: "faction", tab: "events" });
   });
 });

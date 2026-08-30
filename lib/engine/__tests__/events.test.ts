@@ -2,18 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   checkPhaseTransition,
   buildModifiersForPhase,
-  buildShocksForPhase,
-  evaluateSpreadTargets,
   aggregateModifiers,
-  selectEventsToSpawn,
   rollPhaseDuration,
   type EventSnapshot,
-  type SpawnDecision,
-  type SystemSnapshot,
-  type NeighborSnapshot,
   type ModifierRow,
 } from "../events";
-import { MODIFIER_CAPS, type EventDefinition, type EventPhaseDefinition, type SpreadRule } from "@/lib/constants/events";
+import { MODIFIER_CAPS, type EventDefinition } from "@/lib/constants/events";
 
 type ModifierCaps = typeof MODIFIER_CAPS;
 
@@ -30,12 +24,9 @@ function makeDefinition(
   overrides: Partial<EventDefinition> = {},
 ): EventDefinition {
   return {
-    type: "inner_system_conflict",
+    type: "border_conflict",
     name: "Test Event",
     description: "A test event",
-    cooldown: 50,
-    maxActive: 5,
-    weight: 10,
     phases: [
       {
         name: "phase_one",
@@ -77,15 +68,13 @@ function makeSnapshot(
 ): EventSnapshot {
   return {
     id: "evt-1",
-    type: "inner_system_conflict",
+    type: "border_conflict",
     phase: "phase_one",
     systemId: "sys-1",
     regionId: "reg-1",
     startTick: 100,
     phaseStartTick: 100,
     phaseDuration: 15,
-    severity: 1.0,
-    sourceEventId: null,
     ...overrides,
   };
 }
@@ -132,7 +121,7 @@ describe("buildModifiersForPhase", () => {
   const def = makeDefinition();
 
   it("builds modifier rows with system target resolved", () => {
-    const rows = buildModifiersForPhase(def.phases[0], "sys-1", "reg-1", 1.0);
+    const rows = buildModifiersForPhase(def.phases[0], "sys-1", "reg-1");
     expect(rows).toHaveLength(1);
     expect(rows[0]).toEqual({
       domain: "economy",
@@ -159,43 +148,18 @@ describe("buildModifiersForPhase", () => {
         value: 2.0,
       }],
     };
-    const rows = buildModifiersForPhase(regionPhase, "sys-1", "reg-1", 1.0);
+    const rows = buildModifiersForPhase(regionPhase, "sys-1", "reg-1");
     expect(rows[0].targetType).toBe("region");
     expect(rows[0].targetId).toBe("reg-1");
   });
 
-  it("scales anchor_shift values by lerping toward 1.0", () => {
-    const rows = buildModifiersForPhase(def.phases[0], "sys-1", "reg-1", 0.5);
-    // value = 1.5, severity = 0.5 → 1 + (1.5 - 1) × 0.5 = 1.25
-    expect(rows[0].value).toBe(1.25);
-  });
-
-  it("scales rate_multiplier values by lerping toward 1.0", () => {
-    const rows = buildModifiersForPhase(def.phases[1], "sys-1", "reg-1", 0.5);
-    // value = 0.5, severity = 0.5 → 1 + (0.5 - 1) × 0.5 = 0.75
-    expect(rows[0].value).toBe(0.75);
-  });
-
-  it("returns full severity at 1.0 (anchor_shift)", () => {
-    const rows = buildModifiersForPhase(def.phases[0], "sys-1", "reg-1", 1.0);
-    expect(rows[0].value).toBe(1.5);
-  });
-
-  it("returns full severity at 1.0 (rate_multiplier)", () => {
-    const rows = buildModifiersForPhase(def.phases[1], "sys-1", "reg-1", 1.0);
+  it("passes rate_multiplier values through unscaled", () => {
+    const rows = buildModifiersForPhase(def.phases[1], "sys-1", "reg-1");
     expect(rows[0].value).toBe(0.5);
   });
 
-  it("returns neutral values at severity 0", () => {
-    const shiftRows = buildModifiersForPhase(def.phases[0], "sys-1", "reg-1", 0);
-    expect(shiftRows[0].value).toBe(1.0); // anchor_shift lerps to 1.0
-
-    const multRows = buildModifiersForPhase(def.phases[1], "sys-1", "reg-1", 0);
-    expect(multRows[0].value).toBe(1.0); // rate_multiplier lerps to 1.0
-  });
-
   it("sets null goodId when template has null", () => {
-    const rows = buildModifiersForPhase(def.phases[1], "sys-1", "reg-1", 1.0);
+    const rows = buildModifiersForPhase(def.phases[1], "sys-1", "reg-1");
     expect(rows[0].goodId).toBeNull();
   });
 });
@@ -253,6 +217,16 @@ describe("aggregateModifiers", () => {
     ];
     const result = aggregateModifiers(mods, "fuel", defaultCaps);
     expect(result.productionMult).toBeCloseTo(0.4); // 0.5 × 0.8
+  });
+
+  it("multiplies consumption-rate modifiers into consumptionMult, independent of productionMult", () => {
+    const mods: ModifierRow[] = [
+      { domain: "economy", type: "rate_multiplier", targetType: "system", targetId: "sys-1", goodId: null, parameter: "consumption_rate", value: 0.5 },
+      { domain: "economy", type: "rate_multiplier", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "consumption_rate", value: 0.8 },
+    ];
+    const result = aggregateModifiers(mods, "fuel", defaultCaps);
+    expect(result.consumptionMult).toBeCloseTo(0.4); // 0.5 × 0.8
+    expect(result.productionMult).toBe(1); // the other rate arm is untouched
   });
 
   it("caps anchor to maxAnchorMult", () => {
@@ -315,430 +289,5 @@ describe("rollPhaseDuration", () => {
 
   it("works with single-value range", () => {
     expect(rollPhaseDuration([15, 15], () => 0.5)).toBe(15);
-  });
-});
-
-// ── selectEventsToSpawn — one pick ──────────────────────────────
-
-describe("selectEventsToSpawn, single pick", () => {
-  const defs: Record<string, EventDefinition> = {
-    inner_system_conflict: makeDefinition(),
-  };
-
-  const systems: SystemSnapshot[] = [
-    { id: "sys-1", economyType: "extraction", regionId: "reg-1" },
-    { id: "sys-2", economyType: "agricultural", regionId: "reg-1" },
-    { id: "sys-3", economyType: "core", regionId: "reg-2" },
-  ];
-
-  const defaultCapsSpawn = { maxEventsGlobal: 15, maxEventsPerSystem: 2 };
-
-  /** The batch selector held to one pick — the single-spawn contract these cases assert. */
-  const selectOne = (
-    definitions: Record<string, EventDefinition>,
-    activeEvents: EventSnapshot[],
-    spawnSystems: SystemSnapshot[],
-    tick: number,
-    caps: { maxEventsGlobal: number; maxEventsPerSystem: number },
-    rng: () => number,
-  ): SpawnDecision | null =>
-    selectEventsToSpawn(definitions, activeEvents, spawnSystems, tick, caps, rng, 1)[0] ?? null;
-
-  it("returns a spawn decision when eligible", () => {
-    const result = selectOne(defs, [], systems, 100, defaultCapsSpawn, () => 0.5);
-    expect(result).not.toBeNull();
-    expect(result!.type).toBe("inner_system_conflict");
-  });
-
-  it("returns null when global cap reached", () => {
-    const events = Array.from({ length: 15 }, (_, i) =>
-      makeSnapshot({ id: `evt-${i}`, systemId: `sys-other-${i}` }),
-    );
-    const result = selectOne(defs, events, systems, 100, defaultCapsSpawn, () => 0.5);
-    expect(result).toBeNull();
-  });
-
-  it("returns null when per-type cap reached", () => {
-    const events = Array.from({ length: 5 }, (_, i) =>
-      makeSnapshot({ id: `evt-${i}`, type: "inner_system_conflict", systemId: `sys-other-${i}` }),
-    );
-    const result = selectOne(defs, events, systems, 100, defaultCapsSpawn, () => 0.5);
-    expect(result).toBeNull();
-  });
-
-  it("skips systems at per-system cap", () => {
-    // sys-1 has 2 events already (at cap)
-    const events = [
-      makeSnapshot({ id: "evt-1", type: "plague", systemId: "sys-1" }),
-      makeSnapshot({ id: "evt-2", type: "mining_boom", systemId: "sys-1" }),
-    ];
-    const result = selectOne(defs, events, systems, 100, defaultCapsSpawn, () => 0.1);
-    if (result) {
-      expect(result.systemId).not.toBe("sys-1");
-    }
-  });
-
-  it("respects cooldown", () => {
-    // war at sys-1 started at tick 90, cooldown is 50
-    const events = [makeSnapshot({ startTick: 90, systemId: "sys-1", type: "inner_system_conflict" })];
-    // At tick 100, cooldown not expired (90 + 50 > 100)
-    // Only sys-2 and sys-3 remain. The conflict def has no economy filter,
-    // so it can spawn at either.
-    const result = selectOne(defs, events, systems, 100, defaultCapsSpawn, () => 0.1);
-    if (result) {
-      expect(result.systemId).not.toBe("sys-1");
-    }
-  });
-
-  it("respects economy type filter", () => {
-    const filtered: Record<string, EventDefinition> = {
-      inner_system_conflict: makeDefinition({
-        targetFilter: { economyTypes: ["core"] },
-      }),
-    };
-    const result = selectOne(filtered, [], systems, 100, defaultCapsSpawn, () => 0.5);
-    expect(result).not.toBeNull();
-    expect(result!.systemId).toBe("sys-3"); // only core system
-  });
-
-  it("returns null when no systems match filter", () => {
-    const filtered: Record<string, EventDefinition> = {
-      inner_system_conflict: makeDefinition({
-        targetFilter: { economyTypes: ["tech"] },
-      }),
-    };
-    const result = selectOne(filtered, [], systems, 100, defaultCapsSpawn, () => 0.5);
-    expect(result).toBeNull();
-  });
-
-  it("sets severity to 1.0 for fresh spawns", () => {
-    const result = selectOne(defs, [], systems, 100, defaultCapsSpawn, () => 0.5);
-    expect(result!.severity).toBe(1.0);
-  });
-
-  it("spawns with first phase and valid duration", () => {
-    const result = selectOne(defs, [], systems, 100, defaultCapsSpawn, () => 0.5);
-    expect(result!.phase).toBe("phase_one");
-    expect(result!.phaseDuration).toBeGreaterThanOrEqual(10);
-    expect(result!.phaseDuration).toBeLessThanOrEqual(20);
-  });
-
-  it("skips weight-0 definitions (child events)", () => {
-    const childOnly: Record<string, EventDefinition> = {
-      conflict_spillover: makeDefinition({ type: "conflict_spillover", weight: 0 }),
-    };
-    const result = selectOne(childOnly, [], systems, 100, defaultCapsSpawn, () => 0.5);
-    expect(result).toBeNull();
-  });
-});
-
-// ── buildShocksForPhase ─────────────────────────────────────────
-
-describe("buildShocksForPhase", () => {
-  it("returns empty array when no shocks defined", () => {
-    const phase: EventPhaseDefinition = {
-      name: "test",
-      displayName: "Test",
-      durationRange: [10, 20],
-      modifiers: [],
-    };
-    expect(buildShocksForPhase(phase, 1.0)).toEqual([]);
-  });
-
-  it("returns empty array when shocks is empty", () => {
-    const phase: EventPhaseDefinition = {
-      name: "test",
-      displayName: "Test",
-      durationRange: [10, 20],
-      modifiers: [],
-      shocks: [],
-    };
-    expect(buildShocksForPhase(phase, 1.0)).toEqual([]);
-  });
-
-  it("scales shock value by severity", () => {
-    const phase: EventPhaseDefinition = {
-      name: "test",
-      displayName: "Test",
-      durationRange: [10, 20],
-      modifiers: [],
-      shocks: [{ target: "system", goodId: "food", parameter: "supply", value: -30 }],
-    };
-    const shocks = buildShocksForPhase(phase, 0.5);
-    expect(shocks).toHaveLength(1);
-    expect(shocks[0]).toEqual({ goodId: "food", parameter: "supply", value: -15, mode: "absolute" });
-  });
-
-  it("returns full value at severity 1.0", () => {
-    const phase: EventPhaseDefinition = {
-      name: "test",
-      displayName: "Test",
-      durationRange: [10, 20],
-      modifiers: [],
-      shocks: [{ target: "system", goodId: "fuel", parameter: "demand", value: 20 }],
-    };
-    const shocks = buildShocksForPhase(phase, 1.0);
-    expect(shocks[0]).toEqual({ goodId: "fuel", parameter: "demand", value: 20, mode: "absolute" });
-  });
-
-  it("returns zero-value shocks at severity 0", () => {
-    const phase: EventPhaseDefinition = {
-      name: "test",
-      displayName: "Test",
-      durationRange: [10, 20],
-      modifiers: [],
-      shocks: [{ target: "system", goodId: "food", parameter: "supply", value: -30 }],
-    };
-    const shocks = buildShocksForPhase(phase, 0);
-    expect(shocks[0].value).toBe(0);
-    expect(shocks[0].mode).toBe("absolute");
-  });
-
-  it("returns correct goodId and parameter", () => {
-    const phase: EventPhaseDefinition = {
-      name: "test",
-      displayName: "Test",
-      durationRange: [10, 20],
-      modifiers: [],
-      shocks: [
-        { target: "system", goodId: "food", parameter: "supply", value: -30 },
-        { target: "system", goodId: "fuel", parameter: "demand", value: 20 },
-      ],
-    };
-    const shocks = buildShocksForPhase(phase, 1.0);
-    expect(shocks).toHaveLength(2);
-    expect(shocks[0].goodId).toBe("food");
-    expect(shocks[0].parameter).toBe("supply");
-    expect(shocks[1].goodId).toBe("fuel");
-    expect(shocks[1].parameter).toBe("demand");
-  });
-
-  it("handles percentage mode shocks", () => {
-    const phase: EventPhaseDefinition = {
-      name: "test",
-      displayName: "Test",
-      durationRange: [10, 20],
-      modifiers: [],
-      shocks: [{ target: "system", goodId: "food", parameter: "supply", value: -0.5, mode: "percentage" }],
-    };
-    const shocks = buildShocksForPhase(phase, 0.8);
-    expect(shocks).toHaveLength(1);
-    expect(shocks[0].mode).toBe("percentage");
-    // Percentage mode: value × severity (not rounded)
-    expect(shocks[0].value).toBeCloseTo(-0.4); // -0.5 × 0.8
-  });
-});
-
-// ── evaluateSpreadTargets ───────────────────────────────────────
-
-describe("evaluateSpreadTargets", () => {
-  const childDef = makeDefinition({
-    type: "conflict_spillover",
-    weight: 0,
-    phases: [{
-      name: "child_phase",
-      displayName: "Child Phase",
-      durationRange: [20, 40],
-      modifiers: [],
-    }],
-  });
-
-  const defs: Record<string, EventDefinition> = {
-    inner_system_conflict: makeDefinition(),
-    conflict_spillover: childDef,
-  };
-
-  const defaultSpreadCaps = { maxEventsGlobal: 15, maxEventsPerSystem: 2 };
-
-  const neighbors: NeighborSnapshot[] = [
-    { id: "sys-2", economyType: "agricultural", regionId: "reg-1" },
-    { id: "sys-3", economyType: "industrial", regionId: "reg-1" },
-    { id: "sys-4", economyType: "agricultural", regionId: "reg-2" },
-  ];
-
-  const baseRule: SpreadRule = {
-    eventType: "conflict_spillover",
-    probability: 1.0,
-    severity: 0.3,
-  };
-
-  it("returns empty array when no spread rules", () => {
-    const result = evaluateSpreadTargets(
-      [], makeSnapshot(), neighbors, [], defaultSpreadCaps, defs, () => 0,
-    );
-    expect(result).toEqual([]);
-  });
-
-  it("spawns at all neighbors when probability is 1.0 and no filters", () => {
-    const result = evaluateSpreadTargets(
-      [baseRule], makeSnapshot(), neighbors, [], defaultSpreadCaps, defs, () => 0,
-    );
-    expect(result).toHaveLength(3);
-    expect(result.map((d) => d.systemId)).toEqual(["sys-2", "sys-3", "sys-4"]);
-  });
-
-  it("filters neighbors by sameRegion", () => {
-    const rule: SpreadRule = {
-      ...baseRule,
-      targetFilter: { sameRegion: true },
-    };
-    const source = makeSnapshot({ regionId: "reg-1" });
-    const result = evaluateSpreadTargets(
-      [rule], source, neighbors, [], defaultSpreadCaps, defs, () => 0,
-    );
-    // sys-4 is reg-2, should be filtered out
-    expect(result).toHaveLength(2);
-    expect(result.map((d) => d.systemId)).toEqual(["sys-2", "sys-3"]);
-  });
-
-  it("filters neighbors by economyTypes", () => {
-    const rule: SpreadRule = {
-      ...baseRule,
-      targetFilter: { economyTypes: ["agricultural"] },
-    };
-    const result = evaluateSpreadTargets(
-      [rule], makeSnapshot(), neighbors, [], defaultSpreadCaps, defs, () => 0,
-    );
-    // Only sys-2 and sys-4 are agricultural
-    expect(result).toHaveLength(2);
-    expect(result.map((d) => d.systemId)).toEqual(["sys-2", "sys-4"]);
-  });
-
-  it("skips neighbors at per-system cap", () => {
-    const existingEvents = [
-      makeSnapshot({ id: "evt-a", type: "plague", systemId: "sys-2", sourceEventId: null }),
-      makeSnapshot({ id: "evt-b", type: "mining_boom", systemId: "sys-2", sourceEventId: null }),
-    ];
-    const result = evaluateSpreadTargets(
-      [baseRule], makeSnapshot(), neighbors, existingEvents, defaultSpreadCaps, defs, () => 0,
-    );
-    // sys-2 at cap (2 events), should be skipped
-    expect(result.map((d) => d.systemId)).not.toContain("sys-2");
-  });
-
-  it("skips neighbors with same event type already active", () => {
-    const existingEvents = [
-      makeSnapshot({ id: "evt-a", type: "conflict_spillover", systemId: "sys-3", sourceEventId: "evt-parent" }),
-    ];
-    const result = evaluateSpreadTargets(
-      [baseRule], makeSnapshot(), neighbors, existingEvents, defaultSpreadCaps, defs, () => 0,
-    );
-    // sys-3 already has conflict_spillover, should be skipped
-    expect(result.map((d) => d.systemId)).not.toContain("sys-3");
-  });
-
-  it("always spreads when rng returns 0 (below probability)", () => {
-    const rule: SpreadRule = { ...baseRule, probability: 0.5 };
-    const result = evaluateSpreadTargets(
-      [rule], makeSnapshot(), neighbors, [], defaultSpreadCaps, defs, () => 0,
-    );
-    expect(result).toHaveLength(3);
-  });
-
-  it("never spreads when rng returns 1 (at or above probability)", () => {
-    const rule: SpreadRule = { ...baseRule, probability: 0.5 };
-    const result = evaluateSpreadTargets(
-      [rule], makeSnapshot(), neighbors, [], defaultSpreadCaps, defs, () => 1,
-    );
-    expect(result).toHaveLength(0);
-  });
-
-  it("sets severity to rule.severity × source severity", () => {
-    const source = makeSnapshot({ severity: 0.8 });
-    const rule: SpreadRule = { ...baseRule, severity: 0.5 };
-    const result = evaluateSpreadTargets(
-      [rule], source, neighbors, [], defaultSpreadCaps, defs, () => 0,
-    );
-    expect(result[0].severity).toBeCloseTo(0.4); // 0.5 × 0.8
-  });
-
-  it("returns valid SpawnDecision fields", () => {
-    const result = evaluateSpreadTargets(
-      [baseRule], makeSnapshot(), [neighbors[0]], [], defaultSpreadCaps, defs, () => 0,
-    );
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({
-      type: "conflict_spillover",
-      systemId: "sys-2",
-      regionId: "reg-1",
-      phase: "child_phase",
-      severity: 0.3,
-    });
-    expect(result[0].phaseDuration).toBeGreaterThanOrEqual(20);
-    expect(result[0].phaseDuration).toBeLessThanOrEqual(40);
-  });
-
-  it("skips rules for event types not in definitions record", () => {
-    // "plague" is a valid EventTypeId but not in the test's defs record
-    const rule: SpreadRule = { ...baseRule, eventType: "plague" };
-    const result = evaluateSpreadTargets(
-      [rule], makeSnapshot(), neighbors, [], defaultSpreadCaps, defs, () => 0,
-    );
-    expect(result).toEqual([]);
-  });
-});
-
-// ── selectEventsToSpawn ───────────────────────────────────────
-
-describe("selectEventsToSpawn", () => {
-  const defs: Record<string, EventDefinition> = {
-    inner_system_conflict: makeDefinition({ maxActive: 200 }),
-  };
-
-  const systems: SystemSnapshot[] = [
-    { id: "sys-1", economyType: "extraction", regionId: "reg-1" },
-    { id: "sys-2", economyType: "agricultural", regionId: "reg-1" },
-    { id: "sys-3", economyType: "core", regionId: "reg-2" },
-  ];
-
-  const defaultCapsSpawn = { maxEventsGlobal: 150, maxEventsPerSystem: 3 };
-
-  it("returns multiple spawn decisions up to batchSize", () => {
-    const results = selectEventsToSpawn(defs, [], systems, 100, defaultCapsSpawn, () => 0.5, 3);
-    expect(results.length).toBe(3);
-    for (const r of results) {
-      expect(r.type).toBe("inner_system_conflict");
-    }
-  });
-
-  it("respects global cap within batch", () => {
-    const events = Array.from({ length: 148 }, (_, i) =>
-      makeSnapshot({ id: `evt-${i}`, systemId: `sys-other-${i}` }),
-    );
-    // Global cap is 150, 148 active + batchSize 10 → should only spawn 2
-    const results = selectEventsToSpawn(defs, events, systems, 100, defaultCapsSpawn, () => 0.5, 10);
-    expect(results.length).toBe(2);
-  });
-
-  it("respects per-type cap across batch", () => {
-    // maxActive for inner_system_conflict is 5, start with 3 active → can only add 2
-    const typeDefs: Record<string, EventDefinition> = {
-      inner_system_conflict: makeDefinition({ maxActive: 5 }),
-    };
-    const events = Array.from({ length: 3 }, (_, i) =>
-      makeSnapshot({ id: `evt-${i}`, type: "inner_system_conflict", systemId: `sys-other-${i}` }),
-    );
-    const results = selectEventsToSpawn(typeDefs, events, systems, 100, defaultCapsSpawn, () => 0.5, 10);
-    expect(results.length).toBe(2); // 5 - 3 = 2 more conflict events possible
-  });
-
-  it("respects per-system cap across batch", () => {
-    // Only 1 system available, maxEventsPerSystem=3
-    const oneSys: SystemSnapshot[] = [{ id: "sys-1", economyType: "extraction", regionId: "reg-1" }];
-    const results = selectEventsToSpawn(defs, [], oneSys, 100, defaultCapsSpawn, () => 0.5, 10);
-    expect(results.length).toBeLessThanOrEqual(3);
-  });
-
-  it("returns empty array when global cap already reached", () => {
-    const events = Array.from({ length: 150 }, (_, i) =>
-      makeSnapshot({ id: `evt-${i}`, systemId: `sys-other-${i}` }),
-    );
-    const results = selectEventsToSpawn(defs, events, systems, 100, defaultCapsSpawn, () => 0.5);
-    expect(results).toEqual([]);
-  });
-
-  it("returns empty array with no eligible candidates", () => {
-    const results = selectEventsToSpawn({}, [], systems, 100, defaultCapsSpawn, () => 0.5);
-    expect(results).toEqual([]);
   });
 });

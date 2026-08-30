@@ -76,7 +76,6 @@ export interface RelationEventCreate {
   systemId: string | null;
   regionId: string | null;
   phaseDuration: number;
-  severity: number;
   metadata: RelationEventMetadata;
 }
 

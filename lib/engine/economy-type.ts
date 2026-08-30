@@ -3,11 +3,9 @@
  * (depositCounts[r] × potentialYieldMult[r], the extractor capacity weighted by the
  * all-unlocked-bodies deposit-quality pool) + population to one of the six `EconomyType` labels.
  *
- * Not display-only: it drives UI economy badges and `Region.dominantEconomy`, AND event
- * targeting reads it (`targetFilter.economyTypes`, `lib/engine/events.ts`) — several shipped
- * event definitions gate on the label. Nothing in the economy tick reads it directly; production
- * and consumption derive from the physical substrate's worked-prefix yields instead. Thresholds
- * are tuned via the simulator.
+ * Display-only: it drives UI economy badges and `Region.dominantEconomy`. Nothing in the
+ * economy tick reads it directly; production and consumption derive from the physical
+ * substrate's worked-prefix yields instead. Thresholds are tuned via the simulator.
  */
 import type { EconomyType, ResourceVector } from "@/lib/types/game";
 import { RESOURCE_TYPES, emptyResourceVector } from "./resources";

@@ -191,7 +191,6 @@ export function borderConflictTemplate(
     systemId,
     regionId,
     phaseDuration,
-    severity: 1,
     metadata: {
       factionAId,
       factionBId,
@@ -217,7 +216,6 @@ export function pactNegotiationTemplate(
     regionId: null,
     // Never auto-expired by events processor; relations owns the lifecycle.
     phaseDuration: RELATIONS_PHASE_SENTINEL,
-    severity: 1,
     metadata: {
       factionAId,
       factionBId,
@@ -237,7 +235,6 @@ export function allianceDissolvedTemplate(
     systemId: null,
     regionId: null,
     phaseDuration: RELATIONS_PHASE_SENTINEL,
-    severity: 1,
     metadata: {
       factionAId,
       factionBId,

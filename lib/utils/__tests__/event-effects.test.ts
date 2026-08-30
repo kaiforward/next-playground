@@ -3,15 +3,18 @@ import type {
   EventPhaseDefinition,
   ModifierTemplate,
 } from "@/lib/constants/events";
+import { EVENT_DEFINITIONS, getPhaseEffectSummary } from "@/lib/constants/events";
 import { summarisePhaseEffects } from "@/lib/utils/event-effects";
 
-/** Build a minimal phase carrying only the modifiers under test. */
-function phase(modifiers: ModifierTemplate[]): EventPhaseDefinition {
+/** Build a minimal phase carrying only the modifiers (and optionally the authored
+ *  fallback copy) under test. */
+function phase(modifiers: ModifierTemplate[], effectSummary?: string): EventPhaseDefinition {
   return {
     name: "test_phase",
     displayName: "Test Phase",
     durationRange: [10, 20],
     modifiers,
+    ...(effectSummary !== undefined ? { effectSummary } : {}),
   };
 }
 
@@ -65,7 +68,7 @@ describe("summarisePhaseEffects", () => {
     });
 
     it("dedupes: a null-goodId 'All demand up' suppresses redundant per-good up phrases", () => {
-      // pirate_raid shape: all-goods anchor up + weapons anchor up.
+      // A phase carrying both an all-goods anchor up and a per-good anchor up on the same side.
       const result = summarisePhaseEffects(
         phase([anchor(1.67, null), anchor(2.0, "weapons")]),
       );
@@ -125,19 +128,74 @@ describe("summarisePhaseEffects", () => {
     it("returns 'Minor market effects' when no recognised modifiers are present", () => {
       expect(summarisePhaseEffects(phase([]))).toBe("Minor market effects");
     });
+  });
 
-    it("ignores legacy economy modifier types (regression guard for the removed supply/demand_target paths)", () => {
-      // Post-anchor-shift, an economy equilibrium_shift has no summary branch and
-      // must be silently ignored rather than producing supply/demand wording.
-      const legacy: ModifierTemplate = {
-        domain: "economy",
-        type: "equilibrium_shift",
-        target: "system",
-        goodId: "ore",
-        parameter: "supply_target",
-        value: 1.8,
-      };
-      expect(summarisePhaseEffects(phase([legacy]))).toBe("Minor market effects");
+  describe("authored effectSummary fallback", () => {
+    it("shows the authored copy for a modifier-less phase instead of the generic fallback", () => {
+      expect(summarisePhaseEffects(phase([], "Forces massing at the border"))).toBe(
+        "Forces massing at the border",
+      );
+    });
+
+    it("never lets authored copy shadow a phase that does derive real modifier parts", () => {
+      expect(
+        summarisePhaseEffects(phase([anchor(1.5, "fuel")], "Forces massing at the border")),
+      ).toBe("Fuel demand up");
+    });
+
+    it("still falls back to the generic text when a modifier-less phase has no authored copy", () => {
+      expect(summarisePhaseEffects(phase([]))).toBe("Minor market effects");
+    });
+  });
+
+  describe("border_conflict phase copy (production data, not a synthetic phase)", () => {
+    it("shows the authored line for the tension phase, which carries no modifiers", () => {
+      expect(getPhaseEffectSummary("border_conflict", "tension")).toBe(
+        "Forces massing at the border",
+      );
+    });
+
+    it("shows the authored line for the de_escalation phase, which carries no modifiers", () => {
+      expect(getPhaseEffectSummary("border_conflict", "de_escalation")).toBe(
+        "Forces standing down",
+      );
+    });
+
+    it("still derives the real summary for the skirmish phase's production modifier", () => {
+      expect(getPhaseEffectSummary("border_conflict", "skirmish")).toBe("Production slowed");
+    });
+
+    it("carries no residual effectSummary field on the skirmish phase (nothing to shadow)", () => {
+      const skirmish = EVENT_DEFINITIONS.border_conflict.phases.find(
+        (p) => p.name === "skirmish",
+      );
+      expect(skirmish?.effectSummary).toBeUndefined();
+    });
+  });
+
+  describe("political-phase copy (production data — pact_under_negotiation, alliance_dissolved)", () => {
+    // Both phases carry modifiers: [] — purely political, zero economic effect — so without
+    // authored copy this would derive the generic "Minor market effects" text, which is wrong
+    // for an event with no market effect at all.
+    it("shows the authored line for pact_under_negotiation's negotiation phase", () => {
+      expect(getPhaseEffectSummary("pact_under_negotiation", "negotiation")).toBe(
+        "Envoys shuttling between capitals",
+      );
+    });
+
+    it("shows the authored line for alliance_dissolved's dissolving phase", () => {
+      expect(getPhaseEffectSummary("alliance_dissolved", "dissolving")).toBe(
+        "Ambassadors packing for home",
+      );
+    });
+
+    it("never falls back to the generic 'Minor market effects' text for either phase", () => {
+      expect(getPhaseEffectSummary("pact_under_negotiation", "negotiation")).not.toBe(
+        "Minor market effects",
+      );
+      expect(getPhaseEffectSummary("alliance_dissolved", "dissolving")).not.toBe(
+        "Minor market effects",
+      );
     });
   });
 });

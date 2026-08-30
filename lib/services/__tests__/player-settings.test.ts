@@ -67,7 +67,7 @@ describe("setAlertCategory", () => {
   });
 
   it("refuses to re-affirm a critical category as on, too — the flag is not the caller's to set", () => {
-    const result = setAlertCategory({ categoryId: "crisis", on: true });
+    const result = setAlertCategory({ categoryId: "maintenance_unfunded", on: true });
     expect(result.ok).toBe(false);
   });
 

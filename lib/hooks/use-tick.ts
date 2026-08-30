@@ -55,7 +55,6 @@ export function useTick(): UseTickResult {
   const pacing = useGameSlice((state) => state.pacing);
   const eventListeners = useRef<EventListeners>({
     economyTick: new Set(),
-    eventNotifications: new Set(),
   });
   const lastDispatched = useRef<typeof pacing>(null);
 
@@ -75,7 +74,6 @@ export function useTick(): UseTickResult {
     };
 
     dispatch("economyTick", pacing.events.economyTick);
-    dispatch("eventNotifications", pacing.events.eventNotifications);
   }, [pacing]);
 
   const subscribeToEvent = useCallback(

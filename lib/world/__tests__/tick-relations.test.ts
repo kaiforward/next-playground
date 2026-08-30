@@ -62,7 +62,7 @@ describe("runWorldTick — system ownership reaches the relations border graph",
 });
 
 describe("runWorldTick — a relations-owned event survives the rebuild field for field", () => {
-  it("keeps phase, targets, start tick, severity and parent through the round trip", async () => {
+  it("keeps phase, targets and start tick through the round trip", async () => {
     // Every one of these fields is re-read through a `?? default` on the way back into `World`. Each
     // fixture value below is deliberately NOT that default, so a default that fires is a failure
     // rather than a coincidence.
@@ -81,8 +81,6 @@ describe("runWorldTick — a relations-owned event survives the rebuild field fo
       startTick: 1,
       phaseStartTick: 1,
       phaseDuration: 100_000,
-      severity: 2,
-      sourceEventId: "parent-event-1",
       metadata,
     };
 
@@ -100,7 +98,5 @@ describe("runWorldTick — a relations-owned event survives the rebuild field fo
     expect(after.regionId).toBe(seeded.regionId);
     expect(after.startTick).toBe(1);
     expect(after.startTick).not.toBe(RELATIONS_FREQUENCY); // not silently restamped to `tick`
-    expect(after.severity).toBe(2);
-    expect(after.sourceEventId).toBe("parent-event-1");
   });
 });

@@ -1,4 +1,3 @@
-import type { EventTypeId } from "@/lib/constants/events";
 import type { SupplyState } from "@/lib/engine/population";
 
 // ── Typed tick event payloads ─────────────────────────────────────
@@ -12,17 +11,10 @@ export interface EconomyTickPayload {
   shardCount: number;
 }
 
-export interface EventNotificationPayload {
-  message: string;
-  type: EventTypeId;
-  refs: Record<string, { id: string; label: string }>;
-}
-
 // ── Typed event maps ──────────────────────────────────────────────
 
 export interface GlobalEventMap {
   economyTick: EconomyTickPayload[];
-  eventNotifications: EventNotificationPayload[];
 }
 
 // ── Processor types ───────────────────────────────────────────────

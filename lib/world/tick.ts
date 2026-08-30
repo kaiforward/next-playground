@@ -37,7 +37,7 @@
  */
 
 import { mulberry32, type RNG } from "@/lib/engine/universe-gen";
-import { scaleEventCaps, EVENT_SPAWN_INTERVAL, RELATIONS_EVENT_TYPES } from "@/lib/constants/events";
+import { EVENT_DEFINITIONS, RELATIONS_EVENT_TYPES } from "@/lib/constants/events";
 import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, EXPECTATION_PARAMS, MIGRATION_PARAMS, COLONY_DELIVERY_PARAMS } from "@/lib/constants/population";
@@ -144,11 +144,22 @@ import type {
  * Deterministic per-tick RNG stream — no hidden state to persist across
  * save/load. `tick` should be the NEW tick number (post-increment), so tick 0
  * (the freshly generated world, never ticked) never collides with tick 1's
- * stream.
+ * stream. `stream` selects an independent draw sequence for the same
+ * (seed, tick) pair — omitted (or 0) reproduces the original single-stream
+ * sequence bit-for-bit, since XORing in `Math.imul(0, …)` is a no-op. A
+ * non-zero stream (e.g. `EVENTS_RNG_STREAM`) isolates a processor's draws so
+ * removing or changing them cannot realign every other processor sharing the
+ * default stream.
  */
-export function tickRng(seed: number, tick: number): RNG {
-  return mulberry32((seed ^ Math.imul(tick + 1, 0x9e3779b1)) >>> 0);
+export function tickRng(seed: number, tick: number, stream = 0): RNG {
+  return mulberry32(
+    ((seed ^ Math.imul(tick + 1, 0x9e3779b1)) ^ Math.imul(stream, 0x85ebca6b)) >>> 0,
+  );
 }
+
+/** Non-zero stream id isolating the events stage's draws from the tick's default RNG
+ *  stream (shared by directed-build's colonisation tie-break and relations) — see `tickRng`. */
+export const EVENTS_RNG_STREAM = 1;
 
 // ── World → tick row joins (World omits catalog/derived data the shared
 // adapters expect inlined) ──────────────────────────────────────
@@ -1177,7 +1188,7 @@ function rebuildWorldModifiers(
     if (!def) continue;
     const phase: EventPhaseDefinition | undefined = def.phases.find((p) => p.name === e.phase);
     if (!phase) continue;
-    for (const row of buildModifiersForPhase(phase, e.systemId, e.regionId, e.severity)) {
+    for (const row of buildModifiersForPhase(phase, e.systemId, e.regionId)) {
       out.push({ eventId: e.id, ...row });
     }
   }
@@ -1230,7 +1241,7 @@ export async function runWorldTick(
   };
   const tick = world.meta.currentTick + 1;
   const rng = tickRng(world.meta.seed, tick);
-  const scaled = scaleEventCaps(world.systems.length);
+  const eventsRng = tickRng(world.meta.seed, tick, EVENTS_RNG_STREAM);
 
   const globalEvents: Partial<GlobalEventMap> = {};
   const processorsRun: string[] = [];
@@ -1326,21 +1337,15 @@ export async function runWorldTick(
   // market writer, would leave the previous world's rows exposed to mutation.
   {
     const eventsWorld = new InMemoryEventsWorld(
-      { events, modifiers: [], markets, nextId },
+      { events, modifiers: [], markets },
       systems,
-      connections,
-      scaled.definitions,
+      EVENT_DEFINITIONS,
     );
     const result = await runEventsProcessor(eventsWorld, newTickCtx(), {
-      rng,
-      caps: { maxEventsGlobal: scaled.maxEventsGlobal, maxEventsPerSystem: scaled.maxEventsPerSystem },
-      batchSize: scaled.batchSize,
-      spawnInterval: EVENT_SPAWN_INTERVAL,
-      definitions: scaled.definitions,
-      spawnEnabled: true,
+      rng: eventsRng,
+      definitions: EVENT_DEFINITIONS,
     });
     markets = eventsWorld.markets;
-    nextId = eventsWorld.nextId;
     events = eventsWorld.events.map((e) => ({
       id: e.id,
       type: e.type,
@@ -1350,8 +1355,6 @@ export async function runWorldTick(
       startTick: e.startTick,
       phaseStartTick: e.phaseStartTick,
       phaseDuration: e.phaseDuration,
-      severity: e.severity,
-      sourceEventId: e.sourceEventId,
       metadata: metadataByEventId.get(e.id) ?? null,
     }));
     mergeGlobalEvents(globalEvents, result);
@@ -1381,7 +1384,7 @@ export async function runWorldTick(
         .filter((m) => SURVIVAL_GOODS.includes(m.goodId) && developedNow.has(m.systemId))
         .map((m) => [`${m.systemId}|${m.goodId}`, m.stock]),
     );
-    const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, scaled.definitions) });
+    const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, EVENT_DEFINITIONS) });
     const economyResult = await runEconomyProcessor(economyWorld, newTickCtx(), {
       interval: cadence.cycle,
       simParams: ECONOMY_SIM_PARAMS,
@@ -2075,8 +2078,6 @@ export async function runWorldTick(
       startTick: e.startTick ?? tick,
       phaseStartTick: e.phaseStartTick,
       phaseDuration: e.phaseDuration,
-      severity: e.severity ?? 1,
-      sourceEventId: e.sourceEventId ?? null,
       metadata: e.metadata,
     }));
     events = [...events.filter((e) => !RELATIONS_OWNED_TYPES.has(e.type)), ...updatedRelationsEvents];
@@ -2092,7 +2093,7 @@ export async function runWorldTick(
     constructionProjects,
     markets,
     events,
-    modifiers: rebuildWorldModifiers(events, scaled.definitions),
+    modifiers: rebuildWorldModifiers(events, EVENT_DEFINITIONS),
     ships,
     flowEvents,
     relations,

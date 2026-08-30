@@ -14,7 +14,7 @@ import type { TrackerSections } from "@/lib/types/tracker";
  * `docs/active/gameplay/alert-bar.md` → "The categories", and the single authority for them. Written
  * out key by key rather than folded from `ALERT_CATEGORY_IDS` because a fold widens the result's
  * keys back to `string`, which would need an `as` cast to satisfy `AlertCategorySettings`; spelled
- * out, the compiler requires all sixteen.
+ * out, the compiler requires all thirteen.
  *
  * Three important-tier categories are authored OFF — the alert bar is a surface the design chose not
  * to fill by default. Every critical category is `true`, since the tier cannot be turned off anyway
@@ -28,7 +28,6 @@ export const DEFAULT_ALERT_CATEGORIES: AlertCategorySettings = {
   population_collapse: true,
   strike: true,
   maintenance_unfunded: true,
-  crisis: true,
   // ── important ───────────────────────────────────────────────
   deprived_worlds: true,
   unrest_rising: false,
@@ -38,11 +37,9 @@ export const DEFAULT_ALERT_CATEGORIES: AlertCategorySettings = {
   no_housing_headroom: true,
   build_blocked: false,
   industry_idle: false,
-  disruption: true,
   // ── info ────────────────────────────────────────────────────
   build_opportunity: true,
   colony_opportunity: true,
-  windfall: true,
 };
 
 /**

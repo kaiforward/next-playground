@@ -15,8 +15,8 @@ function RenderCounter({ renders }: { renders: { current: number } }) {
 function event(id: string): ActiveEvent {
   return {
     id,
-    type: "refugee_crisis",
-    name: "Refugee Crisis",
+    type: "border_conflict",
+    name: "Border Conflict",
     description: "",
     phase: "onset",
     phaseDisplayName: "Onset",
@@ -28,7 +28,6 @@ function event(id: string): ActiveEvent {
     phaseStartTick: 0,
     phaseDuration: 10,
     ticksRemaining: 10,
-    severity: 1,
   };
 }
 

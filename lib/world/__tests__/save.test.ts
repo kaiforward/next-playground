@@ -196,8 +196,21 @@ describe("serialiseWorld / deserialiseWorld", () => {
   // NOT throw: every market would silently price against nameplate capacity instead of realised
   // output. Nothing but this constant stands between the two, which is why the number is pinned
   // rather than left to drift.
-  it("is at save format version 16 (the three-budget body model + extraction-efficiency columns)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(16);
+  it("is at save format version 17 (alert-category key set shrinks; WorldEvent.type union shrinks)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(17);
+  });
+
+  it("rejects a v16 (pre-events-strip) save with the clean version error", () => {
+    // A v16 save's world.player.alertCategories can carry the three now-deleted keys
+    // (crisis/disruption/windfall) and world.events can carry a now-deleted WorldEvent.type — the
+    // version bump is what makes this fail cleanly instead of loading a stale shape the structural
+    // spot-checks below `meta` cannot see, or silently expiring a foreign event row through the
+    // events processor's stale-type guard.
+    const json = JSON.stringify({ formatVersion: 16, world });
+    const result = deserialiseWorld(json);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe(`Unsupported save formatVersion (expected ${SAVE_FORMAT_VERSION})`);
   });
 
   it("rejects a v15 (pre-habitability-seeding) save with the clean version error", () => {

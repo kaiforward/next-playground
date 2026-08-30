@@ -1,59 +1,25 @@
 "use client";
 
 import { useMemo } from "react";
-import { withCounts } from "@/lib/utils/filter";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { EventIcon } from "@/components/events/event-icon";
 import { useEvents } from "@/lib/hooks/use-events";
 import { useFilterState } from "@/lib/hooks/use-filter-state";
-import { EVENT_TYPE_BADGE_COLOR, compareEventSeverity } from "@/lib/constants/ui";
+import { EVENT_TYPE_BADGE_COLOR } from "@/lib/constants/ui";
 import type { ActiveEvent } from "@/lib/types/game";
-import type { EventTypeId } from "@/lib/constants/events";
 import { formatDuration } from "@/lib/utils/calendar";
 import { useLinkComponent } from "@/components/ui/link-provider";
 
-const FILTER_CHIPS = [
-  { id: "all", label: "All" },
-  { id: "economic", label: "Economic" },
-  { id: "conflict", label: "Conflict" },
-  { id: "environmental", label: "Environmental" },
-  { id: "social", label: "Social" },
-  { id: "diplomatic", label: "Diplomatic" },
-];
-
 const SORT_OPTIONS = [
-  { id: "severity", label: "Severity" },
   { id: "ticks", label: "Time remaining" },
   { id: "system", label: "System name" },
 ];
 
-const TYPE_CATEGORY: Record<EventTypeId, string> = {
-  inner_system_conflict: "conflict",
-  conflict_spillover: "conflict",
-  pirate_raid: "conflict",
-  plague: "environmental",
-  plague_risk: "environmental",
-  solar_storm: "environmental",
-  asteroid_strike: "environmental",
-  trade_festival: "social",
-  refugee_crisis: "social",
-  mining_boom: "economic",
-  ore_glut: "economic",
-  supply_shortage: "economic",
-  trade_embargo: "economic",
-  tech_breakthrough: "economic",
-  border_conflict: "conflict",
-  pact_under_negotiation: "diplomatic",
-  alliance_dissolved: "diplomatic",
-};
-
 function sortEvents(events: ActiveEvent[], sortBy: string): ActiveEvent[] {
   return [...events].sort((a, b) => {
     switch (sortBy) {
-      case "severity":
-        return compareEventSeverity(a.type, b.type);
       case "ticks":
         return a.ticksRemaining - b.ticksRemaining;
       case "system":
@@ -64,44 +30,32 @@ function sortEvents(events: ActiveEvent[], sortBy: string): ActiveEvent[] {
   });
 }
 
-/** Moved from `app/(game)/@panel/factions/[factionId]/events/page.tsx` — the galaxy-wide
- *  active-events feed, not scoped to the faction whose panel hosts it. */
+/** The galaxy-wide active-events feed — not scoped to the faction whose panel hosts it.
+ *  Events are the relations-owned diplomacy arcs, so this is a plain sortable list:
+ *  recency or time-remaining, no filtering. */
 export function FactionEvents() {
   const { events } = useEvents();
-  const { activeChips, toggleChip, activeSort, setActiveSort } =
-    useFilterState({ defaultSort: "severity" });
+  const { activeSort, setActiveSort } = useFilterState({ defaultSort: "ticks" });
   const LinkComponent = useLinkComponent();
 
-  const filtered = useMemo(() => {
-    let result = events;
-    if (!activeChips.includes("all")) {
-      result = result.filter((e) => activeChips.includes(TYPE_CATEGORY[e.type] ?? ""));
-    }
-    return sortEvents(result, activeSort ?? "severity");
-  }, [events, activeChips, activeSort]);
-
-  const chipsWithCounts = useMemo(
-    () => withCounts(FILTER_CHIPS, events, (e) => TYPE_CATEGORY[e.type] ?? ""),
-    [events],
+  const sorted = useMemo(
+    () => sortEvents(events, activeSort ?? "ticks"),
+    [events, activeSort],
   );
 
   return (
     <>
       <FilterBar
-        chips={chipsWithCounts}
-        activeChips={activeChips}
-        onChipToggle={toggleChip}
         sortOptions={SORT_OPTIONS}
         activeSort={activeSort}
         onSortChange={setActiveSort}
-        resultCount={{ shown: filtered.length, total: events.length }}
       />
 
-      {filtered.length === 0 ? (
-        <EmptyState message="No active events match this filter." className="py-16" />
+      {sorted.length === 0 ? (
+        <EmptyState message="No active events." className="py-16" />
       ) : (
         <ul className="space-y-2">
-          {filtered.map((event) => (
+          {sorted.map((event) => (
             <li
               key={event.id}
               className="flex items-start gap-3 py-3 px-3 bg-surface-hover/40 hover:bg-surface-hover border-l-2 border-l-accent transition-colors"
@@ -131,9 +85,6 @@ export function FactionEvents() {
               <div className="text-right shrink-0">
                 <div className="text-xs font-mono text-text-primary">
                   {formatDuration(event.ticksRemaining)}
-                </div>
-                <div className="text-xs text-text-secondary mt-0.5">
-                  Sev: {event.severity.toFixed(1)}
                 </div>
               </div>
             </li>

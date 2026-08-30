@@ -29,8 +29,6 @@ function seededEvent(overrides: Partial<WorldEvent> & Pick<WorldEvent, "id" | "t
     startTick: 0,
     phaseStartTick: 0,
     phaseDuration: NEVER_ADVANCES,
-    severity: 1,
-    sourceEventId: null,
     metadata: null,
     ...overrides,
   };
@@ -43,30 +41,30 @@ function worldWith(base: World, events: WorldEvent[], currentTick: number): Worl
 describe("runWorldTick — modifiers rebuilt from each event's CURRENT phase", () => {
   const base = generateWorld({ systemCount: 40, seed: 7 });
   const systemId = base.systems.find((s) => s.control === "developed")?.id ?? base.systems[0].id;
-  const definition = EVENT_DEFINITIONS.inner_system_conflict;
-  const escalation = definition.phases.find((p) => p.name === "escalation");
-  const tensions = definition.phases.find((p) => p.name === "tensions");
+  const definition = EVENT_DEFINITIONS.border_conflict;
+  const skirmish = definition.phases.find((p) => p.name === "skirmish");
+  const tension = definition.phases.find((p) => p.name === "tension");
 
   it("emits exactly the phase the event is in, and nothing from any other phase", async () => {
     // The premise this test rests on: the two phases must be distinguishable, or picking the wrong
     // one is invisible.
-    expect(escalation).toBeDefined();
-    expect(tensions).toBeDefined();
-    if (!escalation || !tensions) return;
-    const escalationRows = buildModifiersForPhase(escalation, systemId, null, 1);
-    const tensionRows = buildModifiersForPhase(tensions, systemId, null, 1);
-    expect(escalationRows).not.toEqual(tensionRows);
-    expect(escalationRows.length).toBeGreaterThan(0);
+    expect(skirmish).toBeDefined();
+    expect(tension).toBeDefined();
+    if (!skirmish || !tension) return;
+    const skirmishRows = buildModifiersForPhase(skirmish, systemId, null);
+    const tensionRows = buildModifiersForPhase(tension, systemId, null);
+    expect(skirmishRows).not.toEqual(tensionRows);
+    expect(skirmishRows.length).toBeGreaterThan(0);
 
     const seeded = worldWith(
       base,
-      [seededEvent({ id: "e-1", type: "inner_system_conflict", phase: "escalation", systemId })],
+      [seededEvent({ id: "e-1", type: "border_conflict", phase: "skirmish", systemId })],
       0,
     );
     const after = (await runWorldTick(seeded, { cadence: NOTHING_RESOLVES })).world;
 
-    expect(after.events.map((e) => e.phase)).toEqual(["escalation"]); // premise: it did not advance
-    expect(after.modifiers).toEqual(escalationRows.map((row) => ({ eventId: "e-1", ...row })));
+    expect(after.events.map((e) => e.phase)).toEqual(["skirmish"]); // premise: it did not advance
+    expect(after.modifiers).toEqual(skirmishRows.map((row) => ({ eventId: "e-1", ...row })));
   });
 });
 
@@ -91,13 +89,15 @@ describe("runWorldTick — event metadata across the events stage", () => {
   });
 
   it("leaves an event that never carried metadata at null", async () => {
+    // Executes at tick 1 (meta.currentTick + 1) — not a relations tick (RELATIONS_FREQUENCY = 3),
+    // so the relations rebuild never runs and cannot touch this event's metadata either way.
     const seeded = worldWith(
       base,
-      [seededEvent({ id: "isc-1", type: "inner_system_conflict", phase: "tensions", systemId: base.systems[0].id })],
+      [seededEvent({ id: "bc-3", type: "border_conflict", phase: "tension", systemId: base.systems[0].id })],
       0,
     );
     const after = (await runWorldTick(seeded, { cadence: NOTHING_RESOLVES })).world;
-    expect(after.events.find((e) => e.id === "isc-1")?.metadata).toBeNull();
+    expect(after.events.find((e) => e.id === "bc-3")?.metadata).toBeNull();
   });
 });
 
@@ -138,24 +138,10 @@ describe("runWorldTick — which events the relations stage owns", () => {
     expect(after.events.some((e) => e.id === "bc-2")).toBe(false);
   });
 
-  it("leaves a non-relations event alone even when it carries metadata (no duplicate row)", async () => {
-    // Ownership is by event TYPE, not by "has metadata". Widen it and the relations stage both keeps
-    // its own copy and leaves the original in place — the same event, twice.
-    const seeded = worldWith(
-      base,
-      [
-        seededEvent({
-          id: "isc-1",
-          type: "inner_system_conflict",
-          phase: "escalation",
-          systemId: base.systems[0].id,
-          metadata,
-        }),
-      ],
-      beforeRelationsTick,
-    );
-    const after = (await runWorldTick(seeded, { cadence: NOTHING_RESOLVES })).world;
-    expect(after.events.filter((e) => e.id === "isc-1").length).toBe(1);
-    expect(new Set(after.events.map((e) => e.id)).size).toBe(after.events.length);
-  });
+  // "leaves a non-relations event alone even when it carries metadata" deleted: it isolated
+  // ownership-by-TYPE from ownership-by-metadata using a non-relations-owned type
+  // (inner_system_conflict). Post-strip, `RELATIONS_EVENT_TYPES` covers every surviving
+  // `EventTypeId` (spec B1/B2), so a "non-relations event" cannot be constructed from a real
+  // type without an `as` cast — the branch the test isolated is unreachable by any live data
+  // shape, not merely untested.
 });
