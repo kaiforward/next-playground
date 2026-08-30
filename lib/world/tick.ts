@@ -144,11 +144,22 @@ import type {
  * Deterministic per-tick RNG stream — no hidden state to persist across
  * save/load. `tick` should be the NEW tick number (post-increment), so tick 0
  * (the freshly generated world, never ticked) never collides with tick 1's
- * stream.
+ * stream. `stream` selects an independent draw sequence for the same
+ * (seed, tick) pair — omitted (or 0) reproduces the original single-stream
+ * sequence bit-for-bit, since XORing in `Math.imul(0, …)` is a no-op. A
+ * non-zero stream (e.g. `EVENTS_RNG_STREAM`) isolates a processor's draws so
+ * removing or changing them cannot realign every other processor sharing the
+ * default stream.
  */
-export function tickRng(seed: number, tick: number): RNG {
-  return mulberry32((seed ^ Math.imul(tick + 1, 0x9e3779b1)) >>> 0);
+export function tickRng(seed: number, tick: number, stream = 0): RNG {
+  return mulberry32(
+    ((seed ^ Math.imul(tick + 1, 0x9e3779b1)) ^ Math.imul(stream, 0x85ebca6b)) >>> 0,
+  );
 }
+
+/** Non-zero stream id isolating the events stage's draws from the tick's default RNG
+ *  stream (shared by directed-build's colonisation tie-break and relations) — see `tickRng`. */
+export const EVENTS_RNG_STREAM = 1;
 
 // ── World → tick row joins (World omits catalog/derived data the shared
 // adapters expect inlined) ──────────────────────────────────────
@@ -1230,6 +1241,7 @@ export async function runWorldTick(
   };
   const tick = world.meta.currentTick + 1;
   const rng = tickRng(world.meta.seed, tick);
+  const eventsRng = tickRng(world.meta.seed, tick, EVENTS_RNG_STREAM);
   const scaled = scaleEventCaps(world.systems.length);
 
   const globalEvents: Partial<GlobalEventMap> = {};
@@ -1332,7 +1344,7 @@ export async function runWorldTick(
       scaled.definitions,
     );
     const result = await runEventsProcessor(eventsWorld, newTickCtx(), {
-      rng,
+      rng: eventsRng,
       caps: { maxEventsGlobal: scaled.maxEventsGlobal, maxEventsPerSystem: scaled.maxEventsPerSystem },
       batchSize: scaled.batchSize,
       spawnInterval: EVENT_SPAWN_INTERVAL,

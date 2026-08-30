@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
+import { mulberry32 } from "@/lib/engine/universe-gen";
 import {
   runWorldTick, toTickSystems, applyBuildingIncreases, applyDevelopments, applyAbandonments,
   applyBuildBlockedUpdates, applyBuildOpportunityUpdates, applyColonyOpportunityUpdates,
-  marketRowsBySystem, resetAbandonedMarkets,
+  marketRowsBySystem, resetAbandonedMarkets, tickRng, EVENTS_RNG_STREAM,
 } from "../tick";
 import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import { serialiseWorld, deserialiseWorld } from "../save";
@@ -56,6 +57,55 @@ async function runTicksCapturingLast(world: World, count: number) {
   if (!last) throw new Error("count must be > 0");
   return last;
 }
+
+describe("tickRng", () => {
+  it("omitted-stream draws are bit-identical to the pre-split single-stream formula", () => {
+    const seed = 7;
+    const tick = 123;
+    // Reproduces the original (pre-split) formula directly, independent of the current
+    // implementation — a miss here would silently re-roll every seeded baseline in the repo.
+    const original = mulberry32((seed ^ Math.imul(tick + 1, 0x9e3779b1)) >>> 0);
+    const current = tickRng(seed, tick);
+    const originalDraws = Array.from({ length: 20 }, () => original());
+    const currentDraws = Array.from({ length: 20 }, () => current());
+    expect(currentDraws).toEqual(originalDraws);
+  });
+
+  it("stream 0 draws bit-identically to stream omitted", () => {
+    const seed = 7;
+    const tick = 123;
+    const omitted = tickRng(seed, tick);
+    const explicitZero = tickRng(seed, tick, 0);
+    const omittedDraws = Array.from({ length: 20 }, () => omitted());
+    const explicitZeroDraws = Array.from({ length: 20 }, () => explicitZero());
+    expect(explicitZeroDraws).toEqual(omittedDraws);
+  });
+
+  it("the events stream's sequence differs from the default stream for the same (seed, tick)", () => {
+    const seed = 7;
+    const tick = 123;
+    const defaultStream = tickRng(seed, tick);
+    const eventsStream = tickRng(seed, tick, EVENTS_RNG_STREAM);
+    const defaultDraws = Array.from({ length: 10 }, () => defaultStream());
+    const eventsDraws = Array.from({ length: 10 }, () => eventsStream());
+    expect(eventsDraws).not.toEqual(defaultDraws);
+  });
+
+  it("draining draws from the events stream leaves the default stream's next draw unchanged — two instances, never a shared cursor", () => {
+    const seed = 7;
+    const tick = 123;
+    const defaultStream = tickRng(seed, tick);
+    const expectedFirstDraw = defaultStream();
+
+    // A fresh default-stream instance for the same (seed, tick) — proves the events stream
+    // below cannot be advancing a cursor the default stream also reads from.
+    const defaultStreamAgain = tickRng(seed, tick);
+    const eventsStream = tickRng(seed, tick, EVENTS_RNG_STREAM);
+    for (let i = 0; i < 50; i++) eventsStream();
+
+    expect(defaultStreamAgain()).toBe(expectedFirstDraw);
+  });
+});
 
 describe("runWorldTick", () => {
   it("advances meta.currentTick by exactly one per call", async () => {
@@ -1564,7 +1614,7 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
   // archetype/sun-class tables. `EXPANSION.COLONY_SEED_POP` fixes the donation at exactly 2
   // regardless of fixture size, so "unmistakably different" comes from a same-tick counterfactual
   // rather than a huge donor: two clones of the identical pre-tick world (same `meta.currentTick`,
-  // so `tickRng(seed, tick)` draws identically in both — `lib/world/tick.ts:1070`) diverge ONLY in
+  // so `tickRng(seed, tick)` draws identically in both — `lib/world/tick.ts:154`) diverge ONLY in
   // whether directed-build resolves this tick, isolating the donation's contribution to the
   // donor's populationChange exactly, with no other system's dynamics free to differ between the
   // two branches.
