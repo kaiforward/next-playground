@@ -10,7 +10,6 @@ import {
   TrendingDown,
   Megaphone,
   BanknoteX,
-  Siren,
   BatteryLow,
   TrendingUp,
   Hourglass,
@@ -18,16 +17,14 @@ import {
   BedDouble,
   HardHat,
   Factory,
-  TriangleAlert,
   Globe,
-  Sparkles,
 } from "lucide-react";
 import type { AlertCategoryId, AlertCategoryDef } from "@/lib/types/alerts";
 import type { BuildDropReason } from "@/lib/engine/directed-build";
 
 /**
  * Tier, icon and destination per alert category — the authored table from the alert bar spec's tier
- * list, keyed so the compiler requires all sixteen. `order` is unique within a tier: the authored
+ * list, keyed so the compiler requires all thirteen. `order` is unique within a tier: the authored
  * order is total, so a chip cannot move once ranking runs. Each category's default on/off state is
  * `DEFAULT_ALERT_CATEGORIES` (`lib/constants/attention.ts`) — see this file's header.
  */
@@ -63,17 +60,6 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     hideable: false,
     order: 2,
   },
-  crisis: {
-    tier: "critical",
-    icon: Siren,
-    faulted: false,
-    label: "Crisis",
-    conditionLine: "An event severe enough to threaten a world is underway.",
-    destination: { kind: "events" },
-    hideable: false,
-    order: 3,
-  },
-
   // ── important — three default off ────────────────────────────
   deprived_worlds: {
     tier: "important",
@@ -155,18 +141,8 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     hideable: true,
     order: 7,
   },
-  disruption: {
-    tier: "important",
-    icon: TriangleAlert,
-    faulted: false,
-    label: "Disruption",
-    conditionLine: "An event that's costing a world without threatening it.",
-    destination: { kind: "events" },
-    hideable: true,
-    order: 8,
-  },
 
-  // ── info — opportunities and windfalls ───────────────────────
+  // ── info — opportunities ──────────────────────────────────────
   build_opportunity: {
     tier: "info",
     icon: HardHat,
@@ -187,24 +163,14 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     hideable: true,
     order: 1,
   },
-  windfall: {
-    tier: "info",
-    icon: Sparkles,
-    faulted: false,
-    label: "Windfall",
-    conditionLine: "An event worth riding before it ends.",
-    destination: { kind: "events" },
-    hideable: true,
-    order: 2,
-  },
 };
 
 /**
- * Worst-first authored rank for Build blocked's within-category sort — lower is worse, matching
- * `EVENT_BAND.impactRank`'s convention. Lives beside the category table rather than next to
- * `BuildDropReason` because it is a presentation ordering, not an engine fact: the planner's own
- * drop reasons carry no severity of their own, and "no-capacity" (fully saturated) reading as the
- * worst case is a judgment call about what a player most needs to see first.
+ * Worst-first authored rank for Build blocked's within-category sort — lower is worse. Lives beside
+ * the category table rather than next to `BuildDropReason` because it is a presentation ordering,
+ * not an engine fact: the planner's own drop reasons carry no severity of their own, and
+ * "no-capacity" (fully saturated) reading as the worst case is a judgment call about what a player
+ * most needs to see first.
  */
 export const BUILD_DROP_SEVERITY: Record<BuildDropReason, number> = {
   "no-capacity": 1,

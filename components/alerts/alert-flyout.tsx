@@ -35,8 +35,6 @@ export function alertFooterText(category: AlertCategory): string | null {
       return `${category.count} of ${category.denominator} developed systems`;
     case "controlled_systems":
       return `${category.count} of ${category.denominator} controlled systems`;
-    case "events":
-      return `${category.count} events`;
     case "faction":
       return null;
   }
@@ -44,27 +42,25 @@ export function alertFooterText(category: AlertCategory): string | null {
 
 /**
  * Where a row's activation resolves to — either a fly-to-system-and-open-tab (deferred to
- * `useSystemFocus()`, which needs live atlas coordinates this pure function has no access to) or a
- * tab on the PLAYER faction's panel (the caller resolves the faction id — again atlas data this
- * pure function has no access to). `tab` on the system kind carries `AlertDestinationTab`, the
+ * `useSystemFocus()`, which needs live atlas coordinates this pure function has no access to) or the
+ * PLAYER faction's Overview tab (the caller resolves the faction id — again atlas data this pure
+ * function has no access to). `tab` on the system kind carries `AlertDestinationTab`, the
  * four-tab subset `lib/types/alerts.ts` pins with `satisfies` — never the full `SystemTabSegment`,
- * which would re-widen here exactly what the destination table narrowed; on the faction kind it is
- * the two faction-panel tabs alerts actually target. `none` covers the one combination
- * the destination table never actually produces (a `system`-kind category whose instance carries no `systemId`) —
- * `AlertInstance.systemId` is typed nullable across the whole union, so this function still has to
- * return something for it rather than assume the impossible away.
+ * which would re-widen here exactly what the destination table narrowed. `none` covers the one
+ * combination the destination table never actually produces (a `system`-kind category whose instance
+ * carries no `systemId`) — `AlertInstance.systemId` is typed nullable across the whole union, so this
+ * function still has to return something for it rather than assume the impossible away.
  */
 export type AlertNavigateTarget =
   | { kind: "system"; systemId: string; tab: AlertDestinationTab }
-  | { kind: "faction"; tab: Extract<FactionTabSegment, "" | "events"> }
+  | { kind: "faction"; tab: Extract<FactionTabSegment, ""> }
   | { kind: "none" };
 
 /**
  * Resolves a row's destination off `ALERT_CATEGORIES[category.id].destination` and the specific
  * instance's own `systemId` — the per-instance decision the destination table
- * (docs/active/gameplay/alert-bar.md → "What a row click does") reserves for the three event bands
- * (system when the event has one, else the events panel) and, degenerately, for Maintenance
- * unfunded (always the faction panel, whatever `systemId` says).
+ * (docs/active/gameplay/alert-bar.md → "What a row click does") reserves, degenerately, for
+ * Maintenance unfunded (always the faction panel, whatever `systemId` says).
  *
  * Pure and exported so the branching itself is directly testable without a router or an atlas
  * fetch in the loop. `components/alerts/alert-run.tsx`'s `ActiveAlertFlyout` is the one place that
@@ -85,12 +81,6 @@ export function resolveAlertTarget(category: AlertCategory, instance: AlertInsta
       // whatever the instance's own systemId says (it is always null for this category: the row is
       // faction-level, not per-system).
       return { kind: "faction", tab: "" };
-    case "events":
-      // The three event bands: the event's own system when it has one, else the faction panel's
-      // Events tab (the events feed's home since the standalone events destination folded in).
-      return instance.systemId
-        ? { kind: "system", systemId: instance.systemId, tab: "" }
-        : { kind: "faction", tab: "events" };
   }
 }
 

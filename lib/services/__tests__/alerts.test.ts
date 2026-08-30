@@ -10,7 +10,7 @@ import { strikeMultiplier } from "@/lib/engine/population";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import type {
-  World, WorldSystem, WorldBuildProject, WorldMarket, WorldEvent,
+  World, WorldSystem, WorldBuildProject, WorldMarket,
   WorldFactionTreasury, WorldTreasurySettlement,
 } from "@/lib/world/types";
 import type { AlertCategory } from "@/lib/types/api";
@@ -73,16 +73,6 @@ function marketRow(systemId: string, goodId: string, overrides: Partial<WorldMar
   return { systemId, goodId, stock: 100, anchorMult: 1, demandRate: 10, storageCapacity: 1000, ...overrides };
 }
 
-function withEvents(world: World, events: WorldEvent[]): World {
-  return { ...world, events };
-}
-
-/** Windfall's measure and sortKey are both `phaseStartTick + phaseDuration − currentTick`, so a
- *  fixture that exercises either has to move the clock as well as the event. */
-function withTick(world: World, currentTick: number): World {
-  return { ...world, meta: { ...world.meta, currentTick } };
-}
-
 /** Replaces the building roster at the named systems, leaving every other system's untouched. */
 function withBuildings(
   world: World, systemIds: string[], rows: Array<{ systemId: string; buildingType: string; count: number }>,
@@ -97,15 +87,6 @@ function withBuildings(
     // A spare system carries no construction projects at world-gen, but clearing them keeps the
     // headroom fixtures below independent of anything world-gen may queue there later.
     constructionProjects: world.constructionProjects.filter((p) => !replaced.has(p.systemId)),
-  };
-}
-
-function fixtureEvent(overrides: Partial<WorldEvent> = {}): WorldEvent {
-  return {
-    id: "ev-1", type: "plague", phase: "outbreak", systemId: null, regionId: null,
-    startTick: 0, phaseStartTick: 0, phaseDuration: 50, severity: 1, sourceEventId: null,
-    metadata: null,
-    ...overrides,
   };
 }
 
@@ -1223,247 +1204,6 @@ describe("getAlertData", () => {
     });
   });
 
-  describe("Events — Crisis / Disruption / Windfall", () => {
-    it("raises no chip for an event in a rival faction's system", () => {
-      const world = seatWorld();
-      const [rivalSystem] = spareSystemIds(world, 1); // NOT patched to the player's faction
-      const withFixture = withEvents(world, [
-        fixtureEvent({ id: "ev-rival", type: "plague", systemId: rivalSystem }),
-      ]);
-      setWorld(withFixture);
-
-      expect(category("crisis").instances.map((i) => i.systemId)).not.toContain(rivalSystem);
-    });
-
-    it("raises a chip for an event in the player's own developed system", () => {
-      const world = seatWorld();
-      const pid = world.player!.controlledFactionId;
-      const [target] = spareSystemIds(world, 1);
-      const withTarget = withSystems(world, new Map([[target, developedPatch(pid)]]));
-      const withFixture = withEvents(withTarget, [
-        fixtureEvent({ id: "ev-own", type: "plague", systemId: target }),
-      ]);
-      setWorld(withFixture);
-
-      expect(category("crisis").instances.map((i) => i.systemId)).toContain(target);
-    });
-
-    it("raises a chip for a relations-owned pair event involving the player's faction, with systemId null", () => {
-      const world = seatWorld();
-      const pid = world.player!.controlledFactionId;
-      const otherFaction = world.factions.find((f) => f.id !== pid)!.id;
-      const withFixture = withEvents(world, [
-        fixtureEvent({
-          id: "ev-alliance",
-          type: "alliance_dissolved", // disruption band
-          systemId: null,
-          regionId: null,
-          metadata: { factionAId: pid, factionBId: otherFaction, expiresAtTick: 9999 },
-        }),
-      ]);
-      setWorld(withFixture);
-
-      const disruption = category("disruption");
-      expect(disruption.instances).toHaveLength(1);
-      expect(disruption.instances[0].systemId).toBeNull();
-    });
-
-    it("raises no chip for a relations-owned pair event between two rival factions", () => {
-      const world = seatWorld();
-      const pid = world.player!.controlledFactionId;
-      const rivals = world.factions.filter((f) => f.id !== pid);
-      if (rivals.length < 2) throw new Error("fixture: need two non-player factions");
-      const withFixture = withEvents(world, [
-        fixtureEvent({
-          id: "ev-rival-pair",
-          type: "alliance_dissolved",
-          systemId: null,
-          regionId: null,
-          metadata: { factionAId: rivals[0].id, factionBId: rivals[1].id, expiresAtTick: 9999 },
-        }),
-      ]);
-      setWorld(withFixture);
-
-      expect(category("disruption").instances).toHaveLength(0);
-    });
-
-    it("counts events as instances, not systems — two systemId:null events both count", () => {
-      const world = seatWorld();
-      const pid = world.player!.controlledFactionId;
-      const otherFaction = world.factions.find((f) => f.id !== pid)!.id;
-      const withFixture = withEvents(world, [
-        fixtureEvent({
-          id: "ev-1", type: "pact_under_negotiation", systemId: null, regionId: null,
-          metadata: { factionAId: pid, factionBId: otherFaction, expiresAtTick: 9999 },
-        }),
-        fixtureEvent({
-          id: "ev-2", type: "pact_under_negotiation", systemId: null, regionId: null,
-          metadata: { factionAId: pid, factionBId: otherFaction, expiresAtTick: 9998 },
-        }),
-      ]);
-      setWorld(withFixture);
-
-      expect(category("windfall").count).toBe(2);
-      expect(category("windfall").instances.every((i) => i.systemId === null)).toBe(true);
-    });
-
-    it("counts events with no denominator at all, while a system-scoped category carries the developed-systems total", () => {
-      // The two units are not interchangeable: an event count can exceed the developed-systems total
-      // (a region phase covers many systems from one instance, and the pair events have no system at
-      // all), so an event chip that borrowed the shared denominator would read "3 of 2".
-      const world = seatWorld();
-      const pid = world.player!.controlledFactionId;
-      const otherFaction = world.factions.find((f) => f.id !== pid)!.id;
-      const [target] = spareSystemIds(world, 1);
-      const withTarget = withSystems(
-        world,
-        new Map([[target, developedPatch(pid, { populationTrend: -0.05, populationChange: -5, population: 100 })]]),
-      );
-      const withFixture = withEvents(withTarget, [
-        fixtureEvent({
-          id: "ev-1", type: "pact_under_negotiation", systemId: null, regionId: null,
-          metadata: { factionAId: pid, factionBId: otherFaction, expiresAtTick: 9999 },
-        }),
-      ]);
-      setWorld(withFixture);
-
-      const developedCount = getWorld().systems.filter(
-        (s) => s.factionId === pid && s.control === "developed",
-      ).length;
-
-      const populationCollapse = category("population_collapse");
-      if (populationCollapse.unit !== "developed_systems") throw new Error("Population collapse must count developed systems");
-      expect(populationCollapse.count).toBe(1);
-      expect(populationCollapse.denominator).toBe(developedCount);
-
-      const windfall = category("windfall");
-      expect(windfall.unit).toBe("events");
-      expect(windfall.count).toBe(1);
-      // No denominator key at all — not a present-but-zero one a renderer would print as "1 of 0".
-      expect("denominator" in windfall).toBe(false);
-    });
-
-    it("sorts crisis events by the authored impactRank, worst type first, and names the event and its phase", () => {
-      const world = seatWorld();
-      const pid = world.player!.controlledFactionId;
-      const [raided, plagued] = spareSystemIds(world, 2);
-      const withTargets = withSystems(
-        world,
-        new Map([
-          [raided, developedPatch(pid)],
-          [plagued, developedPatch(pid)],
-        ]),
-      );
-      // Authored mildest-first, so a constant sortKey leaves them in this order and reads backwards.
-      setWorld(
-        withEvents(withTargets, [
-          fixtureEvent({ id: "ev-raid", type: "pirate_raid", phase: "raiding", systemId: raided }),
-          fixtureEvent({ id: "ev-plague", type: "plague", phase: "outbreak", systemId: plagued }),
-        ]),
-      );
-
-      const crisis = category("crisis");
-      expect(crisis.instances.map((i) => i.systemId)).toEqual([plagued, raided]);
-      expect(crisis.instances[0].measure).toBe("Plague — Outbreak");
-    });
-
-    it("sorts disruption events by the authored impactRank too — its own branch, its own sortKey", () => {
-      const world = seatWorld();
-      const pid = world.player!.controlledFactionId;
-      const [glutted, embargoed] = spareSystemIds(world, 2);
-      const withTargets = withSystems(
-        world,
-        new Map([
-          [glutted, developedPatch(pid)],
-          [embargoed, developedPatch(pid)],
-        ]),
-      );
-      setWorld(
-        withEvents(withTargets, [
-          fixtureEvent({ id: "ev-glut", type: "ore_glut", phase: "glut", systemId: glutted }),
-          fixtureEvent({ id: "ev-embargo", type: "trade_embargo", phase: "imposed", systemId: embargoed }),
-        ]),
-      );
-
-      const disruption = category("disruption");
-      expect(disruption.instances.map((i) => i.systemId)).toEqual([embargoed, glutted]);
-      expect(disruption.instances[0].measure).toBe("Trade Embargo — Imposed");
-    });
-
-    it("sorts windfall events by ticks remaining, soonest to expire first, and measures that same figure", () => {
-      // Windfall's ticksRemaining is BOTH its sortKey and its measure, so this is the one category
-      // where an ordering defect and a wrong figure are the same defect.
-      const world = seatWorld();
-      const pid = world.player!.controlledFactionId;
-      const [lasting, expiring] = spareSystemIds(world, 2);
-      const withTargets = withSystems(
-        world,
-        new Map([
-          [lasting, developedPatch(pid)],
-          [expiring, developedPatch(pid)],
-        ]),
-      );
-      // Both phases started at tick 100 and the clock reads 100, so remaining is the duration:
-      // 50 ticks against 10. Authored longest-first so a constant sortKey reads backwards.
-      setWorld(
-        withEvents(withTick(withTargets, 100), [
-          fixtureEvent({
-            id: "ev-lasting", type: "mining_boom", phase: "boom", systemId: lasting,
-            phaseStartTick: 100, phaseDuration: 50,
-          }),
-          fixtureEvent({
-            id: "ev-expiring", type: "trade_festival", phase: "festival", systemId: expiring,
-            phaseStartTick: 100, phaseDuration: 10,
-          }),
-        ]),
-      );
-
-      const windfall = category("windfall");
-      expect(windfall.instances.map((i) => i.systemId)).toEqual([expiring, lasting]);
-      // 10 ticks = 2.5 days and 50 ticks = 12.5 days under the calendar's auto-scaled rendering;
-      // sortKey stays the raw tick count, so ordering precision survives the coarser label.
-      expect(windfall.instances[0].measure).toBe("≈3 days remaining");
-      expect(windfall.instances[1].measure).toBe("≈13 days remaining");
-    });
-
-    it("clamps an already-expired windfall to 0 rather than counting down past it", () => {
-      // A phase whose end tick is long past — the world's event sweep has not retired it yet. The
-      // countdown must floor at 0: a negative figure would render a nonsense negative duration and would
-      // sort ahead of every live windfall.
-      const world = seatWorld();
-      const pid = world.player!.controlledFactionId;
-      const [expired, live] = spareSystemIds(world, 2);
-      const withTargets = withSystems(
-        world,
-        new Map([
-          [expired, developedPatch(pid)],
-          [live, developedPatch(pid)],
-        ]),
-      );
-      setWorld(
-        withEvents(withTick(withTargets, 500), [
-          fixtureEvent({
-            id: "ev-expired", type: "trade_festival", phase: "festival", systemId: expired,
-            phaseStartTick: 100, phaseDuration: 50, // ends at 150, i.e. 350 ticks ago
-          }),
-          fixtureEvent({
-            id: "ev-live", type: "mining_boom", phase: "boom", systemId: live,
-            phaseStartTick: 500, phaseDuration: 20,
-          }),
-        ]),
-      );
-
-      const windfall = category("windfall");
-      const row = windfall.instances.find((i) => i.systemId === expired);
-      expect(row?.measure).toBe("0 hours remaining");
-      expect(row?.sortKey).toBe(0);
-      // Non-vacuous on the clamp: an unclamped −350 would still sort first, so the live event has to
-      // be the one that proves 0 is a floor and not just "the smallest number here".
-      expect(windfall.instances.map((i) => i.systemId)).toEqual([expired, live]);
-      expect(windfall.instances[1].measure).toBe("≈5 days remaining");
-    });
-  });
-
   describe("Build opportunity / Colony opportunity — automation self-gate", () => {
     it("Build opportunity returns nothing while build automation is ON, even with a stored buildOpportunity", () => {
       const world = seatWorld();
@@ -1734,17 +1474,43 @@ describe("getAlertData", () => {
   });
 
   describe("Category order", () => {
-    it("emits all sixteen categories, in registry tier + order", () => {
+    it("emits all thirteen categories, in registry tier + order", () => {
       const world = seatWorld();
       setWorld(world);
 
       const ids = getAlertData().categories.map((c) => c.id);
       expect(ids).toEqual([
-        "population_collapse", "strike", "maintenance_unfunded", "crisis",
+        "population_collapse", "strike", "maintenance_unfunded",
         "deprived_worlds", "unrest_rising", "survival_stock_falling", "demand_unservable",
-        "overcrowded", "no_housing_headroom", "build_blocked", "industry_idle", "disruption",
-        "build_opportunity", "colony_opportunity", "windfall",
+        "overcrowded", "no_housing_headroom", "build_blocked", "industry_idle",
+        "build_opportunity", "colony_opportunity",
       ]);
+    });
+
+    // B5's pure removal: the three event alert categories (crisis / disruption / windfall) are gone
+    // with no replacement, so an active event — including the one type that still touches the
+    // player's own economy — builds no event category at all, even while it is live.
+    it("still emits exactly the thirteen categories with an active border_conflict in play — no event category is built", () => {
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const otherFaction = world.factions.find((f) => f.id !== pid)!.id;
+      const withFixture: World = {
+        ...world,
+        events: [
+          {
+            id: "ev-border", type: "border_conflict", phase: "skirmish", systemId: null, regionId: null,
+            startTick: 0, phaseStartTick: 0, phaseDuration: 50, severity: 1, sourceEventId: null,
+            metadata: { factionAId: pid, factionBId: otherFaction, expiresAtTick: 9999 },
+          },
+        ],
+      };
+      setWorld(withFixture);
+
+      const ids = getAlertData().categories.map((c) => c.id);
+      expect(ids).toHaveLength(13);
+      for (const removed of ["crisis", "disruption", "windfall"]) {
+        expect(ids).not.toContain(removed);
+      }
     });
   });
 });

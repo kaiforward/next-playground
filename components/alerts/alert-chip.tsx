@@ -61,17 +61,15 @@ const chip = tv({
 export { chip, TIER_COLOR };
 
 /** The words after the count, per the `AlertCategory` union's `unit` discriminant — the branch
- *  that stops a system-scoped count reading as a bare, unscaled severity and stops an event or
- *  faction-level count borrowing a denominator that isn't its own. `null` for `faction`:
- *  Maintenance unfunded's count is always 0 or 1 by construction, not a share of anything. */
+ *  that stops a system-scoped count reading as a bare, unscaled severity and stops a faction-level
+ *  count borrowing a denominator that isn't its own. `null` for `faction`: Maintenance unfunded's
+ *  count is always 0 or 1 by construction, not a share of anything. */
 function unitSuffix(category: AlertCategory): string | null {
   switch (category.unit) {
     case "developed_systems":
       return `of ${category.denominator} developed systems`;
     case "controlled_systems":
       return `of ${category.denominator} controlled systems`;
-    case "events":
-      return "events";
     case "faction":
       return null;
   }

@@ -334,8 +334,10 @@ function ActiveAlertFlyout({
   function handleNavigate(target: AlertNavigateTarget) {
     if (target.kind === "system") focusSystem(target.systemId, target.tab);
     else if (target.kind === "faction") {
+      // `target.tab` is always "" now that Maintenance unfunded is the only faction-kind
+      // destination — no alert category routes to a faction panel tab any more.
       const factionId = atlas.player?.controlledFactionId;
-      if (factionId) navigate(`/factions/${factionId}${target.tab ? `/${target.tab}` : ""}`);
+      if (factionId) navigate(`/factions/${factionId}`);
     }
   }
 

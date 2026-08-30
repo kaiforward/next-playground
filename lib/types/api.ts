@@ -613,17 +613,6 @@ export interface ControlledSystemsAlertCategory extends AlertCategoryBase {
 }
 
 /**
- * A category counting EVENTS (Crisis / Disruption / Windfall) — "N events", with no denominator at
- * all. Events are the one place the bar departs from its count-of-systems rule and it has to: a
- * region-target phase applies to a whole region from one instance, and two event types spawn with no
- * system at all, so there is no systems total these counts are a share OF. A count here can exceed
- * the developed-systems total, which is why carrying one would misread.
- */
-export interface EventAlertCategory extends AlertCategoryBase {
-  unit: "events";
-}
-
-/**
  * The one faction-level category — Maintenance unfunded — counting the FACTION's own treasury
  * settlement, with no denominator. Its `count` is 0 or 1 by construction (one settlement per
  * faction), so a developed-systems denominator would render "1 of 253 developed systems" about a row
@@ -640,10 +629,9 @@ export interface FactionAlertCategory extends AlertCategoryBase {
 export type AlertCategory =
   | SystemScopedAlertCategory
   | ControlledSystemsAlertCategory
-  | EventAlertCategory
   | FactionAlertCategory;
 
-/** The alert bar's whole read — all sixteen categories, one endpoint rather than one per category.
+/** The alert bar's whole read — all thirteen categories, one endpoint rather than one per category.
  *  With a player seat, `getAlertData()` (lib/services/alerts.ts) always emits every category id,
  *  tier-then-order sorted; a category with nothing to say still appears, with `count: 0` and an empty
  *  `instances` array — the chip run is what decides whether an empty category renders anything. A

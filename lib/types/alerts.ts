@@ -8,12 +8,12 @@ import type { SystemTabSegment } from "@/lib/constants/system-tabs";
 export type AlertTier = "critical" | "important" | "info";
 
 /**
- * The sixteen standing alert categories — system warnings, opportunities and the three event bands,
- * per the alert bar's authored tier list. This array, not a separately hand-written union, is the
+ * The thirteen standing alert categories — system warnings and opportunities, per the alert bar's
+ * authored tier list. This array, not a separately hand-written union, is the
  * single enumeration: `AlertCategoryId` is derived from it below, so every surface that has to walk
  * every category (the settings panel's checkbox list, the write schema in
  * `lib/schemas/player-settings.ts`) iterates the same list the type is made of, and a
- * seventeenth category cannot be added to one without the other. Use instead of
+ * fourteenth category cannot be added to one without the other. Use instead of
  * `Object.keys(ALERT_CATEGORIES)`, which widens a `Record<AlertCategoryId, …>`'s keys back to a bare
  * `string` (a standing TypeScript limitation on `Record`) and so would need an `as` cast to hand an
  * id back to anything expecting the union.
@@ -26,7 +26,6 @@ export const ALERT_CATEGORY_IDS = [
   "population_collapse",
   "strike",
   "maintenance_unfunded",
-  "crisis",
   "deprived_worlds",
   "unrest_rising",
   "survival_stock_falling",
@@ -35,13 +34,11 @@ export const ALERT_CATEGORY_IDS = [
   "no_housing_headroom",
   "build_blocked",
   "industry_idle",
-  "disruption",
   "build_opportunity",
   "colony_opportunity",
-  "windfall",
 ] as const;
 
-/** One of the sixteen standing alert categories — see `ALERT_CATEGORY_IDS` above, which this is
+/** One of the thirteen standing alert categories — see `ALERT_CATEGORY_IDS` above, which this is
  *  derived from. */
 export type AlertCategoryId = (typeof ALERT_CATEGORY_IDS)[number];
 
@@ -64,12 +61,10 @@ export type AlertDestinationTab = (typeof ALERT_DESTINATION_TABS)[number];
 
 /** Where a row click sends the player. `system` reuses the Tracker's fly-to-system-and-open-tab
  *  flow; `faction` opens the faction panel (Maintenance unfunded, which is faction-level, not
- *  per-system); `events` opens the events panel (the three event bands navigate to the event's own
- *  system when it has one — decided per-instance at click time, not here). */
+ *  per-system). */
 export type AlertDestination =
   | { kind: "system"; tab: AlertDestinationTab }
-  | { kind: "faction" }
-  | { kind: "events" };
+  | { kind: "faction" };
 
 /** One category's authored entry in the alert bar's tier list — tier, destination and order in one
  *  place so they cannot drift apart across the surfaces that read them. The default on/off state is

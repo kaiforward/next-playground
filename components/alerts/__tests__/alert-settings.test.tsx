@@ -24,7 +24,7 @@ import {
 // closing it and returning focus to its trigger is `Popover`'s own guarantee now (proven generically
 // in `components/ui/__tests__/popover.test.tsx`), not this file's to pin.
 
-const CRITICAL_LABELS = ["Dying worlds", "Strike", "Maintenance unfunded", "Crisis"];
+const CRITICAL_LABELS = ["Dying worlds", "Strike", "Maintenance unfunded"];
 
 async function renderPanel(categories: AlertCategorySettings = DEFAULT_ALERT_CATEGORIES) {
   const user = userEvent.setup();
@@ -42,7 +42,7 @@ async function renderPanel(categories: AlertCategorySettings = DEFAULT_ALERT_CAT
 }
 
 describe("AlertSettings — critical categories render no control at all", () => {
-  it("renders no checkbox for any of the four critical categories, while still naming them", async () => {
+  it("renders no checkbox for any of the three critical categories, while still naming them", async () => {
     await renderPanel();
 
     for (const label of CRITICAL_LABELS) {
@@ -57,8 +57,8 @@ describe("AlertSettings — critical categories render no control at all", () =>
 
   it("renders a checkbox for every hideable category — the absence above is category-specific, not global", async () => {
     await renderPanel();
-    // 16 categories total, 4 critical (no control) → 12 checkboxes.
-    expect(screen.getAllByRole("checkbox")).toHaveLength(12);
+    // 13 categories total, 3 critical (no control) → 10 checkboxes.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(10);
   });
 });
 
@@ -67,7 +67,7 @@ describe("AlertSettings — every category has a row, in each tier's own authore
    *  the panel itself reads — a derived expectation would agree with any ordering the component
    *  produced, including none. */
   const EXPECTED_ROWS: ReadonlyArray<readonly [string, readonly string[]]> = [
-    ["Critical", ["Dying worlds", "Strike", "Maintenance unfunded", "Crisis"]],
+    ["Critical", ["Dying worlds", "Strike", "Maintenance unfunded"]],
     [
       "Important",
       [
@@ -79,10 +79,9 @@ describe("AlertSettings — every category has a row, in each tier's own authore
         "No housing headroom",
         "Build blocked",
         "Industry idle",
-        "Disruption",
       ],
     ],
-    ["Opportunities", ["Build opportunity", "Colony opportunity", "Windfall"]],
+    ["Opportunities", ["Build opportunity", "Colony opportunity"]],
   ];
 
   it("accounts for every id in the registry — a category the panel drops has an unreachable setting", () => {

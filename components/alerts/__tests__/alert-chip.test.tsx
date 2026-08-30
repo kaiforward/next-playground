@@ -3,7 +3,6 @@ import { render, screen } from "@testing-library/react";
 import { AlertChip } from "@/components/alerts/alert-chip";
 import type {
   ControlledSystemsAlertCategory,
-  EventAlertCategory,
   FactionAlertCategory,
   SystemScopedAlertCategory,
 } from "@/lib/types/api";
@@ -41,13 +40,6 @@ const colonyOpportunity: ControlledSystemsAlertCategory = {
   instances: [],
 };
 
-const crisis: EventAlertCategory = {
-  id: "crisis",
-  unit: "events",
-  count: 2,
-  instances: [],
-};
-
 const maintenanceUnfunded: FactionAlertCategory = {
   id: "maintenance_unfunded",
   unit: "faction",
@@ -76,12 +68,6 @@ describe("AlertChip — accessible name carries the category, count and its own 
     expect(
       screen.getByRole("button", { name: "Colony opportunity, 3 of 12 controlled systems" }),
     ).toBeInTheDocument();
-  });
-
-  it("an events category names its unit and carries no systems denominator: 'Crisis, 2 events'", () => {
-    render(<AlertChip category={crisis} />);
-    expect(screen.getByRole("button", { name: "Crisis, 2 events" })).toBeInTheDocument();
-    expect(screen.queryByText(/developed systems/)).not.toBeInTheDocument();
   });
 
   it("the faction-level Maintenance unfunded chip carries a bare count, no denominator", () => {

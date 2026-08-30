@@ -15,9 +15,9 @@ describe("DEFAULT_ALERT_CATEGORIES — the authored defaults table", () => {
     }
   });
 
-  // The compiler already requires all sixteen keys; this catches the other direction — a key left
+  // The compiler already requires all thirteen keys; this catches the other direction — a key left
   // behind after a category is renamed or dropped from `ALERT_CATEGORY_IDS`.
-  it("carries exactly the sixteen category ids and no more", () => {
+  it("carries exactly the thirteen category ids and no more", () => {
     expect(Object.keys(DEFAULT_ALERT_CATEGORIES).sort()).toEqual([...ALERT_CATEGORY_IDS].sort());
   });
 
