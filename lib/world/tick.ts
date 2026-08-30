@@ -37,7 +37,7 @@
  */
 
 import { mulberry32, type RNG } from "@/lib/engine/universe-gen";
-import { scaleEventCaps, EVENT_SPAWN_INTERVAL, RELATIONS_EVENT_TYPES } from "@/lib/constants/events";
+import { EVENT_DEFINITIONS, RELATIONS_EVENT_TYPES } from "@/lib/constants/events";
 import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, EXPECTATION_PARAMS, MIGRATION_PARAMS, COLONY_DELIVERY_PARAMS } from "@/lib/constants/population";
@@ -1242,7 +1242,6 @@ export async function runWorldTick(
   const tick = world.meta.currentTick + 1;
   const rng = tickRng(world.meta.seed, tick);
   const eventsRng = tickRng(world.meta.seed, tick, EVENTS_RNG_STREAM);
-  const scaled = scaleEventCaps(world.systems.length);
 
   const globalEvents: Partial<GlobalEventMap> = {};
   const processorsRun: string[] = [];
@@ -1338,21 +1337,15 @@ export async function runWorldTick(
   // market writer, would leave the previous world's rows exposed to mutation.
   {
     const eventsWorld = new InMemoryEventsWorld(
-      { events, modifiers: [], markets, nextId },
+      { events, modifiers: [], markets },
       systems,
-      connections,
-      scaled.definitions,
+      EVENT_DEFINITIONS,
     );
     const result = await runEventsProcessor(eventsWorld, newTickCtx(), {
       rng: eventsRng,
-      caps: { maxEventsGlobal: scaled.maxEventsGlobal, maxEventsPerSystem: scaled.maxEventsPerSystem },
-      batchSize: scaled.batchSize,
-      spawnInterval: EVENT_SPAWN_INTERVAL,
-      definitions: scaled.definitions,
-      spawnEnabled: true,
+      definitions: EVENT_DEFINITIONS,
     });
     markets = eventsWorld.markets;
-    nextId = eventsWorld.nextId;
     events = eventsWorld.events.map((e) => ({
       id: e.id,
       type: e.type,
@@ -1393,7 +1386,7 @@ export async function runWorldTick(
         .filter((m) => SURVIVAL_GOODS.includes(m.goodId) && developedNow.has(m.systemId))
         .map((m) => [`${m.systemId}|${m.goodId}`, m.stock]),
     );
-    const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, scaled.definitions) });
+    const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, EVENT_DEFINITIONS) });
     const economyResult = await runEconomyProcessor(economyWorld, newTickCtx(), {
       interval: cadence.cycle,
       simParams: ECONOMY_SIM_PARAMS,
@@ -2104,7 +2097,7 @@ export async function runWorldTick(
     constructionProjects,
     markets,
     events,
-    modifiers: rebuildWorldModifiers(events, scaled.definitions),
+    modifiers: rebuildWorldModifiers(events, EVENT_DEFINITIONS),
     ships,
     flowEvents,
     relations,

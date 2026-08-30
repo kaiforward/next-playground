@@ -366,11 +366,12 @@ describe("runWorldTick", () => {
   });
 
   it("issues every id from one monotonic counter threaded across the tick's stages", async () => {
-    // Events and construction projects draw ids from the same World.nextId counter, threaded stage
-    // by stage: the events adapter mints, hands the advanced counter back, directed-build mints from
-    // there, and the relations adapter takes it next. The id prefix does not disambiguate them — the
-    // threading is what keeps them distinct — so a stage that failed to read the counter back would
-    // silently reissue a value that is already live.
+    // Construction projects and relations-spawned events (border_conflict, pact_under_negotiation,
+    // alliance_dissolved) draw ids from the same World.nextId counter, threaded stage by stage:
+    // directed-build mints "construction-" ids, then the relations adapter takes the counter next
+    // and mints "event-" ids. The id prefix does not disambiguate them — the threading is what keeps
+    // them distinct — so a stage that failed to read the counter back would silently reissue a value
+    // that is already live.
     const base = generateWorld({ systemCount: 100, seed: 42 });
     const a = base.factions[0].homeworldId;
     const b = base.factions[1].homeworldId;
@@ -384,7 +385,10 @@ describe("runWorldTick", () => {
         { fromId: b, toId: a, fuelCost: 1 },
       ],
     };
-    const after = await runTicks(world, 120);
+    // 120 ticks was enough while random spawning also minted "event-" ids; with only relations
+    // creating events, this seed's first faction pair crosses into border conflict at tick 278 —
+    // run well past it.
+    const after = await runTicks(world, 320);
 
     const eventIds = after.events.map((e) => e.id);
     const projectIds = after.constructionProjects.map((p) => p.id);

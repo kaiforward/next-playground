@@ -78,23 +78,6 @@ export interface EventDefinition {
   weight: number;
 }
 
-// ── Spawn / cap constants ───────────────────────────────────────
-
-/** Ticks between spawn attempts. */
-export const EVENT_SPAWN_INTERVAL = 5;
-
-/** Max concurrent events at a single system. */
-export const MAX_EVENTS_PER_SYSTEM = 3;
-
-/**
- * Base max concurrent events globally (for 600 systems).
- * Actual cap is derived at runtime: TOTAL_SYSTEMS * EVENT_COVERAGE_TARGET.
- */
-export const MAX_EVENTS_GLOBAL = 150;
-
-/** Target fraction of systems with active events. Used to scale caps by universe size. */
-export const EVENT_COVERAGE_TARGET = 0.25;
-
 /** Safety caps for aggregated modifier values. */
 export const MODIFIER_CAPS = {
   /** Minimum anchor multiplier (never fully zero out the anchor). */
@@ -813,39 +796,4 @@ for (const [type, def] of Object.entries(EVENT_DEFINITIONS)) {
  */
 export function getPhaseEffectSummary(eventType: EventTypeId, phaseName: string): string {
   return PHASE_EFFECT_SUMMARIES[`${eventType}:${phaseName}`] ?? "";
-}
-
-// ── Scale-aware caps ────────────────────────────────────────────
-
-const BASE_SYSTEMS = 600;
-
-interface ScaledEventCaps {
-  maxEventsGlobal: number;
-  maxEventsPerSystem: number;
-  batchSize: number;
-  definitions: Record<EventTypeId, EventDefinition>;
-}
-
-/**
- * Scale event caps and per-type maxActive for a given universe size.
- * Base values are tuned for 600 systems; this multiplies proportionally.
- */
-export function scaleEventCaps(totalSystems: number): ScaledEventCaps {
-  const scale = totalSystems / BASE_SYSTEMS;
-  const maxEventsGlobal = Math.round(totalSystems * EVENT_COVERAGE_TARGET);
-
-  const definitions: Record<EventTypeId, EventDefinition> = { ...EVENT_DEFINITIONS };
-  for (const key of EVENT_TYPE_IDS) {
-    definitions[key] = {
-      ...definitions[key],
-      maxActive: Math.max(2, Math.round(definitions[key].maxActive * scale)),
-    };
-  }
-
-  return {
-    maxEventsGlobal,
-    maxEventsPerSystem: MAX_EVENTS_PER_SYSTEM,
-    batchSize: Math.ceil(maxEventsGlobal / 50),
-    definitions,
-  };
 }

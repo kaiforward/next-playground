@@ -1,23 +1,11 @@
 import type {
-  EventCreate,
-  EventCreateResult,
   EventsWorld,
   EventWithName,
-  NeighborWithName,
   PhaseAdvance,
-  SystemShock,
-  SystemWithName,
 } from "@/lib/tick/world/events-world";
 import { buildModifiersForPhase, type ModifierRow } from "@/lib/engine/events";
-import { marketBandForRow } from "@/lib/engine/market-pricing";
-import { isEconomicallyActive } from "@/lib/engine/control";
-import { GOODS } from "@/lib/constants/goods";
 import type { EventDefinition, EventTypeId } from "@/lib/constants/events";
-import type {
-  TickConnection,
-  TickEvent,
-  TickSystem,
-} from "@/lib/tick/rows";
+import type { TickEvent, TickSystem } from "@/lib/tick/rows";
 import type { WorldMarket } from "@/lib/world/types";
 
 /**
@@ -32,23 +20,22 @@ export class InMemoryEventsWorld implements EventsWorld {
   events: TickEvent[];
   modifiers: ModifierRow[];
   markets: WorldMarket[];
-  nextId: number;
 
   constructor(
     initial: {
       events: TickEvent[];
       modifiers: ModifierRow[];
       markets: WorldMarket[];
-      nextId: number;
     },
     private readonly systems: TickSystem[],
-    private readonly connections: TickConnection[],
     private readonly definitions: Record<EventTypeId, EventDefinition>,
   ) {
     this.events = [...initial.events];
     this.modifiers = [...initial.modifiers];
+    // Load-bearing de-alias: the events stage is unconditional and the first
+    // to touch markets each tick (lib/world/tick.ts), so this copy is what
+    // stops a later stage's writes from reaching the previous world's rows.
     this.markets = initial.markets.map((m) => ({ ...m }));
-    this.nextId = initial.nextId;
   }
 
   getEvents(): Promise<EventWithName[]> {
@@ -68,42 +55,6 @@ export class InMemoryEventsWorld implements EventsWorld {
         systemName: e.systemId ? (nameById.get(e.systemId) ?? null) : null,
       })),
     );
-  }
-
-  getSystems(): Promise<SystemWithName[]> {
-    return Promise.resolve(
-      this.systems.map((s) => ({
-        id: s.id,
-        name: s.name,
-        economyType: s.economyType,
-        regionId: s.regionId,
-      })),
-    );
-  }
-
-  getNeighborsBySystem(
-    systemIds: string[],
-  ): Promise<Map<string, NeighborWithName[]>> {
-    const idSet = new Set(systemIds);
-    const sysById = new Map(this.systems.map((s) => [s.id, s]));
-    const result = new Map<string, NeighborWithName[]>();
-    for (const c of this.connections) {
-      if (!idSet.has(c.fromSystemId)) continue;
-      const target = sysById.get(c.toSystemId);
-      if (!target) continue;
-      let list = result.get(c.fromSystemId);
-      if (!list) {
-        list = [];
-        result.set(c.fromSystemId, list);
-      }
-      list.push({
-        id: target.id,
-        name: target.name,
-        economyType: target.economyType,
-        regionId: target.regionId,
-      });
-    }
-    return Promise.resolve(result);
   }
 
   advancePhases(advances: PhaseAdvance[]): Promise<void> {
@@ -135,77 +86,6 @@ export class InMemoryEventsWorld implements EventsWorld {
     this.events = this.events.filter((e) => !removeSet.has(e.id));
     this.modifiers = this.rebuildModifiersExcept(new Set());
     return Promise.resolve();
-  }
-
-  createEvents(creates: EventCreate[]): Promise<EventCreateResult[]> {
-    if (creates.length === 0) return Promise.resolve([]);
-
-    const nameById = new Map(this.systems.map((s) => [s.id, s.name]));
-    const results: EventCreateResult[] = [];
-
-    for (const c of creates) {
-      const id = `event-${this.nextId++}`;
-      this.events.push({
-        id,
-        type: c.type,
-        phase: c.phase,
-        systemId: c.systemId,
-        regionId: c.regionId,
-        startTick: c.startTick,
-        phaseStartTick: c.phaseStartTick,
-        phaseDuration: c.phaseDuration,
-        severity: c.severity,
-        sourceEventId: c.sourceEventId,
-      });
-      this.modifiers.push(...c.modifiers);
-      results.push({
-        eventId: id,
-        systemName: nameById.get(c.systemId) ?? "Unknown",
-      });
-    }
-    return Promise.resolve(results);
-  }
-
-  applyShocks(shocks: SystemShock[]): Promise<number> {
-    if (shocks.length === 0) return Promise.resolve(0);
-
-    const marketByKey = new Map<string, WorldMarket>();
-    for (const m of this.markets) {
-      marketByKey.set(`${m.systemId}|${m.goodId}`, m);
-    }
-    // A shock is a market-economic disruption; it only applies where an economy
-    // runs. Non-developed systems are economically inert (their markets freeze),
-    // so a shock targeting one is skipped — events still spawn galaxy-wide as
-    // ambient flavour, but they can't unfreeze an inert market.
-    const controlBySystem = new Map(this.systems.map((s) => [s.id, s.control]));
-
-    const touched = new Set<WorldMarket>();
-    for (const shock of shocks) {
-      const control = controlBySystem.get(shock.systemId);
-      if (control === undefined || !isEconomicallyActive(control)) continue;
-      const market = marketByKey.get(`${shock.systemId}|${shock.goodId}`);
-      if (!market) continue;
-      if (!isFinite(shock.value)) continue;
-      const delta =
-        shock.mode === "percentage"
-          ? market.stock * shock.value // continuous goods delta — no rounding (rounding breaks scale-invariance)
-          : shock.value;
-      // Single-stock model: a "supply" shock moves stock directly; a "demand"
-      // shock moves it inversely (more demand → scarcer → lower stock).
-      const signed = shock.parameter === "supply" ? delta : -delta;
-      // Accumulate unclamped, then clamp once below — clamping per-shock here
-      // would diverge when ≥2 shocks hit the same market in one tick.
-      market.stock += signed;
-      touched.add(market);
-    }
-    for (const market of touched) {
-      // Shocks clamp to the physical [0, maxStock] range — a supply-destruction event
-      // may push a market below the price-saturation point; that is the crisis zone
-      // working, not a floor breach.
-      const band = marketBandForRow(market, GOODS[market.goodId]);
-      market.stock = Math.max(0, Math.min(band.maxStock, market.stock));
-    }
-    return Promise.resolve(touched.size);
   }
 
   private rebuildModifiersExcept(exclude: Set<string>): ModifierRow[] {
