@@ -30,10 +30,9 @@ function sortEvents(events: ActiveEvent[], sortBy: string): ActiveEvent[] {
   });
 }
 
-/** Moved from `app/(game)/@panel/factions/[factionId]/events/page.tsx` — the galaxy-wide
- *  active-events feed, not scoped to the faction whose panel hosts it. Post-strip the only
- *  events left are the relations-owned diplomacy arcs, so this is a plain sortable list —
- *  no type filter, no severity sort (both dropped with the random-spawn content they served). */
+/** The galaxy-wide active-events feed — not scoped to the faction whose panel hosts it.
+ *  Events are the relations-owned diplomacy arcs, so this is a plain sortable list:
+ *  recency or time-remaining, no filtering. */
 export function FactionEvents() {
   const { events } = useEvents();
   const { activeSort, setActiveSort } = useFilterState({ defaultSort: "ticks" });
