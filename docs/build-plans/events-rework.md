@@ -107,3 +107,216 @@ the strip + lean core + arc plumbing, drawing the hazard sweep from this file.
 | Factions + relations | Relations arcs kept, promoted to popups; relations processor untouched otherwise. |
 | Save format (`World` shape) | Active events of deleted types exist in saves; `GameEvent`/phase shape changes with physical effects. Load path is a named gate. |
 | Harness metrics | `lib/tick-harness/event-analysis.ts` and any event-count characterisation pins re-derive after the strip. |
+
+## Spec
+
+**What changes:** Random events stop happening entirely. The only events left in the galaxy are
+the three diplomacy arcs factions create between themselves — a border conflict, a pact under
+negotiation, an alliance dissolving — and everything about how they already behave is unchanged.
+The economy stops receiving event shocks and modifiers except the border conflict's small
+production dip. The machinery that runs event phases and applies modifiers stays alive
+underneath, ready for future mechanic-owned arcs; the machinery that rolled dice to spawn events
+is removed with the events that used it.
+
+**Why:** From `## Idea`: the event system is trader-era decoration. Owner decisions this spec
+encodes, quoted (session 2026-08-30):
+- Strip scope: "yeah b let's just strip them completely its simpler" — option (b): the three
+  naturals (solar_storm, asteroid_strike, plague) strip too; each returns via its own inclusion
+  pass carrying its supporting mechanic. Until then the relations trio are the only live events.
+- One at a time: "we also need to decide how to include each new event, probably one at a time
+  so we can put in the right systems without rushing anything."
+- Alerts: "we just strip them from alerts as well, its not a problem, might be a category worth
+  keeping but that's it probs."
+- Entry bar (from `## Idea`, definitional): "an event can't go in unless we add a mechanic that
+  makes it interesting."
+
+**Evidence:** No `/measure` stage — `## Idea` → Exit: "the direction replaces the system rather
+than resting on claims about its current behaviour — the owner's explicit call." Readings this
+spec rests on instead:
+- Tick-cost share: events at 67.5% of a mid-cycle tick (tick-speed audit; in-process A/B only,
+  percentages portable, absolute ms are not — carried on the roadmap events row).
+- Code-map receipts gathered this session (Explore agent + `npm run impact`), cited inline below.
+
+**Not claimed:**
+- This spec does not design any future event — not the naturals' return, not the strike arc, not
+  popups. Each is its own later spec under the entry bar.
+- It does not fix the events adapter's copy-every-market-row-per-tick cost (roadmap: "Markets
+  need a real dirty/ownership model") — the copy is load-bearing de-aliasing and stays.
+- It does not remove the modifier plumbing (`anchorMult`/`productionMult`/`consumptionMult`
+  fields and their 16-module read surface) — values collapse to neutral, fields stay (hazard 1
+  below).
+- The skimmer's wrong takeaway: "events were deleted." The arc machinery, the relations trio,
+  and the modifier chain all survive; what died is random spawning and its content.
+
+### Behaviour
+
+**B1 — What stops.** The 14 spawnable event definitions are deleted, and with them the random
+spawn path. Today the tick enters spawning every 5th tick (`lib/tick/processors/events.ts:286-287`,
+`EVENT_SPAWN_INTERVAL` at `lib/constants/events.ts:84`) and picks by weighted random over
+weight>0 definitions (`lib/engine/events.ts:252, 271-286`) under a coverage-derived global cap
+(`maxEventsGlobal = round(totalSystems × 0.25)`, `lib/constants/events.ts:835`). All of it goes:
+`selectEventsToSpawn`, spawn weights, cooldown ledger, `scaleEventCaps`, `EVENT_SPAWN_INTERVAL`,
+`EVENT_COVERAGE_TARGET`, `MAX_EVENTS_PER_SYSTEM`, `MAX_EVENTS_GLOBAL` (already imported by
+nothing — documentation-only per code map). Observable: a fresh galaxy runs indefinitely with
+zero events until factions' relations cross the diplomacy thresholds.
+
+**B2 — What survives, unchanged.** The relations trio and their existing lifecycle:
+- Spawned only by the relations processor from pair scores (`lib/engine/relations.ts:189, 214-219,
+  235-239`; thresholds `lib/constants/relations.ts:161-171`).
+- `pact_under_negotiation` / `alliance_dissolved` lifecycle stays relations-owned — the events
+  processor skips them (`lib/tick/processors/events.ts:26-29, 126`).
+- `border_conflict` keeps its three phases driven by the events processor's phase machinery
+  (`lib/tick/processors/events.ts:116-146`, `checkPhaseTransition` at `lib/engine/events.ts:92-105`),
+  and its skirmish phase keeps production ×0.9 via the surviving modifier chain
+  (`lib/constants/events.ts:701-703` → `aggregateModifiers` `lib/engine/events.ts:158-184` →
+  `resolveMarketTickEntry` `lib/engine/market-tick-builder.ts:70` → economy row writes
+  `lib/tick/processors/economy.ts:187, 198`).
+- The faction-diplomacy panel surface survives intact (`components/panels/faction-diplomacy.tsx:184-215`).
+
+**B3 — Stranded machinery removed with its last client.** Deleted because no surviving
+definition uses it and future events arrive by redesign, not by reuse (AGENTS.md: clean up what
+the change strands):
+- Spread: `SpreadRule` (`lib/constants/events.ts:48-56`), `evaluateSpreadTargets`
+  (`lib/engine/events.ts:367-434`), the processor's spread pass
+  (`lib/tick/processors/events.ts:195-275`). No surviving definition has spread rules.
+- Shocks: `ShockTemplate` (`lib/constants/events.ts:39-46`), `buildShocksForPhase`
+  (`lib/engine/events.ts:328-346`), `expandShocks` + apply sites
+  (`lib/tick/processors/events.ts:79-88, 173, 257, 325`), `applyShocks`
+  (`lib/tick/adapters/memory/events.ts:169-209`). No surviving definition has shocks; the
+  physical-effects direction supersedes stock-delta shocks.
+- The `equilibrium_shift` modifier type — already dead today: `aggregateModifiers` matches only
+  `anchor_shift` and the two rate parameters (`lib/engine/events.ts:172-175`); nothing produces it.
+- The event notification channel: `EventNotificationPayload` emission
+  (`lib/tick/processors/events.ts:132-137, 179-187, 262-268, 333-339`) has **zero subscribers**
+  today (`lib/hooks/use-tick.ts:78` is the only reference; the toast/activity surfaces
+  `docs/active/gameplay/events.md:79` claims do not exist), and no surviving definition carries a
+  `notification` string.
+- The dev event spawner, whole vertical: `components/dev-tools/event-spawner-section.tsx`,
+  `lib/hooks/use-dev-tools.ts:112`, `client/worker/dev-commands.ts:30, 60-73`,
+  `lib/services/dev-tools.ts:54-110`. Post-strip it could only offer the trio, and a dev-spawned
+  relations event is already dropped by the tick (`metadata: null` at `lib/services/dev-tools.ts:90`
+  vs the ownership check at `lib/world/tick.ts:2059`, pinned by
+  `lib/world/__tests__/tick-events-modifiers.test.ts:128-138`) — the surface becomes vacuous.
+
+**B4 — Save format.** `SAVE_FORMAT_VERSION` bumps 16 → 17 (`lib/world/save.ts:36`). Nothing
+validates `event.type` on load (`deserialiseWorld` checks only version + shape,
+`lib/world/save.ts:74-94, 145-174`; `toEventTypeId` has zero callers), and a stale type crashes
+the alert bar on first render — `EVENT_DEFINITIONS[event.type]` then `.phases` unguarded at
+`lib/services/alerts.ts:633-639`, likewise `compareEventSeverity` (`lib/constants/ui.ts:174-179`).
+The bump makes old saves refuse loudly instead. Edge case covered: a save captured mid-arc with a
+stripped event active cannot reach the new code.
+
+**B5 — Alert bar.** The three event-band categories (Crisis / Disruption / Windfall,
+`lib/services/alerts.ts:607-663`, `EVENT_BAND` at `lib/constants/ui.ts:138-162`) are removed.
+Proposal (owner tentative — "might be a category worth keeping but that's it probs"): one
+**Diplomacy** category surfacing the relations trio, replacing the nonsensical residue the strip
+would otherwise leave (border_conflict as the only "Crisis", pact negotiation as the only
+"Windfall"). Decision lands at spec review.
+
+**B6 — UI prunes.** The three total `Record<EventTypeId, …>` maps in `lib/constants/ui.ts`
+(badge colour :42-63, icon :86-110, band :138-162) prune to the trio — the compiler forces this.
+`components/panels/faction-events.tsx` prunes `TYPE_CATEGORY` (:32-50) and its filter chips
+(:17-24) to what can still occur; note `getActiveEvents` drops `systemId: null` events
+(`lib/services/events.ts:17`), so of the trio only `border_conflict` ever reaches the per-system
+and galaxy-feed surfaces — the diplomacy pair render only in faction-diplomacy. The per-system
+Active Events section needs no change (renders null when empty,
+`components/events/active-events-section.tsx:13`).
+
+**B7 — Docs lifecycle, on this branch.** `docs/active/gameplay/events.md` is rewritten in
+present tense around the surviving system (it is stale today: claims spawn "every 20 ticks" vs
+code's 5, caps 15/2 vs derived `systems×0.25`/3, and toast + map-marker surfaces that do not
+exist — `docs/active/gameplay/events.md:38-40, 76-83`). `docs/active/gameplay/event-catalog.md`
+is rewritten around the trio (it documents none of them today). `docs/planned/event-ideas.md` is
+deleted — its arcs are random-modifier events the entry bar now forbids; before deletion its
+"Event Engine Mechanics" list (permanent phases, branching successors, player-triggered events)
+is folded into this working file as arc-plumbing candidates for the inclusion passes.
+
+**B8 — Tests.** Known breakage, each rewritten against the surviving system and red-proofed:
+`lib/constants/__tests__/ui.test.ts:33-118` (transcribes all 17 types),
+`lib/constants/__tests__/band-constants.test.ts:336-359` (builds its scenario from
+`solar_storm` phases — retype onto a synthetic definition),
+`lib/world/__tests__/tick-events-modifiers.test.ts` fixtures (use `inner_system_conflict` —
+retype onto `border_conflict`), `lib/services/__tests__/dev-tools.test.ts:29-84` (dev spawner
+deleted with its tests). The consumption-modifier tripwire
+(`lib/tick-harness/__tests__/population-analysis.test.ts:744-759`) passes unchanged.
+
+**B9 — Harness.** `lib/tick-harness/event-analysis.ts` and the simulate Event Impact table stay
+(border_conflict remains measurable; the empty case already prints "no events occurred",
+`scripts/simulate.ts:957-958`). The sim gate for this PR: `npm run simulate` at both horizons,
+pre- and post-strip on the same seed, read against the falsifier below.
+
+### Hazard worksheet
+
+**1. One quantity, several jobs** — quantities this design moves:
+
+| Quantity | Readers today | Which move | Intended? |
+|---|---|---|---|
+| `EVENT_DEFINITIONS` | 16 refs / 6 modules outside tick (impact run pasted below) + tick + harness | All — the Record shrinks to the trio | Yes; every module pruned in this PR |
+| `anchorMult` | 46 refs / 16 modules (impact run: events, industry, market-pricing, market-tick-builder, supply-chain, tick, economy, good-market-state, directed-logistics-world, economy-world, markets, world/types, dev-tools, market-entry, market, system-industry-readout) | Value only: no surviving producer ≠ 1 | Yes — **deliberately kept coupled**: fields and all readers stay, the strip removes producers, value rests at neutral 1. Removing the plumbing would churn 16 modules and break falsifier attribution |
+| `productionMult` | 18 refs / 9 modules (impact run) | Value: only producer left is border_conflict skirmish ×0.9 | Yes — same posture as anchorMult |
+| `consumptionMult` | same chain | No surviving producer ≠ 1 (tripwire test already asserts no shipped definition carries one) | Yes — same posture |
+
+`npm run impact -- EVENT_DEFINITIONS` (key excerpt): outside-tick readers
+`event-spawner-section.tsx:9,28` · `faction-diplomacy.tsx:15,185` · `alerts.ts:63,633` ·
+`dev-tools.ts:8,65` · `events.ts:3,19`; harness `population-analysis.ts:10,195`; "ALSO TOUCHED BY —
+processors that do not declare it: events (2/9)". Verdict: SHARED, hazard 1 applies — per-module
+disposition is the table above plus B3/B5/B6.
+
+**2. Constant read against its docstring:**
+
+| Constant | Docstring says | Used as | Same? |
+|---|---|---|---|
+| `EVENT_COVERAGE_TARGET` | "Target fraction of systems with active events. Used to scale caps by universe size." (`lib/constants/events.ts:95-96`) | Deleted with the spawner it scales | Yes — dies with its purpose |
+| `MAX_EVENTS_GLOBAL` | "Base max concurrent events globally (for 600 systems)" (`:89-93`) | Documentation-only; nothing imports it (code map) | Already dead; deleted |
+| `RELATIONS_PHASE_SENTINEL` | Finite sentinel because `Infinity` corrupts JSON saves (`lib/constants/relations.ts:190-200`) | Untouched | Yes |
+
+**3. System sweep:**
+
+| System | Interaction |
+|---|---|
+| Events | The change itself. |
+| Population + migration | None mechanical — no surviving event touches pops; plague's effects were economy modifiers only (`ModifierTemplate.domain` is `"economy"`, `lib/constants/events.ts:30-37`). |
+| Unrest / regime | Indirect only: stripped supply shocks stop perturbing stock (`applyShocks` moved `market.stock`, `lib/tick/adapters/memory/events.ts:195`), so provision dips the strike loop reads get calmer. Falsifier's sim gate covers it. |
+| Industry + staffing | Value-level only: `productionMult` rests at 1 except border_conflict skirmish (B2). No building/staffing surface touched. |
+| Infrastructure decay | None — no decay reader appears among event consumers (code map §8). |
+| Directed logistics | Value-level via `anchorMult` in `logisticsTarget`/`donorReserve` (`lib/tick/processors/good-market-state.ts:147-177`): rests at neutral 1 post-strip. Fields kept (hazard 1). |
+| Directed build / planner | None — planner reads demand/supply rows, not event state; no planner module appears in any event impact run. |
+| Colonisation + founding | None — no event consumer in founding paths (code map §8). |
+| Treasury / purse | None — events never touched money (`ModifierTemplate.domain` is `"economy"` rates/anchors only). |
+| Factions + relations | Trio preserved bit-for-bit (B2); relations processor untouched. |
+| Save format (`World` shape) | `WorldEvent.type` union shrinks; version bump 16→17 (B4). `World.modifiers` shape unchanged. |
+| Harness metrics | Event Impact table near-empties by design (B9); `population-analysis.ts:356` consumptionMult derivation returns 1 — unchanged behaviour, already asserted by its tripwire test. |
+
+**4. Claims carried with evidence:**
+
+| Claim | Evidence | Horizon/Cohort |
+|---|---|---|
+| Events = 67.5% of a mid-cycle tick | Tick-speed audit, carried on roadmap events row | 2,400-system profile run; percentages portable, ms not |
+| Stale save type crashes alert bar | `lib/services/alerts.ts:633-639` unguarded deref | Code read, this session |
+| Notification channel has no subscriber | `lib/hooks/use-tick.ts:78` is the only reference repo-wide | Code read, this session |
+| Diplomacy pair invisible on event surfaces | `lib/services/events.ts:17` drops `systemId: null` | Code read, this session |
+| `equilibrium_shift` produced/consumed by nothing | `lib/engine/events.ts:172-175` matches only the other two | Code read, this session |
+| events.md spawn figures stale | doc says interval 20 / caps 15/2; code says 5 (`lib/constants/events.ts:84`) / `systems×0.25` (`:835`) / 3 (`:87`) | Code read, this session |
+
+**5. Consumed signals exist:** the spec consumes nothing new. The one surviving dependency —
+border_conflict's phase lifecycle — is produced today at `lib/tick/processors/events.ts:116-146`
+with `RELATIONS_OWNED_LIFECYCLE` deliberately excluding it (`:22-29`), verified this session.
+
+**6. Aggregates the falsifier reads:** dispersion and liquidity from `npm run simulate`, read
+per market-role cohort at both horizons, same seed pre/post. What else moves them: nothing new —
+the strip changes no world-gen and no seeding, so cohort mix is identical; the only delta source
+is event-perturbation removal, which is exactly what the falsifier attributes.
+
+### Falsifier (provenance: committed at 1316c430, moved here unedited)
+
+If the post-strip `npm run simulate` at the 10,000-tick horizon shows a health-bar regression
+attributable to event removal — dispersion collapse or price pinning that the pre-strip baseline
+does not show — then the modifier events were load-bearing perturbation, and the strip cannot
+ship without a replacement perturbation source. That kills "strip with no replacement", the
+premise the whole sequencing stands on.
+
+### Exit
+
+Cross-mechanic surface — the strip touches the events, economy and relations processors' shared
+data, the tick body, the save format, and shared modifier fields with a 16-module read surface.
+**→ `/spec-review` is mandatory before any build plan.**
