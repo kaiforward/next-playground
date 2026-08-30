@@ -1,102 +1,91 @@
 # Events System
 
-Dynamic world events that inject economic shocks and trade opportunities. Events spawn randomly, progress through multi-phase arcs, apply modifiers to markets, and spread to neighboring systems.
+Three faction-relations arcs are the only events in the galaxy. Nothing spawns randomly: a
+border conflict, a pact under negotiation, and an alliance dissolving are created exclusively by
+the relations processor from faction-pair scores, never by dice. The machinery that runs event
+phases and applies modifiers is general-purpose and stays live underneath — a future
+mechanic-owned arc (a strike arc, a naturally-occurring hazard) can reuse it — but today the trio
+is everything that exists.
 
 ---
 
-## Event Types
+## The three event types
 
-### Primary Events (spawn naturally)
+| Event | Created by | Phases | System-visible? |
+|---|---|---|---|
+| `border_conflict` | Relations processor, when a faction pair drops to the unfriendly band (≤ -25) | Border Tension → Skirmish → De-escalation | Yes — targets a representative border system |
+| `pact_under_negotiation` | Relations processor, when a pair crosses +75 | Negotiation (single phase) | No — a political-map signal, no system/region target |
+| `alliance_dissolved` | Relations processor, when an allied pair drops below +50 | Dissolving (single phase) | No — same, no system/region target |
 
-| Event | Target Economies | Phases | Duration Range | Max Active |
-|---|---|---|---|---|
-| War | Industrial, Tech, Extraction, Core | Tensions → Escalation → Active Conflict → Aftermath → Recovery | 30-60 → 20-40 → 80-150 → 50-100 → 40-80 ticks | 3 |
-| Plague | Agricultural | Outbreak → Spreading → Containment → Recovery | 20-40 → 40-80 → 30-60 → 40-60 | 2 |
-| Trade Festival | Core | Single phase | 40-80 | 3 |
-| Mining Boom | Extraction | Discovery → Boom → Peak → Depletion | 20-30 → 60-100 → 40-60 → 60-100 | 2 |
-| Supply Shortage | Any | Single phase | 30-60 | 3 |
-| Pirate Raid | Any | Raiding → Crackdown | 40-80 → 20-40 | 3 |
-| Solar Storm | Any | Storm → Clearing | 15-30 → 10-20 | 2 |
-| Refugee Crisis | Core, Agricultural | Influx → Overcrowding → Settlement | 20-40 → 40-80 → 30-60 | 25 |
-| Trade Embargo | Core, Industrial | Imposed → Enforcement → Easing | 20-40 → 40-80 → 30-60 | 15 |
-| Tech Breakthrough | Tech | Discovery → Innovation → Adoption | 15-30 → 40-80 → 30-60 | 15 |
-| Asteroid Strike | Extraction | Impact → Aftermath → Recovery | 10-20 → 40-80 → 30-60 | 15 |
-
-### Child Events (spread only, never spawn independently)
-
-| Event | Parent | Effect |
-|---|---|---|
-| Conflict Spillover | War (Active phase) | Smaller war echo — fuel/machinery demand |
-| Plague Risk | Plague (Spreading phase), Refugee Crisis (Overcrowding phase) | Milder plague — reduced food production, medicine demand |
-| Ore Glut | Mining Boom (Boom phase) | Market oversupply — ore floods neighboring systems |
+See [faction-system.md](./faction-system.md#2-inter-faction-relations) for the relations
+thresholds and pact lifecycle these events sit inside.
 
 ---
 
-## Event Lifecycle
+## Lifecycle
 
-### Spawning
-- Every 20 ticks, a weighted random selection attempts to spawn one event
-- Constraints: global cap (15 concurrent), per-system cap (2), per-type cap, economy type filter, cooldown per system
-- Events spawn with severity 1.0; child events inherit and multiply parent severity
+**Creation.** Only the relations processor creates events, tagging the participant faction pair
+via `GameEvent.metadata`. The events processor never rolls dice to spawn one — there is no spawn
+path left to roll on.
 
-### Phase Progression
-Each tick, every active event is checked:
-1. If elapsed time >= phase duration: advance to next phase
-2. Old phase modifiers are deleted, new phase modifiers are created
-3. Phase-specific shocks (one-time market jolts) are applied
-4. If no next phase exists: event expires and is deleted
+**Phase progression — `border_conflict` only.** Each tick, the events processor checks whether an
+active `border_conflict` has reached the end of its current phase's rolled duration; if so it
+advances to the next phase (rolling that phase's duration from its authored range) or, at the end
+of De-escalation, expires. `pact_under_negotiation` and `alliance_dissolved` are single-phase and
+relations-owned: the events processor skips them entirely, and their lifecycle resolves through
+relations' own `metadata.expiresAtTick` — a pact confirms or an alliance dissolves on the
+relations processor's own schedule, not through phase transitions here.
 
-Phase duration is rolled randomly from a min-max range on each transition.
-
-### Spread
-When an event transitions to a phase with spread rules:
-- Each neighboring system is evaluated (filtered by region, economy type, existing event caps)
-- Per-neighbor probability roll determines if a child event spawns
-- Child events have their own lifecycle independent of the parent
+**Expiry.** `border_conflict` expires when it has no next phase after De-escalation. The
+relations-owned pair events are removed by the relations processor, not by expiry here.
 
 ---
 
 ## Modifiers
 
-Events apply modifiers that alter market behavior.
+The modifier chain that used to serve fourteen spawned event types survives for the one phase
+that still produces a value: `border_conflict`'s **Skirmish** phase multiplies production by
+**0.9** at its target system. Border Tension and De-escalation carry no modifiers.
 
-### Economy Modifiers
-| Modifier Type | Effect | Example |
-|---|---|---|
-| Anchor shift | Multiplies a good's pricing anchor (`targetStock`) for the event's duration. `>1` raises the anchor → higher prices (surfaces in UI as "demand up"); `<1` lowers it → cheaper ("demand down"). `goodId: null` applies to all goods. Multiple anchor shifts on the same good compound (multiply). | War active conflict: fuel x2.5, machinery x2.0 |
-| Rate multiplier | Scales production or consumption rate | War: production x0.4 (60% reduction) |
-
-The anchor for each good is stored as `WorldMarket.anchorMult` (default `1`). The economy processor recomputes it every tick from the system's active anchor-shift modifiers (same writer/cadence as `stock`) and writes it alongside stock. Reads are pure: price, trade limits, and trade-flow calculations all derive `targetStock = getTargetStock(good) × anchorMult`. Modifiers are aggregated per system: anchor shifts multiply together, rate multipliers multiply together. Caps: anchor multiplier [0.1, 4.0], rate multiplier [0.1, 3.0].
-
-### Shocks
-One-time market jolts applied when a phase starts. Directly modify supply or demand at the system (e.g., Plague Outbreak: -30 food supply instantly). Not repeated — only fire once per phase transition.
+The mechanism itself is unchanged and general: a phase's `ModifierTemplate` entries are anchor
+shifts (multiply a good's pricing anchor) or rate multipliers (production/consumption), aggregated
+per system by `aggregateModifiers`, capped to `[0.1, 4.0]` (anchor) / `[0.1, 3.0]` (rate), and
+consumed by the economy processor the same way any modifier always was
+(`WorldMarket.anchorMult` / the production and consumption rate multipliers). With nothing else
+producing a value, every field outside the Skirmish chain rests at its neutral default (1).
 
 ---
 
-## Event Surfaces
+## Player-visible surfaces
 
-- **Notifications**: the worker's pacing frame carries a notification on event spawn, phase transition, expiration, and spread. Displayed as toasts and in the Activity Panel ship log.
-- **Map markers**: Active events show colored borders/icons on system nodes. Color and icon vary by event type (red for war, amber for plague, green for mining, etc.).
-- **Activity Panel**: Economy tab shows all active events sorted by danger priority, with phase name, system link, and ticks remaining.
-- **System detail**: Events section shows active events at that system with phase and modifier details.
+- **Faction Diplomacy panel** — the trio's home surface: relation score, stance, active pacts and
+  conflicts for a faction pair (see [faction-system.md](./faction-system.md)).
+- **Faction Events list** (`components/panels/faction-events.tsx`) — a plain sortable list (by
+  time remaining or system name) of whatever events are active galaxy-wide. Since only
+  `border_conflict` ever carries a system, the two relations-only pair events don't appear on the
+  per-system or galaxy-feed surfaces — they render only in the faction-diplomacy panel.
+- **System detail** — the Active Events section on a system's panel shows a `border_conflict`
+  active there, renders nothing when empty.
 
----
-
-## Key Gameplay Effects
-
-- **War** is the most impactful — halves production, spikes weapon/fuel demand, and spreads conflict to neighbors. Long duration (200-390 ticks total).
-- **Solar Storm** is short-lived but devastating — near-total production halt.
-- **Trade Festival** is the only purely positive event — demand surge creates profitable opportunities.
-- **Mining Boom** floods ore markets, benefits refineries downstream, but ends in depletion.
-- **Refugee Crisis** strains food and medicine supplies at core/agricultural systems, with overcrowding spreading plague risk to neighbors.
-- **Trade Embargo** creates severe supply shortages at core/industrial systems — all production and supply suppressed, with slow easing.
-- **Tech Breakthrough** is a positive event for tech systems — electronics production surges, machinery demand rises.
-- **Asteroid Strike** devastates extraction systems — near-total production halt on impact (0.05x) and ore/fuel supply shocks.
+There is no toast, activity-feed, or map-marker surface for events — none exists in the codebase
+today.
 
 ---
 
-## System Interactions
+## System interactions
 
-- **Economy**: Events apply modifiers that shift the pricing anchor (`anchor_shift`) and multiply production/consumption rates (`rate_multiplier`); shocks deliver one-time stock jolts (see [economy.md](./economy.md))
-- **Tick engine**: Events processor runs every tick, before economy processor (see [tick-engine.md](../engineering/tick-engine.md))
-- **Faction relations**: the relations processor spawns border-conflict, pact-negotiation, and alliance-dissolution events (see [faction-system.md](./faction-system.md)); full faction wars are planned (see [war-system.md](../../planned/war-system.md))
+- **Economy**: the Skirmish modifier is the only live economy effect an event produces — see
+  [economy.md](./economy.md).
+- **Tick engine**: the events processor runs every tick, before economy (see
+  [tick-engine.md](../engineering/tick-engine.md)).
+- **Faction relations**: the relations processor is the sole producer of all three event types
+  (see [faction-system.md](./faction-system.md)); full faction wars are planned (see
+  [war-system.md](../../planned/war-system.md)).
+
+## Not in scope
+
+Random spawning, spread to neighbouring systems, one-time stock shocks, and the naturally
+occurring hazards (solar storm, asteroid strike, plague) are gone — not paused, not reduced in
+frequency. Each returns, if it returns, through its own future spec carrying the mechanic that
+makes it preventable or exploitable (see `docs/ROADMAP.md`'s events re-hook line). Until then the
+relations trio above is the whole system.

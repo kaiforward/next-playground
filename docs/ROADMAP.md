@@ -148,7 +148,28 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   Likely folds into the goods-pricing revisit above when that comes forward.
 
 After this queue: the events re-hook onto the new mechanics, then war / faction
-implementation — booked as rows when the queue thins.
+implementation — booked as rows when the queue thins. Arc-plumbing candidates for those inclusion
+passes (folded from the deleted `docs/planned/event-ideas.md`, which held them as items needing
+new engine capability beyond phase/modifier design — none designed, none prioritised against the
+rest of this queue):
+  - **Seasonal cycles** — deterministic, time-based arcs the events processor opens on a schedule
+    rather than a random roll (e.g. a periodic harvest/trade/solar-minimum rhythm). Needs a
+    time-based open trigger alongside the relations-driven one.
+  - **Branching phase outcomes** — a phase transition that picks from multiple successor phases by
+    roll or world-state condition, instead of always advancing linearly. Needs a phase
+    `successors: [{ phaseId, weight, condition? }]` field.
+  - **Dynamic modifier growth** — a modifier whose value changes each tick (grows, decays,
+    oscillates) instead of holding fixed within a phase. Needs a modifier `growth: { rate, curve }`.
+  - **Player-influenced resolution** — aggregate player/faction behaviour affecting a phase's
+    duration or outcome. Needs a per-system behaviour signal the processor can read.
+  - **Permanent phases** — a final phase that never expires, shifting equilibrium to a new
+    baseline rather than reverting. Needs a `permanent: true` phase field.
+  - **Moving event geography** — a target that shifts across the spatial graph over an event's
+    life, rather than a fixed system/region. Needs the events processor to track and migrate
+    positions.
+  - **Player-triggered events** — an analytics processor watching aggregate player behaviour and
+    opening arcs from detected patterns. Deferred pending the core simulation stabilising —
+    flagged as carrying real feedback-loop risk.
 
 ---
 
@@ -271,8 +292,9 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   autonomic build, decay, Industry UI).
   *Don't:* re-size the existing constants to make a brake cap work — no single multiplier fits a
   16–843× per-good spread, and inflating them inflates every pricing band with them.
-- **[M] Government layer revisit** — `GOVERNMENT_TYPES` carries only event weights and a danger baseline
-  since the flat `consumptionBoosts` term was deleted. Governments are economically inert until something
+- **[M] Government layer revisit** — `GOVERNMENT_TYPES` carries only a danger baseline (the flat
+  `consumptionBoosts` term and the events-rework strip's `eventWeights` are both gone). Governments
+  are economically inert until something
   replaces it as an economic axis. The leading candidate: **doctrine-driven allocation of discretionary
   spend** — a per-government budget split over the two spends a faction chooses (construction and
   founding; maintenance and logistics are obligations, not choices), so expansionist empires commit more

@@ -167,7 +167,7 @@ Per the no-archive rule, superseded docs are **deleted** (git is history). Execu
 | `planned/economy-simulation-vision.md` | **Stays the simulation north star.** §13 (roadmap) and the player-as-premium-throughput framing in §12.2 are superseded by this doc; the model (§2–§12) stands. Annotate, don't delete. |
 | `planned/war-system.md` | Stays planned; needs a re-spec pass for the player-as-faction seat before build. |
 | `planned/negative-space-economy.md` | Principle survives intact (§5.3 above depends on it). |
-| `planned/event-ideas.md` | Feeds the events re-point. |
+| `planned/event-ideas.md` | **Deleted.** Its engine-mechanics list folded into `docs/ROADMAP.md`'s post-queue events re-hook prose. |
 | `planned/economy-specialisation.md` + `economy-specialisation-s4-guardrails.md` | S4 calibration pauses; resume inside the post-pivot economy pass (goods rework + flow merge will reopen calibration anyway — do it once). |
 | `docs/SPEC.md` | Overview + core-loop sections rewrite to this concept; active-system sections update as systems are cut/re-pointed during the build. |
 | `docs/BACKLOG.md` | **Deleted.** The single ordered queue is `docs/ROADMAP.md`. |

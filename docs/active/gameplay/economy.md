@@ -150,7 +150,7 @@ At seed/reset time each market's starting stock is **cover-based** (`getInitialS
 
 All 8 government types are implemented. Every type has trade-offs — buffs balanced by debuffs. Source of truth: `lib/constants/government.ts`. For faction and identity framing see [faction-system.md](./faction-system.md).
 
-Government type carries **no economic modifier** — it is an event-weight and danger axis. Civilian
+Government type carries **no economic modifier** — it is a danger axis only. Civilian
 demand is identical under all eight types; a replacement economic axis is a planned government-layer
 revisit ([grand-strategy-vision.md](../../planned/grand-strategy-vision.md)).
 
@@ -167,7 +167,6 @@ revisit ([grand-strategy-vision.md](../../planned/grand-strategy-vision.md)).
 
 ### Government Effects on Gameplay
 - **Danger baseline**: Feeds the system danger readout (world attribute — nothing mechanical consumes it since the arrival pipeline was cut). Frontier is the highest at 10%.
-- **Event weights**: Per-type adjustments to event-type likelihood (see `lib/constants/government.ts`).
 
 ---
 
@@ -204,7 +203,7 @@ This restores the cover model's intended invariant — **same cycles-of-cover �
 ### Per-Tick Simulation (runs once per economy-shard update)
 The economy processor groups the shard's markets **by system** and runs the coupled cascade on each (`simulateCoupledEconomyTick`). Within a system goods are processed in recipe-topological order so a fresh input feeds its consumer the same tick; each good's stock is updated:
 
-1. **Apply event modifiers** — active events apply one-time stock shocks, multiply production/consumption rates, or shift the pricing reference (`anchorMult`).
+1. **Apply event modifiers** — an active event phase can multiply production/consumption rates or shift the pricing reference (`anchorMult`). The one live producer is `border_conflict`'s Skirmish phase (production ×0.9 at its target system); every other market's multipliers rest at the neutral 1.
 2. **Input-gated, brake-limited production** — the building-capacity production rate is throttled by `inputGate` (recipe-input availability; 1 for tier-0), then by the production brake's ceiling: full rate while stock sits at or below the **warehouse knee** — the larger of `BRAKE_USE_COVER (40)` cycles of the system's use figure (× `anchorMult`) and `BRAKE_OUTPUT_COVER (8)` cycles of its own reference capacity — ramping linearly to zero at `BRAKE_RAMP (1.3) ×` the knee. No price-anchor quantity reaches the brake. Production is also scaled down by the **strike multiplier** — if the system's `unrest` is above the strike threshold, a smooth suppression factor reduces output. The recipe inputs are then drawn from local stock in proportion to actual output (see [Supply Chain & Input-Gating](#supply-chain--input-gating)).
 3. **Self-limiting consumption** — its population-scaled civilian consumption rate removes stock, ramped by the shared ration curve (`consumptionFactor`; see [Supply Chain & Input-Gating](#supply-chain--input-gating)): full delivery at or above `RATION_COVER` (2) cycles of demand, `sqrt(stock / rationStock)` below it, zero at empty. This is the same curve and the same threshold industrial input draws use — `minStock`/`maxStock` (the pricing band) never enter this ramp. Consumption is **never suppressed** by strikes — people still need goods even when workers walk out.
 4. **Clamp** — stock bounded to `[0, maxStock]`. `minStock` is a pricing-only reserve (see [Market Pricing Band](#market-pricing-band-per-market-stock-range)); it does not gate or clamp the tick's draw.
@@ -318,7 +317,7 @@ The system screen surfaces dynamic population and stability through two views, b
 
 ### Event-Driven Anchor Shifts
 
-Events can shift a good's **pricing reference** (the anchor) — the stock level at which mid price equals base price. This is distinct from a one-time stock shock (which moves stock immediately and persistently); an anchor shift changes *what price a given stock level reads as* for the duration of the event, without touching stock itself.
+An event phase can shift a good's **pricing reference** (the anchor) — the stock level at which mid price equals base price. An anchor shift changes *what price a given stock level reads as* for the duration of the event, without touching stock itself. No shipped event phase currently carries one — the mechanism below is live plumbing awaiting a producer, and `anchorMult` rests at 1 everywhere.
 
 **Modifier**: `anchor_shift` (`parameter: "target_stock"`). The value is a **multiplier** (`anchorMult`) applied to the per-system reference:
 - `> 1` — raises the reference → goods read as scarcer → higher prices ("demand spike")
@@ -342,7 +341,7 @@ See [events.md](./events.md) for the full modifier catalog and event definitions
 The per-market steps above sit inside a larger ordering — the logical sequence each market's state moves through every tick. The **economy** processor processes its shard of systems each tick (every system refreshes every `ECONOMY_UPDATE_INTERVAL` ticks) — and only **developed** systems participate; unclaimed and controlled systems are economically inert (seeded markets frozen, population 0). **Event** modifiers layer on top; goods move between systems only via **directed logistics** (see [economy-autonomic-agency.md](./economy-autonomic-agency.md)). Two additional processors — **population** and **migration** — run after economy and complete the consequence loop:
 
 ```
-EVENTS       run first  - stock shocks (one-time jolts) + modifiers
+EVENTS       run first  - phase advances + modifiers
    |                      (ongoing: scale production/consumption rates,
    |                      shift the pricing reference)
    v
@@ -394,7 +393,7 @@ Viewed another way, the simulation stacks four layers from static to real-time:
                                clamp, directed logistics, infrastructure decay
                                (count -> used, live popCap), population
                                growth/decline, migration, demandRate rewrite
-3  Disruptions (events)        shocks + modifiers temporarily change how
+3  Disruptions (events)        modifiers temporarily change how
                                layer 2 behaves
 ```
 
@@ -404,7 +403,7 @@ Inter-system goods movement (directed logistics) is detailed in [economy-autonom
 
 ## System Interactions
 
-- **Events** inject economic shocks — one-time stock jolts (immediate stock deltas), rate multipliers (production/consumption scale), and **anchor shifts** (the sustained price lever: multiply a good's per-system pricing reference for the event's duration, raising or lowering where "mid price = base price" sits). Anchor shifts and stock shocks are distinct: a shock moves stock immediately; an anchor shift changes *what price a given stock level reads as* for as long as the event is active. Both are live every tick across all read paths (market display, trade-flow gradient). (see [events.md](./events.md))
+- **Events** touch the economy through one live channel: `border_conflict`'s Skirmish phase multiplies production by 0.9 at its target system. The wider modifier chain — rate multipliers and **anchor shifts** (multiply a good's per-system pricing reference for the event's duration) — stays live across every read path, with no other producer today. (see [events.md](./events.md))
 - **Navigation danger** is partly driven by government danger baseline — a readout-only world attribute since the teardown (see [navigation.md](./navigation.md))
 - **Faction system** (planned) will add faction-specific economic modifiers and war-driven market disruption (see [faction-system.md](./faction-system.md))
 
