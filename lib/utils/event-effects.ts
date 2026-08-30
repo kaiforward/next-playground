@@ -10,6 +10,11 @@ function goodDisplayName(goodId: string): string {
  * Derive a human-readable effect summary from a phase's modifiers.
  * Anchor shifts surface as "X demand up/down" (high demand = high price).
  * Returns e.g. "Food, Medicine demand up · Production slowed".
+ *
+ * A phase that derives no parts falls back to its own authored
+ * `effectSummary` when it has one, then to the generic "Minor market
+ * effects" text. A phase that does derive parts always shows them —
+ * an authored line never shadows a real effect.
  */
 export function summarisePhaseEffects(phase: EventPhaseDefinition): string {
   const parts: string[] = [];
@@ -42,5 +47,5 @@ export function summarisePhaseEffects(phase: EventPhaseDefinition): string {
   if (productionChange === "down") parts.push("Production slowed");
   if (productionChange === "up") parts.push("Production boosted");
 
-  return parts.length > 0 ? parts.join(" · ") : "Minor market effects";
+  return parts.length > 0 ? parts.join(" · ") : (phase.effectSummary ?? "Minor market effects");
 }

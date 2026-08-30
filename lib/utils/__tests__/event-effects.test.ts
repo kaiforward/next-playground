@@ -3,15 +3,18 @@ import type {
   EventPhaseDefinition,
   ModifierTemplate,
 } from "@/lib/constants/events";
+import { EVENT_DEFINITIONS, getPhaseEffectSummary } from "@/lib/constants/events";
 import { summarisePhaseEffects } from "@/lib/utils/event-effects";
 
-/** Build a minimal phase carrying only the modifiers under test. */
-function phase(modifiers: ModifierTemplate[]): EventPhaseDefinition {
+/** Build a minimal phase carrying only the modifiers (and optionally the authored
+ *  fallback copy) under test. */
+function phase(modifiers: ModifierTemplate[], effectSummary?: string): EventPhaseDefinition {
   return {
     name: "test_phase",
     displayName: "Test Phase",
     durationRange: [10, 20],
     modifiers,
+    ...(effectSummary !== undefined ? { effectSummary } : {}),
   };
 }
 
@@ -138,6 +141,49 @@ describe("summarisePhaseEffects", () => {
         value: 1.8,
       };
       expect(summarisePhaseEffects(phase([legacy]))).toBe("Minor market effects");
+    });
+  });
+
+  describe("authored effectSummary fallback", () => {
+    it("shows the authored copy for a modifier-less phase instead of the generic fallback", () => {
+      expect(summarisePhaseEffects(phase([], "Forces massing at the border"))).toBe(
+        "Forces massing at the border",
+      );
+    });
+
+    it("never lets authored copy shadow a phase that does derive real modifier parts", () => {
+      expect(
+        summarisePhaseEffects(phase([anchor(1.5, "fuel")], "Forces massing at the border")),
+      ).toBe("Fuel demand up");
+    });
+
+    it("still falls back to the generic text when a modifier-less phase has no authored copy", () => {
+      expect(summarisePhaseEffects(phase([]))).toBe("Minor market effects");
+    });
+  });
+
+  describe("border_conflict phase copy (production data, not a synthetic phase)", () => {
+    it("shows the authored line for the tension phase, which carries no modifiers", () => {
+      expect(getPhaseEffectSummary("border_conflict", "tension")).toBe(
+        "Forces massing at the border",
+      );
+    });
+
+    it("shows the authored line for the de_escalation phase, which carries no modifiers", () => {
+      expect(getPhaseEffectSummary("border_conflict", "de_escalation")).toBe(
+        "Forces standing down",
+      );
+    });
+
+    it("still derives the real summary for the skirmish phase's production modifier", () => {
+      expect(getPhaseEffectSummary("border_conflict", "skirmish")).toBe("Production slowed");
+    });
+
+    it("carries no residual effectSummary field on the skirmish phase (nothing to shadow)", () => {
+      const skirmish = EVENT_DEFINITIONS.border_conflict.phases.find(
+        (p) => p.name === "skirmish",
+      );
+      expect(skirmish?.effectSummary).toBeUndefined();
     });
   });
 });

@@ -63,6 +63,11 @@ export interface EventPhaseDefinition {
   notification?: string;
   shocks?: ShockTemplate[];
   spread?: SpreadRule[];
+  /** Authored player-facing effects line for a phase whose modifiers derive nothing —
+   *  `summarisePhaseEffects` falls back to this instead of its generic "Minor market
+   *  effects" text when present. A phase that does derive modifier parts always shows
+   *  those instead; this can never shadow a real effect. */
+  effectSummary?: string;
 }
 
 export interface EventDefinition {
@@ -676,6 +681,7 @@ const borderConflict: EventDefinition = {
       displayName: "Border Tension",
       durationRange: [15, 25],
       modifiers: [],
+      effectSummary: "Forces massing at the border",
     },
     {
       name: "skirmish",
@@ -690,6 +696,7 @@ const borderConflict: EventDefinition = {
       displayName: "De-escalation",
       durationRange: [10, 20],
       modifiers: [],
+      effectSummary: "Forces standing down",
     },
   ],
 };
