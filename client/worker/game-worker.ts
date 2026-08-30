@@ -414,12 +414,6 @@ async function runCommand(
         const result = await dev.advanceTicks(envelope.payload);
         return { type: "commandResult", id, result };
       }
-      case "spawnEvent": {
-        const dev = engine.dev;
-        if (!dev) return { type: "commandResult", id, result: { ok: false, error: DEV_COMMANDS_UNAVAILABLE } };
-        const { result } = await runWorldMutatingCommand(engine, () => dev.spawnEvent(envelope.payload));
-        return { type: "commandResult", id, result };
-      }
       case "resetEconomy": {
         const dev = engine.dev;
         if (!dev) return { type: "commandResult", id, result: { ok: false, error: DEV_COMMANDS_UNAVAILABLE } };

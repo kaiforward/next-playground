@@ -617,30 +617,20 @@ describe("createGameWorker — dev commands", () => {
     expect(state.frame.worldVersion).toBeGreaterThan(0);
   });
 
-  it("spawnEvent, resetEconomy and inspectWorld round-trip through the worker's command channel", async () => {
+  it("resetEconomy and inspectWorld round-trip through the worker's command channel", async () => {
     const scope = createFakeWorkerScope<InboundMessage, OutboundMessage>();
     createGameWorker(scope);
     scope.receive({ type: "boot", config: BOOT_CONFIG });
     await waitForBoot(scope);
     send(scope, { id: "ng", type: "newGame", payload: SMALL_NEW_GAME });
     await waitForCommandResult(scope, "ng");
-    const systemId = getWorld().systems[0].id;
-
-    send(scope, { id: "spawn", type: "spawnEvent", payload: { systemId, eventType: "solar_storm" } });
-    const spawnResult = narrowCommandResult<{ eventId: string; type: string; phase: string }>(
-      (await waitForCommandResult(scope, "spawn")).result,
-    );
-    expect(spawnResult.ok).toBe(true);
-    if (spawnResult.ok) expect(getWorld().events.some((e) => e.id === spawnResult.data.eventId)).toBe(true);
 
     send(scope, { id: "reset", type: "resetEconomy", payload: null });
-    const resetResult = narrowCommandResult<{ marketsReset: number; eventsCleared: number }>(
+    const resetResult = narrowCommandResult<{ marketsReset: number }>(
       (await waitForCommandResult(scope, "reset")).result,
     );
     expect(resetResult.ok).toBe(true);
-    if (resetResult.ok) expect(resetResult.data.eventsCleared).toBeGreaterThan(0);
-    // resetEconomy clears events — the spawned one above is gone.
-    expect(getWorld().events).toHaveLength(0);
+    if (resetResult.ok) expect(resetResult.data.marketsReset).toBeGreaterThan(0);
 
     send(scope, { id: "inspect", type: "inspectWorld", payload: null });
     const inspectResult = narrowCommandResult<{ meta: { currentTick: number }; counts: { systems: number } }>(

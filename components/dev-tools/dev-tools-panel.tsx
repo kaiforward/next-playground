@@ -4,11 +4,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { TabList, Tab } from "@/components/ui/tabs";
 import { AdvanceTicksSection } from "./advance-ticks-section";
-import { EventSpawnerSection } from "./event-spawner-section";
 import { EconomyOverviewSection } from "./economy-overview-section";
 import { MapDebugSection } from "./map-debug-section";
 
-const TABS = ["Tick", "Events", "Economy", "Map"] as const;
+const TABS = ["Tick", "Economy", "Map"] as const;
 type Tab = (typeof TABS)[number];
 
 export function DevToolsPanel() {
@@ -55,7 +54,6 @@ export function DevToolsPanel() {
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-3">
             {tab === "Tick" && <AdvanceTicksSection />}
-            {tab === "Events" && <EventSpawnerSection />}
             {tab === "Economy" && <EconomyOverviewSection />}
             {tab === "Map" && <MapDebugSection />}
           </div>

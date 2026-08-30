@@ -4,12 +4,10 @@ import { setWorld, clearWorld, getWorld, getWorldVersion } from "@/lib/world/sto
 import { tickLoop } from "@/lib/world/tick-loop";
 import {
   advanceTicks,
-  spawnEvent,
   resetEconomy,
   getEconomySnapshot,
   inspectWorld,
 } from "@/lib/services/dev-tools";
-import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { getInitialStock } from "@/lib/constants/market-economy";
 import { yieldsOf } from "@/lib/engine/resources";
 import type { World, WorldEvent, WorldEventModifier } from "@/lib/world/types";
@@ -25,64 +23,8 @@ afterEach(() => {
   clearWorld();
 });
 
-describe("spawnEvent", () => {
-  it("creates an event and its phase modifiers on the happy path", () => {
-    const system = world.systems[0];
-    const def = EVENT_DEFINITIONS.solar_storm;
-    const firstPhase = def.phases[0];
-    expect(firstPhase.modifiers.length).toBeGreaterThan(0);
-
-    const result = spawnEvent({ systemId: system.id, eventType: "solar_storm" });
-    if (!result.ok) throw new Error(`expected ok, got error: ${result.error}`);
-
-    expect(result.data.type).toBe("solar_storm");
-    expect(result.data.phase).toBe(firstPhase.name);
-    expect(result.data.eventId).toMatch(/^event-/);
-
-    const after = getWorld();
-    const event = after.events.find((e) => e.id === result.data.eventId);
-    expect(event).toBeDefined();
-    expect(event?.systemId).toBe(system.id);
-    expect(event?.regionId).toBe(system.regionId);
-    expect(event?.type).toBe("solar_storm");
-    expect(event?.phase).toBe(firstPhase.name);
-
-    const modifiers = after.modifiers.filter((m) => m.eventId === result.data.eventId);
-    expect(modifiers.length).toBe(firstPhase.modifiers.length);
-
-    // nextId advances so subsequent spawns mint a fresh id.
-    expect(after.nextId).toBe(world.nextId + 1);
-  });
-
-  it("creates an event with zero modifiers when the first phase defines none", () => {
-    const system = world.systems[0];
-    const def = EVENT_DEFINITIONS.border_conflict;
-    const firstPhase = def.phases[0];
-    expect(firstPhase.modifiers.length).toBe(0);
-
-    const result = spawnEvent({ systemId: system.id, eventType: "border_conflict" });
-    if (!result.ok) throw new Error(`expected ok, got error: ${result.error}`);
-
-    const after = getWorld();
-    const modifiers = after.modifiers.filter((m) => m.eventId === result.data.eventId);
-    expect(modifiers.length).toBe(0);
-    expect(after.events.some((e) => e.id === result.data.eventId)).toBe(true);
-  });
-
-  it("returns ok:false for an unknown event type", () => {
-    const system = world.systems[0];
-    const result = spawnEvent({ systemId: system.id, eventType: "not_a_real_event" });
-    expect(result.ok).toBe(false);
-  });
-
-  it("returns ok:false for an unknown system id", () => {
-    const result = spawnEvent({ systemId: "does-not-exist", eventType: "solar_storm" });
-    expect(result.ok).toBe(false);
-  });
-});
-
 describe("resetEconomy", () => {
-  it("reseeds market stock to getInitialStock and resets anchorMult, clearing events/modifiers", () => {
+  it("reseeds market stock to getInitialStock and resets anchorMult", () => {
     // A settled system — only those have market rows to reseed.
     const system = world.systems.find((s) => s.control === "developed")!;
 
@@ -94,7 +36,36 @@ describe("resetEconomy", () => {
         : m,
     );
 
-    // Seed a fake event + modifier so we can assert they're cleared.
+    const seeded: World = { ...world, markets: mutatedMarkets };
+    setWorld(seeded);
+
+    const result = resetEconomy();
+    if (!result.ok) throw new Error(`expected ok, got error: ${result.error}`);
+
+    expect(result.data.marketsReset).toBe(seeded.markets.length);
+
+    const after = getWorld();
+
+    // Independently compute the expected seed stock the same way the source does.
+    const buildings: Record<string, number> = {};
+    for (const b of world.buildings) {
+      if (b.systemId === system.id) buildings[b.buildingType] = b.count;
+    }
+    const yields = yieldsOf(system);
+    const expectedStock = getInitialStock(buildings, yields, system.population, targetGoodId);
+
+    const resetRow = after.markets.find((m) => m.systemId === system.id && m.goodId === targetGoodId);
+    expect(resetRow).toBeDefined();
+    expect(resetRow?.stock).toBe(expectedStock);
+    expect(resetRow?.anchorMult).toBe(1);
+  });
+
+  it("leaves an active relations event and its modifiers in place — resetEconomy no longer owns event lifecycle", () => {
+    const system = world.systems[0];
+
+    // A parked pact_under_negotiation event, the alliance-blocking case from B3: deleting it here
+    // would permanently block that pair's alliance since the spawn condition needs a fresh
+    // threshold crossing, not a parked-above-threshold state.
     const fakeEvent: WorldEvent = {
       id: "fake-event-1",
       type: "solar_storm",
@@ -119,36 +90,15 @@ describe("resetEconomy", () => {
       value: 0.05,
     };
 
-    const seeded: World = {
-      ...world,
-      markets: mutatedMarkets,
-      events: [fakeEvent],
-      modifiers: [fakeModifier],
-    };
+    const seeded: World = { ...world, events: [fakeEvent], modifiers: [fakeModifier] };
     setWorld(seeded);
 
     const result = resetEconomy();
     if (!result.ok) throw new Error(`expected ok, got error: ${result.error}`);
 
-    expect(result.data.marketsReset).toBe(seeded.markets.length);
-    expect(result.data.eventsCleared).toBe(1);
-
     const after = getWorld();
-    expect(after.events).toEqual([]);
-    expect(after.modifiers).toEqual([]);
-
-    // Independently compute the expected seed stock the same way the source does.
-    const buildings: Record<string, number> = {};
-    for (const b of world.buildings) {
-      if (b.systemId === system.id) buildings[b.buildingType] = b.count;
-    }
-    const yields = yieldsOf(system);
-    const expectedStock = getInitialStock(buildings, yields, system.population, targetGoodId);
-
-    const resetRow = after.markets.find((m) => m.systemId === system.id && m.goodId === targetGoodId);
-    expect(resetRow).toBeDefined();
-    expect(resetRow?.stock).toBe(expectedStock);
-    expect(resetRow?.anchorMult).toBe(1);
+    expect(after.events).toEqual([fakeEvent]);
+    expect(after.modifiers).toEqual([fakeModifier]);
   });
 });
 
@@ -238,11 +188,6 @@ describe("getEconomySnapshot", () => {
 describe("no-world guard", () => {
   beforeEach(() => {
     clearWorld();
-  });
-
-  it("spawnEvent returns ok:false when no world is loaded", () => {
-    const result = spawnEvent({ systemId: "any-system", eventType: "solar_storm" });
-    expect(result.ok).toBe(false);
   });
 
   it("resetEconomy returns ok:false when no world is loaded", () => {

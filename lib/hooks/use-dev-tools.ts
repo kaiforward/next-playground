@@ -6,8 +6,8 @@ import { narrowCommandResult } from "@/lib/types/guards";
 import type { EconomySnapshotSystem, WorldInspection } from "@/lib/services/dev-tools";
 
 /**
- * Dev tools (build plan Task 13) — dispatches through the same worker command channel every other
- * mutation hook in `lib/hooks/` uses (`lib/runtime/command-client.ts`, Task 8), but does NOT adopt
+ * Dev tools — dispatches through the same worker command channel every other
+ * mutation hook in `lib/hooks/` uses (`lib/runtime/command-client.ts`), but does NOT adopt
  * `useCommandMutation`'s `{mutate, mutateAsync, isPending}` surface
  * (`lib/hooks/use-command-mutation.ts`): the dev panel's components
  * (`components/dev-tools/advance-ticks-section.tsx` etc.) read `.data`/`.error.message` too — the
@@ -15,7 +15,7 @@ import type { EconomySnapshotSystem, WorldInspection } from "@/lib/services/dev-
  * `useCommandMutation` itself for one dev-only caller would change a production-facing hook's
  * contract for no production benefit, so this file keeps its own small local state instead.
  *
- * The commands dispatched here (`advanceTicks`, `spawnEvent`, `resetEconomy`, `economySnapshot`)
+ * The commands dispatched here (`advanceTicks`, `resetEconomy`, `economySnapshot`)
  * only exist in a build where `client/worker/dev-commands.ts` was actually loaded
  * (`import.meta.env.DEV` — see that module's header docstring). Without a command transport
  * configured, `sendCommand` resolves `{ok:false, error:"Command transport not configured."}` — the
@@ -103,22 +103,8 @@ export function useAdvanceTicksMutation() {
   });
 }
 
-export function useSpawnEventMutation() {
-  return useDevMutation<
-    { systemId: string; eventType: string; severity?: number },
-    { eventId: string; type: string; phase: string }
-  >((payload) => {
-    const id = crypto.randomUUID();
-    return sendCommand({ id, type: "spawnEvent", payload }).then((message) => {
-      const result = narrowCommandResult<{ eventId: string; type: string; phase: string }>(message.result);
-      if (!result.ok) throw new Error(result.error);
-      return result.data;
-    });
-  });
-}
-
 /**
- * Console-inspection affordance (spec §10, build plan Task 13 review finding 1): `inspectWorld`
+ * Console-inspection affordance: `inspectWorld`
  * was protocol-wired with no reachable caller — a developer had to write code to invoke it. This is
  * the minimal honest affordance: a button (`components/dev-tools/advance-ticks-section.tsx`) that
  * dispatches the command and `console.log`s the result, so "Dev inspection of the world... exposing
@@ -136,10 +122,10 @@ export function useInspectWorldMutation() {
 }
 
 export function useResetEconomyMutation() {
-  return useDevMutation<void, { marketsReset: number; eventsCleared: number }>(() => {
+  return useDevMutation<void, { marketsReset: number }>(() => {
     const id = crypto.randomUUID();
     return sendCommand({ id, type: "resetEconomy", payload: null }).then((message) => {
-      const result = narrowCommandResult<{ marketsReset: number; eventsCleared: number }>(message.result);
+      const result = narrowCommandResult<{ marketsReset: number }>(message.result);
       if (!result.ok) throw new Error(result.error);
       return result.data;
     });

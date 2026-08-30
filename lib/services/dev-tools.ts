@@ -5,14 +5,11 @@
 
 import { getWorld, hasWorld, setWorld } from "@/lib/world/store";
 import { tickLoop } from "@/lib/world/tick-loop";
-import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { getInitialStock } from "@/lib/constants/market-economy";
 import { GOODS } from "@/lib/constants/goods";
-import { buildModifiersForPhase, rollPhaseDuration } from "@/lib/engine/events";
 import { spotPrice, curveForRow } from "@/lib/engine/market-pricing";
 import { yieldsOf } from "@/lib/engine/resources";
-import { isEventTypeId } from "@/lib/types/guards";
-import type { World, WorldEvent, WorldEventModifier } from "@/lib/world/types";
+import type { World } from "@/lib/world/types";
 
 // ── Result types ────────────────────────────────────────────────
 
@@ -23,8 +20,8 @@ type ServiceResult<T> =
 // ── Advance ticks ───────────────────────────────────────────────
 
 /**
- * Runs `count` ticks through `TickLoop.runTicks` — the real loop's own `tickOnce`/`emit` path
- * (build plan Task 13) — rather than looping `runWorldTick` locally and committing once at the
+ * Runs `count` ticks through `TickLoop.runTicks` — the real loop's own `tickOnce`/`emit`
+ * path — rather than looping `runWorldTick` locally and committing once at the
  * end. Every tick's own `setWorld` and subscriber notification fire exactly as they do for a paced
  * tick, so a worker (or any other `tickLoop.subscribe` consumer) sees the batch's progress the same
  * way it sees ordinary ticks — the store is never left stale until the whole batch finishes.
@@ -46,69 +43,6 @@ export async function advanceTicks(count: number): Promise<ServiceResult<{ newTi
       newTick: getWorld().meta.currentTick,
       elapsed: Math.round(performance.now() - start),
     },
-  };
-}
-
-// ── Spawn event ─────────────────────────────────────────────────
-
-export function spawnEvent(params: {
-  systemId: string;
-  eventType: string;
-  severity?: number;
-}): ServiceResult<{ eventId: string; type: string; phase: string }> {
-  if (!isEventTypeId(params.eventType)) {
-    return { ok: false, error: `Unknown event type: ${params.eventType}` };
-  }
-  if (!hasWorld()) {
-    return { ok: false, error: "No world loaded." };
-  }
-  const def = EVENT_DEFINITIONS[params.eventType];
-
-  const world = getWorld();
-  const system = world.systems.find((s) => s.id === params.systemId);
-  if (!system) {
-    return { ok: false, error: `System not found: ${params.systemId}` };
-  }
-
-  const severity = params.severity ?? 1.0;
-  const firstPhase = def.phases[0];
-  // Dev tool — outside the deterministic tick path, so Math.random is fine here.
-  const duration = rollPhaseDuration(firstPhase.durationRange, Math.random);
-  const tick = world.meta.currentTick;
-
-  // Same id namespace the in-memory events adapter mints from.
-  const eventId = `event-${world.nextId}`;
-  const event: WorldEvent = {
-    id: eventId,
-    type: params.eventType,
-    phase: firstPhase.name,
-    systemId: system.id,
-    regionId: system.regionId,
-    startTick: tick,
-    phaseStartTick: tick,
-    phaseDuration: duration,
-    severity,
-    sourceEventId: null,
-    metadata: null,
-  };
-
-  const modifiers: WorldEventModifier[] = buildModifiersForPhase(
-    firstPhase,
-    system.id,
-    system.regionId,
-    severity,
-  ).map((row) => ({ eventId, ...row }));
-
-  setWorld({
-    ...world,
-    events: [...world.events, event],
-    modifiers: [...world.modifiers, ...modifiers],
-    nextId: world.nextId + 1,
-  });
-
-  return {
-    ok: true,
-    data: { eventId, type: event.type, phase: event.phase },
   };
 }
 
@@ -160,19 +94,26 @@ export function getEconomySnapshot(): ServiceResult<{ systems: EconomySnapshotSy
 // ── Reset economy ───────────────────────────────────────────────
 
 /**
- * Reset every market to its fresh-world state and clear all events/modifiers. Each row returns to its
- * capacity-driven seed stock with a neutral anchor, and the tick-persisted flow-state fields are returned
- * to their world-gen seed: satisfaction 1, the squeeze/proposal persistence counters 0, and the realised
- * rate, suppression and logistics-binding flags dropped (so the row reads exactly as a freshly generated
- * market). anchorMult resets to 1 alongside stock: all events (and their anchor_shift modifiers) are being
- * cleared, so the neutral anchor is the correct clean-slate value.
+ * Reset every market to its fresh-world state. Each row returns to its capacity-driven seed stock
+ * with a neutral anchor, and the tick-persisted flow-state fields are returned to their world-gen
+ * seed: satisfaction 1, the squeeze/proposal persistence counters 0, and the realised rate,
+ * suppression and logistics-binding flags dropped (so the row reads exactly as a freshly generated
+ * market). anchorMult resets to 1 alongside stock — there is no event-driven anchor_shift modifier
+ * to reconcile it against any more.
+ *
+ * Does NOT touch `world.events`/`world.modifiers`: relations owns the event lifecycle now, and
+ * modifiers rebuild from active events every tick (`rebuildWorldModifiers`, `lib/world/tick.ts`),
+ * so clearing them here would only fight that rebuild. Deleting an active relations event
+ * unconditionally would also be actively harmful — a `pact_under_negotiation` event parked above
+ * the negotiation threshold can never respawn once cleared, because its spawn condition requires a
+ * fresh threshold *crossing* (`lib/tick/processors/relations.ts`), permanently blocking that pair's
+ * alliance.
  */
-export function resetEconomy(): ServiceResult<{ marketsReset: number; eventsCleared: number }> {
+export function resetEconomy(): ServiceResult<{ marketsReset: number }> {
   if (!hasWorld()) {
     return { ok: false, error: "No world loaded." };
   }
   const world = getWorld();
-  const eventsCleared = world.events.length;
 
   const buildingsBySystem = new Map<string, Record<string, number>>();
   for (const b of world.buildings) {
@@ -200,9 +141,9 @@ export function resetEconomy(): ServiceResult<{ marketsReset: number; eventsClea
     };
   });
 
-  setWorld({ ...world, markets, events: [], modifiers: [] });
+  setWorld({ ...world, markets });
 
-  return { ok: true, data: { marketsReset: markets.length, eventsCleared } };
+  return { ok: true, data: { marketsReset: markets.length } };
 }
 
 // ── Inspect world ───────────────────────────────────────────────
