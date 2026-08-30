@@ -204,8 +204,8 @@ describe("serialiseWorld / deserialiseWorld", () => {
     // A v16 save's world.player.alertCategories can carry the three now-deleted keys
     // (crisis/disruption/windfall) and world.events can carry a now-deleted WorldEvent.type — the
     // version bump is what makes this fail cleanly instead of loading a stale shape the structural
-    // spot-checks below `meta` cannot see, or crashing the alert bar's unguarded
-    // EVENT_DEFINITIONS[event.type] lookup on first render.
+    // spot-checks below `meta` cannot see, or silently expiring a foreign event row through the
+    // events processor's stale-type guard.
     const json = JSON.stringify({ formatVersion: 16, world });
     const result = deserialiseWorld(json);
     expect(result.ok).toBe(false);

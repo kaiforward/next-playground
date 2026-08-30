@@ -39,9 +39,7 @@ function snapshotPrices(
 interface ActiveEventRecord {
   type: EventTypeId;
   systemId: string | null;
-  severity: number;
   startTick: number;
-  sourceEventId: string | null;
   startPrices: EventBoundaryPrice[];
 }
 
@@ -71,9 +69,7 @@ export function trackEventLifecycles(
       activeEvents.set(event.id, {
         type: event.type,
         systemId: event.systemId,
-        severity: event.severity,
         startTick: event.startTick,
-        sourceEventId: event.sourceEventId,
         startPrices: snapshotPrices(preTickMarkets, event.systemId),
       });
     }
@@ -86,10 +82,8 @@ export function trackEventLifecycles(
         id,
         type: info.type,
         systemId: info.systemId,
-        severity: info.severity,
         startTick: info.startTick,
         endTick: tick,
-        sourceEventId: info.sourceEventId,
         startPrices: info.startPrices,
         endPrices: snapshotPrices(markets, info.systemId),
       });
@@ -114,10 +108,8 @@ export function flushActiveEvents(
       id,
       type: info.type,
       systemId: info.systemId,
-      severity: info.severity,
       startTick: info.startTick,
       endTick: endTick,
-      sourceEventId: info.sourceEventId,
       startPrices: info.startPrices,
       endPrices: snapshotPrices(finalMarkets, info.systemId),
     });
@@ -140,9 +132,6 @@ export function computeEventImpacts(
 ): EventImpact[] {
   if (events.length === 0) return [];
 
-  // Build a lookup from event id → type for resolving parent types
-  const eventTypeById = new Map(events.map((e) => [e.id, e.type]));
-
   const impacts: EventImpact[] = [];
 
   for (const event of events) {
@@ -158,29 +147,22 @@ export function computeEventImpacts(
     // Base-price-weighted average
     const weightedPriceImpactPct = computeWeightedPriceImpact(goodPriceChanges);
 
-    // Resolve parent event type (null for root events)
-    const parentEventType = event.sourceEventId
-      ? (eventTypeById.get(event.sourceEventId) ?? null)
-      : null;
-
     impacts.push({
       eventId: event.id,
       eventType: event.type,
       systemId: event.systemId,
       systemName: event.systemId ? (systemNames.get(event.systemId) ?? event.systemId) : "—",
-      severity: event.severity,
       startTick: event.startTick,
       endTick: event.endTick,
       duration,
-      parentEventType,
       goodPriceChanges,
       weightedPriceImpactPct,
     });
   }
 
-  // Sort: root events by abs(weightedPriceImpactPct) desc,
-  // child events grouped after their parent by same sort
-  return sortImpactsWithChildren(impacts);
+  return impacts.sort(
+    (a, b) => Math.abs(b.weightedPriceImpactPct) - Math.abs(a.weightedPriceImpactPct),
+  );
 }
 
 /**
@@ -231,80 +213,4 @@ function computeWeightedPriceImpact(changes: GoodPriceChange[]): number {
   }
 
   return totalWeight > 0 ? weightedSum / totalWeight : 0;
-}
-
-/**
- * Sort impacts: root events by abs(weightedPriceImpactPct) desc,
- * child events grouped immediately after their parent by same sort.
- */
-function sortImpactsWithChildren(impacts: EventImpact[]): EventImpact[] {
-  const roots = impacts.filter((e) => e.parentEventType === null);
-  const children = impacts.filter((e) => e.parentEventType !== null);
-
-  // Sort roots by absolute weighted price impact
-  roots.sort((a, b) => Math.abs(b.weightedPriceImpactPct) - Math.abs(a.weightedPriceImpactPct));
-
-  // Group children by parent event id
-  const childrenByParent = new Map<string, EventImpact[]>();
-  for (const child of children) {
-    // Find parent: the root event whose id matches child's sourceEventId from the lifecycle
-    // We need to find the parent by looking at the original event's sourceEventId
-    // Since parentEventType is derived from sourceEventId, we need to match by event relationship
-    // The child's eventId's sourceEventId maps to a parent event
-    // But we only have parentEventType — find the root event at the same or nearby system
-    // Actually, we stored sourceEventId in lifecycle, but EventImpact doesn't have it.
-    // We'll just group orphan children at the end, sorted by impact.
-    const parentId = findParentEventId(child, roots);
-    if (parentId) {
-      const list = childrenByParent.get(parentId) ?? [];
-      list.push(child);
-      childrenByParent.set(parentId, list);
-    } else {
-      // Orphan child — append at end
-      const list = childrenByParent.get("__orphan__") ?? [];
-      list.push(child);
-      childrenByParent.set("__orphan__", list);
-    }
-  }
-
-  // Sort each child group
-  for (const group of childrenByParent.values()) {
-    group.sort((a, b) => Math.abs(b.weightedPriceImpactPct) - Math.abs(a.weightedPriceImpactPct));
-  }
-
-  // Interleave: root, then its children
-  const result: EventImpact[] = [];
-  for (const root of roots) {
-    result.push(root);
-    const kids = childrenByParent.get(root.eventId);
-    if (kids) result.push(...kids);
-  }
-
-  // Append orphan children
-  const orphans = childrenByParent.get("__orphan__");
-  if (orphans) result.push(...orphans);
-
-  return result;
-}
-
-/**
- * Find the most likely parent root event for a child event.
- * Match by: parentEventType matches root's eventType AND overlapping tick ranges.
- */
-function findParentEventId(child: EventImpact, roots: EventImpact[]): string | null {
-  // Find roots whose type matches the child's parentEventType
-  // and whose tick range overlaps with the child's
-  const candidates = roots.filter((r) =>
-    r.eventType === child.parentEventType &&
-    r.startTick <= child.startTick &&
-    r.endTick >= child.startTick,
-  );
-
-  if (candidates.length === 0) return null;
-
-  // If multiple, pick the one with the closest start tick
-  candidates.sort((a, b) =>
-    Math.abs(a.startTick - child.startTick) - Math.abs(b.startTick - child.startTick),
-  );
-  return candidates[0].eventId;
 }

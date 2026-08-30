@@ -36,8 +36,6 @@ function relationEvent(
     startTick: 5,
     phaseStartTick: 5,
     phaseDuration: 10,
-    severity: 1,
-    sourceEventId: null,
     metadata: { factionAId, factionBId, expiresAtTick: 100 },
     ...overrides,
   };

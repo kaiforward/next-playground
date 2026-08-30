@@ -43,9 +43,8 @@ relations-owned pair events are removed by the relations processor, not by expir
 
 ## Modifiers
 
-The modifier chain that used to serve fourteen spawned event types survives for the one phase
-that still produces a value: `border_conflict`'s **Skirmish** phase multiplies production by
-**0.9** at its target system. Border Tension and De-escalation carry no modifiers.
+One phase produces a modifier value: `border_conflict`'s **Skirmish** phase multiplies production
+by **0.9** at its target system. Border Tension and De-escalation carry no modifiers.
 
 The mechanism itself is unchanged and general: a phase's `ModifierTemplate` entries are anchor
 shifts (multiply a good's pricing anchor) or rate multipliers (production/consumption), aggregated

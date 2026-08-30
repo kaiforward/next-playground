@@ -14,10 +14,17 @@ interface SortOption {
   label: string;
 }
 
+/** The chip row is all-or-nothing: a caller that wants chips must supply the toggle
+ *  handler alongside them, so there's no shape where chips render but clicking one
+ *  silently does nothing. */
+interface ChipFilter {
+  chips: readonly FilterChip[];
+  activeChips: string[];
+  onChipToggle: (id: string) => void;
+}
+
 interface FilterBarProps {
-  chips?: readonly FilterChip[];
-  activeChips?: string[];
-  onChipToggle?: (id: string) => void;
+  chipFilter?: ChipFilter;
   searchValue?: string;
   onSearchChange?: (value: string) => void;
   searchPlaceholder?: string;
@@ -28,9 +35,7 @@ interface FilterBarProps {
 }
 
 export function FilterBar({
-  chips,
-  activeChips,
-  onChipToggle,
+  chipFilter,
   searchValue,
   onSearchChange,
   searchPlaceholder = "Search...",
@@ -42,14 +47,14 @@ export function FilterBar({
   return (
     <div className="flex flex-wrap items-center gap-2 mb-4">
       {/* Filter chips — omitted entirely when the caller has no chip set to offer */}
-      {chips && chips.length > 0 && onChipToggle && (
+      {chipFilter && chipFilter.chips.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {chips.map((chip) => {
-            const active = activeChips?.includes(chip.id) ?? false;
+          {chipFilter.chips.map((chip) => {
+            const active = chipFilter.activeChips.includes(chip.id);
             return (
               <button
                 key={chip.id}
-                onClick={() => onChipToggle(chip.id)}
+                onClick={() => chipFilter.onChipToggle(chip.id)}
                 className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
                   active
                     ? "bg-accent/20 border-accent text-text-accent"
@@ -98,4 +103,4 @@ export function FilterBar({
   );
 }
 
-export type { FilterChip, SortOption, FilterBarProps };
+export type { FilterChip, SortOption, ChipFilter, FilterBarProps };

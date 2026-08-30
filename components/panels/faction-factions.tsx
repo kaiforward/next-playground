@@ -81,9 +81,7 @@ export function FactionFactions() {
   return (
     <>
       <FilterBar
-        chips={chipsWithCounts}
-        activeChips={activeChips}
-        onChipToggle={toggleChip}
+        chipFilter={{ chips: chipsWithCounts, activeChips, onChipToggle: toggleChip }}
         searchValue={searchValue}
         onSearchChange={setSearchValue}
         searchPlaceholder="Search factions..."

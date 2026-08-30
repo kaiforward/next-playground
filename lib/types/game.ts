@@ -300,6 +300,5 @@ export interface ActiveEvent {
   phaseStartTick: number;
   phaseDuration: number;
   ticksRemaining: number;
-  severity: number;
 }
 

@@ -50,8 +50,6 @@ export class InMemoryEventsWorld implements EventsWorld {
         startTick: e.startTick,
         phaseStartTick: e.phaseStartTick,
         phaseDuration: e.phaseDuration,
-        severity: e.severity,
-        sourceEventId: e.sourceEventId,
         systemName: e.systemId ? (nameById.get(e.systemId) ?? null) : null,
       })),
     );
@@ -97,7 +95,7 @@ export class InMemoryEventsWorld implements EventsWorld {
       const phase = def.phases.find((p) => p.name === e.phase);
       if (!phase) continue;
       out.push(
-        ...buildModifiersForPhase(phase, e.systemId, e.regionId, e.severity),
+        ...buildModifiersForPhase(phase, e.systemId, e.regionId),
       );
     }
     return out;

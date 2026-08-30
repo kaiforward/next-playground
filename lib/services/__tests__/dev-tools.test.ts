@@ -63,7 +63,7 @@ describe("resetEconomy", () => {
   it("leaves an active relations event and its modifiers in place — resetEconomy no longer owns event lifecycle", () => {
     const system = world.systems[0];
 
-    // A parked pact_under_negotiation event, the alliance-blocking case from B3: deleting it here
+    // A parked pact_under_negotiation event, the alliance-blocking case: deleting it here
     // would permanently block that pair's alliance since the spawn condition needs a fresh
     // threshold crossing, not a parked-above-threshold state.
     const fakeEvent: WorldEvent = {
@@ -75,8 +75,6 @@ describe("resetEconomy", () => {
       startTick: 0,
       phaseStartTick: 0,
       phaseDuration: 20,
-      severity: 1,
-      sourceEventId: null,
       metadata: null,
     };
     const fakeModifier: WorldEventModifier = {

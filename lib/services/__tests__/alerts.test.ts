@@ -1487,7 +1487,7 @@ describe("getAlertData", () => {
       ]);
     });
 
-    // B5's pure removal: the three event alert categories (crisis / disruption / windfall) are gone
+    // The three event alert categories (crisis / disruption / windfall) are gone
     // with no replacement, so an active event — including the one type that still touches the
     // player's own economy — builds no event category at all, even while it is live.
     it("still emits exactly the thirteen categories with an active border_conflict in play — no event category is built", () => {
@@ -1499,7 +1499,7 @@ describe("getAlertData", () => {
         events: [
           {
             id: "ev-border", type: "border_conflict", phase: "skirmish", systemId: null, regionId: null,
-            startTick: 0, phaseStartTick: 0, phaseDuration: 50, severity: 1, sourceEventId: null,
+            startTick: 0, phaseStartTick: 0, phaseDuration: 50,
             metadata: { factionAId: pid, factionBId: otherFaction, expiresAtTick: 9999 },
           },
         ],

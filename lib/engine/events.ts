@@ -8,7 +8,6 @@ import type {
   EventDefinition,
   EventPhaseDefinition,
   EventTypeId,
-  ModifierTemplate,
 } from "@/lib/constants/events";
 
 // ── Types ───────────────────────────────────────────────────────
@@ -23,8 +22,6 @@ export interface EventSnapshot {
   startTick: number;
   phaseStartTick: number;
   phaseDuration: number;
-  severity: number;
-  sourceEventId: string | null;
 }
 
 /** Result of a phase transition check. */
@@ -83,30 +80,13 @@ export function checkPhaseTransition(
 // ── Modifier building ───────────────────────────────────────────
 
 /**
- * Scale a modifier template value by event severity.
- *
- * All modifier types lerp toward 1.0: `1 + (value - 1) × severity`.
- * For anchor_shift (a multiplier), 2.0 at severity 0.5 → 1.5; rate_multiplier
- * uses the same formula.
- */
-function scaleValue(
-  template: ModifierTemplate,
-  severity: number,
-): number {
-  // All types: lerp toward 1.0 (neutral)
-  return 1 + (template.value - 1) * severity;
-}
-
-/**
- * Build concrete modifier rows for a given phase.
- *
- * Resolves "system"/"region" targets to actual IDs and applies severity scaling.
+ * Build concrete modifier rows for a given phase, resolving "system"/"region"
+ * targets to actual IDs.
  */
 export function buildModifiersForPhase(
   phase: EventPhaseDefinition,
   systemId: string | null,
   regionId: string | null,
-  severity: number,
 ): ModifierRow[] {
   return phase.modifiers.map((template) => {
     const targetId = template.target === "system" ? systemId : regionId;
@@ -117,7 +97,7 @@ export function buildModifiersForPhase(
       targetId,
       goodId: template.goodId ?? null,
       parameter: template.parameter,
-      value: scaleValue(template, severity),
+      value: template.value,
     };
   });
 }

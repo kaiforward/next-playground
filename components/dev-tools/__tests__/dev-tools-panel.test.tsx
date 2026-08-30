@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DevToolsPanel } from "../dev-tools-panel";
 
-// B3: the dev event spawner vertical is removed — the panel offers only the tabs that survive
+// The dev event spawner vertical is removed — the panel offers only the tabs that survive
 // the strip. Pins the tab list rather than the deleted section's own markup, since the deleted
 // section is gone from the tree entirely once its tab is gone.
 

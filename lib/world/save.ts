@@ -33,9 +33,9 @@ import { effColumns, yieldColumns } from "@/lib/engine/resources";
 // are deleted, not merely defaulted), and `WorldEvent.type`'s union shrinks to the relations-owned
 // trio (the fourteen random-spawn event definitions are deleted). A pre-bump save can carry either
 // stale key: an old alertCategories record with a now-nonexistent key would leave a category with no
-// stored preference, and an old world.events row naming a stripped type would crash the alert bar's
-// unguarded `EVENT_DEFINITIONS[event.type]` lookup on first render — the bump makes both fail loudly
-// at load instead.
+// stored preference, and an old world.events row naming a stripped type would be silently expired by
+// the events processor's stale-type guard (`lib/tick/processors/events.ts`) rather than surfacing
+// anywhere — the bump makes both fail loudly at load instead of drifting unnoticed.
 export const SAVE_FORMAT_VERSION = 17;
 
 /** Reserved save name the tick loop autosaves to; the start screen's "Continue" loads it. */

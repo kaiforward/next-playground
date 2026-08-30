@@ -461,7 +461,7 @@ describe("summariseSupplyRegimes", () => {
     const event: WorldEvent = {
       id: "e1", type: "border_conflict", phase: "tension",
       systemId: "thirsty", regionId: "r1", startTick: 0, phaseStartTick: 0, phaseDuration: 10,
-      severity: 1, sourceEventId: null, metadata: null,
+      metadata: null,
     };
     expect(summariseSupplyRegimes(systems, markets, [event]))
       .toEqual(summariseSupplyRegimes(systems, markets));

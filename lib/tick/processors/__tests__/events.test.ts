@@ -111,8 +111,6 @@ describe("runEventsProcessor", () => {
       startTick: 0,
       phaseStartTick: 0,
       phaseDuration: 20,
-      severity: 1,
-      sourceEventId: null,
     };
     const world = makeWorld({ systems: [makeSystem("s1", "r1")], events: [event] });
 
@@ -149,8 +147,6 @@ describe("runEventsProcessor", () => {
       startTick: 0,
       phaseStartTick: 0,
       phaseDuration: 0, // elapsed immediately at tick 1 → advances into "skirmish"
-      severity: 1,
-      sourceEventId: null,
     };
     const fuelMarket = makeMarket("s1", "fuel", 100);
     const machineryMarket = makeMarket("s1", "machinery", 100);
@@ -183,8 +179,6 @@ describe("runEventsProcessor", () => {
       startTick: 0,
       phaseStartTick: 0,
       phaseDuration: 1,
-      severity: 1,
-      sourceEventId: null,
     };
     const dissolution: TickEvent = {
       id: "ev-diss",
@@ -195,8 +189,6 @@ describe("runEventsProcessor", () => {
       startTick: 0,
       phaseStartTick: 0,
       phaseDuration: 1,
-      severity: 1,
-      sourceEventId: null,
     };
 
     const world = makeWorld({
@@ -228,8 +220,6 @@ describe("runEventsProcessor", () => {
       startTick: 0,
       phaseStartTick: 0,
       phaseDuration: 0, // advances into "skirmish" at tick 1
-      severity: 1,
-      sourceEventId: null,
     };
     const expiring: TickEvent = {
       id: "ev-exp",
@@ -240,8 +230,6 @@ describe("runEventsProcessor", () => {
       startTick: 0,
       phaseStartTick: 0,
       phaseDuration: 0, // its final phase — expires at tick 1
-      severity: 1,
-      sourceEventId: null,
     };
     const world = makeWorld({
       systems: [makeSystem("s1", "r1"), makeSystem("s2", "r1")],

@@ -29,8 +29,6 @@ function seededEvent(overrides: Partial<WorldEvent> & Pick<WorldEvent, "id" | "t
     startTick: 0,
     phaseStartTick: 0,
     phaseDuration: NEVER_ADVANCES,
-    severity: 1,
-    sourceEventId: null,
     metadata: null,
     ...overrides,
   };
@@ -53,8 +51,8 @@ describe("runWorldTick — modifiers rebuilt from each event's CURRENT phase", (
     expect(skirmish).toBeDefined();
     expect(tension).toBeDefined();
     if (!skirmish || !tension) return;
-    const skirmishRows = buildModifiersForPhase(skirmish, systemId, null, 1);
-    const tensionRows = buildModifiersForPhase(tension, systemId, null, 1);
+    const skirmishRows = buildModifiersForPhase(skirmish, systemId, null);
+    const tensionRows = buildModifiersForPhase(tension, systemId, null);
     expect(skirmishRows).not.toEqual(tensionRows);
     expect(skirmishRows.length).toBeGreaterThan(0);
 

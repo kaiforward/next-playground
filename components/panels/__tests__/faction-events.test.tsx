@@ -28,7 +28,6 @@ function makeEvent(overrides: Partial<ActiveEvent>): ActiveEvent {
     phaseStartTick: 0,
     phaseDuration: 30,
     ticksRemaining: 30,
-    severity: 1,
     ...overrides,
   };
 }
@@ -82,15 +81,22 @@ describe("FactionEvents — plain sortable list, no chips", () => {
     expect(rows()).toEqual(["Zeta", "Alpha"]);
   });
 
-  it("shows the derived summary for a phase with real modifiers and the authored copy for one without", () => {
-    eventsValue.current = [
-      makeEvent({ id: "skirmish", phase: "skirmish", effects: "Production slowed" }),
-      makeEvent({ id: "tension", phase: "tension", effects: "Forces massing at the border" }),
-    ];
+  // The derivation itself (summarisePhaseEffects / getPhaseEffectSummary, including the
+  // authored copy for the two political phases) is asserted at the service level
+  // (lib/utils/__tests__/event-effects.test.ts) where the real function runs — this component
+  // only renders whatever string the events slice hands it, so that's all this asserts.
+  it("renders each event's effects string when present", () => {
+    eventsValue.current = [makeEvent({ id: "e1", effects: "Production slowed" })];
     render(<FactionEvents />);
 
     expect(screen.getByText("Production slowed")).toBeInTheDocument();
-    expect(screen.getByText("Forces massing at the border")).toBeInTheDocument();
-    expect(screen.queryByText("Minor market effects")).not.toBeInTheDocument();
+  });
+
+  it("renders no effects line for an event with an empty effects string", () => {
+    eventsValue.current = [makeEvent({ id: "e1", name: "Solo Event", effects: "" })];
+    const { container } = render(<FactionEvents />);
+
+    expect(screen.getByText("Solo Event")).toBeInTheDocument();
+    expect(container.querySelector("p")).not.toBeInTheDocument();
   });
 });

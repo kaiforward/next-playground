@@ -1188,7 +1188,7 @@ function rebuildWorldModifiers(
     if (!def) continue;
     const phase: EventPhaseDefinition | undefined = def.phases.find((p) => p.name === e.phase);
     if (!phase) continue;
-    for (const row of buildModifiersForPhase(phase, e.systemId, e.regionId, e.severity)) {
+    for (const row of buildModifiersForPhase(phase, e.systemId, e.regionId)) {
       out.push({ eventId: e.id, ...row });
     }
   }
@@ -1355,8 +1355,6 @@ export async function runWorldTick(
       startTick: e.startTick,
       phaseStartTick: e.phaseStartTick,
       phaseDuration: e.phaseDuration,
-      severity: e.severity,
-      sourceEventId: e.sourceEventId,
       metadata: metadataByEventId.get(e.id) ?? null,
     }));
     mergeGlobalEvents(globalEvents, result);
@@ -2080,8 +2078,6 @@ export async function runWorldTick(
       startTick: e.startTick ?? tick,
       phaseStartTick: e.phaseStartTick,
       phaseDuration: e.phaseDuration,
-      severity: e.severity ?? 1,
-      sourceEventId: e.sourceEventId ?? null,
       metadata: e.metadata,
     }));
     events = [...events.filter((e) => !RELATIONS_OWNED_TYPES.has(e.type)), ...updatedRelationsEvents];

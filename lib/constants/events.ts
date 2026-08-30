@@ -107,6 +107,7 @@ const pactUnderNegotiation: EventDefinition = {
       displayName: "Negotiation",
       durationRange: [5, 10],
       modifiers: [],
+      effectSummary: "Envoys shuttling between capitals",
     },
   ],
 };
@@ -126,6 +127,7 @@ const allianceDissolved: EventDefinition = {
       displayName: "Dissolving",
       durationRange: [5, 5],
       modifiers: [],
+      effectSummary: "Ambassadors packing for home",
     },
   ],
 };

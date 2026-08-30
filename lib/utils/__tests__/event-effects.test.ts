@@ -172,4 +172,30 @@ describe("summarisePhaseEffects", () => {
       expect(skirmish?.effectSummary).toBeUndefined();
     });
   });
+
+  describe("political-phase copy (production data — pact_under_negotiation, alliance_dissolved)", () => {
+    // Both phases carry modifiers: [] — purely political, zero economic effect — so without
+    // authored copy this would derive the generic "Minor market effects" text, which is wrong
+    // for an event with no market effect at all.
+    it("shows the authored line for pact_under_negotiation's negotiation phase", () => {
+      expect(getPhaseEffectSummary("pact_under_negotiation", "negotiation")).toBe(
+        "Envoys shuttling between capitals",
+      );
+    });
+
+    it("shows the authored line for alliance_dissolved's dissolving phase", () => {
+      expect(getPhaseEffectSummary("alliance_dissolved", "dissolving")).toBe(
+        "Ambassadors packing for home",
+      );
+    });
+
+    it("never falls back to the generic 'Minor market effects' text for either phase", () => {
+      expect(getPhaseEffectSummary("pact_under_negotiation", "negotiation")).not.toBe(
+        "Minor market effects",
+      );
+      expect(getPhaseEffectSummary("alliance_dissolved", "dissolving")).not.toBe(
+        "Minor market effects",
+      );
+    });
+  });
 });

@@ -194,7 +194,7 @@ function economyModifiers(events: ReadonlyArray<WorldEvent>): ModifierRow[] {
   for (const e of events) {
     const phase = EVENT_DEFINITIONS[e.type]?.phases.find((p) => p.name === e.phase);
     if (!phase) continue;
-    for (const mod of buildModifiersForPhase(phase, e.systemId, e.regionId, e.severity)) {
+    for (const mod of buildModifiersForPhase(phase, e.systemId, e.regionId)) {
       if (mod.domain === "economy") out.push(mod);
     }
   }

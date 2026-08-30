@@ -29,12 +29,14 @@ describe("FilterBar — chips are optional", () => {
     const onChipToggle = vi.fn();
     render(
       <FilterBar
-        chips={[
-          { id: "all", label: "All", count: 5 },
-          { id: "dominant", label: "Dominant", count: 2 },
-        ]}
-        activeChips={["all"]}
-        onChipToggle={onChipToggle}
+        chipFilter={{
+          chips: [
+            { id: "all", label: "All", count: 5 },
+            { id: "dominant", label: "Dominant", count: 2 },
+          ],
+          activeChips: ["all"],
+          onChipToggle,
+        }}
         sortOptions={SORT_OPTIONS}
         activeSort="a"
         onSortChange={vi.fn()}

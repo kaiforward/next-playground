@@ -730,10 +730,6 @@ export interface WorldEvent {
   startTick: number;
   phaseStartTick: number;
   phaseDuration: number;
-  /** Intensity multiplier (spread events are weaker). */
-  severity: number;
-  /** Parent event, for spread events. */
-  sourceEventId: string | null;
   /** Only populated for relations-spawned events. */
   metadata: WorldEventMetadata | null;
 }

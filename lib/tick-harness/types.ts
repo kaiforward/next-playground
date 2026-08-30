@@ -310,10 +310,8 @@ export interface EventLifecycle {
   type: EventTypeId;
   /** Null for region/pair-level events (e.g. relations-owned events). */
   systemId: string | null;
-  severity: number;
   startTick: number;
   endTick: number;
-  sourceEventId: string | null;
   /** Prices at the event's system when the event started ([] if systemId is null). */
   startPrices: EventBoundaryPrice[];
   /** Prices at the event's system when the event ended ([] if systemId is null). */
@@ -333,12 +331,9 @@ export interface EventImpact {
   eventType: string;
   systemId: string | null;
   systemName: string;
-  severity: number;
   startTick: number;
   endTick: number;
   duration: number;
-  /** null for root events, event type string for child/spread events. */
-  parentEventType: string | null;
   /** Per-good price changes between event start and end. */
   goodPriceChanges: GoodPriceChange[];
   /** Base-price-weighted average price change across all goods (%). */

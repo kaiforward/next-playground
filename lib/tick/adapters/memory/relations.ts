@@ -45,13 +45,13 @@ interface MemoryTradeFlow {
 /**
  * Stored shape for one relations-owned event (border_conflict,
  * pact_under_negotiation, alliance_dissolved). `phase`/`systemId`/`regionId`/
- * `startTick`/`severity`/`sourceEventId` mirror `World`'s unified `WorldEvent`
- * row exactly — they're optional here (unread by the relations processor
- * itself, which only needs `id`/`type`/`phaseStartTick`/`phaseDuration`/
- * `metadata`) so existing fixture-only callers (unit tests) keep compiling,
- * but `createRelationEvents` always fills them from the real event template
- * so a caller that seeds/reads back full `WorldEvent` rows (`lib/world/tick.ts`)
- * round-trips every field without loss.
+ * `startTick` mirror `World`'s unified `WorldEvent` row exactly — they're
+ * optional here (unread by the relations processor itself, which only needs
+ * `id`/`type`/`phaseStartTick`/`phaseDuration`/`metadata`) so existing
+ * fixture-only callers (unit tests) keep compiling, but `createRelationEvents`
+ * always fills them from the real event template so a caller that seeds/reads
+ * back full `WorldEvent` rows (`lib/world/tick.ts`) round-trips every field
+ * without loss.
  */
 interface MemoryRelationEvent {
   id: string;
@@ -62,8 +62,6 @@ interface MemoryRelationEvent {
   startTick?: number;
   phaseStartTick: number;
   phaseDuration: number;
-  severity?: number;
-  sourceEventId?: string | null;
   metadata: RelationEventView["metadata"];
 }
 
@@ -248,8 +246,6 @@ export class InMemoryRelationsWorld implements RelationsWorld {
         startTick: currentTick,
         phaseStartTick: currentTick,
         phaseDuration: c.phaseDuration,
-        severity: c.severity,
-        sourceEventId: null,
         metadata: { ...c.metadata },
       });
     }

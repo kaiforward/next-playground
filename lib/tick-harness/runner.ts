@@ -93,9 +93,7 @@ export function foldFoundingTick(
 interface ActiveEventRecord {
   type: TickEvent["type"];
   systemId: string | null;
-  severity: number;
   startTick: number;
-  sourceEventId: string | null;
   startPrices: { goodId: string; price: number }[];
 }
 

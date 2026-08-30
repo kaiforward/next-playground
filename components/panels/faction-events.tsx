@@ -50,7 +50,6 @@ export function FactionEvents() {
         sortOptions={SORT_OPTIONS}
         activeSort={activeSort}
         onSortChange={setActiveSort}
-        resultCount={{ shown: sorted.length, total: events.length }}
       />
 
       {sorted.length === 0 ? (
@@ -87,9 +86,6 @@ export function FactionEvents() {
               <div className="text-right shrink-0">
                 <div className="text-xs font-mono text-text-primary">
                   {formatDuration(event.ticksRemaining)}
-                </div>
-                <div className="text-xs text-text-secondary mt-0.5">
-                  Sev: {event.severity.toFixed(1)}
                 </div>
               </div>
             </li>

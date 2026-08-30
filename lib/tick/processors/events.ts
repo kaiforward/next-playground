@@ -91,7 +91,6 @@ export async function runEventsProcessor(
         a.nextPhase,
         a.snap.systemId,
         a.snap.regionId,
-        a.snap.severity,
       ),
     }));
     await world.advancePhases(advances);

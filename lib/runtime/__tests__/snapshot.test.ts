@@ -258,8 +258,7 @@ describe("buildStateFrame — event lists stay in the state slice", () => {
   function baseEvent(overrides: Partial<WorldEvent>): WorldEvent {
     return {
       id: "ev", type: "border_conflict", phase: "skirmish", systemId: null, regionId: null,
-      startTick: 0, phaseStartTick: 0, phaseDuration: 0, severity: 1,
-      sourceEventId: null, metadata: null,
+      startTick: 0, phaseStartTick: 0, phaseDuration: 0, metadata: null,
       ...overrides,
     };
   }

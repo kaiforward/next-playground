@@ -155,6 +155,4 @@ export interface TickEvent {
   startTick: number;
   phaseStartTick: number;
   phaseDuration: number;
-  severity: number;
-  sourceEventId: string | null;
 }

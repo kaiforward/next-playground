@@ -75,8 +75,6 @@ function makeSnapshot(
     startTick: 100,
     phaseStartTick: 100,
     phaseDuration: 15,
-    severity: 1.0,
-    sourceEventId: null,
     ...overrides,
   };
 }
@@ -123,7 +121,7 @@ describe("buildModifiersForPhase", () => {
   const def = makeDefinition();
 
   it("builds modifier rows with system target resolved", () => {
-    const rows = buildModifiersForPhase(def.phases[0], "sys-1", "reg-1", 1.0);
+    const rows = buildModifiersForPhase(def.phases[0], "sys-1", "reg-1");
     expect(rows).toHaveLength(1);
     expect(rows[0]).toEqual({
       domain: "economy",
@@ -150,43 +148,18 @@ describe("buildModifiersForPhase", () => {
         value: 2.0,
       }],
     };
-    const rows = buildModifiersForPhase(regionPhase, "sys-1", "reg-1", 1.0);
+    const rows = buildModifiersForPhase(regionPhase, "sys-1", "reg-1");
     expect(rows[0].targetType).toBe("region");
     expect(rows[0].targetId).toBe("reg-1");
   });
 
-  it("scales anchor_shift values by lerping toward 1.0", () => {
-    const rows = buildModifiersForPhase(def.phases[0], "sys-1", "reg-1", 0.5);
-    // value = 1.5, severity = 0.5 → 1 + (1.5 - 1) × 0.5 = 1.25
-    expect(rows[0].value).toBe(1.25);
-  });
-
-  it("scales rate_multiplier values by lerping toward 1.0", () => {
-    const rows = buildModifiersForPhase(def.phases[1], "sys-1", "reg-1", 0.5);
-    // value = 0.5, severity = 0.5 → 1 + (0.5 - 1) × 0.5 = 0.75
-    expect(rows[0].value).toBe(0.75);
-  });
-
-  it("returns full severity at 1.0 (anchor_shift)", () => {
-    const rows = buildModifiersForPhase(def.phases[0], "sys-1", "reg-1", 1.0);
-    expect(rows[0].value).toBe(1.5);
-  });
-
-  it("returns full severity at 1.0 (rate_multiplier)", () => {
-    const rows = buildModifiersForPhase(def.phases[1], "sys-1", "reg-1", 1.0);
+  it("passes rate_multiplier values through unscaled", () => {
+    const rows = buildModifiersForPhase(def.phases[1], "sys-1", "reg-1");
     expect(rows[0].value).toBe(0.5);
   });
 
-  it("returns neutral values at severity 0", () => {
-    const shiftRows = buildModifiersForPhase(def.phases[0], "sys-1", "reg-1", 0);
-    expect(shiftRows[0].value).toBe(1.0); // anchor_shift lerps to 1.0
-
-    const multRows = buildModifiersForPhase(def.phases[1], "sys-1", "reg-1", 0);
-    expect(multRows[0].value).toBe(1.0); // rate_multiplier lerps to 1.0
-  });
-
   it("sets null goodId when template has null", () => {
-    const rows = buildModifiersForPhase(def.phases[1], "sys-1", "reg-1", 1.0);
+    const rows = buildModifiersForPhase(def.phases[1], "sys-1", "reg-1");
     expect(rows[0].goodId).toBeNull();
   });
 });

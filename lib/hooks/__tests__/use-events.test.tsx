@@ -28,7 +28,6 @@ function event(id: string): ActiveEvent {
     phaseStartTick: 0,
     phaseDuration: 10,
     ticksRemaining: 10,
-    severity: 1,
   };
 }
 
