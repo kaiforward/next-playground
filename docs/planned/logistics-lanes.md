@@ -117,9 +117,11 @@ undirected system pair, carrying the invested **lane level** (float, ≥ 0) and 
 - **Build and upkeep ride the existing purse:** a lane upgrade is a construction project in the
   committed queue (`world.constructionProjects`, same `origin: "auto" | "player"` tagging —
   `docs/active/gameplay/player-seat.md`), funded by the construction band; built lane levels join
-  the maintenance band's bill. Proposal: lane levels **decay toward used capacity** exactly as
-  buildings decay toward use (the decay-ratchet symmetry), so an abandoned corridor's investment
-  rots. Money stays fuel, not capacity.
+  the maintenance band's bill. Lane levels **decay toward used capacity** as buildings decay
+  toward use (the decay-ratchet symmetry), so an abandoned corridor's investment rots — accepted
+  with an owner watch-item: "we'll see how it plays out in practice, building decay was quite
+  complex and difficult to manage", so the lane instance stays the simplest possible shape (one
+  disuse rate, no unrest-teardown term) until play says otherwise. Money stays fuel, not capacity.
 - The autonomic planner proposes lane upgrades symmetrically for every faction (§4).
 
 ### 2. Routing
@@ -198,9 +200,11 @@ Transit is scheduled, never positionally simulated (owner decision).
 - **Player:** an invest/upgrade verb on any lane whose two endpoints the player controls, from the
   lane's map surface (§7). Orders enter `world.constructionProjects` tagged `origin: "player"`,
   ride the existing queue priority (`orderOpenProjects` — `docs/active/gameplay/player-seat.md`)
-  and are cancellable like any player build. The build/colonisation automation switches gain no
-  third domain this pass: lane proposals ride the existing `build` switch (proposal — cheapest
-  honest cut; revisit if lanes want their own toggle).
+  and are cancellable like any player build. **Lane automation is its own domain**: a third
+  per-domain switch (`world.player.automation.lanes`, default on, alongside `build` and
+  `colonisation`) gating lane-upgrade proposal generation for the player's faction only — owner
+  decision: "I do think it should be its own kind of automation, we will want many features to be
+  independently toggleable."
 - **Autonomic planner:** a new opportunity type on the planner's existing ROI ordering
   (`docs/active/gameplay/economy-autonomic-agency.md`): where the past window's routing shows an
   edge congestion-binding (booked load at capacity, or unserved shortfall attributable to
