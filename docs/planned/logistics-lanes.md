@@ -87,7 +87,9 @@ realistic times" — freight latency is a few ticks against a 24-tick logistics 
 single tunable that can be set to zero (instant delivery, routing and capacity retained) if it
 proves confusing or destabilising; (2) "the map rework changes what is habitable" — habitability,
 deposits and settleability distributions are untouched; only positions, spacing and the lane graph
-change.
+change. Also not in this pass: the **player map-drawing tool** (a future second author of the same
+density grid §5 defines) and any **open-space travel mechanic** (a future tech may add a
+deep-space crossing lane class; free positional travel through voids is not designed).
 
 ---
 
@@ -349,12 +351,67 @@ flat (`fuelCost` is normalised distance, and Poisson distances cluster near the 
 variance; the lane graph machinery on top (per-region MST + extra edges + gateway crossings,
 `lib/engine/universe-gen.ts:475-605`) is retained and retuned, not redesigned.
 
+**How the map is authored** (owner-settled 2026-08-31: "that mental model works for now for
+sure"). The principle: noise never authors the map — placed, countable objects do; noise roughens
+their edges.
+
+- **The density grid is the single authoring interface**: a coarse grid over the map (proposal
+  128×128), each cell 0–1 star-friendliness — new, produced by generation ahead of placement and
+  consumed only by placement. Everything that shapes the galaxy writes this grid, which is what
+  keeps the future player **drawing tool** a pure second author ("if we can plug a drawing tool
+  into the grid later using the same system then Im happy to focus on generation first" — not in
+  this pass).
+- **Cluster seeds author the structure**: K seeds (K derived from system count, as region count is
+  today) placed by the existing spaced-center machinery (`generateRegions`,
+  `lib/engine/universe-gen.ts:161`), each rolling a size from a deliberately skewed distribution
+  (a few big, many small) and an ellipse stretch/orientation. Cell density = the strongest nearby
+  seed's influence under distance falloff — islands of density, emptiness as the complement, so
+  void count and size are explicit knobs (seed spacing minus seed sizes), never accidents.
+- **Two noise layers decorate**: one large-scale layer warps cluster edges and occasionally merges
+  neighbours into continents-with-peninsulas; one small-scale layer adds local texture; cells
+  below a floor become true void. Seeded RNG throughout (`mulberry32`,
+  `lib/engine/universe-gen.ts:86`) — grid + seed → identical galaxy.
+- **Corridors are chosen at the structure level, not emergent**: the neighbour graph over cluster
+  seeds (the same MST shape that connects regions today, `lib/engine/universe-gen.ts:543-547`)
+  picks which cluster pairs connect; each connection is realised as either a thin raised-density
+  band (a sparse chain of waypoint stars) or a single long **crossing lane** — the mix is an open
+  taste question resolved by generating candidates and looking (below), not by argument.
+- **Placement**: the existing sampler (`bridsonSample`, `lib/engine/universe-gen.ts:219-305`) runs
+  with its minimum distance varying by local cell density — tight in clusters, sparse on
+  corridors, nothing in voids. Lanes inside a cluster build as today (per-cluster MST + extra
+  edges); between clusters, only along the chosen corridors.
+
+**Regions and gateways are reworked, not preserved** (owner: "the old regions + joining region
+lanes doesnt really make sense in this system"): **region becomes cluster** — regions are the
+Voronoi partition over cluster seeds, so region names and boundaries follow real geography — and
+**gateway becomes corridor endpoint**: the old cross-region gateway-pair phase
+(`lib/engine/universe-gen.ts:549-604`) is replaced by corridor realisation, with the persisted
+`isGateway` flag (`lib/world/types.ts:107`) kept, now marking corridor-endpoint systems (its
+readers are map UI only).
+
+**Empty space is represented as absence, not as a rule**: a void is simply where no systems and no
+lanes are — "you cannot cross" means no lane exists, no new movement mechanic. All land stays
+joined via corridors (owner: "if we dont allow travel at all across the empty bits then we need
+all the land to be joined together somehow"). This deliberately keeps the future open on the
+cheap: a later tech can add a slow, expensive **deep-space crossing lane class** across a void
+(the lane-class cost multiplier already exists — `laneFuelCost`'s `multiplier`,
+`lib/engine/universe-gen.ts:421-428`), which the owner flagged as the likelier shape ("maybe some
+kind of special travel lanes that cross empty space might make sense"); free ocean-style
+positional travel would be a new movement system and is not designed here.
+
+**The generation preview**: the New Game screen gains a knob-preview surface — the structure knobs
+(cluster count, size skew, spacing, void floor, corridors per cluster) plus seed, rendering a fast
+impression of the candidate galaxy (density field + star dots) and regenerating on change (owner:
+"It would be really cool if we could make an interface to basically tweak those knobs and see an
+impression of the generated map before you play"). It doubles as the dev instrument for choosing
+the shipped defaults, and its canvas is the surface the future drawing tool paints onto.
+UI-prototype-first rule applies (browser-viewable prototype approved before implementation).
+
 Observable outcomes, stated as acceptance measures:
 
 - **Clusters, crossings and voids.** System density varies across the map: dense clusters whose
   internal lanes are short and cheap; long sparse crossings between them; and true voids —
-  ocean-like empty spans that no lane crosses, so traffic must go around. Regions, region naming,
-  Voronoi boundaries and the gateway-system designation (`lib/world/types.ts:107`) survive.
+  ocean-like empty spans that no lane crosses, so traffic must go around.
 - **Distance variance becomes cost variance:** intra-faction lane `fuelCost` p90/p10 ≥ 2 on the
   generated map (the premise-4 line, promoted from falsified premise to generation acceptance) —
   measured over the premise-4 cohort (undirected same-faction edges) **and over the
@@ -388,8 +445,14 @@ Observable outcomes, stated as acceptance measures:
   relations-score distribution and border_conflict count on the generated map at both horizons.
 - **Untouched:** habitability scoring, deposit authoring, the settleable fraction, homeworld
   prefab stamping (`stampHomeworldPrefabs`, `lib/engine/universe-gen.ts:617`), and homeworld
-  spacing guarantees. New-game system-count scaling continues to derive extent/regions
+  spacing guarantees. New-game system-count scaling continues to derive extent and cluster count
   continuously (`docs/SPEC.md` Universe & Map).
+- **Sequencing (owner decision):** the map-generation sub-project builds and ships **first**, with
+  the lane mechanics following — every lane constant is calibrated against the generated fuel
+  distribution, the acceptance measures are lanes-off by design, and the falsified premise 1 says
+  lanes on the flat map would not bite. The open taste questions (corridor style mix; how hard the
+  size skew goes) are resolved during that sub-project by generating candidates and looking, using
+  the preview surface and the acceptance instruments.
 - Seeds shift by design; verification is intrinsic coherence plus the acceptance measures, never
   parity with old output (AGENTS verification rule).
 
