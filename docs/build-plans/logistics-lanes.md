@@ -106,3 +106,44 @@ open-edge path.
 - **If below**, the map is too uniform for chokepoints — the map-generation rework (clusters,
   corridors, voids) becomes a co-requisite of this pass, so geography supplies the structure the
   even spread lacks. The lane mechanics are unchanged either way.
+
+## Evidence
+
+### Premise 1 — flow concentration (measured 2026-08-31)
+
+```
+Meaning:  Logistics flow spreads broadly over each faction's lane graph — the busiest tenth of
+          lanes carries about three times its uniform share, far short of dominant corridors, and
+          no small edge set carries the galaxy's freight. A few individual factions do read
+          concentrated (0.43-0.49), so chokepoints exist locally, not structurally.
+Claim:    At equilibrium-horizon, projecting the flow log's hauls onto shortest open-edge paths,
+          the top decile of trafficked intra-faction edges carries ≥ 40% of edge-crossing volume.
+Number:   Top-decile share (even-split projection): 0.317 (seed 42, 10K), 0.328 (seed 43, 10K),
+          0.296 (seed 42, 16K). Deterministic-path projection within 2 points of even-split on
+          every run — tie-breaking is not hiding concentration. Top-10-edges absolute share only
+          0.10-0.15. Per-faction top-decile ranges 0.26-0.49; above 0.40 in 2 of 6 (s42 10K),
+          2 of 5 (s43 10K), 2 of 8 (s42 16K) factions with ≥20 trafficked edges.
+Horizon:  1000t: zero flow events (pre-founding — 20 seeded homeworlds, no intra-faction edges;
+          validated against the known first-establish ~t=4128). 10,000t: both seeds. 16,000t:
+          trajectory check — share drifts DOWN (0.317 → 0.296) as the galaxy develops (188 → 212
+          developed), so maturation spreads flow further; the reading is not a transient low.
+Cohort:   All directed-logistics hauls in the trailing FLOW_HISTORY_TICKS=200 window (~8 logistics
+          runs, 2371-3001 events), projected onto the end-state open-edge graph; per-faction rows
+          gated at ≥20 trafficked edges.
+Licenses: Supports: the current even-spread topology does not concentrate flow to the 40% line at
+          any measured horizon or seed. Does NOT support: "no chokepoints exist" (per-faction highs
+          0.43-0.49); any mature-galaxy claim (~31-35% of systems developed even at 16K — founding
+          era per measurement-traps). Instrument noise: 3.6-8.6% of hauls project unreachable or
+          >MAX_HOPS because ownership at snapshot differs from ownership at haul time
+          (abandonment); conserved-volume validation passed exactly on all runs.
+Raw:      temp/lane-flow-10k-s42.json, temp/lane-flow-10k-s43.json, temp/lane-flow-16k-s42.json
+          (temp/lane-flow-diag.ts; headline rows inline below)
+            s42 10K  split topDecile 0.3171  det 0.3011  edges 339  hauls 2739  unreachable 99
+            s43 10K  split topDecile 0.3280  det 0.3241  edges 277  hauls 2371  unreachable 203
+            s42 16K  split topDecile 0.2964  det 0.2866  edges 394  hauls 3001  unreachable 126
+```
+
+**Outcome: falsified — the decision rule's second arm fires.** The map as generated is too uniform
+for lane capacity to bite; the map-generation rework (clustered stars, corridors, voids) joins this
+pass as a co-requisite. Side observation for premise 5: the hop histogram is roughly uniform across
+1-4 hops then cliffs at 5 — `MAX_HOPS` visibly binds; ~45% of hauls already run 3-4 hops.
