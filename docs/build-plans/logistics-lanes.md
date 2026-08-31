@@ -175,3 +175,129 @@ Raw:      temp/lane-flow-10k-s42.json, temp/lane-flow-10k-s43.json, temp/lane-fl
 for lane capacity to bite; the map-generation rework (clustered stars, corridors, voids) joins this
 pass as a co-requisite. Side observation for premise 5: the hop histogram is roughly uniform across
 1-4 hops then cliffs at 5 — `MAX_HOPS` visibly binds; ~45% of hauls already run 3-4 hops.
+
+*Correction (2026-08-31, premises 2-5 instrument):* the 1000t parenthetical above overstated —
+intra-faction edges DO exist at 1000t (the claim wave finishes by ~t=700, freezing the faction
+partition; 702 same-faction edges on s42). What is absent pre-founding is developed-to-developed
+flow: zero flow events stands.
+
+### Premises 2–5 (measured 2026-08-31)
+
+Instrument: `temp/lane-premise-diag.ts` + two temporary measuring patches (directed-logistics block
+timing + routeCost call counter in `lib/world/tick.ts`; per-run deficit/transfer census via
+`classifyMarketState` at the matcher call site in `lib/tick/processors/directed-logistics.ts`),
+both reverted after the runs. Validation: with hooks installed, s42/600/10K reproduced premise 1's
+run exactly (developed 188, flowEvents 2739) — the instrument does not perturb the world; and on
+every run the hook's transfer count over the flow window equals the flow log exactly
+(single-writer cross-check). Startup horizon: structurally empty for all flow-derived metrics
+(zero flow events at 1000t, validated premise 1). Equilibrium windows: run stats over ticks ≥ 60%
+of horizon. Raw: `temp/lane-premise-600-s42-t10000.json`, `…-600-s43-t10000.json`,
+`…-600-s42-t16000.json`, `…-10000-s42-t10000.json`, `…-600-s42-t1000.json`.
+
+#### Premise 2 — routing workload is boundable
+
+```
+Meaning:  Real cheapest-path routing is comfortably affordable at current traffic on both galaxy
+          sizes — per-run haul-source counts are around a hundred, a single-source BFS over the
+          largest faction's lane graph is microseconds, and the projected pathfinding bill is a
+          small fraction of what the logistics run already spends building its own state.
+Claim:    Per logistics run at equilibrium, transfers and distinct donor→deficit pairs are small
+          enough to path-find within budget.
+Number:   600 systems (s42 10K / s43 10K / s42 16K), per-run medians: transfers 236/229/359;
+          distinct pairs 133/132/249; distinct haul sources 81/80/130; routeCost calls 355/336/690;
+          deficit rows 1874/1799/2271; surplus rows 304/306/537. Logistics run wall-clock median
+          9.0/9.2/13.3 ms; logistics share of total tick wall-clock (equilibrium) 7.3%/7.2%/8.6%.
+          Largest faction subgraph 35-38 nodes; BFS ≈ 0.006 ms → projected per-run pathfinding
+          0.50-0.81 ms = 5.4-6.1% of the run's own current cost. 10,000-system galaxy (s42 10K):
+          transfers 400, pairs 211, sources 123, routeCost calls 578; run 17.6 ms; share 2.2%;
+          largest faction 407 nodes, BFS 0.027 ms → projected 3.3 ms = 19% of the run's cost.
+Horizon:  1000t structurally empty (no flow); 10,000t both seeds; 16,000t trajectory: counts grow
+          roughly with developed-system count (transfers 236 → 359 as developed 188 → 212), so the
+          workload tracks development, not galaxy size.
+Cohort:   Equilibrium-window logistics runs (167 runs at 10K, 250 at 16K), all factions; census
+          taken where the matcher reads its state.
+Licenses: Supports: per-haul shortest-path routing with per-source path caching fits today's tick
+          budget at 600 and 10,000 systems — the committed kill-line (projected pathfind > the
+          run's own wall-clock) fires nowhere (worst ratio 0.19). Does NOT support: the cost of
+          per-edge capacity accounting or congestion-aware re-routing (not modeled); workload
+          after lanes remove MAX_HOPS (reach grows, sources see more candidates); a mature-galaxy
+          claim (both sizes still founding-era — 403/10,000 developed at the large size).
+Outcome:  CONFIRMED (kill-line clear by >5×; the route-dictionary hypothesis stays an
+          optimisation, not a requirement).
+```
+
+#### Premise 3 — correction is already slow relative to transit
+
+```
+Meaning:  The typical survival-good deficit is corrected within a single logistics interval — the
+          median spell is one run at every seed and horizon — so a few ticks of scheduled transit
+          latency would be a material addition to the typical correction, not a rounding error on
+          an already-slow one. A heavy tail of chronic deficits (weeks-long spells) coexists with
+          the fast median.
+Claim:    Median ticks from a system entering a survival-good deficit to recovery at equilibrium
+          ≥ one LOGISTICS_INTERVAL (24 ticks).
+Number:   Median spell = 1 run (i.e. cleared by the next run, correction ≤ 24 ticks) on every run:
+          single-run share 77.0% (s42 10K, n=1080), 75.5% (s43 10K, n=661), 85.3% (s42 16K,
+          n=681), 82.1% (10K-system, n=3511). p90 = 2-3 runs; max 33-158 runs (chronic tail).
+Horizon:  10,000t (both seeds) and 16,000t — falsified at both; 1000t structurally empty (no
+          survival deficits recorded among the 20 self-sufficient homeworld prefabs).
+Cohort:   (developed system, water|food) deficit spells classified by classifyMarketState at each
+          logistics run, spells starting inside the equilibrium window and completed before the
+          end (censored spells 0-23 per run, excluded).
+Licenses: Supports: typical correction is fast — the premise's "latency rides free" waiver is
+          gone. Does NOT support: "all correction is fast" (the p90+ tail is runs-to-weeks long —
+          the chronic/no-donor class); an exact sub-interval correction time (resolution is one
+          run, so median 1 run means ≤ 24 ticks, not a point value). A system leaving the
+          developed set mid-spell ends its spell (abandonment conflation, small share).
+Outcome:  FALSIFIED — per the committed falsifier, scheduled-transit latency gets first-class
+          oscillation-hazard treatment in the spec; the carried "latency does not destabilise"
+          hypothesis is now live, not waivable.
+```
+
+#### Premise 4 — edge cost varies
+
+```
+Meaning:  Intra-faction jump-lane fuel costs are nearly uniform — the spread between cheap and
+          expensive lanes is well under the committed 2× line on every seed and size — so the
+          existing edge-cost field cannot differentiate lanes on its own.
+Claim:    Intra-faction edge fuelCost p90/p10 ≥ 2 at equilibrium.
+Number:   p90/p10 = 1.79 (s42, 702 edges), 1.87 (s43, 692 edges), 1.60 (10K-system galaxy,
+          10,123 edges). p10/p50/p90 ≈ 7.1/8.5/12.7. Identical at 1000t/10K/16K on s42 — the
+          faction partition freezes when the claim wave completes (~t=700), so the cohort is
+          horizon-stable.
+Horizon:  Both horizons read (identical by structure); equilibrium quoted.
+Cohort:   Undirected same-faction edges at end-state, all control states (claimed fringe
+          included).
+Licenses: Supports: lane differentiation cannot come from existing fuelCost spread — invested
+          infrastructure and map-gen geography must carry it (converges with premise 1's
+          second-arm outcome). Does NOT support: fuelCost being meaningless (a 1.6-1.9× spread
+          exists and migration already reads it); the trafficked-edge sub-cohort's spread was not
+          measured separately.
+Outcome:  FALSIFIED on both seeds.
+```
+
+#### Premise 5 — long chains exist to serve
+
+```
+Meaning:  Relay chains essentially do not exist — virtually no haul departs a system that itself
+          received the same good in the window. MAX_HOPS binds (premise 1's hop cliff) and the
+          demand beyond it is simply unserved, not served indirectly; the donor dead-band makes
+          relaying structurally impossible (a deficit fills to ~32-40 cycles of cover but only
+          donates above ~56), so multi-hop service can never emerge from warehouse stitching.
+Claim:    Goods already effectively traverse > MAX_HOPS via relay through intermediate markets.
+Number:   Re-export share of edge-crossing haul volume (donor received same good earlier in the
+          window): 0.054% (s42 10K), 0.094% (s43 10K), 0.000% (s42 16K), 0.040% (10K-system) —
+          two orders below the committed 5% line. Stitched chains whose origin out-reaches
+          MAX_HOPS to the final destination: 0-4 events per window. Same-run re-export: 0 in all
+          runs.
+Horizon:  10,000t (both seeds) and 16,000t; 1000t structurally empty.
+Cohort:   All hauls in the trailing FLOW_HISTORY_TICKS=200 window (~8 logistics runs,
+          2371-4684 events) against arrivals in the same window.
+Licenses: Supports: no current service beyond MAX_HOPS — the spec must treat >4-hop routing as a
+          new capability serving latent demand, not a formalisation of existing behaviour. Does
+          NOT support: "no demand beyond 4 hops" (the hop cliff and the unreachable/unservable
+          residuals say the demand is there and unserved). Window-bounded: a relay slower than
+          ~8 runs would be invisible — but the donor dead-band argument above rules that out
+          structurally, not just observationally.
+Outcome:  FALSIFIED — decisively.
+```
