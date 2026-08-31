@@ -107,6 +107,34 @@ open-edge path.
   corridors, voids) becomes a co-requisite of this pass, so geography supplies the structure the
   even spread lacks. The lane mechanics are unchanged either way.
 
+## Premises 2–5 — falsifiers (committed before measurement)
+
+Same diagnostic posture as premise 1: a falsified premise redirects the spec, it never kills the
+chosen mechanics.
+
+- **Premise 2 (routing workload).** The raw counts (per-run transfers, distinct donor→deficit
+  pairs, route-cost evaluations, and the logistics processor's wall-clock share) are *descriptive,
+  no kill-line*. The one kill-line: **if measured per-run distinct haul sources × a measured
+  single-source BFS over the largest faction's open-edge subgraph projects to more than the
+  current directed-logistics run's own wall-clock** (real pathfinding would at least double the
+  processor), the workload premise is falsified and the route dictionary is promoted from
+  engineering hypothesis to spec requirement.
+- **Premise 3 (correction already slow).** Measured as consecutive-logistics-run deficit spells per
+  (system, survival good) using `classifyMarketState` where the matcher reads it: **if the median
+  spell is a single run (deficit cleared by the next run, i.e. correction ≤ one
+  `LOGISTICS_INTERVAL` = 24 ticks) at both the 10K and 16K horizons**, the premise is falsified —
+  scheduled-transit latency is then a real addition to correction time, and the oscillation
+  hazard gets first-class treatment in the spec instead of a "small against today" waiver.
+- **Premise 4 (edge cost varies).** **If intra-faction edge `fuelCost` p90/p10 < 2 on both seeds at
+  equilibrium**, falsified — existing edge costs cannot differentiate lanes, and all lane
+  differentiation must come from invested infrastructure plus map-gen geography.
+- **Premise 5 (long chains exist).** **If under 5% of edge-crossing haul volume in the equilibrium
+  flow window departs a donor that itself received the same good within the window** (re-export
+  stitching), relays are rare and the premise is falsified — routing beyond `MAX_HOPS` serves
+  demand that does not yet exist and the spec must not lean on it. The premise-1 hop-histogram
+  cliff at `MAX_HOPS` shows the cap *binds*; it does not show relaying, so it cannot confirm this
+  premise on its own.
+
 ## Evidence
 
 ### Premise 1 — flow concentration (measured 2026-08-31)
