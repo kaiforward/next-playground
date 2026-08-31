@@ -387,7 +387,10 @@ Voronoi partition over cluster seeds, so region names and boundaries follow real
 **gateway becomes corridor endpoint**: the old cross-region gateway-pair phase
 (`lib/engine/universe-gen.ts:549-604`) is replaced by corridor realisation, with the persisted
 `isGateway` flag (`lib/world/types.ts:107`) kept, now marking corridor-endpoint systems (its
-readers are map UI only).
+readers are cosmetic throughout: map styling, two panel badges at
+`components/panels/system-panel.tsx:128` / `components/panels/faction-territory.tsx:39`, and a
+gateways-first territory sort at `lib/services/factions.ts:246` — none break under the new
+meaning; badge copy joins the /game-copy pass).
 
 **Empty space is represented as absence, not as a rule**: a void is simply where no systems and no
 lanes are — "you cannot cross" means no lane exists, no new movement mechanic. All land stays

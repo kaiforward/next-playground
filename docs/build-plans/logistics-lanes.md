@@ -1,5 +1,210 @@
 # Logistics lanes — working file
 
+## Build plan — map-generation sub-project
+
+Sub-project 1 of the spec (`docs/planned/logistics-lanes.md` §5); lane mechanics follow as their
+own sub-project. Branch shape per AGENTS: integration branch `shared/logistics-lanes` off main;
+the current `feat/logistics-lanes` (brainstorm → evidence → spec) is sub-PR 1 into it; this plan's
+work runs on `feat/map-gen-geography`, sub-PR 2. Phases below are check-in pauses, never PRs.
+
+### Resolution — every measure to its producer
+
+| Measure (spec prose) | State | Producer |
+|---|---|---|
+| density grid (128×128, 0–1) | new | Task 1 |
+| cluster seed count K "derived from system count" | new | Task 1 knob defaults via `genConfigForSystemCount` / `interpolateBySqrtN` (`lib/constants/universe-gen.ts:78,71`) |
+| seed size skew + ellipse stretch | new | Task 1 (authored constants, proposals) |
+| seed influence / distance falloff | new | Task 1 |
+| two noise layers | new | Task 1 (seeded via `mulberry32`, `lib/engine/universe-gen.ts:86`) |
+| void floor | new | Task 1 constant |
+| corridor pair choice (MST over seeds) | exists | `kruskalMST` (`lib/engine/universe-gen.ts:446`), re-aimed at seeds in Task 1 |
+| corridor realisation (waypoint band / crossing lane) | new | Task 3; style mix decided at Gate A |
+| density-varying placement radius | new | Task 2 (variable-radius variant of `bridsonSample`, `lib/engine/universe-gen.ts:219-305`) |
+| region = Voronoi over cluster seeds | exists | `assignRegions` (`lib/engine/universe-gen.ts:312`) with seed centers; names via `REGION_NAMES` (`lib/constants/universe-gen.ts`) + wrap path (`lib/engine/universe-gen.ts:152`) |
+| `isGateway` = corridor endpoint | exists (field `lib/world/types.ts:107`) | new writer in Task 3 |
+| crossing-lane fuel class | exists | `laneFuelCost` multiplier arg (`lib/engine/universe-gen.ts:421-428`) |
+| fuel p90/p10, all + trafficked cohorts | new | Task 4 harness module |
+| corrected flow projection (own+unclaimed, fuel-weighted) | new | Task 4, importing `buildFuelAdjacency` (`lib/engine/pathfinding.ts:43`) |
+| cross-faction lane count | new | Task 4 |
+| beyond-crossing cohort (colony cluster ≠ faction homeworld cluster) | new | Task 4 fold over `regionIndex` + faction homeworld |
+| relations-score distribution + border_conflict count | exists (state) | new report rows, Task 4 |
+| re-derived ≥0.40 concentration line | — | Gate A output |
+| `distanceDecay` recalibration | exists (`lib/constants/population.ts:159`) | Gate A action |
+| shape-knob config type | new | Task 1 export; boundary schema Task 6 (`newGameSchema`, `lib/schemas/game-setup.ts:5`) |
+| map extent derivation | exists | `interpolateBySqrtN` (`lib/constants/universe-gen.ts:71`) — unchanged |
+
+### Task 1 — Galaxy-shape engine: density grid, cluster seeds, corridors
+
+Files: `lib/engine/density-field.ts` (new), `lib/engine/__tests__/density-field.test.ts` (new),
+`lib/constants/universe-gen.ts` (shape-knob defaults + sqrt-N derivation entries).
+Interface: `GalaxyShapeKnobs { clusterCount, sizeSkew, clusterSpacing, voidFloor,
+corridorsPerCluster, corridorStyle }`; `ClusterSeed { x, y, size, stretch, angle }`;
+`DensityGrid { resolution, cells: number[] }` (flat array, JSON-serialisable);
+`CorridorPlan { pairs: Array<{ a, b, style }> }`;
+`buildGalaxyShape(knobs, mapSize, rng) → { grid, seeds, corridors }`. Pure; no import that pulls
+`lib/constants/economy-scale` (the preview renders it on the main thread — `client/worker/boot.ts`
+docstring constraint).
+Proves: cells below the floor read exactly 0 (true void, not small); the size distribution
+actually skews (a few large, many small — not uniform) across seeds; every seed pair chosen by the
+corridor MST gets a raised-density band or a crossing mark, and no seed is left unconnected; same
+knobs + seed → byte-identical grid twice; a degenerate single-cluster knob set still yields a
+valid grid rather than crashing.
+Consumes: nothing.
+
+### Task 2 — Density-aware placement and cluster regions
+
+Files: `lib/engine/universe-gen.ts` (`bridsonSample` variable-radius variant, `generateRegions` /
+`generateSystems` rework to consume `buildGalaxyShape`), `lib/world/gen.ts` (`buildGenParams`
+lockstep, `lib/world/gen.ts:55`), `lib/constants/universe-gen.ts` (`UniverseGenConfig` members),
+`lib/engine/__tests__/universe-gen.test.ts` + `universe-gen-invariants.test.ts` (re-authored —
+seeds shift by design; intrinsic invariants replace parity), `lib/map/mock-data.ts` (fixture).
+Interface: `GenParams` gains the shape knobs; `generateSystems(rng, regions, params)` keeps its
+signature but places by grid density; regions are the Voronoi partition over cluster seeds
+(`Region` row shape unchanged: id, name, dominantEconomy, x, y — center = seed position).
+Proves: no system lands in a zero-density cell; median nearest-neighbour distance inside clusters
+reads tighter than on corridor bands (density actually modulates the radius); every system's
+region is its nearest seed; homeworld stamping still yields the spaced, substrate-biased
+homeworlds on a clustered map (`stampHomeworldPrefabs` untouched but exercised); cluster counts
+past 28 name via the wrap path without collision; same `{systemCount, seed}` → byte-identical
+world (determinism contract, `lib/world/gen.ts:77-83`).
+Consumes: Task 1 (`buildGalaxyShape`).
+
+### Task 3 — Connections: per-cluster lanes + realised corridors
+
+Files: `lib/engine/universe-gen.ts` (`generateConnections`: phase 1 intra-cluster MST + extras
+kept; phases 2–3 — region-centre MST `:543-547` and gateway pairs `:549-604` — replaced by
+corridor realisation from `CorridorPlan`), `lib/utils/region.ts` (`getIntraRegionConnections` /
+`getInterRegionConnections` / `getGatewayTargetRegions` re-read against the new structure — the
+intra/inter dichotomy survives with region=cluster; verify semantics, rename only if behaviour
+shifted), tests.
+Interface: crossing lanes priced through `laneFuelCost`'s multiplier (the crossing class);
+waypoint-band corridors laned at intra rates along the band; `isGateway` written on
+corridor-endpoint systems (readers are cosmetic — map styling, two panel badges, one territory
+sort — spec §5).
+Proves: the finished lane graph is fully connected (every system reachable — union-find over
+lanes); no cross-cluster lane exists outside a corridor pair the plan chose; a crossing lane costs
+more than an intra lane of the same length (the class multiplier bites); `isGateway` holds exactly
+on corridor endpoints, nowhere else; a map with `corridorStyle` at each extreme (all-band /
+all-crossing) generates validly.
+Consumes: Task 1 (CorridorPlan), Task 2 (placed systems + regions).
+
+### Task 4 — Geography acceptance instruments in the harness
+
+Files: `lib/tick-harness/geography-analysis.ts` (new — first harness module to read the connection
+graph), `lib/tick-harness/types.ts` (summary interface + `HarnessResults` field),
+`lib/tick-harness/runner.ts` (registration), `scripts/simulate.ts` (report block, copy the
+`logisticsActivity` idiom), `lib/tick-harness/experiment.ts` (comparison fields),
+`lib/tick-harness/__tests__/harness-results-fixture.ts` (fixture field), tests (new).
+Interface: `summariseGeography(finalWorld, flowEvents) → { topDecileShare, topDecileShareByFaction,
+fuelP90P10All, fuelP90P10Trafficked, crossFactionLaneCount, beyondCrossingCohort }` — the
+projection uses own+unclaimed adjacency and fuel-weighted shortest paths
+(`buildFuelAdjacency` + the Dijkstra, `lib/engine/pathfinding.ts:43,109-111`), per spec §5's
+corrected instrument; the beyond-crossing cohort folds migrant inflow and population trajectory by
+colony-cluster ≠ faction-homeworld-cluster. Report rows also surface the existing relations-score
+distribution and border_conflict count. NaN rule: zero denominators report 0 with the reason
+(`lib/tick-harness/logistics-analysis.ts` conventions).
+Proves: projection volume conserves exactly (Σ placed edge volume = Σ haul quantity × path length
+— the premise-1 validation trick); a zero-flow world reports zeros, never NaN; the trafficked
+cohort is a strict subset of the all-edges cohort; per-faction rows gate on a minimum trafficked
+edge count; the fixture-typed field fails the build if unregistered (vacuity: delete the runner
+fold, watch the type/test break).
+Consumes: Task 3 (generated worlds with corridors).
+
+### Gate A — Candidate sweep and owner acceptance
+
+Arms: candidate knob sets across cluster count / size skew / spacing / void floor / corridor style
+(all-band, all-crossing, mixed), seeds 42/43/44, viewed in the Task 5 preview and read through the
+Task 4 instruments at both horizons.
+Reads: fuel p90/p10 (both cohorts), top-decile concentration (re-derived line — the committed 0.40
+was calibrated on the old projection), migration beyond-crossing cohort, cross-faction lane count,
+relations-score distribution + border_conflict count, conservation identities, coarse health bar.
+Merge condition: owner picks the shipped default knob set and the corridor style mix by looking;
+fuel spread ≥ 2 on both cohorts; the re-derived concentration line is documented in this file and
+met; `distanceDecay` recalibrated against the generated distribution (or kept, with the receipt
+quoted); no conservation identity fails; the booking "re-derive the ≥0.40 line" closes here.
+
+### Task 5 — Galaxy-preview prototype (styleguide section)
+
+Files: `components/start/galaxy-preview.tsx` (new), `components/panels/styleguide-panel.tsx`
+(new `StyleSection`), routed at `/styleguide` (`client/routes.ts:27,33,40` — exists).
+Interface: `<GalaxyPreview knobs={GalaxyShapeKnobs} seed={number} systemCount={number} />` —
+renders the density field via canvas `ImageData` plus star dots from the real engine placement
+(same `mulberry32` draw order as the worker, so the impression IS the playable galaxy), regenerates
+on prop change.
+Reuse (props read this session): `NumberInput` (`components/form/number-input.tsx:4-7` —
+`Omit<InputFieldProps,"type">`, forwardRef), `RangeInput`
+(`components/form/range-input.tsx:35-44` — the slider for skew/void-floor knobs),
+`SegmentedControl<T>` (`components/form/segmented-control.tsx:38-48` — corridor-style picker),
+`StyleSection` (`styleguide-panel.tsx:19`). New: `GalaxyPreview` — nothing fits: the codebase has
+no 2D-canvas rendering pattern at all (nearest are SVG sparklines/rings and Pixi, both wrong
+tools for an ImageData field + a few thousand dots).
+Proves: same knobs + seed renders an identical impression twice; the dots match a world generated
+from the same inputs (parity with `generateWorld` placement — the determinism seam); extreme knobs
+(void floor 1.0, cluster count 1) render without crashing; a 20,000-system impression completes
+within an interactive bound.
+Consumes: Tasks 1–2 (engine functions), and its approval is the AGENTS prototype gate for Task 6.
+
+### Task 6 — New Game wiring
+
+Files: `lib/schemas/game-setup.ts` (`newGameSchema` gains optional shape knobs with server-side
+defaults), `components/start/create-faction-form.tsx` (knob section + embedded `GalaxyPreview`;
+also fix the hardcoded 600 default at `:40` to import `DEFAULT_SYSTEM_COUNT`),
+`components/start/start-screen.tsx` (the New Game `Dialog` at `:198` grows to hold the preview —
+stays a dialog, no new route), `client/worker/game-worker.ts` (payload through `:83,361-368`),
+`lib/services/game.ts` (knobs → `generateWorld`), `lib/world/gen.ts` +
+`lib/constants/universe-gen.ts` (the four-place knob lockstep: `UniverseGenConfig`, `BASE_CONFIG`,
+`GenParams`, `buildGenParams`).
+Interface: `NewGameInput` gains `shape?: GalaxyShapeKnobs`; omitted → the Gate-A defaults.
+Reuse: `Dialog`/`useDialog` (props read — `start-screen.tsx:198`), RHF + zodResolver as the form
+already does. New: none beyond Task 5's component.
+Proves: a `newGame` with no knobs produces a byte-identical world to the Gate-A default set (the
+back-compat pin); out-of-range knobs are rejected at the schema, not downstream; the previewed
+galaxy and the played galaxy match for identical inputs end-to-end (form → worker → gen); an
+omitted seed still randomises (`lib/services/game.ts:18`).
+Consumes: Tasks 1–2 (knob type), Task 5 (approved component).
+
+### Verification
+
+`npm run simulate` on the shipped default map, **both horizons**, quoted in the sub-PR: all
+conservation identities pass; coarse health bar (no NaN/runaway/pinning, dispersion, liquidity)
+comparable to the flat-map baseline; the new geography table (fuel spread both cohorts,
+concentration aggregate + per-faction, cross-faction lane count, beyond-crossing cohort) at both
+horizons. Build gate `npm run build` (tsc && vite build). Determinism: re-authored invariants
+tests green; preview↔world parity test green. Red-proof per task's Proves list before review.
+
+### Doc fold
+
+On the branch before final review: `docs/active/gameplay/universe.md` (placement, regions,
+gateways sections rewritten to density-grid/cluster/corridor reality),
+`docs/SPEC.md` Universe & Map paragraph, `docs/active/engineering/map-rendering.md` only if it
+names gateway/region structure (check at fold). The spec `docs/planned/logistics-lanes.md` stays
+in planned/ until the lane sub-project ships (multi-PR rule); its §5 is marked shipped-by-sub-PR
+at the fold. This working file survives until the whole feature ships.
+
+### Not covered
+
+- **Lane mechanics** (§1–§4, §6–§8 of the spec) — the next sub-project; the spec itself is the
+  booking.
+- **Player map-drawing tool** — booked: `docs/ROADMAP.md` row added in this plan's commit (second
+  author of the same density grid; after the lanes pass).
+- **Deep-space crossing lane class / open-space travel tech** — dropped for now: named in the
+  spec's Not-claimed with the future shape (a lane-class unlock), no roadmap row until the tech
+  system exists.
+- **Connection-object style fingerprint widening + per-lane map state** (`connection-object.ts:27`
+  binary fingerprint; fuel labels unrendered) — booked at the lane sub-project, which owns lane
+  visuals; the map-gen pass keeps today's two-style drawing (region-crossing lanes read as
+  crossings automatically under region=cluster).
+- **Region-label centroid drift** (`territory-layer.ts:107` labels at member centroid) — no issue
+  under region=cluster: members ARE the cluster, so the centroid sits inside it; noted, not
+  changed.
+
+### Net-new UI
+
+One item: **`GalaxyPreview`** (canvas + ImageData density field + star dots — the codebase's first
+2D-canvas component; knobs compose existing form controls). Prototype-first: it lands as a
+styleguide section (Task 5) and is the owner-approved prototype before the New Game wiring
+(Task 6) starts.
+
 ## Spec
 
 Written 2026-08-31 from the evidence below plus the session's settled decisions:

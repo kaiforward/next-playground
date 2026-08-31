@@ -69,6 +69,15 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   closes the remaining half. The concrete place it lands is the **good-allocation cliff** row above,
   which owns the allocation policy; this line exists so the pillar pass does not design that policy
   necessity-blind.
+  *Next step:* the pass is in flight — spec approved and spec-reviewed
+  (`docs/planned/logistics-lanes.md`; evidence + build plan in
+  `docs/build-plans/logistics-lanes.md`). Map-generation sub-project first (its build plan is
+  written), lane mechanics after, on `shared/logistics-lanes`.
+- **[M] Map drawing tool — player paints where stars generate.** Second author of the map-gen
+  density grid (`docs/planned/logistics-lanes.md` §5): a New Game canvas writes the same 0–1 grid
+  the procedural clusters produce, so galaxy shape becomes paintable with no second generation
+  path. *Next step:* after the logistics-lanes feature ships — prototype the paint surface on the
+  Task-5 preview canvas.
 - **[M] Faction gameplay direction — design pass only, before pop scope is committed.** Decide
   what gameplay styles factions offer and how a faction manages its pops, so the pop expansion
   below is cut to fit a chosen direction rather than guessed. Inputs: the government layer
