@@ -1,5 +1,12 @@
 # Logistics lanes — working file
 
+## Spec
+
+Written 2026-08-31 from the evidence below plus the session's settled decisions:
+**`docs/planned/logistics-lanes.md`** — its own planned doc because the feature is multi-PR (the
+map-generation rework is its own sub-project) and this file is already the length of a spec.
+Next gate: `/spec-review` (cross-mechanic surface — logistics + build planner + gen + treasury).
+
 ## Idea
 
 ### Problem
