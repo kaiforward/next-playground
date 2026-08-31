@@ -31,6 +31,10 @@ infrastructure, scheduled virtual transit.**
   window. Nothing per-tick moves.
 - Severed lanes are the war system's future strategic verb; this pass builds the substrate hook,
   not the war mechanics.
+- **Map generation is a coupled lever, not a fixed given.** Star distribution need not be an even
+  spread — clusters, corridors and voids are on the table precisely to give lane mechanics
+  geography worth investing in. Whether the map-gen rework rides in this pass is decided by the
+  flow-concentration measure below.
 
 ### Killed alternatives
 
@@ -86,11 +90,19 @@ infrastructure, scheduled virtual transit.**
 - A route dictionary keyed on (faction, source, destination), invalidated on topology/ownership
   change, keeps pathfinding affordable at 10K systems. *(engineering hypothesis)*
 
-### Terminal falsifier
+### Decision rule (owner-reframed: the measure diagnoses, it does not veto)
 
-At equilibrium (10,000 ticks, default 600-system galaxy), project every directed-logistics haul in
-the flow window onto its shortest open-edge path. **If the top 10% of trafficked intra-faction
-edges carry < 40% of total edge-crossing haul volume, and additionally no major faction has any
-single edge whose removal disconnects ≥ 15% of its developed systems from its largest component,
-the direction dies** — flow is spread too evenly and severable too weakly for per-lane capacity
-investment to have anything to bite on.
+The direction is a design commitment, not a hypothesis under test. Owner (2026-08-31): "I'm not
+keen on shaping our mechanics based on a measure, if the measure is off then we need to think of
+way to fix that because we've chosen the mechanics we think will make it fun."
+
+The measurement stays, with its consequence redirected: at equilibrium (10,000 ticks, default
+600-system galaxy), project every directed-logistics haul in the flow window onto its shortest
+open-edge path.
+
+- **If the top 10% of trafficked intra-faction edges carry ≥ 40% of edge-crossing haul volume**, the
+  current topology already concentrates flow — lane mechanics land on the map as generated, and the
+  map-gen rework (clustered/uneven star distribution) can follow as its own pass.
+- **If below**, the map is too uniform for chokepoints — the map-generation rework (clusters,
+  corridors, voids) becomes a co-requisite of this pass, so geography supplies the structure the
+  even spread lacks. The lane mechanics are unchanged either way.
