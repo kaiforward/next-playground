@@ -28,7 +28,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useNavigate } from "@/components/ui/link-provider";
 import { AUTOSAVE_NAME } from "@/lib/world/save";
 import { WouterRuntimeProvider } from "./wouter-link";
-import { useRoute, resolveRouteGate, shouldRedirectToStart } from "./routes";
+import { useRoute, resolveRouteGate, shouldRedirectToStart, routeWorldNeed } from "./routes";
 import { startHref } from "@/lib/utils/route-hrefs";
 import type { InboundMessage } from "./worker/game-worker";
 
@@ -187,17 +187,15 @@ function RouteBody() {
   // `client/routes.ts`'s own docstring (Gate C smoke finding: without this distinction, New Game
   // navigated to the map route and was immediately redirected straight back to `/start`).
   const isReplacing = useGameSlice(selectIsReplacing);
-  const routeIsStart = route.name === "start";
-  // Renders nothing from the world, so the no-world redirect must leave it alone.
-  const routeIsWorldFree = route.name === "styleguide";
+  const need = routeWorldNeed(route.name);
 
   useEffect(() => {
-    if (shouldRedirectToStart(worldVersion, routeIsStart, isReplacing, routeIsWorldFree)) {
+    if (shouldRedirectToStart(worldVersion, need, isReplacing)) {
       navigate(startHref(), { replace: true });
     }
-  }, [worldVersion, routeIsStart, isReplacing, routeIsWorldFree, navigate]);
+  }, [worldVersion, need, isReplacing, navigate]);
 
-  const gate = resolveRouteGate(worldVersion, routeIsStart, isReplacing, routeIsWorldFree);
+  const gate = resolveRouteGate(worldVersion, need, isReplacing);
 
   if (gate === "boot-loading") return <BootLoading />;
   if (gate === "start") {
