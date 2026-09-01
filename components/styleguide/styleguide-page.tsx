@@ -459,7 +459,7 @@ function GalaxyPreviewSection() {
           />
           <RangeInput
             id="galaxy-preview-min-distance-scale"
-            label="Star spacing (density)"
+            label="Star spacing"
             valueLabel={`×${minDistanceScale.toFixed(2)}`}
             min={0.2}
             max={1.5}
@@ -469,7 +469,7 @@ function GalaxyPreviewSection() {
           />
           <RangeInput
             id="galaxy-preview-density-radius-exponent"
-            label="Core/band contrast"
+            label="Cluster tightness"
             valueLabel={densityRadiusExponent.toFixed(2)}
             min={0}
             max={1}
