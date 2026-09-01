@@ -195,8 +195,11 @@ export function StartScreen() {
         {importError && <EmptyState message={importError} className="mt-2" />}
       </Card>
 
-      <Dialog open={newGameDialog.open} onClose={newGameDialog.onClose} modal size="sm">
-        <CardHeader title="New Game" subtitle="Author the faction you'll rule." />
+      <Dialog open={newGameDialog.open} onClose={newGameDialog.onClose} modal size="xl">
+        <CardHeader
+          title="New Game"
+          subtitle="Author the faction you'll rule, then shape the galaxy you'll rule it in."
+        />
         <CreateFactionForm onSuccess={newGameDialog.onClose} />
       </Dialog>
     </div>

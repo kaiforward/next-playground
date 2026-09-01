@@ -66,6 +66,58 @@ describe("CreateFactionForm — success", () => {
   });
 });
 
+describe("CreateFactionForm — galaxy shape knobs", () => {
+  it("renders every shape knob with an accessible name, plus the embedded preview", () => {
+    renderForm();
+
+    expect(screen.getByLabelText("Cluster count")).toBeInTheDocument();
+    expect(screen.getByLabelText("Size skew")).toBeInTheDocument();
+    expect(screen.getByLabelText("Cluster spacing")).toBeInTheDocument();
+    expect(screen.getByLabelText("Void floor")).toBeInTheDocument();
+    expect(screen.getByLabelText("Corridors per cluster")).toBeInTheDocument();
+    expect(screen.getByLabelText("Cluster turbulence")).toBeInTheDocument();
+    expect(screen.getByLabelText("Star spacing")).toBeInTheDocument();
+    expect(screen.getByLabelText("Cluster tightness")).toBeInTheDocument();
+    expect(screen.getByLabelText("Map size")).toBeInTheDocument();
+    expect(screen.getByText("Corridor style")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Mixed" })).toBeChecked();
+    expect(screen.getByRole("img", { name: "Galaxy generation preview" })).toBeInTheDocument();
+  });
+
+  it("submits the exact knob values shown, once a knob is changed — the previewed values are the played ones", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText("Faction name"), "Aurelian League");
+    const clusterCount = screen.getByLabelText("Cluster count");
+    await user.clear(clusterCount);
+    await user.type(clusterCount, "12");
+    await user.click(screen.getByRole("radio", { name: "Mostly crossings" }));
+
+    await user.click(screen.getByRole("button", { name: "Launch New Galaxy" }));
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    const payload = posted[0].payload as { shape?: { clusterCount?: number; corridorStyle?: number } };
+    expect(payload.shape?.clusterCount).toBe(12);
+    expect(payload.shape?.corridorStyle).toBe(0.85);
+  });
+
+  it("submits the Gate-A default shape values unchanged when no knob is touched", async () => {
+    renderForm();
+
+    await fillAndSubmit();
+    await waitFor(() => expect(posted).toHaveLength(1));
+
+    const payload = posted[0].payload as {
+      shape?: { clusterCount: number; starSpacing: number; clusterTightness: number; mapSizeScale: number };
+    };
+    expect(payload.shape).toBeDefined();
+    expect(payload.shape?.starSpacing).toBe(1);
+    expect(payload.shape?.clusterTightness).toBe(0.05);
+    expect(payload.shape?.mapSizeScale).toBe(1);
+  });
+});
+
 describe("CreateFactionForm — failure", () => {
   it("shows the error and does not navigate", async () => {
     const { navigate } = renderForm();

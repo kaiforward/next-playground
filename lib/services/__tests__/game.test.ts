@@ -171,4 +171,17 @@ describe("newGame — authored player faction", () => {
     expect(seat.governmentType).toBe("technocratic");
     expect(seat.doctrine).toBe("mercantile");
   });
+
+  it("still randomises the seed when `shape` knobs are supplied but `seed` is omitted", () => {
+    const input = {
+      systemCount: 120,
+      name: "Randomised Seed Test",
+      governmentType: "technocratic" as const,
+      doctrine: "mercantile" as const,
+      shape: { clusterCount: 10, starSpacing: 0.8 },
+    };
+    const metaA = newGame(input);
+    const metaB = newGame(input);
+    expect(metaA.seed).not.toBe(metaB.seed);
+  });
 });

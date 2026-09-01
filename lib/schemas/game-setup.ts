@@ -2,6 +2,69 @@ import { z } from "zod";
 import { sanitiseSaveName, AUTOSAVE_NAME } from "@/lib/world/save";
 import { ALL_GOVERNMENT_TYPES, ALL_DOCTRINES } from "@/lib/types/guards";
 
+/**
+ * The galaxy-shape structure knobs (spec `docs/planned/logistics-lanes.md` §5) plus the placement
+ * levers the styleguide's preview surface explored, exposed to New Game at clamped ranges — the
+ * unclamped dev-exploration ranges live only in `components/styleguide/styleguide-page.tsx`. All
+ * optional: an omitted field keeps `buildGenParams`'s (`lib/world/gen.ts`) engine default, which is
+ * what keeps a knob-free `newGame` byte-identical to today's world. `starSpacing`/`clusterTightness`
+ * name the same levers `GenParams` calls `minDistanceScale`/`densityRadiusExponent` — the player-
+ * facing names match the styleguide's slider labels ("Star spacing", "Cluster tightness").
+ */
+export const galaxyShapeSchema = z.object({
+  clusterCount: z
+    .number("Cluster count must be a number")
+    .int("Cluster count must be a whole number")
+    .min(1, "Cluster count must be at least 1")
+    .max(100, "Cluster count must be at most 100")
+    .optional(),
+  sizeSkew: z
+    .number("Size skew must be a number")
+    .min(0, "Size skew must be at least 0")
+    .max(1, "Size skew must be at most 1")
+    .optional(),
+  clusterSpacing: z
+    .number("Cluster spacing must be a number")
+    .min(100, "Cluster spacing must be at least 100")
+    .max(2000, "Cluster spacing must be at most 2,000")
+    .optional(),
+  voidFloor: z
+    .number("Void floor must be a number")
+    .min(0, "Void floor must be at least 0")
+    .max(0.9, "Void floor must be at most 0.9")
+    .optional(),
+  corridorsPerCluster: z
+    .number("Corridors per cluster must be a number")
+    .min(0, "Corridors per cluster must be at least 0")
+    .max(2, "Corridors per cluster must be at most 2")
+    .optional(),
+  corridorStyle: z
+    .number("Corridor style must be a number")
+    .min(0, "Corridor style must be at least 0")
+    .max(1, "Corridor style must be at most 1")
+    .optional(),
+  clusterTurbulence: z
+    .number("Cluster turbulence must be a number")
+    .min(0, "Cluster turbulence must be at least 0")
+    .max(1, "Cluster turbulence must be at most 1")
+    .optional(),
+  starSpacing: z
+    .number("Star spacing must be a number")
+    .min(0.2, "Star spacing must be at least 0.2")
+    .max(1.5, "Star spacing must be at most 1.5")
+    .optional(),
+  clusterTightness: z
+    .number("Cluster tightness must be a number")
+    .min(0, "Cluster tightness must be at least 0")
+    .max(1, "Cluster tightness must be at most 1")
+    .optional(),
+  mapSizeScale: z
+    .number("Map size must be a number")
+    .min(0.5, "Map size must be at least ×0.5")
+    .max(2, "Map size must be at most ×2")
+    .optional(),
+});
+
 export const newGameSchema = z.object({
   systemCount: z
     .number("System count is required")
@@ -16,6 +79,7 @@ export const newGameSchema = z.object({
     .max(40, "Faction name must be at most 40 characters"),
   governmentType: z.enum(ALL_GOVERNMENT_TYPES),
   doctrine: z.enum(ALL_DOCTRINES),
+  shape: galaxyShapeSchema.optional(),
 });
 
 export const speedSchema = z.object({
@@ -58,6 +122,7 @@ export const importSaveSchema = z.object({
   json: z.string().min(1, "Save file is empty"),
 });
 
+export type GalaxyShapeInput = z.infer<typeof galaxyShapeSchema>;
 export type NewGameInput = z.infer<typeof newGameSchema>;
 export type SpeedInput = z.infer<typeof speedSchema>;
 export type SaveGameInput = z.infer<typeof saveGameSchema>;

@@ -6,7 +6,8 @@
  */
 
 import { createSystemMarkets } from "@/lib/world/markets";
-import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
+import { generateUniverse, type GenParams, type GalaxyShapeInput } from "@/lib/engine/universe-gen";
+import { DENSITY_RADIUS_EXPONENT } from "@/lib/engine/system-placement";
 import { deriveDominantEconomy, type PlayerFactionInput } from "@/lib/engine/faction-gen";
 import { countColumns, qualColumns, yieldColumns, effColumns } from "@/lib/engine/resources";
 import { genConfigForSystemCount, REGION_NAMES } from "@/lib/constants/universe-gen";
@@ -30,6 +31,10 @@ export interface GenerateWorldOptions {
   systemCount: number;
   seed: number;
   playerFaction?: PlayerFactionInput;
+  /** New Game's optional structure/placement knobs (`lib/schemas/game-setup.ts`'s
+   *  `galaxyShapeSchema`) — omitted fields keep `buildGenParams`'s engine default, which is what
+   *  keeps a knob-free `newGame` byte-identical to today's world. */
+  shape?: GalaxyShapeInput;
 }
 
 /**
@@ -55,6 +60,7 @@ function mintId(minter: IdMinter, prefix: string): string {
 export function buildGenParams(
   seed: number,
   config: ReturnType<typeof genConfigForSystemCount>,
+  shape?: GalaxyShapeInput,
 ): GenParams {
   return {
     seed,
@@ -68,14 +74,19 @@ export function buildGenParams(
     intraRegionBaseFuel: config.INTRA_REGION_BASE_FUEL,
     minorFactionCount: config.MINOR_FACTION_COUNT,
     shapeKnobs: {
-      clusterCount: config.CLUSTER_COUNT,
-      sizeSkew: config.CLUSTER_SIZE_SKEW,
-      clusterSpacing: config.CLUSTER_SPACING,
-      voidFloor: config.VOID_FLOOR,
-      corridorsPerCluster: config.CORRIDORS_PER_CLUSTER,
-      corridorStyle: config.CORRIDOR_STYLE_MIX,
-      clusterTurbulence: config.CLUSTER_TURBULENCE,
+      clusterCount: shape?.clusterCount ?? config.CLUSTER_COUNT,
+      sizeSkew: shape?.sizeSkew ?? config.CLUSTER_SIZE_SKEW,
+      clusterSpacing: shape?.clusterSpacing ?? config.CLUSTER_SPACING,
+      voidFloor: shape?.voidFloor ?? config.VOID_FLOOR,
+      corridorsPerCluster: shape?.corridorsPerCluster ?? config.CORRIDORS_PER_CLUSTER,
+      corridorStyle: shape?.corridorStyle ?? config.CORRIDOR_STYLE_MIX,
+      clusterTurbulence: shape?.clusterTurbulence ?? config.CLUSTER_TURBULENCE,
     },
+    // Gate-A defaults (1 / 1 / DENSITY_RADIUS_EXPONENT) reproduce today's world exactly — the
+    // back-compat pin (`lib/world/__tests__/gen.test.ts`).
+    mapSizeScale: shape?.mapSizeScale ?? 1,
+    minDistanceScale: shape?.starSpacing ?? 1,
+    densityRadiusExponent: shape?.clusterTightness ?? DENSITY_RADIUS_EXPONENT,
   };
 }
 
@@ -89,7 +100,7 @@ export function buildGenParams(
 export function generateWorld(options: GenerateWorldOptions): World {
   const { systemCount, seed } = options;
   const config = genConfigForSystemCount(systemCount);
-  const params = buildGenParams(seed, config);
+  const params = buildGenParams(seed, config, options.shape);
   const universe = generateUniverse(params, REGION_NAMES, options.playerFaction);
 
   const minter: IdMinter = { next: 0 };

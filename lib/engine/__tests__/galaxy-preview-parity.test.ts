@@ -54,4 +54,27 @@ describe("galaxy-preview parity with the real engine orchestration (generateUniv
     const coords = universe.systems.map((s) => ({ x: s.x, y: s.y }));
     expect(coords).toEqual(impression.points);
   });
+
+  // New Game's placement/scale levers (`mapSizeScale`/`starSpacing`/`clusterTightness`,
+  // `lib/schemas/game-setup.ts`) must agree between the preview (`buildGalaxyImpression`'s
+  // `ImpressionOverrides`) and the played galaxy (`generateUniverse`'s `GenParams`) — this is the
+  // seam that would silently diverge if either side's threading dropped a lever.
+  it("holds with every non-default placement/scale lever set (mapSizeScale, starSpacing, clusterTightness)", () => {
+    const seed = 55;
+    const systemCount = 500;
+    const config = genConfigForSystemCount(systemCount);
+    const shape = { mapSizeScale: 1.5, starSpacing: 0.7, clusterTightness: 0.4 };
+    const params = buildGenParams(seed, config, shape);
+
+    const universe = generateUniverse(params, REGION_NAMES);
+    const impression = buildGalaxyImpression(params.shapeKnobs, seed, systemCount, {
+      mapSizeScale: shape.mapSizeScale,
+      minDistanceScale: shape.starSpacing,
+      densityRadiusExponent: shape.clusterTightness,
+    });
+
+    expect(universe.systems.length).toBe(impression.points.length);
+    const coords = universe.systems.map((s) => ({ x: s.x, y: s.y }));
+    expect(coords).toEqual(impression.points);
+  });
 });

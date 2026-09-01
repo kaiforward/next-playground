@@ -209,6 +209,30 @@ describe("generateWorld", () => {
   });
 });
 
+// New Game's optional `shape` knobs (galaxy structure + placement levers) thread through
+// `buildGenParams`/`generateUniverse` (`lib/engine/universe-gen.ts`) — the back-compat pin every
+// one of those levers depends on: a `newGame` (or `generateWorld`) call with `shape` omitted
+// entirely must produce a world BYTE-IDENTICAL to one from before the levers existed, since the
+// levers' defaults (mapSizeScale 1, starSpacing→minDistanceScale 1, clusterTightness→
+// DENSITY_RADIUS_EXPONENT) must be true no-ops.
+describe("generateWorld — shape knobs back-compat pin", () => {
+  it("with shape omitted, produces the exact same world as a shape explicitly set to Gate-A defaults", () => {
+    const withoutShape = generateWorld({ systemCount: 300, seed: 99 });
+    const withExplicitDefaults = generateWorld({
+      systemCount: 300,
+      seed: 99,
+      shape: { mapSizeScale: 1, starSpacing: 1, clusterTightness: 0.05 },
+    });
+    expect(withExplicitDefaults).toEqual(withoutShape);
+  });
+
+  it("a non-default shape knob actually perturbs the generated world (the pin isn't vacuously always-equal)", () => {
+    const base = generateWorld({ systemCount: 300, seed: 99 });
+    const perturbed = generateWorld({ systemCount: 300, seed: 99, shape: { starSpacing: 0.5 } });
+    expect(perturbed).not.toEqual(base);
+  });
+});
+
 describe("generateWorld: market seeding", () => {
   it("seeds owned markets from the shared civilian basket and unowned tick rows as frontier", () => {
     const { world, home } = marshalateWorld();

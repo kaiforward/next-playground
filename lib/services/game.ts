@@ -25,6 +25,7 @@ export function newGame(input: NewGameInput): WorldMeta {
       governmentType: input.governmentType,
       doctrine: input.doctrine,
     },
+    shape: input.shape,
   });
   setWorld(world);
   return world.meta;

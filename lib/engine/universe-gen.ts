@@ -97,7 +97,29 @@ export interface GenParams {
   /** Galaxy-shape structure knobs (spec §5) — consumed by `buildGalaxyShape` to author the density
    *  grid, cluster seeds and corridor plan that region/system placement read. */
   shapeKnobs: GalaxyShapeKnobs;
+  /** Multiplies `mapSize` before padding, shape authoring (`buildGalaxyShape`) and placement all
+   *  read it — the New Game "Map size" lever. 1 reproduces today's config-derived extent exactly. */
+  mapSizeScale: number;
+  /** Multiplies `poissonMinDistance` — the New Game "Star spacing" lever: below 1 places stars
+   *  closer together everywhere, above 1 sparser. 1 reproduces today's spacing exactly. */
+  minDistanceScale: number;
+  /** Passed straight through to `bridsonSample`'s `densityRadiusExponent` — the New Game "Cluster
+   *  tightness" lever, the core-vs-band spacing contrast. Defaults to `DENSITY_RADIUS_EXPONENT`
+   *  (`system-placement.ts`), reproducing today's placement exactly. */
+  densityRadiusExponent: number;
 }
+
+/** Every galaxy-shape lever a caller may override, flattened: the seven `GalaxyShapeKnobs` fields
+ *  plus the three placement/scale levers above. All optional — an omitted field keeps
+ *  `buildGenParams`'s (`lib/world/gen.ts`) engine default, which is what keeps a knob-free
+ *  `newGame` byte-identical to today's world. Field names here match the New Game schema
+ *  (`lib/schemas/game-setup.ts`'s `galaxyShapeSchema`), not `GenParams`'s own — `starSpacing`/
+ *  `clusterTightness` are the player-facing names for `minDistanceScale`/`densityRadiusExponent`. */
+export type GalaxyShapeInput = Partial<GalaxyShapeKnobs> & {
+  starSpacing?: number;
+  clusterTightness?: number;
+  mapSizeScale?: number;
+};
 
 // ── Utility functions ───────────────────────────────────────────
 
@@ -116,7 +138,9 @@ export function generateSystems(
   params: GenParams,
   grid: DensityGrid,
 ): GeneratedSystem[] {
-  const { totalSystems, mapSize, mapPadding, poissonMinDistance, poissonKCandidates } = params;
+  const {
+    totalSystems, mapSize, mapPadding, poissonMinDistance, poissonKCandidates, densityRadiusExponent,
+  } = params;
   const padding = mapSize * mapPadding;
 
   // Step 1: Scatter systems by local density — tight in clusters, sparse on corridor bands,
@@ -128,6 +152,7 @@ export function generateSystems(
   const points = bridsonSample(
     rng, mapSize, mapSize, poissonMinDistance, poissonKCandidates, padding, totalSystems, grid,
     regions.map((r) => ({ x: r.x, y: r.y })),
+    densityRadiusExponent,
   );
 
   // Step 2: Assign each point to its nearest region center
@@ -616,18 +641,31 @@ export function generateUniverse(
 ): GeneratedUniverse {
   const rng = mulberry32(params.seed);
 
+  // Map-size/spacing scale levers (New Game "Map size"/"Star spacing") apply once, here, before
+  // padding, shape authoring or placement read either quantity — every later phase reads the
+  // scaled values off `effectiveParams`, never the raw config-derived ones. 1/1 reproduces
+  // `params.mapSize`/`params.poissonMinDistance` exactly (the back-compat pin).
+  const effectiveMapSize = params.mapSize * params.mapSizeScale;
+  const effectiveParams: GenParams = {
+    ...params,
+    mapSize: effectiveMapSize,
+    poissonMinDistance: params.poissonMinDistance * params.minDistanceScale,
+  };
+
   // The galaxy shape (density grid, cluster seeds, corridor plan) is authored once, up front, off
   // the same draw sequence every other generation step shares — region and system placement both
   // read its output, never re-derive structure of their own (density-field.ts's authoring model).
-  const shape = buildGalaxyShape(params.shapeKnobs, params.mapSize, rng);
+  const shape = buildGalaxyShape(params.shapeKnobs, effectiveMapSize, rng);
 
   const regions = generateRegions(shape.seeds, names);
-  const rawSystems = generateSystems(rng, regions, params, shape.grid);
-  const { connections, systems } = generateConnections(rng, rawSystems, regions, shape.corridors, params);
+  const rawSystems = generateSystems(rng, regions, effectiveParams, shape.grid);
+  const { connections, systems } = generateConnections(
+    rng, rawSystems, regions, shape.corridors, effectiveParams,
+  );
 
   const factions = generateFactions(rng, systems, {
     minorFactionCount: params.minorFactionCount,
-    mapSize: params.mapSize,
+    mapSize: effectiveMapSize,
     playerFaction,
   });
 
