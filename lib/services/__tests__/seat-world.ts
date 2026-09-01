@@ -1,5 +1,8 @@
 import { generateWorld } from "@/lib/world/gen";
 import { getWorld } from "@/lib/world/store";
+import { toTickConnections } from "@/lib/world/tick";
+import { boundedHopsFromOrigin } from "@/lib/engine/pathfinding";
+import { COLONY_REACH_HOPS } from "@/lib/services/colony-eligibility";
 import type { World, WorldSystem } from "@/lib/world/types";
 
 /**
@@ -50,4 +53,30 @@ export function controlledNeighbour(peopleLand: number): { target: WorldSystem; 
   target.control = "controlled";
   target.peopleLand = peopleLand;
   return { target, home };
+}
+
+/**
+ * A second controlled, amply-landed player system distinct from `excludeId` — reachable from the
+ * homeworld within the colony verb's own seed-source search radius (`COLONY_REACH_HOPS`), not
+ * necessarily a direct connection: corridor topology (spec `docs/planned/logistics-lanes.md` §5)
+ * does not guarantee the homeworld has two direct neighbours the way `controlledNeighbour` alone
+ * assumes. Throws with a clear message rather than a bare `undefined!` crash if the seeded galaxy
+ * doesn't offer one.
+ */
+export function secondControlledSystem(excludeId: string, peopleLand: number): WorldSystem {
+  const world = getWorld();
+  const home = playerHome();
+  const hops = boundedHopsFromOrigin(home.id, toTickConnections(world), COLONY_REACH_HOPS);
+  const candidate = world.systems.find(
+    (s) => s.id !== home.id && s.id !== excludeId && s.control !== "developed" && hops.has(s.id),
+  );
+  if (!candidate) {
+    throw new Error(
+      `seeded galaxy has no second colonisable system within ${COLONY_REACH_HOPS} hops of the homeworld`,
+    );
+  }
+  candidate.factionId = playerFactionId();
+  candidate.control = "controlled";
+  candidate.peopleLand = peopleLand;
+  return candidate;
 }

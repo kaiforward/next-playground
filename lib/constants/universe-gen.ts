@@ -42,7 +42,11 @@ const BASE_CONFIG: UniverseGenConfig = {
   TOTAL_SYSTEMS: 600,
   MAP_SIZE: 7000,
   MAP_PADDING: 0.10,
-  POISSON_MIN_DISTANCE: 180,
+  // Densest-core Poisson radius, sized so the authored geography holds the full requested system
+  // count: at 180 default knobs placed only ~48% of the request; 117 reaches ~99-100% at 600 and
+  // 5000 (seeds 42-44) without capping placement so early that draw order biases which clusters
+  // fill (owner-accepted 2026-09-01).
+  POISSON_MIN_DISTANCE: 117,
   POISSON_K_CANDIDATES: 30,
   INTRA_REGION_EXTRA_EDGES: 0.5,
   CROSSING_FUEL_MULTIPLIER: 2.5,

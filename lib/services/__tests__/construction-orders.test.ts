@@ -3,7 +3,7 @@ import { setWorld, clearWorld } from "@/lib/world/store";
 import { generateWorld } from "@/lib/world/gen";
 import { getWorld } from "@/lib/world/store";
 import { orderBuild, orderColony, cancelOrder, setAutomation } from "@/lib/services/construction-orders";
-import { seatWorld, controlledNeighbour, playerHome } from "./seat-world";
+import { seatWorld, controlledNeighbour, secondControlledSystem, playerHome } from "./seat-world";
 import { colonyEligibility } from "@/lib/services/colony-eligibility";
 import { foundingCommitmentCost } from "@/lib/engine/founding-cost";
 import { runWorldTick } from "@/lib/world/tick";
@@ -349,20 +349,10 @@ describe("construction order services", () => {
     // charter into pendingFounding immediately, so the second order's gate sees the reduced working
     // balance and refuses — closing the window where an unpaid charter let the same money commit
     // two colonies. Cancelling does not refund it: a charter is lost by design.
-    const { target, home } = controlledNeighbour(50);
+    const { target } = controlledNeighbour(50);
     const w = getWorld();
     const pid = w.player!.controlledFactionId;
-    const secondConn = w.connections.find((c) => {
-      if (c.fromId !== home.id && c.toId !== home.id) return false;
-      const otherId = c.fromId === home.id ? c.toId : c.fromId;
-      return otherId !== target.id;
-    });
-    if (!secondConn) throw new Error("fixture: expected the homeworld to have a second neighbour");
-    const secondId = secondConn.fromId === home.id ? secondConn.toId : secondConn.fromId;
-    const second = w.systems.find((s) => s.id === secondId)!;
-    second.factionId = pid;
-    second.control = "controlled";
-    second.peopleLand = 50;
+    const second = secondControlledSystem(target.id, 50);
 
     fundPlayer(Number.MAX_SAFE_INTEGER);
     const quote = colonyEligibility(getWorld(), pid, target);

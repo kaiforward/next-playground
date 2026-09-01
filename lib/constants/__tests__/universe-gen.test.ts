@@ -14,7 +14,7 @@ describe("genConfigForSystemCount", () => {
     expectWithinPercent(config.TOTAL_SYSTEMS, 600, 5);
     expectWithinPercent(config.MAP_SIZE, 7000, 5);
     expectWithinPercent(config.MAP_PADDING, 0.1, 5);
-    expectWithinPercent(config.POISSON_MIN_DISTANCE, 180, 5);
+    expectWithinPercent(config.POISSON_MIN_DISTANCE, 117, 5);
     expectWithinPercent(config.POISSON_K_CANDIDATES, 30, 5);
     expectWithinPercent(config.INTRA_REGION_EXTRA_EDGES, 0.5, 5);
     expectWithinPercent(config.CROSSING_FUEL_MULTIPLIER, 2.5, 5);
@@ -71,7 +71,7 @@ describe("genConfigForSystemCount", () => {
       const config = genConfigForSystemCount(count);
       expect(config.SEED).toBe(42);
       expect(config.MAP_PADDING).toBe(0.1);
-      expect(config.POISSON_MIN_DISTANCE).toBe(180);
+      expect(config.POISSON_MIN_DISTANCE).toBe(117);
       expect(config.POISSON_K_CANDIDATES).toBe(30);
       expect(config.INTRA_REGION_EXTRA_EDGES).toBe(0.5);
       expect(config.CROSSING_FUEL_MULTIPLIER).toBe(2.5);
