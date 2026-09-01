@@ -6,11 +6,14 @@ import {
   buildGalaxyImpression,
   renderDensityField,
   worldToCanvas,
+  crossingSegments,
   type GalaxyImpression,
 } from "./galaxy-preview-render";
 
-/** Square canvas side, in CSS pixels — the density field and every dot/line project onto this. */
-const CANVAS_SIZE = 480;
+/** Square canvas side, in CSS pixels — the density field and every dot/line project onto this.
+ *  Big on purpose: at small sizes dense cluster cores merge into a single blob and crossings
+ *  vanish; 900 keeps individual dots readable at the default 600-system count. */
+const CANVAS_SIZE = 900;
 
 /** Regeneration debounce: a slider drag fires many onChange events per second, and rebuilding a
  *  large galaxy's placement on every one of them would visibly stutter the control itself. Flagged
@@ -22,7 +25,7 @@ const REGEN_DEBOUNCE_MS = 150;
  *  corridors are already visible as raised density in the field itself (`density-field.ts`), so
  *  only crossing-style pairs get an explicit line here — the cheaper of the two to draw, since a
  *  crossing is always exactly one segment. */
-const CROSSING_LINE_COLOR = "rgba(208, 106, 66, 0.35)";
+const CROSSING_LINE_COLOR = "rgba(208, 106, 66, 0.75)";
 const STAR_DOT_COLOR = "#e8dcc8";
 
 export interface GalaxyPreviewProps {
@@ -75,13 +78,10 @@ export function GalaxyPreview({ knobs, seed, systemCount }: GalaxyPreviewProps) 
     ctx.putImageData(new ImageData(bytes, CANVAS_SIZE, CANVAS_SIZE), 0, 0);
 
     ctx.strokeStyle = CROSSING_LINE_COLOR;
-    ctx.lineWidth = 1;
-    for (const pair of impression.shape.corridors.pairs) {
-      if (pair.style !== "crossing") continue;
-      const a = impression.shape.seeds[pair.a];
-      const b = impression.shape.seeds[pair.b];
-      const pa = worldToCanvas(a.x, a.y, impression.mapSize, CANVAS_SIZE, CANVAS_SIZE);
-      const pb = worldToCanvas(b.x, b.y, impression.mapSize, CANVAS_SIZE, CANVAS_SIZE);
+    ctx.lineWidth = 2;
+    for (const segment of crossingSegments(impression)) {
+      const pa = worldToCanvas(segment.a.x, segment.a.y, impression.mapSize, CANVAS_SIZE, CANVAS_SIZE);
+      const pb = worldToCanvas(segment.b.x, segment.b.y, impression.mapSize, CANVAS_SIZE, CANVAS_SIZE);
       ctx.beginPath();
       ctx.moveTo(pa.x, pa.y);
       ctx.lineTo(pb.x, pb.y);

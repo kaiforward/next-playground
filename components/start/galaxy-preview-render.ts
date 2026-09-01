@@ -106,6 +106,60 @@ export function renderDensityField(
   return bytes;
 }
 
+/**
+ * World-space endpoints for each crossing-style corridor, anchored the way the lane graph actually
+ * realises them: the placed system in each cluster nearest to the OTHER cluster's seed — never
+ * seed-center to seed-center, which overstates how deep into a cluster a crossing reaches. A
+ * cluster with no placed system falls back to its seed position (matches the degenerate case the
+ * engine repairs).
+ */
+export function crossingSegments(impression: GalaxyImpression): Array<{ a: Point; b: Point }> {
+  const { seeds } = impression.shape;
+  // Cluster membership = nearest seed, the same Voronoi rule region assignment uses.
+  const byCluster: Point[][] = seeds.map(() => []);
+  for (const point of impression.points) {
+    let best = 0;
+    let bestDist = Number.MAX_VALUE;
+    for (let s = 0; s < seeds.length; s++) {
+      const dx = point.x - seeds[s].x;
+      const dy = point.y - seeds[s].y;
+      const d = dx * dx + dy * dy;
+      if (d < bestDist) {
+        bestDist = d;
+        best = s;
+      }
+    }
+    byCluster[best].push(point);
+  }
+
+  const anchorToward = (cluster: number, target: Point): Point => {
+    const members = byCluster[cluster];
+    if (members.length === 0) return { x: seeds[cluster].x, y: seeds[cluster].y };
+    let best = members[0];
+    let bestDist = Number.MAX_VALUE;
+    for (const m of members) {
+      const dx = m.x - target.x;
+      const dy = m.y - target.y;
+      const d = dx * dx + dy * dy;
+      if (d < bestDist) {
+        bestDist = d;
+        best = m;
+      }
+    }
+    return best;
+  };
+
+  const segments: Array<{ a: Point; b: Point }> = [];
+  for (const pair of impression.shape.corridors.pairs) {
+    if (pair.style !== "crossing") continue;
+    segments.push({
+      a: anchorToward(pair.a, seeds[pair.b]),
+      b: anchorToward(pair.b, seeds[pair.a]),
+    });
+  }
+  return segments;
+}
+
 /** Project a world-space coordinate (authored over `mapSize` × `mapSize`) onto a `canvasWidth` ×
  *  `canvasHeight` pixel canvas. Shared by dot placement and corridor-line endpoints so both read
  *  off the same projection. */

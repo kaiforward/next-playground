@@ -363,9 +363,8 @@ function GalaxyPreviewSection() {
 
   return (
     <StyleSection title="Galaxy Preview — New Game structure knobs (spec §5)">
-      <div className="grid grid-cols-1 lg:grid-cols-[480px_1fr] gap-6">
-        <GalaxyPreview knobs={knobs} seed={seed} systemCount={systemCount} />
-        <div className="space-y-4 max-w-sm">
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
           <NumberInput
             id="galaxy-preview-cluster-count"
             label="Cluster count"
@@ -439,6 +438,7 @@ function GalaxyPreviewSection() {
             onChange={(e) => setSystemCount(Number(e.target.value))}
           />
         </div>
+        <GalaxyPreview knobs={knobs} seed={seed} systemCount={systemCount} />
       </div>
     </StyleSection>
   );
