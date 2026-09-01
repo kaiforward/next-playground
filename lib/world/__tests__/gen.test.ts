@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { generateWorld } from "../gen";
+import { generateWorld, buildGenParams } from "../gen";
+import { generateUniverse } from "@/lib/engine/universe-gen";
+import { genConfigForSystemCount, REGION_NAMES } from "@/lib/constants/universe-gen";
 import { GOODS } from "@/lib/constants/goods";
 import { DEFAULT_TAX_LEVEL } from "@/lib/constants/treasury";
 import { civilianDemandRateForGood, getInitialStock } from "@/lib/constants/market-economy";
@@ -350,6 +352,38 @@ describe("generateWorld — player faction", () => {
   it("seats the player with no pinned systems", () => {
     const world = generateWorld({ ...base, playerFaction: authored });
     expect(world.player?.pinnedSystemIds).toEqual([]);
+  });
+});
+
+describe("generateWorld: connections carry the engine's isCrossing flag", () => {
+  it("world connection rows match generateUniverse's own isCrossing exactly, lane for lane", () => {
+    const systemCount = 600;
+    const seed = 1;
+
+    // Reproduces exactly the params generateWorld builds internally (buildGenParams is the same
+    // exported helper gen.ts itself calls), so this compares against the SAME generated universe
+    // generateWorld would have folded into World — not a second, differently-configured run.
+    const config = genConfigForSystemCount(systemCount);
+    const params = buildGenParams(seed, config);
+    const universe = generateUniverse(params, REGION_NAMES);
+    const world = generateWorld({ systemCount, seed });
+
+    // Non-vacuity: the fixture must actually mix crossing and non-crossing lanes, or this test
+    // could pass by coincidence (e.g. every lane false).
+    const crossingCount = universe.connections.filter((c) => c.isCrossing).length;
+    const nonCrossingCount = universe.connections.length - crossingCount;
+    expect(crossingCount, "fixture must contain at least one crossing-class lane").toBeGreaterThan(0);
+    expect(nonCrossingCount, "fixture must contain at least one non-crossing lane").toBeGreaterThan(0);
+
+    // `gen.ts` mints one system id per generated system in array order (`systemIds = universe.
+    // systems.map(() => mintId(...))`), so `world.systems[i].id` names `universe.systems[i]`.
+    const idAtIndex = world.systems.map((s) => s.id);
+    const worldIsCrossingByPair = new Map(world.connections.map((c) => [`${c.fromId}|${c.toId}`, c.isCrossing]));
+
+    for (const conn of universe.connections) {
+      const key = `${idAtIndex[conn.fromSystemIndex]}|${idAtIndex[conn.toSystemIndex]}`;
+      expect(worldIsCrossingByPair.get(key)).toBe(conn.isCrossing);
+    }
   });
 });
 

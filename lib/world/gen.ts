@@ -190,6 +190,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
     fromId: systemIds[c.fromSystemIndex],
     toId: systemIds[c.toSystemIndex],
     fuelCost: c.fuelCost,
+    isCrossing: c.isCrossing,
   }));
 
   // ── Markets (developed systems only) ──

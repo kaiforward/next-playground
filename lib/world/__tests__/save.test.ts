@@ -684,6 +684,44 @@ describe("save compatibility — collapseDebt moved from building rows to system
   });
 });
 
+describe("save compatibility — connection rows predating isCrossing", () => {
+  /**
+   * A save written before `WorldConnection.isCrossing` existed: every connection row lacks the
+   * key entirely. Not version-bumped — the load boundary defaults the missing value to `false`
+   * (`normalizeConnectionCrossing`, save.ts), the same reading every intra-cluster/band-chain lane
+   * already carries, so a pre-migration save just shows no crossing-class lanes rather than failing
+   * to load or mis-highlighting ordinary lanes.
+   */
+  it("loads, and every connection missing isCrossing reads false", () => {
+    const world = generateWorld({ systemCount: 40, seed: 11 });
+    expect(world.connections.length).toBeGreaterThan(0); // non-vacuous
+    const legacy = {
+      formatVersion: SAVE_FORMAT_VERSION,
+      world: {
+        ...world,
+        connections: world.connections.map(({ isCrossing: _dropped, ...rest }) => rest),
+      },
+    };
+    const result = deserialiseWorld(JSON.stringify(legacy));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    for (const c of result.world.connections) expect(c.isCrossing).toBe(false);
+  });
+
+  it("does not disturb a current save whose connections already carry a real isCrossing", () => {
+    // 600 systems, seed 1 — a fixture already known to produce at least one crossing-class lane
+    // (`lib/world/__tests__/gen.test.ts`'s isCrossing pass-through test uses the same pair).
+    const world = generateWorld({ systemCount: 600, seed: 1 });
+    // Non-vacuity: this generated fixture actually has at least one crossing-class lane, so a
+    // buggy normalizer that always forced false would be caught here.
+    expect(world.connections.some((c) => c.isCrossing)).toBe(true);
+    const result = deserialiseWorld(serialiseWorld(world));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.connections).toEqual(world.connections);
+  });
+});
+
 describe("save compatibility — provisionExpectation seeds from Provision, not a coerced 0", () => {
   /**
    * A save predating the field loads and its first economy cycle seeds the stored memory from

@@ -29,11 +29,12 @@ export const TERRITORY = {
 
 export const EDGE = {
   default:  { color: 0x94a3b8, alpha: 0.4,  width: 1.5 },
-  // Gateway trunk routes — amber "lit pathway": a wide soft glow under a crisp
-  // core line. Amber matches TEXT_COLORS.gateway so gateway edges and labels
-  // share one identity (replaces the old per-system fuchsia gateway ring).
-  gateway:     { color: 0xf59e0b, alpha: 0.85, width: 2.5 },
-  gatewayGlow: { color: 0xf59e0b, alpha: 0.15, width: 7.0 },
+  // Crossing-class lanes (the engine's single priced crossing lane per corridor) — amber "lit
+  // pathway": a wide soft glow under a crisp core line. Amber matches TEXT_COLORS.gateway so these
+  // lanes and gateway-system labels share one identity (replaces the old per-system fuchsia gateway
+  // ring), even though the two are separate concepts (lane crossing-class vs. corridor-endpoint system).
+  crossing:     { color: 0xf59e0b, alpha: 0.85, width: 2.5 },
+  crossingGlow: { color: 0xf59e0b, alpha: 0.15, width: 7.0 },
 } as const;
 
 // ── Point cloud (universe view) ─────────────────────────────────
