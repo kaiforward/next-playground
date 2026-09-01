@@ -8,7 +8,7 @@
  */
 
 import { generateWorld } from "@/lib/world/gen";
-import { runWorldTick, toTickSystems } from "@/lib/world/tick";
+import { runWorldTick, toTickSystems, toTickConnections } from "@/lib/world/tick";
 import {
   takeMarketSnapshot, computeMarketHealth, computeKneeBinding, SNAPSHOT_INTERVAL,
   newDemandHuntingAccumulator, sampleDemandHunting, summariseDemandHunting,
@@ -20,6 +20,7 @@ import {
 } from "./event-analysis";
 import { summariseLogistics, fundingBoundCensus, LOGISTICS_WARMUP_TICKS } from "./logistics-analysis";
 import type { LogisticsBudgetTotals } from "./logistics-analysis";
+import { summariseGeography } from "./geography-analysis";
 import {
   summariseBuildBursts, trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample,
   summariseFoundingStock, recordFoundingManifest, newFoundingStallTotals, recordFoundingStall,
@@ -471,6 +472,10 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     ratePerEligible: strikeEligibleTotal > 0 ? strikeSuppressedTotal / strikeEligibleTotal : 0,
   };
 
+  const geography = summariseGeography(
+    finalTickSystems, toTickConnections(world), world.factions, logisticsFlows, colonistDeliveryTotals,
+  );
+
   const episodeCosts = summariseEpisodeCostsByCohort(episodeCostTotals, finalTickSystems, homeworldIds);
   const foundingTrajectory = summariseFoundingTrajectory(foundingTrajectoryTotals);
   const provisionVarianceBySystem = computeTrailingProvisionVariance(provisionSnapshots, RATCHET_TRAILING_WINDOW);
@@ -524,5 +529,6 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     foundingTrajectory,
     provisionRatchet,
     tierZeroIdle: summariseTierZeroIdle(finalTickSystems, homeworldIds),
+    geography,
   };
 }

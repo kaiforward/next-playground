@@ -43,6 +43,7 @@ import { summarisePopulation, detectPingPong, summariseInfrastructure, summarise
 import { summariseColonisation, summariseConstructionPool, CONSTRUCTION_WARMUP_TICKS } from "../lib/tick-harness/build-analysis";
 import type { TierZeroIdleSummary } from "../lib/tick-harness/build-analysis";
 import { LOGISTICS_WARMUP_TICKS } from "../lib/tick-harness/logistics-analysis";
+import { summariseRelationsScores, countBorderConflicts } from "../lib/tick-harness/geography-analysis";
 import { conservationGateFailure } from "../lib/tick-harness/conservation-analysis";
 import type { ConservationReport } from "../lib/tick-harness/conservation-analysis";
 import { renderTable } from "../lib/tick-harness/table";
@@ -197,7 +198,7 @@ export function formatTierZeroIdle(t: TierZeroIdleSummary): string[] {
 }
 
 export function formatTable(results: HarnessResults): string {
-  const { marketHealth, roleCoverLevels, worldCohorts, eventImpacts, logisticsActivity, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, initialBuildingTotal, populationSnapshots } = results;
+  const { marketHealth, roleCoverLevels, worldCohorts, eventImpacts, logisticsActivity, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, initialBuildingTotal, populationSnapshots, geography } = results;
 
   // Computed once and reused by both the population/unrest and infrastructure
   // summaries below — they used to each call toTickSystems(finalWorld) separately.
@@ -922,6 +923,46 @@ export function formatTable(results: HarnessResults): string {
         `default scale, so read low activity as "too early", not "broken" (a matured read needs ~5600 ticks).`,
       );
     }
+  }
+
+  // Geography acceptance instruments (map-generation sub-project, spec §5) — corrected flow
+  // concentration, fuel-cost spread over both cohorts, cross-faction lane count, beyond-crossing
+  // migration cohort. Relations-score distribution and border_conflict count are existing state,
+  // surfaced here as new rows rather than a new mechanic.
+  {
+    lines.push("");
+    lines.push("Geography Acceptance (map generation, whole run):");
+    const gRows: [string, string][] = [
+      ["Top-decile flow share", geography.topDecileShare.toFixed(3)],
+      ["Fuel p90/p10 (all)", geography.fuelP90P10All.toFixed(2)],
+      ["Fuel p90/p10 (trafficked)", geography.fuelP90P10Trafficked.toFixed(2)],
+      ["Cross-faction lanes", String(geography.crossFactionLaneCount)],
+      ["Unreachable hauls", String(geography.unreachableHaulCount)],
+      ["Unreachable haul volume", fmtNum(geography.unreachableHaulVolume)],
+      ["Unreachable volume share", geography.unreachableHaulVolumeShare.toFixed(3)],
+    ];
+    lines.push(...renderTable(["Metric", "Value"], [26, 16], gRows.map(([l, v]) => [l, v])));
+    if (geography.topDecileShareByFaction.length > 0) {
+      lines.push("  per-faction (>= gate trafficked edges):");
+      for (const f of geography.topDecileShareByFaction) {
+        lines.push(`    ${f.factionId}: ${f.topDecileShare.toFixed(3)} share over ${f.trafficked} trafficked edges`);
+      }
+    } else {
+      lines.push("  no faction cleared the trafficked-edge gate for a per-faction read");
+    }
+    for (const row of geography.beyondCrossingCohort) {
+      lines.push(
+        `  ${row.cohort}: n=${row.n}, mean migrant inflow ${fmtNum(row.meanMigrantInflow)}, ` +
+        `mean population trend ${(row.meanPopulationTrend * 100).toFixed(2)}%`,
+      );
+    }
+    const relations = summariseRelationsScores(finalWorld.relations);
+    const borderConflicts = countBorderConflicts(finalWorld.events);
+    lines.push(
+      `  relations score (n=${relations.n}): median ${relations.median.toFixed(1)}, ` +
+      `p10 ${relations.p10.toFixed(1)}, p90 ${relations.p90.toFixed(1)}`,
+    );
+    lines.push(`  border_conflict events on board: ${borderConflicts}`);
   }
 
   // Event impact (top 20 only — full list in JSON output)

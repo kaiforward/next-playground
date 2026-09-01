@@ -87,5 +87,19 @@ export function minimalHarnessResults(): HarnessResults {
       homeworld: { systemCount: 0, idleLevels: 0, systemsWithIdleTier0: 0 },
       colony: { systemCount: 0, idleLevels: 0, systemsWithIdleTier0: 0 },
     },
+    geography: {
+      topDecileShare: 0,
+      topDecileShareByFaction: [],
+      fuelP90P10All: 0,
+      fuelP90P10Trafficked: 0,
+      crossFactionLaneCount: 0,
+      beyondCrossingCohort: [
+        { cohort: "interior", n: 0, meanMigrantInflow: 0, meanPopulationTrend: 0 },
+        { cohort: "beyond-crossing", n: 0, meanMigrantInflow: 0, meanPopulationTrend: 0 },
+      ],
+      unreachableHaulCount: 0,
+      unreachableHaulVolume: 0,
+      unreachableHaulVolumeShare: 0,
+    },
   };
 }
