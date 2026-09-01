@@ -473,11 +473,11 @@ describe("runTickHarness: episode costs, founding trajectory, the ratchet check"
     //
     // totalTeardownLevels is deliberately pinned rather than dropped. Post-strip (no random event
     // spawning left at all — only the relations trio remains, and it spawns far past this
-    // horizon) BUSY sheds 194 levels over its horizon on this fixture's generated galaxy (its
+    // horizon) BUSY sheds 188 levels over its horizon on this fixture's generated galaxy (its
     // cluster/lane topology, spec `docs/planned/logistics-lanes.md` §5, sets which systems decay
-    // and when), up from the near-zero reading under the previous, spawn-still-present alignment.
-    // Pinned exactly as the regime's signature; a drift in either direction is a mechanics change
-    // to re-read, not a regression in this instrument. The counter's own wiring
+    // and when). Pinned exactly as the regime's signature; a drift in either direction is a
+    // mechanics or topology change to re-read, not a regression in this instrument. The counter's
+    // own wiring
     // — that a torn-down level actually reaches
     // `totalTeardownLevels` — is proven at unit level where it can be forced to fire:
     // lib/tick/processors/__tests__/infrastructure-decay.test.ts "infrastructure-decay processor:
@@ -487,7 +487,7 @@ describe("runTickHarness: episode costs, founding trajectory, the ratchet check"
     // `totalTeardownLevels` and asserts the total. Together they cover both hops of the wire this
     // test cannot exercise on a dormant galaxy.
     const results = await runBusy();
-    expect(results.episodeCosts.totalTeardownLevels).toBe(194);
+    expect(results.episodeCosts.totalTeardownLevels).toBe(188);
     expect(results.foundingTrajectory.buckets[0].n).toBeGreaterThan(0); // colonies founded in-window
     expect(results.provisionRatchet.buckets.length).toBeGreaterThan(0);
 

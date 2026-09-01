@@ -278,7 +278,7 @@ function projectOntoLine(
  * as possible), that sit near the direct seed-to-seed line and strictly between the two anchors'
  * OWN projected positions (`tLow`/`tHigh`, not a hardcoded [0,1] — the nearest-facing anchor rule
  * does not guarantee an anchor sits exactly at its cluster's seed) — the sparse chain of waypoint
- * stars a band-style corridor's raised density placed (`buildDensityGrid`'s band strip,
+ * stars a band-style corridor's raised density placed (`paintCorridorBands`'s band strip,
  * `lib/engine/density-field.ts`). The "no lane outside the plan" guarantee still holds: this only
  * ever links a waypoint into THIS pair's own chain, never opens a lane belonging to some other
  * corridor.

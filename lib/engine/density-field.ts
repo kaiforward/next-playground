@@ -30,7 +30,11 @@ export interface GalaxyShapeKnobs {
   voidFloor: number;
   /** Extra corridor pairs beyond the connectivity-guaranteeing MST, per cluster seed. */
   corridorsPerCluster: number;
-  /** Fraction of corridor pairs realised as a single crossing lane rather than a waypoint band. */
+  /** Bias, 0–1, on the void-fraction threshold that decides whether a corridor pair's measured
+   *  seed-to-seed line reads as a crossing (mostly true void — the wormhole case) or a band (mostly
+   *  populated). 0 pins every pair to band regardless of what the line measures; 1 pins every pair
+   *  to crossing; between the extremes it lowers (toward 1) or raises (toward 0) how void a line
+   *  must read to tip into crossing — see `corridorStyleFor` in `density-field.ts`. */
   corridorStyle: number;
   /** How wildly per-cluster peak density swings between clusters, 0–1: 0 = every cluster's peak
    *  density multiplier is exactly 1 (uniform peaks); higher values dampen some clusters toward
@@ -290,19 +294,16 @@ function seedInfluence(seed: ClusterSeed, wx: number, wy: number, warp: number):
 }
 
 /**
- * Build the coarse density grid: cell density is the strongest nearby seed's influence (islands of
- * density, emptiness as the complement), decorated by a large-scale warp layer (edge roughening,
- * occasional cluster merging) and a small-scale texture layer, then floored — any cell below
- * `voidFloor` reads exactly 0, true void rather than merely sparse. Waypoint-band corridors
- * (`corridors.pairs` entries with `style: "band"`) then raise a thin strip of cells along their
- * seed-to-seed line to just above `voidFloor` — so system placement can follow it as a sparse
- * chain of waypoint stars — capped low relative to cluster cores so it reads as a chain, not
- * another cluster. Crossing-style pairs are deliberately grid-silent: their "mark" is the
- * `CorridorPlan` entry itself, realised directly as a single long lane, not a placement trail.
+ * Build the coarse BASE density grid — seed influence plus noise, floored — with no corridor
+ * awareness at all: cell density is the strongest nearby seed's influence (islands of density,
+ * emptiness as the complement), decorated by a large-scale warp layer (edge roughening, occasional
+ * cluster merging) and a small-scale texture layer, then floored — any cell below `voidFloor` reads
+ * exactly 0, true void rather than merely sparse. This is the grid `planCorridors` measures each
+ * pair's seed-to-seed line against (`corridorStyleFor` below) — style must read the world as it
+ * would exist with no corridors yet, not a grid corridors have already painted themselves onto.
  */
-function buildDensityGrid(
+function buildBaseDensityGrid(
   seeds: ClusterSeed[],
-  corridors: CorridorPlan,
   knobs: GalaxyShapeKnobs,
   mapSize: number,
   rng: RNG,
@@ -312,13 +313,6 @@ function buildDensityGrid(
   const largeNoise = buildNoiseLattice(rng, LARGE_NOISE_LATTICE);
   const smallNoise = buildNoiseLattice(rng, SMALL_NOISE_LATTICE);
   const cells = new Array<number>(resolution * resolution);
-  const bandHalfWidth = BAND_HALF_WIDTH_CELLS * cellWorldSize;
-  const bandLevel = Math.min(knobs.voidFloor + BAND_ABOVE_FLOOR_MARGIN, BAND_DENSITY_CEILING);
-  const bandSegments = corridors.pairs
-    .filter((pair) => pair.style === "band")
-    .map((pair) => ({
-      ax: seeds[pair.a].x, ay: seeds[pair.a].y, bx: seeds[pair.b].x, by: seeds[pair.b].y,
-    }));
 
   for (let row = 0; row < resolution; row++) {
     const v = resolution > 1 ? row / (resolution - 1) : 0;
@@ -338,6 +332,47 @@ function buildDensityGrid(
       density += SMALL_NOISE_AMPLITUDE * sampleLattice(smallNoise, SMALL_NOISE_LATTICE, u, v);
       density = clamp01(density);
       if (density < knobs.voidFloor) density = 0;
+
+      cells[row * resolution + col] = density;
+    }
+  }
+
+  return { resolution, cells };
+}
+
+/**
+ * Raise a thin strip of cells to just above `voidFloor` along every band-style corridor's
+ * seed-to-seed line — so system placement can follow it as a sparse chain of waypoint stars —
+ * capped low relative to cluster cores so it reads as a chain, not another cluster. Crossing-style
+ * pairs are deliberately grid-silent: their "mark" is the `CorridorPlan` entry itself, realised
+ * directly as a single long lane, not a placement trail. Returns the input grid unchanged (no copy)
+ * when there is nothing to paint.
+ */
+function paintCorridorBands(
+  baseGrid: DensityGrid,
+  seeds: ClusterSeed[],
+  corridors: CorridorPlan,
+  knobs: GalaxyShapeKnobs,
+  mapSize: number,
+): DensityGrid {
+  const bandSegments = corridors.pairs
+    .filter((pair) => pair.style === "band")
+    .map((pair) => ({
+      ax: seeds[pair.a].x, ay: seeds[pair.a].y, bx: seeds[pair.b].x, by: seeds[pair.b].y,
+    }));
+  if (bandSegments.length === 0) return baseGrid;
+
+  const { resolution } = baseGrid;
+  const cellWorldSize = mapSize / resolution;
+  const bandHalfWidth = BAND_HALF_WIDTH_CELLS * cellWorldSize;
+  const bandLevel = Math.min(knobs.voidFloor + BAND_ABOVE_FLOOR_MARGIN, BAND_DENSITY_CEILING);
+  const cells = baseGrid.cells.slice();
+
+  for (let row = 0; row < resolution; row++) {
+    for (let col = 0; col < resolution; col++) {
+      const wx = (col + 0.5) * cellWorldSize;
+      const wy = (row + 0.5) * cellWorldSize;
+      let density = cells[row * resolution + col];
 
       for (const segment of bandSegments) {
         if (pointSegmentDistance(wx, wy, segment.ax, segment.ay, segment.bx, segment.by) <= bandHalfWidth) {
@@ -359,25 +394,115 @@ function edgeKey(a: number, b: number): string {
 }
 
 /**
- * Choose which cluster-seed pairs connect: an MST over the seeds (`kruskalMST`,
- * `lib/engine/generation-primitives.ts`) guarantees every seed reachable, then `corridorsPerCluster`
- * extra pairs (nearest-first, beyond the MST) add route variety — mirrors the intra-region
- * extra-edge shape already used for lanes. Each pair's style rolls against `corridorStyle`
- * (fraction realised as a crossing lane vs a waypoint band); the band write into the density grid
- * happens in `buildDensityGrid` above, while lane rendering is a downstream connection-graph
- * concern this module never touches.
+ * Sample count for `sampleSegmentVoidFraction`: at least `MIN_STYLE_SAMPLES` regardless of length
+ * (short corridors still get a stable read), scaling up with segment length so a long corridor
+ * gets roughly one sample per grid cell it crosses, capped at `MAX_STYLE_SAMPLES` so a galaxy-
+ * spanning pair doesn't blow the sampling budget for a decision that only needs to be roughly
+ * right. Judgement call — the spec leaves the exact sample count open.
  */
-function planCorridors(seeds: ClusterSeed[], knobs: GalaxyShapeKnobs, rng: RNG): CorridorPlan {
+const MIN_STYLE_SAMPLES = 20;
+const MAX_STYLE_SAMPLES = 200;
+
+/**
+ * Fraction of `sampleCount` evenly-spaced points along the (ax,ay)-(bx,by) segment that land on a
+ * true-void cell (density exactly 0) in `grid`. Reads the grid as-is — callers are responsible for
+ * passing the pre-corridor base grid when the reading must reflect the world before any corridor
+ * has painted itself onto it.
+ */
+function sampleSegmentVoidFraction(
+  grid: DensityGrid, mapSize: number, ax: number, ay: number, bx: number, by: number,
+): number {
+  const { resolution, cells } = grid;
+  const cellWorldSize = mapSize / resolution;
+  const segmentLength = distance(ax, ay, bx, by);
+  const sampleCount = Math.min(
+    MAX_STYLE_SAMPLES,
+    Math.max(MIN_STYLE_SAMPLES, Math.ceil(segmentLength / cellWorldSize)),
+  );
+
+  let voidCount = 0;
+  for (let i = 0; i < sampleCount; i++) {
+    const t = sampleCount === 1 ? 0 : i / (sampleCount - 1);
+    const wx = ax + (bx - ax) * t;
+    const wy = ay + (by - ay) * t;
+    const col = Math.min(resolution - 1, Math.max(0, Math.floor((wx / mapSize) * resolution)));
+    const row = Math.min(resolution - 1, Math.max(0, Math.floor((wy / mapSize) * resolution)));
+    if (cells[row * resolution + col] === 0) voidCount++;
+  }
+
+  return voidCount / sampleCount;
+}
+
+/**
+ * Decide one pair's style by measuring its seed-to-seed line against the base grid, not by rolling
+ * against `corridorStyle` — a mostly-void line (the wormhole case) reads as a crossing, a
+ * mostly-populated one reads as a band. `corridorStyle` biases the void-fraction threshold a
+ * borderline line must clear: threshold = `1 - corridorStyle`. The extremes are pinned absolutely,
+ * independent of what the line measures (spec-required: 0 never crosses, 1 always crosses) rather
+ * than left to fall out of the threshold arithmetic at the boundary, which is the more legible
+ * shape for an invariant the tests hold to exactly.
+ */
+function corridorStyleFor(voidFraction: number, corridorStyle: number): "band" | "crossing" {
+  if (corridorStyle >= 1) return "crossing";
+  if (corridorStyle <= 0) return "band";
+  const threshold = 1 - corridorStyle;
+  return voidFraction >= threshold ? "crossing" : "band";
+}
+
+/**
+ * An extra corridor departing within this many radians of an already-accepted corridor at the same
+ * cluster is suppressed (fan/near-parallel doubles read as noise, not route variety) — ~20°,
+ * judgement call, the spec leaves the exact angle open.
+ */
+const FAN_SUPPRESSION_ANGLE_RAD = (20 * Math.PI) / 180;
+
+/** Minimal angular difference between two headings (radians), always in [0, PI]. */
+function angularDiff(a: number, b: number): number {
+  let diff = Math.abs(a - b) % (Math.PI * 2);
+  if (diff > Math.PI) diff = Math.PI * 2 - diff;
+  return diff;
+}
+
+/**
+ * Choose which cluster-seed pairs connect: an MST over the seeds (`kruskalMST`,
+ * `lib/engine/generation-primitives.ts`) guarantees every seed reachable and is never suppressed
+ * (connectivity), then `corridorsPerCluster` extra pairs (nearest-first, beyond the MST) add route
+ * variety — mirrors the intra-region extra-edge shape already used for lanes, except an extra is
+ * dropped when it departs within `FAN_SUPPRESSION_ANGLE_RAD` of a corridor (MST or an already-
+ * accepted extra) already leaving one of its two endpoint clusters — kills near-parallel doubles
+ * and fans without touching connectivity. No backfill: a suppressed candidate is simply not
+ * replaced by the next-nearest one, so the realised extra count can come in under
+ * `corridorsPerCluster`'s target when a cluster's neighbourhood is already covered. Every pair's
+ * style is measured against the base density grid (`corridorStyleFor`); the band write into the
+ * density grid happens in `paintCorridorBands`, while lane rendering is a downstream
+ * connection-graph concern this module never touches. Fully deterministic — no `rng` draws.
+ */
+function planCorridors(seeds: ClusterSeed[], knobs: GalaxyShapeKnobs, baseGrid: DensityGrid, mapSize: number): CorridorPlan {
   if (seeds.length < 2) return { pairs: [] };
 
-  const mst = kruskalMST(seeds);
-  const styleFor = (): "band" | "crossing" => (rng() < knobs.corridorStyle ? "crossing" : "band");
+  const styleForPair = (a: number, b: number): "band" | "crossing" => {
+    const voidFraction = sampleSegmentVoidFraction(baseGrid, mapSize, seeds[a].x, seeds[a].y, seeds[b].x, seeds[b].y);
+    return corridorStyleFor(voidFraction, knobs.corridorStyle);
+  };
 
-  const pairs: CorridorPlan["pairs"] = mst.map((edge) => ({
-    a: edge.a,
-    b: edge.b,
-    style: styleFor(),
-  }));
+  // Departure headings (radians) of every accepted corridor at each cluster, MST first — extras
+  // are checked against this set and add to it only when accepted.
+  const departureAngles = new Map<number, number[]>();
+  const recordDeparture = (a: number, b: number): void => {
+    const angleAtA = Math.atan2(seeds[b].y - seeds[a].y, seeds[b].x - seeds[a].x);
+    const angleAtB = Math.atan2(seeds[a].y - seeds[b].y, seeds[a].x - seeds[b].x);
+    for (const [cluster, angle] of [[a, angleAtA], [b, angleAtB]] as const) {
+      const existing = departureAngles.get(cluster);
+      if (existing) existing.push(angle);
+      else departureAngles.set(cluster, [angle]);
+    }
+  };
+
+  const mst = kruskalMST(seeds);
+  const pairs: CorridorPlan["pairs"] = mst.map((edge) => {
+    recordDeparture(edge.a, edge.b);
+    return { a: edge.a, b: edge.b, style: styleForPair(edge.a, edge.b) };
+  });
 
   const extraCount = Math.round(seeds.length * Math.max(0, knobs.corridorsPerCluster));
   if (extraCount > 0) {
@@ -396,7 +521,15 @@ function planCorridors(seeds: ClusterSeed[], knobs: GalaxyShapeKnobs, rng: RNG):
     candidates.sort((a, b) => a.dist - b.dist);
 
     for (let k = 0; k < Math.min(extraCount, candidates.length); k++) {
-      pairs.push({ a: candidates[k].a, b: candidates[k].b, style: styleFor() });
+      const { a, b } = candidates[k];
+      const angleAtA = Math.atan2(seeds[b].y - seeds[a].y, seeds[b].x - seeds[a].x);
+      const angleAtB = Math.atan2(seeds[a].y - seeds[b].y, seeds[a].x - seeds[b].x);
+      const fansAtA = (departureAngles.get(a) ?? []).some((existing) => angularDiff(existing, angleAtA) < FAN_SUPPRESSION_ANGLE_RAD);
+      const fansAtB = (departureAngles.get(b) ?? []).some((existing) => angularDiff(existing, angleAtB) < FAN_SUPPRESSION_ANGLE_RAD);
+      if (fansAtA || fansAtB) continue;
+
+      recordDeparture(a, b);
+      pairs.push({ a, b, style: styleForPair(a, b) });
     }
   }
 
@@ -406,16 +539,19 @@ function planCorridors(seeds: ClusterSeed[], knobs: GalaxyShapeKnobs, rng: RNG):
 // ── Top-level entry point ───────────────────────────────────────
 
 /**
- * Author one galaxy's shape from structure knobs: place cluster seeds, plan which seed pairs
- * corridors connect, then derive the density grid — seed influence plus noise, with band-style
- * corridors additionally raising their own strip of cells (§5: the grid is fully authored by this
- * function; system placement consumes it purely by reading cell density, never by re-deriving
- * structure). Pure and deterministic: identical `knobs` + `mapSize` + an `rng` at the same draw
- * position always produce a byte-identical result.
+ * Author one galaxy's shape from structure knobs: place cluster seeds, build the base density grid
+ * (seed influence plus noise, no corridor awareness), plan which seed pairs corridors connect —
+ * each pair's style measured against that base grid — then raise band-style corridors' own strip of
+ * cells on top (§5: the grid is fully authored by this function; system placement consumes it
+ * purely by reading cell density, never by re-deriving structure). Corridor planning itself draws
+ * nothing from `rng` — style is measured, not rolled — so only seed placement and the two base-grid
+ * noise lattices consume the stream. Pure and deterministic: identical `knobs` + `mapSize` + an
+ * `rng` at the same draw position always produce a byte-identical result.
  */
 export function buildGalaxyShape(knobs: GalaxyShapeKnobs, mapSize: number, rng: RNG): GalaxyShape {
   const seeds = placeClusterSeeds(rng, knobs, mapSize);
-  const corridors = planCorridors(seeds, knobs, rng);
-  const grid = buildDensityGrid(seeds, corridors, knobs, mapSize, rng);
+  const baseGrid = buildBaseDensityGrid(seeds, knobs, mapSize, rng);
+  const corridors = planCorridors(seeds, knobs, baseGrid, mapSize);
+  const grid = paintCorridorBands(baseGrid, seeds, corridors, knobs, mapSize);
   return { grid, seeds, corridors };
 }

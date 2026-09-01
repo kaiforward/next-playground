@@ -74,6 +74,49 @@ describe("buildGalaxyShape", () => {
     }
   });
 
+  it("never accepts two corridors leaving the same cluster within the fan-suppression angle of each other", () => {
+    // Tight spacing and a generous extra-corridor budget crowd many nearest-neighbour candidates
+    // around each cluster — exactly the layout that produces near-parallel doubles and fans if
+    // suppression isn't wired in.
+    const shape = buildGalaxyShape(
+      knobs({ clusterCount: 30, clusterSpacing: 150, corridorsPerCluster: 2 }),
+      MAP_SIZE,
+      mulberry32(77),
+    );
+
+    // Non-vacuous: extras beyond the MST were actually realised, so suppression had candidates to
+    // act on, not just an empty pool.
+    expect(shape.corridors.pairs.length).toBeGreaterThan(shape.seeds.length - 1);
+
+    const SUPPRESSION_ANGLE_RAD = (20 * Math.PI) / 180;
+    const angularDiff = (a: number, b: number): number => {
+      let diff = Math.abs(a - b) % (Math.PI * 2);
+      if (diff > Math.PI) diff = Math.PI * 2 - diff;
+      return diff;
+    };
+
+    const anglesByCluster = new Map<number, number[]>();
+    for (const pair of shape.corridors.pairs) {
+      const a = shape.seeds[pair.a];
+      const b = shape.seeds[pair.b];
+      const departures: Array<[number, number]> = [
+        [pair.a, Math.atan2(b.y - a.y, b.x - a.x)],
+        [pair.b, Math.atan2(a.y - b.y, a.x - b.x)],
+      ];
+      for (const [cluster, angle] of departures) {
+        const existing = anglesByCluster.get(cluster) ?? [];
+        for (const other of existing) {
+          expect(
+            angularDiff(angle, other),
+            `cluster ${cluster}: two accepted corridors depart within the fan-suppression angle`,
+          ).toBeGreaterThanOrEqual(SUPPRESSION_ANGLE_RAD);
+        }
+        existing.push(angle);
+        anglesByCluster.set(cluster, existing);
+      }
+    }
+  });
+
   it("raises a thin band of cells along a band-style corridor's seed-to-seed line", () => {
     // Two clusters, spaced well beyond twice the max seed-size radius, so the corridor midpoint
     // sits in what would otherwise be true void: only band-writing can raise it.
@@ -126,6 +169,36 @@ describe("buildGalaxyShape", () => {
     expect(midCell).toBe(0);
   });
 
+  it("measures a void-gap pair as a crossing at a mid corridorStyle, not an extreme", () => {
+    // Two clusters spaced well beyond twice the max seed-size radius, same void-spacing setup as
+    // the band/crossing extreme tests above, but corridorStyle: 0.5 — the *measurement*, not the
+    // extreme clamp, must be what drives this to "crossing" (the line is almost entirely void).
+    const shape = buildGalaxyShape(
+      knobs({ clusterCount: 2, clusterSpacing: 3500, corridorsPerCluster: 0, corridorStyle: 0.5, voidFloor: 0.05 }),
+      MAP_SIZE,
+      mulberry32(5),
+    );
+
+    expect(shape.corridors.pairs.length).toBe(1);
+    const [pair] = shape.corridors.pairs;
+    expect(pair.style).toBe("crossing");
+  });
+
+  it("measures a densely-populated pair as a band at a mid corridorStyle, not an extreme", () => {
+    // Two clusters close enough, with large-enough seed sizes (sizeSkew 0 draws uniformly toward
+    // the wide end too), that their footprints cover the whole seed-to-seed line — no true void
+    // along it — at the same mid corridorStyle used by the crossing fixture above.
+    const shape = buildGalaxyShape(
+      knobs({ clusterCount: 2, clusterSpacing: 200, sizeSkew: 0, corridorsPerCluster: 0, corridorStyle: 0.5, voidFloor: 0.05 }),
+      MAP_SIZE,
+      mulberry32(9),
+    );
+
+    expect(shape.corridors.pairs.length).toBe(1);
+    const [pair] = shape.corridors.pairs;
+    expect(pair.style).toBe("band");
+  });
+
   it("produces a byte-identical grid for the same knobs and seed", () => {
     const first = buildGalaxyShape(knobs(), MAP_SIZE, mulberry32(2024));
     const second = buildGalaxyShape(knobs(), MAP_SIZE, mulberry32(2024));
@@ -166,8 +239,8 @@ describe("clusterTurbulence", () => {
   // These pin the design constraint from the module docstring: turbulence rolls from a stream
   // derived from each seed's own already-rolled position, never the main `rng` passed into
   // buildGalaxyShape — so turbulence can perturb cell densities but must NEVER shift where the
-  // main stream's next draw lands (seed placement, corridor planning).
-  it("leaves seed positions and the corridor plan byte-identical at turbulence 0 vs 0.8 — only cell densities may differ", () => {
+  // main stream's next draw lands (seed placement, corridor planning consumes no `rng` at all).
+  it("leaves seed positions and the corridor plan's pair structure byte-identical at turbulence 0 vs 0.8 — cell densities, and a style measured from them, may differ", () => {
     const many = knobs({ clusterCount: 20, clusterSpacing: 200, corridorsPerCluster: 0.3 });
     const calm = buildGalaxyShape({ ...many, clusterTurbulence: 0 }, MAP_SIZE, mulberry32(2026));
     const turbulent = buildGalaxyShape({ ...many, clusterTurbulence: 0.8 }, MAP_SIZE, mulberry32(2026));
@@ -177,9 +250,15 @@ describe("clusterTurbulence", () => {
       seeds.map(({ peakMultiplier: _peakMultiplier, ...rest }) => rest);
     expect(stripMultiplier(turbulent.seeds)).toEqual(stripMultiplier(calm.seeds));
 
-    // Corridor planning consumes the main rng after placement — its draw position, and therefore
-    // its output, is untouched too.
-    expect(turbulent.corridors).toEqual(calm.corridors);
+    // Corridor planning consumes no `rng`, and which seed pairs connect (MST + nearest-first
+    // extras, both purely geometric) never reads turbulence — the pair structure is identical.
+    // Each pair's *style* is measured against the base grid though, and turbulence's
+    // peakMultiplier does perturb that grid's densities, so a borderline pair's style is allowed
+    // to flip between calm and turbulent — that isn't a draw-sequence leak, it's the intended
+    // consequence of "style is measured, not rolled".
+    const pairStructure = (corridors: typeof calm.corridors) =>
+      corridors.pairs.map(({ a, b }) => ({ a, b }));
+    expect(pairStructure(turbulent.corridors)).toEqual(pairStructure(calm.corridors));
 
     // The turbulence knob does something real: cell densities actually differ somewhere.
     expect(turbulent.grid.cells).not.toEqual(calm.grid.cells);

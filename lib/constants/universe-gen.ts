@@ -22,7 +22,10 @@ interface UniverseGenConfig {
   VOID_FLOOR: number;
   /** Extra corridor pairs beyond the connectivity-guaranteeing MST, per cluster seed. */
   CORRIDORS_PER_CLUSTER: number;
-  /** Fraction of corridor pairs realised as a single crossing lane rather than a waypoint band. */
+  /** Bias, 0–1, on the void-fraction threshold that decides whether a corridor pair's measured
+   *  seed-to-seed line reads as a crossing (mostly true void) or a band (mostly populated) — not a
+   *  probability. 0 pins every pair to band, 1 pins every pair to crossing; between the extremes it
+   *  biases which way a borderline line tips (`corridorStyleFor`, `lib/engine/density-field.ts`). */
   CORRIDOR_STYLE_MIX: number;
   /** Per-cluster peak-density swing: 0 = every cluster's peak density reads the same; higher values
    *  dampen some clusters toward diffuse while others stay full. Never a placement/corridor knob —

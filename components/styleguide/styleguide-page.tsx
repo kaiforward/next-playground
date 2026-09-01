@@ -329,9 +329,10 @@ function StatsSection() {
 
 // ── Galaxy Preview ───────────────────────────────────────────────
 
-/** Discrete presets over `GalaxyShapeKnobs.corridorStyle` (a continuous fraction of corridor pairs
- *  realised as a crossing lane vs a waypoint band) — the corridor-style picker the map-gen sub-
- *  project's owner-eyeball gate (spec §5) chooses between, not a knob a player would drag by
+/** Discrete presets over `GalaxyShapeKnobs.corridorStyle` (a continuous 0–1 bias on the void-fraction
+ *  threshold that decides band vs crossing per corridor pair — not a probability; see
+ *  `corridorStyleFor` in `lib/engine/density-field.ts`) — the corridor-style picker the map-gen
+ *  sub-project's owner-eyeball gate (spec §5) chooses between, not a knob a player would drag by
  *  fraction. The AGENTS prototype gate settles which of these (or a continuous slider) ships. */
 const CORRIDOR_STYLE_PRESETS = {
   bands: 0.15,
