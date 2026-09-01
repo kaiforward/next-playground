@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useForm, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -60,11 +61,14 @@ const DEFAULT_SHAPE: Required<GalaxyShapeInput> = {
   mapSizeScale: 1,
 };
 
-/** Preview-only fallback for an unset seed — the schema's `seed` field stays genuinely optional
- *  (omitted means "randomise" all the way to `lib/services/game.ts`), so a blank field previews a
- *  fixed candidate seed rather than showing nothing; typing an explicit seed is what makes the
- *  previewed galaxy and the played one the same galaxy. */
-const PREVIEW_FALLBACK_SEED = 42;
+/** The form always opens with a concrete random seed already filled in, so the previewed galaxy
+ *  IS the one a submit generates — a blank field used to randomise invisibly at generation while
+ *  the preview showed a fixed fallback, and the two never matched. "Surprise me" is re-rolling
+ *  the visible number, not an invisible one. The schema's `seed` stays optional for API callers;
+ *  this form just never submits it blank. */
+function rollSeed(): number {
+  return Math.floor(Math.random() * 1_000_000);
+}
 
 interface CreateFactionFormProps {
   /** Called after a successful `newGame` command, before navigating to the map root — the start
@@ -80,6 +84,9 @@ interface CreateFactionFormProps {
 export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
   const navigate = useNavigate();
   const newGame = useNewGameMutation();
+  // One roll per mount: the seed field opens pre-filled, and a cleared field still submits this
+  // same value, so the preview and the generated galaxy can never diverge.
+  const [initialSeed] = useState(rollSeed);
   const {
     register,
     control,
@@ -93,6 +100,7 @@ export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
       name: "",
       governmentType: "federation",
       doctrine: "expansionist",
+      seed: initialSeed,
       shape: DEFAULT_SHAPE,
     },
   });
@@ -116,7 +124,7 @@ export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
 
   const onSubmit = handleSubmit(async (values) => {
     try {
-      await newGame.mutateAsync(values);
+      await newGame.mutateAsync({ ...values, seed: values.seed ?? initialSeed });
       onSuccess?.();
       navigate(mapHref());
     } catch (error) {
@@ -176,9 +184,8 @@ export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
         />
         <TextInput
           id="new-game-seed"
-          label="Seed (optional)"
+          label="Seed"
           inputMode="numeric"
-          placeholder="Random"
           error={errors.seed?.message}
           {...register("seed", {
             setValueAs: (value) => (value === "" ? undefined : Number(value)),
@@ -295,7 +302,7 @@ export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
       <div className="flex-1 flex items-center justify-center min-w-0">
         <GalaxyPreview
           knobs={previewKnobs}
-          seed={seed ?? PREVIEW_FALLBACK_SEED}
+          seed={seed ?? initialSeed}
           systemCount={systemCount}
           overrides={{ mapSizeScale, minDistanceScale: starSpacing, densityRadiusExponent: clusterTightness }}
         />

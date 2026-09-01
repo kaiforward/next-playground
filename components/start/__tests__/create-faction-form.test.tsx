@@ -116,6 +116,20 @@ describe("CreateFactionForm — galaxy shape knobs", () => {
     expect(payload.shape?.clusterTightness).toBe(0.05);
     expect(payload.shape?.mapSizeScale).toBe(1);
   });
+
+  it("opens with a concrete seed pre-filled and submits exactly that seed untouched — the previewed galaxy is the played one", async () => {
+    renderForm();
+
+    const seedInput = screen.getByLabelText("Seed", { exact: true });
+    const shown = Number((seedInput as HTMLInputElement).value);
+    expect(Number.isInteger(shown)).toBe(true);
+
+    await fillAndSubmit();
+    await waitFor(() => expect(posted).toHaveLength(1));
+
+    const payload = posted[0].payload as { seed?: number };
+    expect(payload.seed).toBe(shown);
+  });
 });
 
 describe("CreateFactionForm — failure", () => {
