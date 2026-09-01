@@ -123,6 +123,41 @@ fuel spread ≥ 2 on both cohorts; the re-derived concentration line is document
 met; `distanceDecay` recalibrated against the generated distribution (or kept, with the receipt
 quoted); no conservation identity fails; the booking "re-derive the ≥0.40 line" closes here.
 
+### Gate A — results (recorded 2026-09-01, shipped defaults, seed 42, 600 systems, both horizons)
+
+Owner-driven candidate exploration replaced a formal arm sweep: the preview gained live levers
+(star spacing, cluster tightness, map size, cluster turbulence) plus geometry-driven corridor
+style (void-fraction measured on the base grid; fan suppression at 20°), and the owner picked
+the shipped defaults by eye — BASE_CONFIG knobs with POISSON_MIN_DISTANCE 117 (request fully
+placed at 600 and 5000; the ×1.0 / 180 default filled ~48%).
+
+Instrument reads (equilibrium 10,000t unless noted; founding 1000t structurally empty of flow
+as measured at premise 1):
+
+- **Re-derived concentration line: aggregate top-decile share ≥ 0.35 on the corrected
+  instrument.** Reads 0.383 (vs 0.282 for the flat map on the same instrument — geography
+  concentrates flow by +36%); per-faction rows over the 20-edge gate: 0.393 / 0.612 / 0.504.
+  Line met.
+- **Fuel p90/p10: 1.81 both cohorts — the committed ≥ 2 line is NOT met** (flat map read
+  1.99/1.93). **Owner decision (2026-09-01): accepted; the ≥ 2 line is retired as a gate.**
+  Rationale: premise 4 already established raw fuel cost cannot differentiate lanes alone;
+  invested lane infrastructure (the next sub-project) is the intended differentiator, and
+  tuning the map's look against that unfinished system would invert the priority. The owner
+  notes the maps do not read as uniform to the eye — the structural variety (clusters, voids,
+  corridors) also makes locations findable, value beyond lane variance. Revisit fuel spread
+  when lane mechanics ship.
+- Migration across geography healthy at current `distanceDecay` 0.1: beyond-crossing cohort
+  (n=39) mean migrant inflow 56 vs interior (n=123) 69, population trend 0.50% vs 0.41% —
+  far colonies grow at least as fast; **`distanceDecay` kept at 0.1, receipt: this cohort
+  read.**
+- Cross-faction lanes 182 (89 on the flat map — denser borders); border_conflict events over
+  the run 116, none on board at end. Relations scores pin at ±100 extremes at equilibrium
+  (median −100) — pre-existing clamp behaviour, unchanged shape from the flat map; watch item
+  for the relations pass, not a geography regression.
+- Unreachable haul share 4.5% (old-instrument noise band was 3.6–8.6%).
+- All conservation identities PASS at both horizons; no collapsed systems; 162 developed
+  colonies + 20 homeworlds at 10K.
+
 ### Task 5 — Galaxy-preview prototype (styleguide section)
 
 Files: `components/start/galaxy-preview.tsx` (new), `components/panels/styleguide-panel.tsx`
