@@ -99,10 +99,14 @@ function densityAt(grid: DensityGrid, mapSize: number, x: number, y: number): nu
  * (< 1) before inverting compresses that falloff back toward the tight end, so a cluster reads tight
  * across most of its footprint and only its rim — genuinely near the void floor — reads sparse.
  */
-const DENSITY_RADIUS_EXPONENT = 0.05;
+export const DENSITY_RADIUS_EXPONENT = 0.05;
 
-function radiusFromDensity(density: number, baseMinDistance: number): number {
-  const raw = baseMinDistance / Math.pow(density, DENSITY_RADIUS_EXPONENT);
+function radiusFromDensity(
+  density: number,
+  baseMinDistance: number,
+  exponent: number,
+): number {
+  const raw = baseMinDistance / Math.pow(density, exponent);
   return Math.min(Math.max(raw, baseMinDistance), baseMinDistance * MAX_DENSITY_RADIUS_MULTIPLIER);
 }
 
@@ -132,6 +136,7 @@ export function bridsonSample(
   maxPoints: number,
   grid: DensityGrid,
   clusterSeedPoints: Point[] = [],
+  densityRadiusExponent: number = DENSITY_RADIUS_EXPONENT,
 ): Point[] {
   const mapSize = width; // the density grid is authored over a square map, width === height in practice
   const cellSize = baseMinDistance / Math.SQRT2; // finest possible spacing, at max density
@@ -181,7 +186,7 @@ export function bridsonSample(
     if (!inBounds(x, y)) return null;
     const density = densityAt(grid, mapSize, x, y);
     if (density <= 0) return null; // true void — never place here
-    const r = radiusFromDensity(density, baseMinDistance);
+    const r = radiusFromDensity(density, baseMinDistance, densityRadiusExponent);
     if (tooClose(x, y, r)) return null;
 
     const idx = points.length;

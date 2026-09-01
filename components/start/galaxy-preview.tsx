@@ -7,6 +7,7 @@ import {
   renderDensityField,
   worldToCanvas,
   crossingSegments,
+  type PlacementOverrides,
   type GalaxyImpression,
 } from "./galaxy-preview-render";
 
@@ -32,6 +33,8 @@ export interface GalaxyPreviewProps {
   knobs: GalaxyShapeKnobs;
   seed: number;
   systemCount: number;
+  /** Dev-exploration placement levers (styleguide only for now); omitted = the engine's values. */
+  placement?: PlacementOverrides;
 }
 
 /**
@@ -45,13 +48,18 @@ export interface GalaxyPreviewProps {
  * reasoning. Under jsdom (component tests) `getContext("2d")` returns null; painting is skipped and
  * the canvas element still renders, so a test can assert structure/text without a real canvas.
  */
-export function GalaxyPreview({ knobs, seed, systemCount }: GalaxyPreviewProps) {
+export function GalaxyPreview({ knobs, seed, systemCount, placement }: GalaxyPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [impression, setImpression] = useState<GalaxyImpression | null>(null);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
-      setImpression(buildGalaxyImpression(knobs, seed, systemCount));
+      setImpression(
+        buildGalaxyImpression(knobs, seed, systemCount, {
+          minDistanceScale: placement?.minDistanceScale,
+          densityRadiusExponent: placement?.densityRadiusExponent,
+        }),
+      );
     }, REGEN_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- individual knob fields, not the
@@ -66,6 +74,8 @@ export function GalaxyPreview({ knobs, seed, systemCount }: GalaxyPreviewProps) 
     knobs.corridorStyle,
     seed,
     systemCount,
+    placement?.minDistanceScale,
+    placement?.densityRadiusExponent,
   ]);
 
   useEffect(() => {

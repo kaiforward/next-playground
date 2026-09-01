@@ -19,7 +19,7 @@
 import { genConfigForSystemCount } from "@/lib/constants/universe-gen";
 import { mulberry32 } from "@/lib/engine/generation-primitives";
 import { buildGalaxyShape, type GalaxyShape, type GalaxyShapeKnobs } from "@/lib/engine/density-field";
-import { bridsonSample } from "@/lib/engine/system-placement";
+import { bridsonSample, DENSITY_RADIUS_EXPONENT } from "@/lib/engine/system-placement";
 
 export interface Point {
   x: number;
@@ -35,6 +35,15 @@ export interface GalaxyImpression {
   points: Point[];
 }
 
+/** Dev-exploration overrides for the placement levers the config normally fixes: overall star
+ *  density (a scale on the Poisson minimum distance — smaller = denser everywhere) and the
+ *  core-vs-band spacing contrast (the density-radius exponent). Defaults reproduce the engine's
+ *  own values exactly, which is what keeps the `generateUniverse` parity seam intact. */
+export interface PlacementOverrides {
+  minDistanceScale?: number;
+  densityRadiusExponent?: number;
+}
+
 /**
  * Author one galaxy impression from structure knobs + seed + system count — the same draw sequence
  * `generateUniverse` runs for the galaxy-shape and placement phases (see module docstring). Pure and
@@ -44,6 +53,7 @@ export function buildGalaxyImpression(
   knobs: GalaxyShapeKnobs,
   seed: number,
   systemCount: number,
+  placement: PlacementOverrides = {},
 ): GalaxyImpression {
   const config = genConfigForSystemCount(systemCount);
   const mapSize = config.MAP_SIZE;
@@ -55,12 +65,13 @@ export function buildGalaxyImpression(
     rng,
     mapSize,
     mapSize,
-    config.POISSON_MIN_DISTANCE,
+    config.POISSON_MIN_DISTANCE * (placement.minDistanceScale ?? 1),
     config.POISSON_K_CANDIDATES,
     padding,
     config.TOTAL_SYSTEMS,
     shape.grid,
     shape.seeds.map((s) => ({ x: s.x, y: s.y })),
+    placement.densityRadiusExponent ?? DENSITY_RADIUS_EXPONENT,
   );
 
   return { shape, mapSize, points };

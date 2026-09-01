@@ -356,6 +356,11 @@ function GalaxyPreviewSection() {
     defaultGalaxyShapeKnobs(GALAXY_PREVIEW_DEFAULT_SYSTEM_COUNT),
   );
   const [corridorStylePreset, setCorridorStylePreset] = useState<CorridorStylePreset>("mixed");
+  // Placement levers, dev-exploration only (unclamped on purpose — Gate A picks the shipped
+  // values, then New Game gets the limited ranges): overall density (min-distance scale, smaller
+  // = denser) and core-vs-band spacing contrast (density-radius exponent).
+  const [minDistanceScale, setMinDistanceScale] = useState(1.0);
+  const [densityRadiusExponent, setDensityRadiusExponent] = useState(0.05);
 
   function setKnob<K extends keyof GalaxyShapeKnobs>(key: K, value: GalaxyShapeKnobs[K]) {
     setKnobs((prev) => ({ ...prev, [key]: value }));
@@ -437,8 +442,33 @@ function GalaxyPreviewSection() {
             step={50}
             onChange={(e) => setSystemCount(Number(e.target.value))}
           />
+          <RangeInput
+            id="galaxy-preview-min-distance-scale"
+            label="Star spacing (density)"
+            valueLabel={`×${minDistanceScale.toFixed(2)}`}
+            min={0.2}
+            max={1.5}
+            step={0.05}
+            value={minDistanceScale}
+            onChange={(e) => setMinDistanceScale(Number(e.target.value))}
+          />
+          <RangeInput
+            id="galaxy-preview-density-radius-exponent"
+            label="Core/band contrast"
+            valueLabel={densityRadiusExponent.toFixed(2)}
+            min={0}
+            max={1}
+            step={0.05}
+            value={densityRadiusExponent}
+            onChange={(e) => setDensityRadiusExponent(Number(e.target.value))}
+          />
         </div>
-        <GalaxyPreview knobs={knobs} seed={seed} systemCount={systemCount} />
+        <GalaxyPreview
+          knobs={knobs}
+          seed={seed}
+          systemCount={systemCount}
+          placement={{ minDistanceScale, densityRadiusExponent }}
+        />
       </div>
     </StyleSection>
   );
