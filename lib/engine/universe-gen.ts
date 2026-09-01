@@ -18,6 +18,13 @@ import {
   type GeneratedFaction,
   type PlayerFactionInput,
 } from "./faction-gen";
+import { distance, mulberry32, kruskalMST, UnionFind, type RNG, type Edge } from "./generation-primitives";
+
+// Re-exported so existing consumers (`@/lib/engine/universe-gen` importers throughout the tick,
+// engine and test layers) keep their import path — these are dependency-free primitives that now
+// live in `generation-primitives.ts` alongside the galaxy-shape engine (`density-field.ts`), which
+// needs them without pulling in this module's much heavier import graph.
+export { distance, mulberry32, UnionFind, type RNG };
 
 // ── Output types ────────────────────────────────────────────────
 
@@ -78,69 +85,10 @@ export interface GenParams {
   minorFactionCount: number;
 }
 
-// ── PRNG (mulberry32) ───────────────────────────────────────────
-
-export type RNG = () => number;
-
-/** Create a seeded PRNG returning values in [0, 1). */
-export function mulberry32(seed: number): RNG {
-  let s = seed | 0;
-  return () => {
-    s = (s + 0x6d2b79f5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 // ── Utility functions ───────────────────────────────────────────
-
-export function distance(ax: number, ay: number, bx: number, by: number): number {
-  const dx = ax - bx;
-  const dy = ay - by;
-  return Math.sqrt(dx * dx + dy * dy);
-}
 
 export function randInt(rng: RNG, min: number, max: number): number {
   return Math.floor(rng() * (max - min + 1)) + min;
-}
-
-// ── Union-Find (for Kruskal's MST) ─────────────────────────────
-
-export class UnionFind {
-  private parent: number[];
-  private rank: number[];
-
-  constructor(size: number) {
-    this.parent = Array.from({ length: size }, (_, i) => i);
-    this.rank = new Array(size).fill(0);
-  }
-
-  find(x: number): number {
-    if (this.parent[x] !== x) {
-      this.parent[x] = this.find(this.parent[x]);
-    }
-    return this.parent[x];
-  }
-
-  union(a: number, b: number): boolean {
-    const ra = this.find(a);
-    const rb = this.find(b);
-    if (ra === rb) return false;
-    if (this.rank[ra] < this.rank[rb]) {
-      this.parent[ra] = rb;
-    } else if (this.rank[ra] > this.rank[rb]) {
-      this.parent[rb] = ra;
-    } else {
-      this.parent[rb] = ra;
-      this.rank[ra]++;
-    }
-    return true;
-  }
-
-  connected(a: number, b: number): boolean {
-    return this.find(a) === this.find(b);
-  }
 }
 
 // ── Region generation ───────────────────────────────────────────
@@ -387,12 +335,6 @@ export function generateSystems(
 
 // ── Connection generation ───────────────────────────────────────
 
-interface Edge {
-  a: number; // local index within a set
-  b: number;
-  dist: number;
-}
-
 /**
  * Candidate extra edges for route variety: every local-index pair NOT already joined by `mst`,
  * nearest first.
@@ -437,39 +379,6 @@ function pushLane(
 ): void {
   connections.push({ fromSystemIndex: aIndex, toSystemIndex: bIndex, fuelCost, isGateway });
   connections.push({ fromSystemIndex: bIndex, toSystemIndex: aIndex, fuelCost, isGateway });
-}
-
-/**
- * Build MST edges using Kruskal's algorithm within a set of systems.
- * Returns local-index edges (indices into the provided array).
- */
-function kruskalMST(systemsInSet: { x: number; y: number }[]): Edge[] {
-  const n = systemsInSet.length;
-  if (n < 2) return [];
-
-  // Build all possible edges sorted by distance
-  const edges: Edge[] = [];
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      edges.push({
-        a: i,
-        b: j,
-        dist: distance(systemsInSet[i].x, systemsInSet[i].y, systemsInSet[j].x, systemsInSet[j].y),
-      });
-    }
-  }
-  edges.sort((a, b) => a.dist - b.dist);
-
-  const uf = new UnionFind(n);
-  const mst: Edge[] = [];
-  for (const edge of edges) {
-    if (uf.union(edge.a, edge.b)) {
-      mst.push(edge);
-      if (mst.length === n - 1) break;
-    }
-  }
-
-  return mst;
 }
 
 export function generateConnections(

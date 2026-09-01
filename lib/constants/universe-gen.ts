@@ -16,6 +16,18 @@ interface UniverseGenConfig {
   MAX_PLACEMENT_ATTEMPTS: number;
   /** Minor factions seeded alongside the 8 majors. */
   MINOR_FACTION_COUNT: number;
+  /** Galaxy-shape cluster seed count — mirrors REGION_COUNT until region generation reads cluster seeds directly. */
+  CLUSTER_COUNT: number;
+  /** Cluster size-roll skew: 0 = uniform draw, higher = a few large clusters and many small ones. */
+  CLUSTER_SIZE_SKEW: number;
+  /** Minimum distance between cluster seed centers — mirrors REGION_MIN_DISTANCE. */
+  CLUSTER_SPACING: number;
+  /** Density-grid cells below this value read as true void (exactly 0), not merely sparse. */
+  VOID_FLOOR: number;
+  /** Extra corridor pairs beyond the connectivity-guaranteeing MST, per cluster seed. */
+  CORRIDORS_PER_CLUSTER: number;
+  /** Fraction of corridor pairs realised as a single crossing lane rather than a waypoint band. */
+  CORRIDOR_STYLE_MIX: number;
 }
 
 // ── Anchor configs ──────────────────────────────────────────────
@@ -36,6 +48,12 @@ const BASE_CONFIG: UniverseGenConfig = {
   INTRA_REGION_BASE_FUEL: 8,
   MAX_PLACEMENT_ATTEMPTS: 500,
   MINOR_FACTION_COUNT: 12,
+  CLUSTER_COUNT: 24,
+  CLUSTER_SIZE_SKEW: 0.6,
+  CLUSTER_SPACING: 800,
+  VOID_FLOOR: 0.08,
+  CORRIDORS_PER_CLUSTER: 0.3,
+  CORRIDOR_STYLE_MIX: 0.5,
 };
 
 /**
@@ -49,6 +67,8 @@ const TEN_K_OVERRIDES = {
   REGION_COUNT: 60,
   REGION_MIN_DISTANCE: 2_500,
   MINOR_FACTION_COUNT: 18,
+  CLUSTER_COUNT: 60,
+  CLUSTER_SPACING: 2_500,
 } as const;
 
 /**
@@ -111,6 +131,15 @@ export function genConfigForSystemCount(systemCount: number): UniverseGenConfig 
           TEN_K_OVERRIDES.MINOR_FACTION_COUNT
         )
       )
+    ),
+    CLUSTER_COUNT: Math.max(
+      1,
+      Math.round(
+        interpolateBySqrtN(systemCount, BASE_CONFIG.CLUSTER_COUNT, TEN_K_OVERRIDES.CLUSTER_COUNT)
+      )
+    ),
+    CLUSTER_SPACING: Math.round(
+      interpolateBySqrtN(systemCount, BASE_CONFIG.CLUSTER_SPACING, TEN_K_OVERRIDES.CLUSTER_SPACING)
     ),
   };
 }
