@@ -10,6 +10,11 @@ import { StatList, StatRow } from "@/components/ui/stat-row";
 import { TabList, Tab } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InlineAlert } from "@/components/ui/inline-alert";
+import { NumberInput } from "@/components/form/number-input";
+import { RangeInput } from "@/components/form/range-input";
+import { SegmentedControl } from "@/components/form/segmented-control";
+import { GalaxyPreview } from "@/components/start/galaxy-preview";
+import { defaultGalaxyShapeKnobs, type GalaxyShapeKnobs } from "@/lib/engine/density-field";
 import { useState } from "react";
 
 /** Moved from `app/(game)/@panel/styleguide/page.tsx` — this was DetailPanel's one caller outside a
@@ -323,6 +328,123 @@ function StatsSection() {
   );
 }
 
+// ── Galaxy Preview ───────────────────────────────────────────────
+
+/** Discrete presets over `GalaxyShapeKnobs.corridorStyle` (a continuous fraction of corridor pairs
+ *  realised as a crossing lane vs a waypoint band) — the corridor-style picker the map-gen sub-
+ *  project's owner-eyeball gate (spec §5) chooses between, not a knob a player would drag by
+ *  fraction. The AGENTS prototype gate settles which of these (or a continuous slider) ships. */
+const CORRIDOR_STYLE_PRESETS = {
+  bands: 0.15,
+  mixed: 0.5,
+  crossings: 0.85,
+} as const;
+
+type CorridorStylePreset = keyof typeof CORRIDOR_STYLE_PRESETS;
+
+const CORRIDOR_STYLE_OPTIONS: Array<{ value: CorridorStylePreset; label: string }> = [
+  { value: "bands", label: "Mostly bands" },
+  { value: "mixed", label: "Mixed" },
+  { value: "crossings", label: "Mostly crossings" },
+];
+
+const GALAXY_PREVIEW_DEFAULT_SYSTEM_COUNT = 600;
+
+function GalaxyPreviewSection() {
+  const [systemCount, setSystemCount] = useState(GALAXY_PREVIEW_DEFAULT_SYSTEM_COUNT);
+  const [seed, setSeed] = useState(42);
+  const [knobs, setKnobs] = useState<GalaxyShapeKnobs>(() =>
+    defaultGalaxyShapeKnobs(GALAXY_PREVIEW_DEFAULT_SYSTEM_COUNT),
+  );
+  const [corridorStylePreset, setCorridorStylePreset] = useState<CorridorStylePreset>("mixed");
+
+  function setKnob<K extends keyof GalaxyShapeKnobs>(key: K, value: GalaxyShapeKnobs[K]) {
+    setKnobs((prev) => ({ ...prev, [key]: value }));
+  }
+
+  return (
+    <StyleSection title="Galaxy Preview — New Game structure knobs (spec §5)">
+      <div className="grid grid-cols-1 lg:grid-cols-[480px_1fr] gap-6">
+        <GalaxyPreview knobs={knobs} seed={seed} systemCount={systemCount} />
+        <div className="space-y-4 max-w-sm">
+          <NumberInput
+            id="galaxy-preview-cluster-count"
+            label="Cluster count"
+            value={knobs.clusterCount}
+            min={1}
+            onChange={(e) => setKnob("clusterCount", Number(e.target.value))}
+          />
+          <RangeInput
+            id="galaxy-preview-size-skew"
+            label="Size skew"
+            valueLabel={knobs.sizeSkew.toFixed(2)}
+            min={0}
+            max={1}
+            step={0.05}
+            value={knobs.sizeSkew}
+            onChange={(e) => setKnob("sizeSkew", Number(e.target.value))}
+          />
+          <RangeInput
+            id="galaxy-preview-cluster-spacing"
+            label="Cluster spacing"
+            valueLabel={String(knobs.clusterSpacing)}
+            min={100}
+            max={2000}
+            step={50}
+            value={knobs.clusterSpacing}
+            onChange={(e) => setKnob("clusterSpacing", Number(e.target.value))}
+          />
+          <RangeInput
+            id="galaxy-preview-void-floor"
+            label="Void floor"
+            valueLabel={knobs.voidFloor.toFixed(2)}
+            min={0}
+            max={1}
+            step={0.02}
+            value={knobs.voidFloor}
+            onChange={(e) => setKnob("voidFloor", Number(e.target.value))}
+          />
+          <RangeInput
+            id="galaxy-preview-corridors-per-cluster"
+            label="Corridors per cluster"
+            valueLabel={knobs.corridorsPerCluster.toFixed(2)}
+            min={0}
+            max={2}
+            step={0.1}
+            value={knobs.corridorsPerCluster}
+            onChange={(e) => setKnob("corridorsPerCluster", Number(e.target.value))}
+          />
+          <SegmentedControl
+            name="galaxy-preview-corridor-style"
+            label="Corridor style"
+            value={corridorStylePreset}
+            onChange={(preset) => {
+              setCorridorStylePreset(preset);
+              setKnob("corridorStyle", CORRIDOR_STYLE_PRESETS[preset]);
+            }}
+            options={CORRIDOR_STYLE_OPTIONS}
+          />
+          <NumberInput
+            id="galaxy-preview-seed"
+            label="Seed"
+            value={seed}
+            onChange={(e) => setSeed(Number(e.target.value))}
+          />
+          <NumberInput
+            id="galaxy-preview-system-count"
+            label="System count"
+            value={systemCount}
+            min={50}
+            max={20000}
+            step={50}
+            onChange={(e) => setSystemCount(Number(e.target.value))}
+          />
+        </div>
+      </div>
+    </StyleSection>
+  );
+}
+
 // ── Feedback ─────────────────────────────────────────────────────
 
 function FeedbackSection() {
@@ -351,6 +473,7 @@ export function StyleguidePanel() {
         <TabsSection />
         <SectionHeadersSection />
         <StatsSection />
+        <GalaxyPreviewSection />
         <FeedbackSection />
       </div>
     </DetailPanel>
