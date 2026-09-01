@@ -58,19 +58,24 @@ export function buildGenParams(
 ): GenParams {
   return {
     seed,
-    regionCount: config.REGION_COUNT,
     totalSystems: config.TOTAL_SYSTEMS,
     mapSize: config.MAP_SIZE,
     mapPadding: config.MAP_PADDING,
     poissonMinDistance: config.POISSON_MIN_DISTANCE,
     poissonKCandidates: config.POISSON_K_CANDIDATES,
-    regionMinDistance: config.REGION_MIN_DISTANCE,
     extraEdgeFraction: config.INTRA_REGION_EXTRA_EDGES,
     gatewayFuelMultiplier: config.GATEWAY_FUEL_MULTIPLIER,
     gatewaysPerBorder: config.GATEWAYS_PER_BORDER,
     intraRegionBaseFuel: config.INTRA_REGION_BASE_FUEL,
-    maxPlacementAttempts: config.MAX_PLACEMENT_ATTEMPTS,
     minorFactionCount: config.MINOR_FACTION_COUNT,
+    shapeKnobs: {
+      clusterCount: config.CLUSTER_COUNT,
+      sizeSkew: config.CLUSTER_SIZE_SKEW,
+      clusterSpacing: config.CLUSTER_SPACING,
+      voidFloor: config.VOID_FLOOR,
+      corridorsPerCluster: config.CORRIDORS_PER_CLUSTER,
+      corridorStyle: config.CORRIDOR_STYLE_MIX,
+    },
   };
 }
 

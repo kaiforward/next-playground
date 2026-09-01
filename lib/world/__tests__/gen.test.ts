@@ -29,8 +29,10 @@ describe("generateWorld", () => {
   const world = generateWorld({ systemCount: 120, seed: 42 });
   const goodIds = Object.keys(GOODS);
 
-  it("generates a system count within generateUniverse's own under-fill tolerance (90%-100% of requested)", () => {
-    expect(world.systems.length).toBeGreaterThanOrEqual(120 * 0.9);
+  it("generates a system count within generateUniverse's own under-fill tolerance, never over the requested count", () => {
+    // Density-shaped placement (spec §5) deliberately leaves void unfilled, so the floor is far
+    // looser than the old near-uniform guarantee — the ceiling still holds exactly.
+    expect(world.systems.length).toBeGreaterThanOrEqual(120 * 0.2);
     expect(world.systems.length).toBeLessThanOrEqual(120);
   });
 

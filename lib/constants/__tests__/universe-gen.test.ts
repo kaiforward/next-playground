@@ -11,19 +11,18 @@ describe("genConfigForSystemCount", () => {
     const config = genConfigForSystemCount(600);
 
     expectWithinPercent(config.SEED, 42, 5);
-    expectWithinPercent(config.REGION_COUNT, 24, 5);
     expectWithinPercent(config.TOTAL_SYSTEMS, 600, 5);
     expectWithinPercent(config.MAP_SIZE, 7000, 5);
     expectWithinPercent(config.MAP_PADDING, 0.1, 5);
     expectWithinPercent(config.POISSON_MIN_DISTANCE, 180, 5);
     expectWithinPercent(config.POISSON_K_CANDIDATES, 30, 5);
-    expectWithinPercent(config.REGION_MIN_DISTANCE, 800, 5);
     expectWithinPercent(config.INTRA_REGION_EXTRA_EDGES, 0.5, 5);
     expectWithinPercent(config.GATEWAY_FUEL_MULTIPLIER, 2.5, 5);
     expectWithinPercent(config.GATEWAYS_PER_BORDER, 3, 5);
     expectWithinPercent(config.INTRA_REGION_BASE_FUEL, 8, 5);
-    expectWithinPercent(config.MAX_PLACEMENT_ATTEMPTS, 500, 5);
     expectWithinPercent(config.MINOR_FACTION_COUNT, 12, 5);
+    expectWithinPercent(config.CLUSTER_COUNT, 24, 5);
+    expectWithinPercent(config.CLUSTER_SPACING, 800, 5);
   });
 
   it('matches today\'s SCALE_OVERRIDES["10k"] within 5% at the 10,000-system anchor', () => {
@@ -31,9 +30,9 @@ describe("genConfigForSystemCount", () => {
 
     expectWithinPercent(config.TOTAL_SYSTEMS, 10_000, 5);
     expectWithinPercent(config.MAP_SIZE, 25_000, 5);
-    expectWithinPercent(config.REGION_COUNT, 60, 5);
-    expectWithinPercent(config.REGION_MIN_DISTANCE, 2_500, 5);
     expectWithinPercent(config.MINOR_FACTION_COUNT, 18, 5);
+    expectWithinPercent(config.CLUSTER_COUNT, 60, 5);
+    expectWithinPercent(config.CLUSTER_SPACING, 2_500, 5);
   });
 
   it("sets TOTAL_SYSTEMS to exactly the requested system count", () => {
@@ -51,19 +50,19 @@ describe("genConfigForSystemCount", () => {
     }
   });
 
-  it("grows REGION_COUNT, REGION_MIN_DISTANCE, and MINOR_FACTION_COUNT monotonically with system count", () => {
+  it("grows CLUSTER_COUNT, CLUSTER_SPACING, and MINOR_FACTION_COUNT monotonically with system count", () => {
     const counts = [50, 600, 5_000, 10_000, 20_000];
-    const regionCounts = counts.map((count) => genConfigForSystemCount(count).REGION_COUNT);
-    const regionMinDistances = counts.map(
-      (count) => genConfigForSystemCount(count).REGION_MIN_DISTANCE
+    const clusterCounts = counts.map((count) => genConfigForSystemCount(count).CLUSTER_COUNT);
+    const clusterSpacings = counts.map(
+      (count) => genConfigForSystemCount(count).CLUSTER_SPACING
     );
     const minorFactionCounts = counts.map(
       (count) => genConfigForSystemCount(count).MINOR_FACTION_COUNT
     );
 
     for (let i = 1; i < counts.length; i++) {
-      expect(regionCounts[i]).toBeGreaterThanOrEqual(regionCounts[i - 1]);
-      expect(regionMinDistances[i]).toBeGreaterThanOrEqual(regionMinDistances[i - 1]);
+      expect(clusterCounts[i]).toBeGreaterThanOrEqual(clusterCounts[i - 1]);
+      expect(clusterSpacings[i]).toBeGreaterThanOrEqual(clusterSpacings[i - 1]);
       expect(minorFactionCounts[i]).toBeGreaterThanOrEqual(minorFactionCounts[i - 1]);
     }
   });
@@ -79,7 +78,10 @@ describe("genConfigForSystemCount", () => {
       expect(config.GATEWAY_FUEL_MULTIPLIER).toBe(2.5);
       expect(config.GATEWAYS_PER_BORDER).toBe(3);
       expect(config.INTRA_REGION_BASE_FUEL).toBe(8);
-      expect(config.MAX_PLACEMENT_ATTEMPTS).toBe(500);
+      expect(config.CLUSTER_SIZE_SKEW).toBe(0.6);
+      expect(config.VOID_FLOOR).toBe(0.08);
+      expect(config.CORRIDORS_PER_CLUSTER).toBe(0.3);
+      expect(config.CORRIDOR_STYLE_MIX).toBe(0.5);
     }
   });
 
@@ -87,8 +89,8 @@ describe("genConfigForSystemCount", () => {
     for (const count of [50, 733, 10_000, 19_999]) {
       const config = genConfigForSystemCount(count);
       expect(Number.isInteger(config.MAP_SIZE)).toBe(true);
-      expect(Number.isInteger(config.REGION_COUNT)).toBe(true);
-      expect(Number.isInteger(config.REGION_MIN_DISTANCE)).toBe(true);
+      expect(Number.isInteger(config.CLUSTER_COUNT)).toBe(true);
+      expect(Number.isInteger(config.CLUSTER_SPACING)).toBe(true);
       expect(Number.isInteger(config.MINOR_FACTION_COUNT)).toBe(true);
       expect(Number.isInteger(config.TOTAL_SYSTEMS)).toBe(true);
     }

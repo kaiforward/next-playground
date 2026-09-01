@@ -15,6 +15,7 @@ import {
   type GeneratedRegion,
   type GeneratedSystem,
 } from "../universe-gen";
+import { buildGalaxyShape, type DensityGrid, type ClusterSeed } from "@/lib/engine/density-field";
 import { HOME_SYSTEM_PREFAB } from "@/lib/engine/homeworld-prefab";
 import { emptyResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import {
@@ -35,6 +36,46 @@ const DEFAULT_GEN_CONFIG = genConfigForSystemCount(DEFAULT_SYSTEM_COUNT);
 
 function defaultParams(): GenParams {
   return buildGenParams(DEFAULT_GEN_CONFIG.SEED, DEFAULT_GEN_CONFIG);
+}
+
+/** A fully nonzero-density grid, resolution `n` — bridsonSample degrades to the old fixed-radius
+ *  behaviour whenever every cell reads 1 (max density everywhere). */
+function uniformGrid(n = 4): DensityGrid {
+  return { resolution: n, cells: new Array(n * n).fill(1) };
+}
+
+/** Same lookup `densityAt` (universe-gen.ts, not exported) performs — a test-only oracle so tests
+ *  can check placement against the grid without widening the module's public surface. */
+function densityAtForTest(grid: DensityGrid, mapSize: number, x: number, y: number): number {
+  const cellSize = mapSize / grid.resolution;
+  const col = Math.min(grid.resolution - 1, Math.max(0, Math.floor(x / cellSize)));
+  const row = Math.min(grid.resolution - 1, Math.max(0, Math.floor(y / cellSize)));
+  return grid.cells[row * grid.resolution + col];
+}
+
+/** Reconstructs the exact `GalaxyShape` `generateUniverse` builds internally: `buildGalaxyShape` is
+ *  the first rng-consuming call off a freshly-seeded PRNG, so replaying that same first call from
+ *  the same seed reproduces byte-identical seeds/grid/corridors. */
+function shapeFor(params: GenParams) {
+  const rng = mulberry32(params.seed);
+  return buildGalaxyShape(params.shapeKnobs, params.mapSize, rng);
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+/** Nearest-neighbour distance from `sys` to any other system in `systems`. */
+function nearestNeighbourDistance(sys: { x: number; y: number }, systems: { x: number; y: number }[]): number {
+  let best = Infinity;
+  for (const other of systems) {
+    if (other === sys) continue;
+    const d = distance(sys.x, sys.y, other.x, other.y);
+    if (d < best) best = d;
+  }
+  return best;
 }
 
 /** Minimal GeneratedSystem for unit tests — only the fields under test matter; rest are inert defaults. */
@@ -142,10 +183,10 @@ describe("UnionFind", () => {
 // ── Bridson's Poisson disk sampling ──────────────────────────────
 
 describe("bridsonSample", () => {
-  it("generates well-spaced points with guaranteed minimum distance", () => {
+  it("generates well-spaced points with guaranteed minimum distance under a uniform (max-density) grid", () => {
     const rng = mulberry32(42);
     const minDist = 250;
-    const points = bridsonSample(rng, 7000, 7000, minDist, 30, 700, 600);
+    const points = bridsonSample(rng, 7000, 7000, minDist, 30, 700, 600, uniformGrid());
 
     for (let i = 0; i < points.length; i++) {
       for (let j = i + 1; j < points.length; j++) {
@@ -158,7 +199,7 @@ describe("bridsonSample", () => {
 
   it("respects maxPoints limit", () => {
     const rng = mulberry32(42);
-    const points = bridsonSample(rng, 7000, 7000, 250, 30, 700, 100);
+    const points = bridsonSample(rng, 7000, 7000, 250, 30, 700, 100, uniformGrid());
     expect(points.length).toBeLessThanOrEqual(100);
     expect(points.length).toBeGreaterThan(0);
   });
@@ -167,7 +208,7 @@ describe("bridsonSample", () => {
     const rng = mulberry32(42);
     const padding = 700;
     const size = 7000;
-    const points = bridsonSample(rng, size, size, 250, 30, padding, 600);
+    const points = bridsonSample(rng, size, size, 250, 30, padding, 600, uniformGrid());
 
     for (const p of points) {
       expect(p.x).toBeGreaterThanOrEqual(padding);
@@ -178,40 +219,66 @@ describe("bridsonSample", () => {
   });
 
   it("is deterministic with the same RNG seed", () => {
-    const p1 = bridsonSample(mulberry32(42), 7000, 7000, 250, 30, 700, 600);
-    const p2 = bridsonSample(mulberry32(42), 7000, 7000, 250, 30, 700, 600);
+    const p1 = bridsonSample(mulberry32(42), 7000, 7000, 250, 30, 700, 600, uniformGrid());
+    const p2 = bridsonSample(mulberry32(42), 7000, 7000, 250, 30, 700, 600, uniformGrid());
     expect(p1).toEqual(p2);
+  });
+
+  it("never places a point in a zero-density cell", () => {
+    // Left half of the grid is true void (0), right half is at max density (1).
+    const resolution = 8;
+    const cells = new Array(resolution * resolution).fill(0).map((_, i) => {
+      const col = i % resolution;
+      return col < resolution / 2 ? 0 : 1;
+    });
+    const grid: DensityGrid = { resolution, cells };
+    const size = 7000;
+    const points = bridsonSample(mulberry32(7), size, size, 200, 30, 700, 400, grid);
+
+    expect(points.length).toBeGreaterThan(0); // non-vacuous: the right half did get placed
+    for (const p of points) {
+      expect(densityAtForTest(grid, size, p.x, p.y)).toBeGreaterThan(0);
+      expect(p.x).toBeGreaterThanOrEqual(size / 2);
+    }
   });
 });
 
 // ── Region generation ───────────────────────────────────────────
 
 describe("generateRegions", () => {
-  it("generates the correct number of regions", () => {
-    const params = defaultParams();
-    const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_NAMES);
-    expect(regions).toHaveLength(params.regionCount);
-  });
+  function fakeSeeds(n: number): ClusterSeed[] {
+    return Array.from({ length: n }, (_, i) => ({
+      x: i * 100, y: i * 200, size: 500, stretch: 1, angle: 0,
+    }));
+  }
 
-  it("places regions within map bounds", () => {
-    const params = defaultParams();
-    const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_NAMES);
-    for (const r of regions) {
-      expect(r.x).toBeGreaterThan(0);
-      expect(r.x).toBeLessThan(params.mapSize);
-      expect(r.y).toBeGreaterThan(0);
-      expect(r.y).toBeLessThan(params.mapSize);
-    }
+  it("region becomes cluster: one region per seed, center = seed position", () => {
+    const seeds = fakeSeeds(5);
+    const regions = generateRegions(seeds, REGION_NAMES);
+    expect(regions).toHaveLength(seeds.length);
+    regions.forEach((r, i) => {
+      expect(r.x).toBe(seeds[i].x);
+      expect(r.y).toBe(seeds[i].y);
+      expect(r.index).toBe(i);
+    });
   });
 
   it("assigns unique names to all regions", () => {
     const params = defaultParams();
-    const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_NAMES);
+    const regions = generateRegions(shapeFor(params).seeds, REGION_NAMES);
     const names = regions.map((r) => r.name);
     expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("names past 28 clusters via the wrap path without collision", () => {
+    // REGION_NAMES has exactly 28 entries — 30 seeds forces the pool to wrap twice.
+    expect(REGION_NAMES.length).toBe(28);
+    const regions = generateRegions(fakeSeeds(30), REGION_NAMES);
+    const names = regions.map((r) => r.name);
+    expect(new Set(names).size).toBe(30);
+    // The wrapped names must be visibly distinct from (not silently equal to) the names they wrap onto.
+    expect(regions[28].name).not.toBe(regions[0].name);
+    expect(regions[29].name).not.toBe(regions[1].name);
   });
 });
 
@@ -222,15 +289,70 @@ describe("generateSystems", () => {
 
   function makeRegionsAndSystems() {
     const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_NAMES);
-    const systems = generateSystems(rng, regions, params);
-    return { regions, systems };
+    const shape = buildGalaxyShape(params.shapeKnobs, params.mapSize, rng);
+    const regions = generateRegions(shape.seeds, REGION_NAMES);
+    const systems = generateSystems(rng, regions, params, shape.grid);
+    return { regions, systems, grid: shape.grid };
   }
+
+  it("no system lands in a zero-density cell", () => {
+    const { systems, grid } = makeRegionsAndSystems();
+    expect(systems.length).toBeGreaterThan(0); // non-vacuous
+    for (const s of systems) {
+      expect(densityAtForTest(grid, params.mapSize, s.x, s.y)).toBeGreaterThan(0);
+    }
+  });
+
+  it("median nearest-neighbour distance is tighter in a high-density region than a low-density one (density actually modulates the radius)", () => {
+    // Two full, equal-area 2D halves of the map at different (both nonzero) density — not a
+    // cluster-core-vs-thin-corridor-band split — so packing geometry (a strip has fewer neighbour
+    // directions than an open area) can't confound the read: only the density->radius mapping can
+    // explain a spacing difference between two halves shaped identically.
+    const resolution = 8;
+    const highDensity = 0.9;
+    const lowDensity = 0.15;
+    const cells = new Array(resolution * resolution).fill(0).map((_, i) => {
+      const col = i % resolution;
+      return col < resolution / 2 ? highDensity : lowDensity;
+    });
+    const grid: DensityGrid = { resolution, cells };
+    const size = 4000;
+    const rng = mulberry32(42);
+    const points = bridsonSample(rng, size, size, 60, 30, 200, 2000, grid);
+
+    const highHalf = points.filter((p) => p.x < size / 2);
+    const lowHalf = points.filter((p) => p.x >= size / 2);
+    expect(highHalf.length).toBeGreaterThan(20); // non-vacuous: both halves are real cohorts
+    expect(lowHalf.length).toBeGreaterThan(20);
+
+    const highMedian = median(highHalf.map((p) => nearestNeighbourDistance(p, points)));
+    const lowMedian = median(lowHalf.map((p) => nearestNeighbourDistance(p, points)));
+    expect(highMedian).toBeLessThan(lowMedian);
+  });
+
+  it("every system's region is its nearest seed", () => {
+    const { regions, systems } = makeRegionsAndSystems();
+    for (const s of systems) {
+      let bestIdx = 0;
+      let bestDist = distance(s.x, s.y, regions[0].x, regions[0].y);
+      for (let i = 1; i < regions.length; i++) {
+        const d = distance(s.x, s.y, regions[i].x, regions[i].y);
+        if (d < bestDist) {
+          bestDist = d;
+          bestIdx = i;
+        }
+      }
+      expect(s.regionIndex).toBe(bestIdx);
+    }
+  });
 
   it("generates approximately the target number of systems", () => {
     const { systems } = makeRegionsAndSystems();
-    // Poisson sampling may produce slightly fewer than target if space fills up
-    expect(systems.length).toBeGreaterThanOrEqual(params.totalSystems * 0.9);
+    // Density-shaped placement deliberately leaves void (and a cluster's own low-density rim)
+    // unfilled (spec §5), so the floor is far looser than the old near-uniform guarantee — the
+    // shipped default knobs are Gate-A-tunable proposals, not a target this task calibrates. The
+    // ceiling (never overshoot the requested count) still holds exactly.
+    expect(systems.length).toBeGreaterThanOrEqual(params.totalSystems * 0.2);
     expect(systems.length).toBeLessThanOrEqual(params.totalSystems);
   });
 
@@ -293,15 +415,19 @@ describe("generateSystems", () => {
     expect(new Set(indices).size).toBe(indices.length);
   });
 
-  it("no large gaps — every map point is near some system", () => {
-    const { systems } = makeRegionsAndSystems();
-    // Sample random points and ensure they're within 2x Poisson distance of a system
+  it("every occupied (nonzero-density) location is near some system — void points are exempt by design", () => {
+    const { systems, grid } = makeRegionsAndSystems();
     const rng = mulberry32(999);
     const padding = params.mapSize * params.mapPadding;
-    const maxGap = params.poissonMinDistance * 3;
-    for (let i = 0; i < 200; i++) {
+    // The local radius can be as sparse as the sampler's density-radius cap (6x baseMinDistance);
+    // allow a further factor of 2 for the annulus growth step's own reach beyond that.
+    const maxGap = params.poissonMinDistance * 12;
+    let checked = 0;
+    for (let i = 0; i < 1000 && checked < 100; i++) {
       const tx = padding + rng() * (params.mapSize - 2 * padding);
       const ty = padding + rng() * (params.mapSize - 2 * padding);
+      if (densityAtForTest(grid, params.mapSize, tx, ty) <= 0) continue; // true void — no guarantee
+      checked++;
       let minDist = Infinity;
       for (const s of systems) {
         const d = distance(tx, ty, s.x, s.y);
@@ -309,6 +435,7 @@ describe("generateSystems", () => {
       }
       expect(minDist).toBeLessThan(maxGap);
     }
+    expect(checked).toBeGreaterThan(50); // non-vacuous: plenty of nonzero-density samples were tested
   });
 });
 
@@ -338,8 +465,9 @@ describe("generateConnections", () => {
 
   function makeFullUniverse() {
     const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_NAMES);
-    const rawSystems = generateSystems(rng, regions, params);
+    const shape = buildGalaxyShape(params.shapeKnobs, params.mapSize, rng);
+    const regions = generateRegions(shape.seeds, REGION_NAMES);
+    const rawSystems = generateSystems(rng, regions, params, shape.grid);
     const result = generateConnections(rng, rawSystems, regions, params);
     return { regions, ...result };
   }
@@ -370,7 +498,12 @@ describe("generateConnections", () => {
   it("all regions are connected via gateways (BFS on region graph)", () => {
     const { regions, systems, connections } = makeFullUniverse();
 
-    // Build region adjacency from gateway connections
+    // A cluster small enough to roll zero placed systems (rare, but real once regions follow
+    // authored cluster footprints rather than a guaranteed-minimum-size rejection sample) can never
+    // carry a gateway — restrict the connectivity expectation to regions that actually got systems.
+    const nonEmptyRegions = regions.filter((r) => systems.some((s) => s.regionIndex === r.index));
+    expect(nonEmptyRegions.length).toBeGreaterThan(1); // non-vacuous
+
     const regionAdj = new Map<number, number[]>();
     for (const r of regions) regionAdj.set(r.index, []);
 
@@ -383,8 +516,8 @@ describe("generateConnections", () => {
       }
     }
 
-    const reachable = bfsReachable(regionAdj, regions[0].index);
-    expect(reachable.size).toBe(regions.length);
+    const reachable = bfsReachable(regionAdj, nonEmptyRegions[0].index);
+    expect(reachable.size).toBe(nonEmptyRegions.length);
   });
 
   it("connections are bidirectional", () => {
@@ -405,14 +538,17 @@ describe("generateConnections", () => {
     }
   });
 
-  it("marks at least 1 gateway per region", () => {
+  it("marks at least 1 gateway per non-empty region", () => {
     const { regions, systems } = makeFullUniverse();
+    let checked = 0;
     for (const region of regions) {
-      const gateways = systems.filter(
-        (s) => s.regionIndex === region.index && s.isGateway,
-      );
+      const regionSystems = systems.filter((s) => s.regionIndex === region.index);
+      if (regionSystems.length === 0) continue; // a small cluster can roll zero systems by chance
+      checked++;
+      const gateways = regionSystems.filter((s) => s.isGateway);
       expect(gateways.length).toBeGreaterThanOrEqual(1);
     }
+    expect(checked).toBeGreaterThan(0); // non-vacuous
   });
 
   it("fuel costs are positive and reasonable", () => {
@@ -579,8 +715,9 @@ describe("generation switch — potential/worked separation", () => {
     // vector instead would fail this test, not pass it vacuously.
     const params = defaultParams();
     const rng = mulberry32(123);
-    const regions = generateRegions(rng, params, REGION_NAMES);
-    const systems = generateSystems(rng, regions, params);
+    const shape = buildGalaxyShape(params.shapeKnobs, params.mapSize, rng);
+    const regions = generateRegions(shape.seeds, REGION_NAMES);
+    const systems = generateSystems(rng, regions, params, shape.grid);
 
     let sawDivergentLabel = false;
     for (const s of systems) {
@@ -677,24 +814,22 @@ describe("generateUniverse", () => {
     const params = defaultParams();
     const u = generateUniverse(params, REGION_NAMES);
 
-    expect(u.regions).toHaveLength(params.regionCount);
-    // Poisson sampling may generate slightly fewer than target
-    expect(u.systems.length).toBeGreaterThanOrEqual(params.totalSystems * 0.9);
+    expect(u.regions).toHaveLength(params.shapeKnobs.clusterCount);
+    // Density-shaped placement deliberately leaves void (and a cluster's own low-density rim)
+    // unfilled (spec §5) — the old near-uniform floor no longer holds, and the shipped default
+    // knobs are Gate-A-tunable proposals, not a target this task calibrates.
+    expect(u.systems.length).toBeGreaterThanOrEqual(params.totalSystems * 0.2);
     expect(u.systems.length).toBeLessThanOrEqual(params.totalSystems);
     // At minimum MST edges (bidirectional) per region
     expect(u.connections.length).toBeGreaterThan(500);
   });
 
-  it("no region has fewer than 5 systems", () => {
-    const params = defaultParams();
-    const u = generateUniverse(params, REGION_NAMES);
-    const regionCounts = new Map<number, number>();
-    for (const s of u.systems) {
-      regionCounts.set(s.regionIndex, (regionCounts.get(s.regionIndex) ?? 0) + 1);
-    }
-    for (const [, count] of regionCounts) {
-      expect(count).toBeGreaterThanOrEqual(5);
-    }
+  it("same {systemCount, seed} produces a byte-identical world (determinism contract)", () => {
+    const config = genConfigForSystemCount(300);
+    const params = buildGenParams(7, config);
+    const u1 = generateUniverse(params, REGION_NAMES);
+    const u2 = generateUniverse(params, REGION_NAMES);
+    expect(JSON.stringify(u1)).toBe(JSON.stringify(u2));
   });
 });
 
@@ -749,6 +884,17 @@ describe("faction generation", () => {
       if (homeworlds.has(s.index)) continue;
       expect(s.population).toBe(0);
       expect(Object.keys(s.buildings)).toHaveLength(0);
+    }
+  });
+
+  it("stamps every homeworld with the self-sufficient prefab on a clustered map (stampHomeworldPrefabs exercised, not modified)", () => {
+    const u = generateUniverse(defaultParams(), REGION_NAMES);
+    const homeworlds = new Set(u.factions.map((f) => f.homeworldSystemIndex));
+    expect(homeworlds.size).toBeGreaterThan(0); // non-vacuous
+    for (const s of u.systems) {
+      if (!homeworlds.has(s.index)) continue;
+      expect(s.population).toBe(HOME_SYSTEM_PREFAB.population);
+      expect(Object.keys(s.buildings).length).toBeGreaterThan(0);
     }
   });
 });
