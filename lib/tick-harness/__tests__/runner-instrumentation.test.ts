@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { foldFoundingTick, runTickHarness } from "../runner";
+import { foldFoundingTick, runTickHarness, computeRegionOverview } from "../runner";
 import { MARKET_ROLES } from "../types";
 import type { HarnessConfig, HarnessResults, MarketRole } from "../types";
 import { CONSTRUCTION_INTERVAL, CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
@@ -110,37 +110,37 @@ describe("runTickHarness: the region overview", () => {
     expect(results.regionOverview).toEqual(expected);
   });
 
-  it("is measured on a galaxy that exercises the empty region, the tie-break and its direction", () => {
-    // The comparison above is only worth its runtime on a fixture where each branch is live: a
-    // galaxy of one-government regions agrees with almost any folding rule, and would pass while
-    // the tie-break ran backwards or the default leaked into every row.
-    const byRegion = govsByRegion();
-    const world = generateWorld({ systemCount: CONFIG.systemCount, seed: CONFIG.seed });
+  it("exercises the empty region, the tie-break and its direction, on the production folding function directly", () => {
+    // `generateWorld` cannot supply this fixture any more: the per-cluster placement guarantee
+    // (spec `docs/planned/logistics-lanes.md` §5) means a system count large enough to place the
+    // required faction homeworlds is already large enough that every cluster gets a system, so a
+    // genuinely empty region no longer occurs at any system count the game can actually generate.
+    // `computeRegionOverview` is exported and pure exactly so this branch stays provable — a
+    // hand-built input feeds it directly, bypassing `generateWorld` and its viability floor.
+    const regions = [
+      { id: "r-empty", name: "Empty Reach" }, // no entry below — the empty-region branch
+      { id: "r-tie", name: "Tied Ground" }, // technocratic encountered first, cooperative second
+      { id: "r-clear", name: "Clear Majority" }, // militarist, no tie
+    ];
+    const systemsByRegion = new Map<string, GovernmentType[]>([
+      ["r-tie", ["technocratic", "cooperative"]],
+      ["r-clear", ["militarist", "militarist", "corporate"]],
+    ]);
 
-    let emptyRegions = 0;
-    let nonDefaultDominant = 0;
-    let tiesWhereOrderMatters = 0;
-    for (const r of world.regions) {
-      const govs = byRegion.get(r.id) ?? [];
-      if (govs.length === 0) {
-        emptyRegions++;
-        continue;
-      }
-      const counts = new Map<GovernmentType, number>();
-      for (const g of govs) counts.set(g, (counts.get(g) ?? 0) + 1);
-      const entries = [...counts.entries()];
-      const max = Math.max(...entries.map((e) => e[1]));
-      const tied = entries.filter((e) => e[1] === max);
-      const alphabetical = [...tied].sort((a, b) => (a[0] < b[0] ? -1 : 1))[0][0];
-      if (alphabetical !== "federation") nonDefaultDominant++;
-      // A tie whose winner is NOT the first type encountered — the only shape in which the
-      // tie-break's existence, and its direction, are both visible.
-      if (tied.length > 1 && tied[0][0] !== alphabetical) tiesWhereOrderMatters++;
-    }
+    const overview = computeRegionOverview(regions, systemsByRegion);
 
-    expect(emptyRegions).toBeGreaterThan(0);
-    expect(nonDefaultDominant).toBeGreaterThan(0);
-    expect(tiesWhereOrderMatters).toBeGreaterThan(0);
+    const byName = new Map(overview.map((r) => [r.name, r]));
+    expect(byName.get("Empty Reach")).toEqual({
+      name: "Empty Reach", dominantGovernmentType: "federation", systemCount: 0,
+    });
+    // Tie-break direction: "technocratic" was encountered first, but "cooperative" sorts first
+    // alphabetically and must win — proves the break is alphabetical, not insertion-order.
+    expect(byName.get("Tied Ground")).toEqual({
+      name: "Tied Ground", dominantGovernmentType: "cooperative", systemCount: 2,
+    });
+    expect(byName.get("Clear Majority")).toEqual({
+      name: "Clear Majority", dominantGovernmentType: "militarist", systemCount: 3,
+    });
   });
 });
 
@@ -473,10 +473,11 @@ describe("runTickHarness: episode costs, founding trajectory, the ratchet check"
     //
     // totalTeardownLevels is deliberately pinned rather than dropped. Post-strip (no random event
     // spawning left at all — only the relations trio remains, and it spawns far past this
-    // horizon) BUSY sheds 192 levels over its horizon, up from the near-zero reading under the
-    // previous, spawn-still-present alignment. Pinned exactly as the regime's signature; a drift
-    // in either direction is a mechanics change to re-read, not a regression in this instrument.
-    // The counter's own wiring
+    // horizon) BUSY sheds 194 levels over its horizon on this fixture's generated galaxy (its
+    // cluster/lane topology, spec `docs/planned/logistics-lanes.md` §5, sets which systems decay
+    // and when), up from the near-zero reading under the previous, spawn-still-present alignment.
+    // Pinned exactly as the regime's signature; a drift in either direction is a mechanics change
+    // to re-read, not a regression in this instrument. The counter's own wiring
     // — that a torn-down level actually reaches
     // `totalTeardownLevels` — is proven at unit level where it can be forced to fire:
     // lib/tick/processors/__tests__/infrastructure-decay.test.ts "infrastructure-decay processor:
@@ -486,7 +487,7 @@ describe("runTickHarness: episode costs, founding trajectory, the ratchet check"
     // `totalTeardownLevels` and asserts the total. Together they cover both hops of the wire this
     // test cannot exercise on a dormant galaxy.
     const results = await runBusy();
-    expect(results.episodeCosts.totalTeardownLevels).toBe(192);
+    expect(results.episodeCosts.totalTeardownLevels).toBe(194);
     expect(results.foundingTrajectory.buckets[0].n).toBeGreaterThan(0); // colonies founded in-window
     expect(results.provisionRatchet.buckets.length).toBeGreaterThan(0);
 

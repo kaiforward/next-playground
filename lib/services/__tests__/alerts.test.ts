@@ -19,13 +19,15 @@ import { emptyResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import type { DevelopmentRefs } from "@/lib/engine/development";
 import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 
-/** Two arbitrary systems that are NOT the player's homeworld — fixture sites the tests force into
+/** Two arbitrary systems that are NOT ANY faction's homeworld — fixture sites the tests force into
  *  a developed, player-owned state (mirrors lib/services/__tests__/tracker.test.ts's own pattern of
- *  patching a spare system rather than depending on world-gen's starting layout). */
+ *  patching a spare system rather than depending on world-gen's starting layout). Excludes every
+ *  faction's homeworld, not just the player's: a homeworld already carries the stamped capital
+ *  prefab (population, buildings, seeded markets — `stampHomeworldPrefabs`), so picking one by
+ *  array-order accident silently hands a fixture a system that isn't actually spare. */
 function spareSystemIds(world: World, count: number): string[] {
-  const pid = world.player!.controlledFactionId;
-  const home = world.factions.find((f) => f.id === pid)!.homeworldId;
-  const spares = world.systems.filter((s) => s.id !== home).slice(0, count);
+  const homeworldIds = new Set(world.factions.map((f) => f.homeworldId));
+  const spares = world.systems.filter((s) => !homeworldIds.has(s.id)).slice(0, count);
   if (spares.length < count) throw new Error("fixture: not enough spare systems");
   return spares.map((s) => s.id);
 }

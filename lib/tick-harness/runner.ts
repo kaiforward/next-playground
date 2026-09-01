@@ -52,7 +52,7 @@ import type { EpisodeCostTotals } from "./population-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
 import type { GovernmentType } from "@/lib/types/game";
-import type { WorldFlowEvent, WorldMarket } from "@/lib/world/types";
+import type { WorldFlowEvent, WorldMarket, WorldRegion } from "@/lib/world/types";
 import type {
   HarnessConfig,
   HarnessResults,
@@ -89,6 +89,40 @@ export function foldFoundingTick(
   trackFoundedColonies(systems, tick, developedAtStart, tracker, staging);
 }
 
+/**
+ * Region overview: each region's system count and modal government type, ties broken
+ * alphabetically, an empty region (no systems at all) keeping the "federation" default rather
+ * than ranking nothing. Exported (and pure — no `generateWorld` dependency) so the empty-region,
+ * tie-break and tie-direction branches can be proven on a hand-built input: `generateWorld` itself
+ * cannot produce a genuinely empty region at any system count large enough to also place its
+ * required faction homeworlds (spec §5's per-cluster placement guarantee means a system count
+ * that large already covers every cluster), so the branch would otherwise have no live fixture at
+ * all. `runTickHarness` is its only production caller.
+ */
+export function computeRegionOverview(
+  regions: ReadonlyArray<Pick<WorldRegion, "id" | "name">>,
+  systemsByRegion: ReadonlyMap<string, GovernmentType[]>,
+): RegionOverviewEntry[] {
+  return regions.map((r) => {
+    const govs = systemsByRegion.get(r.id) ?? [];
+    const counts = new Map<GovernmentType, number>();
+    for (const g of govs) counts.set(g, (counts.get(g) ?? 0) + 1);
+    let dominant: GovernmentType = "federation";
+    let bestCount = 0;
+    for (const [g, count] of counts) {
+      if (count > bestCount || (count === bestCount && g < dominant)) {
+        dominant = g;
+        bestCount = count;
+      }
+    }
+    return {
+      name: r.name,
+      dominantGovernmentType: dominant,
+      systemCount: govs.length,
+    };
+  });
+}
+
 /** Mirrors event-analysis.ts's (unexported) ActiveEventRecord shape. */
 interface ActiveEventRecord {
   type: TickEvent["type"];
@@ -114,24 +148,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     list.push(s.governmentType);
     systemsByRegion.set(s.regionId, list);
   }
-  const regionOverview: RegionOverviewEntry[] = world.regions.map((r) => {
-    const govs = systemsByRegion.get(r.id) ?? [];
-    const counts = new Map<GovernmentType, number>();
-    for (const g of govs) counts.set(g, (counts.get(g) ?? 0) + 1);
-    let dominant: GovernmentType = "federation";
-    let bestCount = 0;
-    for (const [g, count] of counts) {
-      if (count > bestCount || (count === bestCount && g < dominant)) {
-        dominant = g;
-        bestCount = count;
-      }
-    }
-    return {
-      name: r.name,
-      dominantGovernmentType: dominant,
-      systemCount: govs.length,
-    };
-  });
+  const regionOverview = computeRegionOverview(world.regions, systemsByRegion);
 
   const marketSnapshots: { tick: number; markets: MarketSnapshot[] }[] = [];
   const populationSnapshots: Array<Map<string, number>> = [];

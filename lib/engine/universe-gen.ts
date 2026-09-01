@@ -19,7 +19,10 @@ import {
   type PlayerFactionInput,
 } from "./faction-gen";
 import { distance, mulberry32, kruskalMST, UnionFind, type RNG, type Edge } from "./generation-primitives";
-import { buildGalaxyShape, type GalaxyShapeKnobs, type ClusterSeed, type DensityGrid } from "./density-field";
+import {
+  buildGalaxyShape,
+  type GalaxyShapeKnobs, type ClusterSeed, type DensityGrid, type CorridorPlan,
+} from "./density-field";
 
 // Re-exported so existing consumers (`@/lib/engine/universe-gen` importers throughout the tick,
 // engine and test layers) keep their import path — these are dependency-free primitives that now
@@ -52,7 +55,14 @@ export interface GeneratedConnection {
   fromSystemIndex: number;
   toSystemIndex: number;
   fuelCost: number;
-  isGateway: boolean;
+  /** True exactly for a corridor's single crossing-style lane (spec §5) — priced through
+   *  `laneFuelCost`'s multiplier, the crossing class. False for every intra-cluster lane AND
+   *  every band-style corridor's chain link, even one that crosses a cluster boundary: crossing
+   *  the map's regions and being priced as the expensive "crossing" class are separate facts. The
+   *  cosmetic, persisted `isGateway` flag lives on the SYSTEM instead (`GeneratedSystem.isGateway`
+   *  / `WorldSystem.isGateway`, `lib/world/types.ts:107`) — a corridor-endpoint system, not a
+   *  connection-level concept. */
+  isCrossing: boolean;
 }
 
 export interface GeneratedUniverse {
@@ -76,8 +86,11 @@ export interface GenParams {
   poissonMinDistance: number;
   poissonKCandidates: number;
   extraEdgeFraction: number;
-  gatewayFuelMultiplier: number;
-  gatewaysPerBorder: number;
+  /** Crossing-class multiplier: prices a corridor's crossing-style lane above the intra-cluster
+   *  baseline. The only lane class this pass has — no separate "gateways per border" knob (the old
+   *  region-adjacency phase this replaced had one; corridor count is `shapeKnobs.corridorsPerCluster`
+   *  now, spec §5). */
+  crossingFuelMultiplier: number;
   intraRegionBaseFuel: number;
   /** Procedurally generated minors layered on top of the 8 majors. */
   minorFactionCount: number;
@@ -182,7 +195,15 @@ function radiusFromDensity(density: number, baseMinDistance: number): number {
  * distance at each point comes from `grid`'s density there instead of one fixed value, so placement
  * runs tight inside clusters, sparse along corridor bands, and never lands in a true-void cell
  * (`densityAt` reading exactly 0). Multi-seeded (`initialSeedAttempts`) so growth reaches every
- * density island, not just the one the first random point happens to land in.
+ * density island, not just the one the first random point happens to land in. `clusterSeedPoints`
+ * (default none — every other caller of this function is a raw-grid unit test with no cluster
+ * structure of its own) are placed FIRST, before the random seeding phase: a cluster seed's own
+ * center is where its density is highest, so this is expected to always succeed — the guarantee
+ * this exists for is "every cluster gets at least one placed system," which corridor realisation
+ * (`realizeCorridorPair`, spec §5) depends on to anchor every planned corridor without falling back
+ * to the whole-graph repair pass. Consumes no RNG draws of its own (`tryAddPoint` is pure geometry),
+ * so it does not shift what `rng()` returns to the random phases that follow — only how many of
+ * their draws land, which output already varies by seed.
  * Uses a seeded RNG throughout for determinism.
  */
 export function bridsonSample(
@@ -194,6 +215,7 @@ export function bridsonSample(
   padding: number,
   maxPoints: number,
   grid: DensityGrid,
+  clusterSeedPoints: Point[] = [],
 ): Point[] {
   const mapSize = width; // the density grid is authored over a square map, width === height in practice
   const cellSize = baseMinDistance / Math.SQRT2; // finest possible spacing, at max density
@@ -251,6 +273,16 @@ export function bridsonSample(
     radii.push(r);
     accel[accelIndex(x, y)] = idx;
     return idx;
+  }
+
+  // Phase 0: guarantee every cluster seed places at least one system, at (or as near as the
+  // density/bounds checks allow to) its own center — before any random point exists, so this can
+  // only ever be blocked by two cluster seeds sitting closer together than their own placement
+  // radius (a degenerate knob configuration) or a seed sitting exactly on the padding boundary.
+  for (const sp of clusterSeedPoints) {
+    if (points.length >= maxPoints) break;
+    const idx = tryAddPoint(sp.x, sp.y);
+    if (idx !== null) active.push(idx);
   }
 
   // Phase 1: rejection-sample initial active points broadly across the map, so every density
@@ -331,9 +363,14 @@ export function generateSystems(
   const padding = mapSize * mapPadding;
 
   // Step 1: Scatter systems by local density — tight in clusters, sparse on corridor bands,
-  // nothing in true void (spec §5).
+  // nothing in true void (spec §5). `regions` are the cluster seeds themselves (one center per
+  // region, `generateRegions`) — passing their positions guarantees every cluster places at least
+  // one system, so every corridor has real systems to anchor (spec §5's connectivity requirement;
+  // `connectRemainingComponents`, `generateConnections`, stays a pure safety net for the
+  // degenerate cases this can't reach, not the routine mechanism).
   const points = bridsonSample(
     rng, mapSize, mapSize, poissonMinDistance, poissonKCandidates, padding, totalSystems, grid,
+    regions.map((r) => ({ x: r.x, y: r.y })),
   );
 
   // Step 2: Assign each point to its nearest region center
@@ -421,19 +458,278 @@ function pushLane(
   aIndex: number,
   bIndex: number,
   fuelCost: number,
-  isGateway: boolean,
+  isCrossing: boolean,
 ): void {
-  connections.push({ fromSystemIndex: aIndex, toSystemIndex: bIndex, fuelCost, isGateway });
-  connections.push({ fromSystemIndex: bIndex, toSystemIndex: aIndex, fuelCost, isGateway });
+  connections.push({ fromSystemIndex: aIndex, toSystemIndex: bIndex, fuelCost, isCrossing });
+  connections.push({ fromSystemIndex: bIndex, toSystemIndex: aIndex, fuelCost, isCrossing });
+}
+
+/** The subset of `GenParams` corridor realisation needs — kept small so fixture tests don't have
+ *  to construct a full `GenParams` (shape knobs, map size, etc.) just to exercise this phase. */
+type CorridorRealisationParams = Pick<
+  GenParams, "intraRegionBaseFuel" | "crossingFuelMultiplier" | "poissonMinDistance"
+>;
+
+/** The system in `candidates` nearest world point (targetX, targetY) — the corridor-anchoring
+ *  rule (judgement call, not spec-mandated): each side's corridor endpoint is whichever placed
+ *  system in that cluster reaches furthest toward the OTHER cluster's seed. `candidates` must be
+ *  non-empty. */
+function nearestSystemTowardSeed(
+  candidates: GeneratedSystem[],
+  targetX: number,
+  targetY: number,
+): GeneratedSystem {
+  let best = candidates[0];
+  let bestDist = distance(best.x, best.y, targetX, targetY);
+  for (let i = 1; i < candidates.length; i++) {
+    const d = distance(candidates[i].x, candidates[i].y, targetX, targetY);
+    if (d < bestDist) {
+      bestDist = d;
+      best = candidates[i];
+    }
+  }
+  return best;
+}
+
+/** How far (world units) a system may sit from the direct seed-to-seed line and still count as a
+ *  band waypoint — a multiple of the Poisson minimum distance so it scales with the galaxy's own
+ *  spacing, Gate-A-sweepable like the rest of §5's tuning constants. Judgement call: a fixed
+ *  multiplier of the placement radius, independent of `density-field.ts`'s own (private) band
+ *  width — the two need not agree; this one only decides which ALREADY-PLACED systems get pulled
+ *  into the chain, not where band density gets raised. */
+const BAND_WAYPOINT_MAX_PERP_DISTANCE_MULTIPLE = 3;
+
+/** Normalised projection of (px, py) onto the line through (ax, ay) and (bx, by): 0 at the first
+ *  point, 1 at the second, negative/greater-than-1 beyond either end. Degenerate (coincident)
+ *  line reads every point as 0. */
+function projectOntoLine(
+  px: number, py: number, ax: number, ay: number, bx: number, by: number,
+): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lengthSq = dx * dx + dy * dy;
+  return lengthSq === 0 ? 0 : ((px - ax) * dx + (py - ay) * dy) / lengthSq;
+}
+
+/**
+ * Placed systems, from the WHOLE galaxy (judgement call, and a necessary one: restricting the
+ * pool to the corridor's own two clusters was tried first and rejected — a region's own second-
+ * best candidate is, by construction, always on the far side of its anchor from the corridor
+ * (closer to its own seed), never between the two anchors, so a same-cluster-only pool can never
+ * populate a multi-stop chain; real waypoint stars a band's raised density places overwhelmingly
+ * fall inside a DIFFERENT cluster's Voronoi cell than either endpoint — exactly what spec §5 flags
+ * as possible), that sit near the direct seed-to-seed line and strictly between the two anchors'
+ * OWN projected positions (`tLow`/`tHigh`, not a hardcoded [0,1] — the nearest-facing anchor rule
+ * does not guarantee an anchor sits exactly at its cluster's seed) — the sparse chain of waypoint
+ * stars a band-style corridor's raised density placed (`buildDensityGrid`'s band strip,
+ * `lib/engine/density-field.ts`). The "no lane outside the plan" guarantee still holds: this only
+ * ever links a waypoint into THIS pair's own chain, never opens a lane belonging to some other
+ * corridor.
+ */
+function waypointsAlongCorridor(
+  candidateSystems: GeneratedSystem[],
+  ax: number, ay: number, bx: number, by: number,
+  excludeIndices: Set<number>,
+  maxPerpDistance: number,
+  tLow: number,
+  tHigh: number,
+): GeneratedSystem[] {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const result: GeneratedSystem[] = [];
+
+  for (const s of candidateSystems) {
+    if (excludeIndices.has(s.index)) continue;
+    const t = projectOntoLine(s.x, s.y, ax, ay, bx, by);
+    if (t <= tLow || t >= tHigh) continue; // strictly between the two anchors, never beyond either
+    const px = ax + t * dx;
+    const py = ay + t * dy;
+    if (distance(s.x, s.y, px, py) > maxPerpDistance) continue;
+    result.push(s);
+  }
+
+  return result;
+}
+
+/**
+ * Realise one chosen cluster-seed pair (spec §5) as actual lanes. A crossing-style pair becomes a
+ * single lane, at the crossing multiplier, between the two systems nearest-facing each other's
+ * cluster. A band-style pair chains through whatever waypoint stars the band placed, at intra
+ * rates, in corridor order (anchorA, waypoints and anchorB all sorted by their own projection
+ * along the seed-to-seed line — the nearest-facing anchor rule does not guarantee anchorA/anchorB
+ * sit at the chain's extreme ends, so the whole chain is sorted together rather than assuming
+ * it) — when the band placed zero waypoint systems (a low-density knob set can do this), the chain
+ * is just [anchorA, anchorB]: a direct lane, the same fallback the crossing style always uses,
+ * needing no special case. `isGateway` marks exactly the two anchors — "the system at each end
+ * where a corridor meets a cluster" (spec §5) — never an interior waypoint. A cluster with no
+ * placed systems on either side anchors nothing and is skipped: there is nothing there to connect
+ * (§8's `connectRemainingComponents` repairs any resulting stranding at the whole-graph level).
+ */
+function realizeCorridorPair(
+  pair: CorridorPlan["pairs"][number],
+  systemsByRegion: Map<number, GeneratedSystem[]>,
+  allSystems: GeneratedSystem[],
+  regions: GeneratedRegion[],
+  avgIntraDist: number,
+  params: CorridorRealisationParams,
+  connections: GeneratedConnection[],
+): void {
+  const sysA = systemsByRegion.get(pair.a) ?? [];
+  const sysB = systemsByRegion.get(pair.b) ?? [];
+  if (sysA.length === 0 || sysB.length === 0) return;
+
+  const seedA = regions[pair.a];
+  const seedB = regions[pair.b];
+  const anchorA = nearestSystemTowardSeed(sysA, seedB.x, seedB.y);
+  const anchorB = nearestSystemTowardSeed(sysB, seedA.x, seedA.y);
+
+  anchorA.isGateway = true;
+  anchorB.isGateway = true;
+
+  if (pair.style === "crossing") {
+    pushLane(
+      connections, anchorA.index, anchorB.index,
+      laneFuelCost(
+        distance(anchorA.x, anchorA.y, anchorB.x, anchorB.y),
+        avgIntraDist, params.intraRegionBaseFuel, params.crossingFuelMultiplier,
+      ),
+      true,
+    );
+    return;
+  }
+
+  const anchorAT = projectOntoLine(anchorA.x, anchorA.y, seedA.x, seedA.y, seedB.x, seedB.y);
+  const anchorBT = projectOntoLine(anchorB.x, anchorB.y, seedA.x, seedA.y, seedB.x, seedB.y);
+  const waypoints = waypointsAlongCorridor(
+    allSystems, seedA.x, seedA.y, seedB.x, seedB.y,
+    new Set([anchorA.index, anchorB.index]),
+    params.poissonMinDistance * BAND_WAYPOINT_MAX_PERP_DISTANCE_MULTIPLE,
+    Math.min(anchorAT, anchorBT), Math.max(anchorAT, anchorBT),
+  );
+
+  const chain = [anchorA, anchorB, ...waypoints].sort(
+    (p, q) =>
+      projectOntoLine(p.x, p.y, seedA.x, seedA.y, seedB.x, seedB.y)
+      - projectOntoLine(q.x, q.y, seedA.x, seedA.y, seedB.x, seedB.y),
+  );
+  for (let i = 0; i < chain.length - 1; i++) {
+    pushLane(
+      connections, chain[i].index, chain[i + 1].index,
+      laneFuelCost(
+        distance(chain[i].x, chain[i].y, chain[i + 1].x, chain[i + 1].y),
+        avgIntraDist, params.intraRegionBaseFuel, 1,
+      ),
+      false,
+    );
+  }
+}
+
+/**
+ * Realise every chosen corridor (spec §5): clones `systems` (so callers keep their own,
+ * unflagged copy — mirrors the old gateway-designation phase this replaces), marks each
+ * corridor's two anchors `isGateway`, and returns the lanes each pair added.
+ */
+export function realizeCorridors(
+  systems: GeneratedSystem[],
+  regions: GeneratedRegion[],
+  corridors: CorridorPlan,
+  avgIntraDist: number,
+  params: CorridorRealisationParams,
+): { connections: GeneratedConnection[]; systems: GeneratedSystem[] } {
+  const updatedSystems = systems.map((s) => ({ ...s }));
+  const systemsByRegion = new Map<number, GeneratedSystem[]>();
+  for (const sys of updatedSystems) {
+    const list = systemsByRegion.get(sys.regionIndex);
+    if (list) list.push(sys);
+    else systemsByRegion.set(sys.regionIndex, [sys]);
+  }
+
+  const connections: GeneratedConnection[] = [];
+  for (const pair of corridors.pairs) {
+    realizeCorridorPair(pair, systemsByRegion, updatedSystems, regions, avgIntraDist, params, connections);
+  }
+
+  return { connections, systems: updatedSystems };
+}
+
+/**
+ * Last-resort connectivity repair: corridor realisation can strand a whole branch of clusters
+ * when a corridor's anchor region rolled zero placed systems (spec-flagged failure mode, §5) —
+ * every individual cluster stays internally connected, but the branch beyond the empty one never
+ * gets a lane in. `generateSystems` seeding a system at every cluster center (spec §5's
+ * connectivity requirement) is expected to make this path routinely unreachable — this function is
+ * a pure safety net, never the mechanism connectivity is supposed to run through; its return value
+ * (repair lanes added) is exactly what lets a test prove that, rather than inferring it indirectly.
+ * Union-finds the graph built so far; for every extra component beyond the first, adds one direct
+ * lane to the globally nearest system outside that component (an MST over components, not a
+ * planned corridor) and repeats until one component remains. Priced at the crossing rate — an
+ * unplanned trans-void link is not a cheap intra hop — but never marked `isGateway`: it is not a
+ * plan-authored corridor endpoint. Mutates `connections` in place.
+ */
+function connectRemainingComponents(
+  systems: GeneratedSystem[],
+  connections: GeneratedConnection[],
+  avgIntraDist: number,
+  params: CorridorRealisationParams,
+): number {
+  if (systems.length < 2) return 0;
+
+  const posByIndex = new Map<number, number>();
+  systems.forEach((s, pos) => posByIndex.set(s.index, pos));
+
+  const uf = new UnionFind(systems.length);
+  for (const c of connections) {
+    const posA = posByIndex.get(c.fromSystemIndex);
+    const posB = posByIndex.get(c.toSystemIndex);
+    if (posA === undefined || posB === undefined) continue;
+    uf.union(posA, posB);
+  }
+
+  let repairLaneCount = 0;
+  for (;;) {
+    const root = uf.find(0);
+    const stranded: number[] = [];
+    for (let pos = 0; pos < systems.length; pos++) {
+      if (uf.find(pos) !== root) stranded.push(pos);
+    }
+    if (stranded.length === 0) return repairLaneCount;
+
+    const compRoot = uf.find(stranded[0]);
+    const compPositions = stranded.filter((pos) => uf.find(pos) === compRoot);
+
+    let bestFrom = compPositions[0];
+    let bestTo = -1;
+    let bestDist = Infinity;
+    for (const from of compPositions) {
+      for (let to = 0; to < systems.length; to++) {
+        if (uf.find(to) === compRoot) continue; // still-stranded — pick a bridge OUT of this component
+        const d = distance(systems[from].x, systems[from].y, systems[to].x, systems[to].y);
+        if (d < bestDist) {
+          bestDist = d;
+          bestFrom = from;
+          bestTo = to;
+        }
+      }
+    }
+
+    pushLane(
+      connections, systems[bestFrom].index, systems[bestTo].index,
+      laneFuelCost(bestDist, avgIntraDist, params.intraRegionBaseFuel, params.crossingFuelMultiplier),
+      false,
+    );
+    uf.union(bestFrom, bestTo);
+    repairLaneCount++;
+  }
 }
 
 export function generateConnections(
   rng: RNG,
   systems: GeneratedSystem[],
   regions: GeneratedRegion[],
+  corridors: CorridorPlan,
   params: GenParams,
-): { connections: GeneratedConnection[]; systems: GeneratedSystem[] } {
-  const { extraEdgeFraction, gatewayFuelMultiplier, gatewaysPerBorder, intraRegionBaseFuel } = params;
+): { connections: GeneratedConnection[]; systems: GeneratedSystem[]; repairLaneCount: number } {
+  const { extraEdgeFraction, intraRegionBaseFuel } = params;
   const connections: GeneratedConnection[] = [];
 
   // Group systems by region
@@ -459,7 +755,7 @@ export function generateConnections(
   }
   const avgIntraDist = totalIntraEdges > 0 ? totalIntraDist / totalIntraEdges : params.poissonMinDistance;
 
-  // ── Phase 1: Intra-region connections ──
+  // ── Phase 1: Intra-cluster connections (per-region MST + extra edges) ──
   for (const [, regionSys] of regionSystems) {
     if (regionSys.length < 2) continue;
 
@@ -494,69 +790,17 @@ export function generateConnections(
     }
   }
 
-  // ── Phase 2: Region adjacency (MST on region centers + extras) ──
-  const regionMST = kruskalMST(regions);
+  // ── Phase 2: Corridor realisation (spec §5) — replaces the old region-centre MST + gateway
+  // crossing phases entirely; between-cluster lanes now exist ONLY along the plan's corridors. ──
+  const { connections: corridorConnections, systems: updatedSystems } = realizeCorridors(
+    systems, regions, corridors, avgIntraDist, params,
+  );
+  connections.push(...corridorConnections);
 
-  // Add ~2 extra inter-region edges for variety
-  const regionExtras = extraEdgeCandidates(regions, regionMST);
-  const allRegionPairs = [...regionMST, ...regionExtras.slice(0, 2)];
+  // ── Phase 3: Connectivity repair (rare) ──
+  const repairLaneCount = connectRemainingComponents(updatedSystems, connections, avgIntraDist, params);
 
-  // ── Phase 3: Gateway designation + inter-region connections ──
-  // Clone systems array so we can mark gateways
-  const updatedSystems = systems.map((s) => ({ ...s }));
-  const systemsByRegion: Map<number, GeneratedSystem[]> = new Map();
-  for (const sys of updatedSystems) {
-    if (!systemsByRegion.has(sys.regionIndex)) {
-      systemsByRegion.set(sys.regionIndex, []);
-    }
-    systemsByRegion.get(sys.regionIndex)!.push(sys);
-  }
-
-  for (const pair of allRegionPairs) {
-    const regionA = regions[pair.a];
-    const regionB = regions[pair.b];
-    const sysA = systemsByRegion.get(regionA.index) ?? [];
-    const sysB = systemsByRegion.get(regionB.index) ?? [];
-
-    // Build all cross-region pairs sorted by distance
-    const crossPairs: { sa: GeneratedSystem; sb: GeneratedSystem; dist: number }[] = [];
-    for (const sa of sysA) {
-      for (const sb of sysB) {
-        crossPairs.push({ sa, sb, dist: distance(sa.x, sa.y, sb.x, sb.y) });
-      }
-    }
-    crossPairs.sort((a, b) => a.dist - b.dist);
-
-    // Pick up to gatewaysPerBorder pairs, ensuring distinct systems on each side
-    // so crossing points are geographically spread out
-    const usedA = new Set<number>();
-    const usedB = new Set<number>();
-    let picked = 0;
-
-    for (const cp of crossPairs) {
-      if (picked >= gatewaysPerBorder) break;
-      if (usedA.has(cp.sa.index) || usedB.has(cp.sb.index)) continue;
-
-      usedA.add(cp.sa.index);
-      usedB.add(cp.sb.index);
-      picked++;
-
-      // Mark as gateways
-      cp.sa.isGateway = true;
-      cp.sb.isGateway = true;
-
-      // Inter-region connection with higher fuel cost
-      pushLane(
-        connections,
-        cp.sa.index,
-        cp.sb.index,
-        laneFuelCost(cp.dist, avgIntraDist, intraRegionBaseFuel, gatewayFuelMultiplier),
-        true,
-      );
-    }
-  }
-
-  return { connections, systems: updatedSystems };
+  return { connections, systems: updatedSystems, repairLaneCount };
 }
 
 // ── Emergent starting condition ─────────────────────────────────
@@ -622,7 +866,7 @@ export function generateUniverse(
 
   const regions = generateRegions(shape.seeds, names);
   const rawSystems = generateSystems(rng, regions, params, shape.grid);
-  const { connections, systems } = generateConnections(rng, rawSystems, regions, params);
+  const { connections, systems } = generateConnections(rng, rawSystems, regions, shape.corridors, params);
 
   const factions = generateFactions(rng, systems, {
     minorFactionCount: params.minorFactionCount,

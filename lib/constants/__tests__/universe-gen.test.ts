@@ -17,8 +17,7 @@ describe("genConfigForSystemCount", () => {
     expectWithinPercent(config.POISSON_MIN_DISTANCE, 180, 5);
     expectWithinPercent(config.POISSON_K_CANDIDATES, 30, 5);
     expectWithinPercent(config.INTRA_REGION_EXTRA_EDGES, 0.5, 5);
-    expectWithinPercent(config.GATEWAY_FUEL_MULTIPLIER, 2.5, 5);
-    expectWithinPercent(config.GATEWAYS_PER_BORDER, 3, 5);
+    expectWithinPercent(config.CROSSING_FUEL_MULTIPLIER, 2.5, 5);
     expectWithinPercent(config.INTRA_REGION_BASE_FUEL, 8, 5);
     expectWithinPercent(config.MINOR_FACTION_COUNT, 12, 5);
     expectWithinPercent(config.CLUSTER_COUNT, 24, 5);
@@ -75,8 +74,7 @@ describe("genConfigForSystemCount", () => {
       expect(config.POISSON_MIN_DISTANCE).toBe(180);
       expect(config.POISSON_K_CANDIDATES).toBe(30);
       expect(config.INTRA_REGION_EXTRA_EDGES).toBe(0.5);
-      expect(config.GATEWAY_FUEL_MULTIPLIER).toBe(2.5);
-      expect(config.GATEWAYS_PER_BORDER).toBe(3);
+      expect(config.CROSSING_FUEL_MULTIPLIER).toBe(2.5);
       expect(config.INTRA_REGION_BASE_FUEL).toBe(8);
       expect(config.CLUSTER_SIZE_SKEW).toBe(0.6);
       expect(config.VOID_FLOOR).toBe(0.08);

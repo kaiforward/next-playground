@@ -64,8 +64,7 @@ export function buildGenParams(
     poissonMinDistance: config.POISSON_MIN_DISTANCE,
     poissonKCandidates: config.POISSON_K_CANDIDATES,
     extraEdgeFraction: config.INTRA_REGION_EXTRA_EDGES,
-    gatewayFuelMultiplier: config.GATEWAY_FUEL_MULTIPLIER,
-    gatewaysPerBorder: config.GATEWAYS_PER_BORDER,
+    crossingFuelMultiplier: config.CROSSING_FUEL_MULTIPLIER,
     intraRegionBaseFuel: config.INTRA_REGION_BASE_FUEL,
     minorFactionCount: config.MINOR_FACTION_COUNT,
     shapeKnobs: {

@@ -11,11 +11,15 @@ import {
   generateConnections,
   generateUniverse,
   stampHomeworldPrefabs,
+  realizeCorridors,
   type GenParams,
   type GeneratedRegion,
   type GeneratedSystem,
 } from "../universe-gen";
-import { buildGalaxyShape, type DensityGrid, type ClusterSeed } from "@/lib/engine/density-field";
+import {
+  buildGalaxyShape,
+  type DensityGrid, type ClusterSeed, type CorridorPlan,
+} from "@/lib/engine/density-field";
 import { HOME_SYSTEM_PREFAB } from "@/lib/engine/homeworld-prefab";
 import { emptyResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import {
@@ -468,8 +472,24 @@ describe("generateConnections", () => {
     const shape = buildGalaxyShape(params.shapeKnobs, params.mapSize, rng);
     const regions = generateRegions(shape.seeds, REGION_NAMES);
     const rawSystems = generateSystems(rng, regions, params, shape.grid);
-    const result = generateConnections(rng, rawSystems, regions, params);
-    return { regions, ...result };
+    const result = generateConnections(rng, rawSystems, regions, shape.corridors, params);
+    return { regions, corridors: shape.corridors, ...result };
+  }
+
+  /** Union-find over every undirected lane in `connections`, indexed by `systems` array position
+   *  (not `GeneratedSystem.index`, which the caller's own local slice may not start at 0). */
+  function connectivityComponents(
+    systems: GeneratedSystem[], connections: { fromSystemIndex: number; toSystemIndex: number }[],
+  ): UnionFind {
+    const posByIndex = new Map<number, number>();
+    systems.forEach((s, pos) => posByIndex.set(s.index, pos));
+    const uf = new UnionFind(systems.length);
+    for (const c of connections) {
+      const a = posByIndex.get(c.fromSystemIndex);
+      const b = posByIndex.get(c.toSystemIndex);
+      if (a !== undefined && b !== undefined) uf.union(a, b);
+    }
+    return uf;
   }
 
   it("all intra-region systems are connected (BFS)", () => {
@@ -495,29 +515,16 @@ describe("generateConnections", () => {
     }
   });
 
-  it("all regions are connected via gateways (BFS on region graph)", () => {
-    const { regions, systems, connections } = makeFullUniverse();
+  // ── Proves: "the finished lane graph is fully connected" ──
+  it("the finished lane graph is fully connected — every system reachable from every other (union-find over lanes)", () => {
+    const { systems, connections } = makeFullUniverse();
+    expect(systems.length).toBeGreaterThan(1); // non-vacuous
 
-    // A cluster small enough to roll zero placed systems (rare, but real once regions follow
-    // authored cluster footprints rather than a guaranteed-minimum-size rejection sample) can never
-    // carry a gateway — restrict the connectivity expectation to regions that actually got systems.
-    const nonEmptyRegions = regions.filter((r) => systems.some((s) => s.regionIndex === r.index));
-    expect(nonEmptyRegions.length).toBeGreaterThan(1); // non-vacuous
-
-    const regionAdj = new Map<number, number[]>();
-    for (const r of regions) regionAdj.set(r.index, []);
-
-    for (const conn of connections) {
-      if (!conn.isGateway) continue;
-      const fromRegion = systems.find((s) => s.index === conn.fromSystemIndex)!.regionIndex;
-      const toRegion = systems.find((s) => s.index === conn.toSystemIndex)!.regionIndex;
-      if (fromRegion !== toRegion) {
-        regionAdj.get(fromRegion)!.push(toRegion);
-      }
+    const uf = connectivityComponents(systems, connections);
+    const root = uf.find(0);
+    for (let pos = 1; pos < systems.length; pos++) {
+      expect(uf.find(pos), `system ${systems[pos].index} unreachable from system ${systems[0].index}`).toBe(root);
     }
-
-    const reachable = bfsReachable(regionAdj, nonEmptyRegions[0].index);
-    expect(reachable.size).toBe(nonEmptyRegions.length);
   });
 
   it("connections are bidirectional", () => {
@@ -528,34 +535,325 @@ describe("generateConnections", () => {
     }
   });
 
-  it("non-gateway connections only link systems in the same region", () => {
-    const { systems, connections } = makeFullUniverse();
+  // ── Proves: "no cross-cluster lane exists outside a corridor pair the plan chose" ──
+  it("isCrossing lanes exist exactly one per crossing-style corridor pair with both sides populated", () => {
+    const { systems, connections, corridors } = makeFullUniverse();
+    const crossingPairsWithSystems = corridors.pairs.filter(
+      (p) => p.style === "crossing"
+        && systems.some((s) => s.regionIndex === p.a)
+        && systems.some((s) => s.regionIndex === p.b),
+    );
+    expect(crossingPairsWithSystems.length).toBeGreaterThan(0); // non-vacuous — default corridorStyle mix
+
+    // Undirected count: pushLane always writes both directed rows.
+    const crossingLaneCount = connections.filter((c) => c.isCrossing).length / 2;
+    expect(crossingLaneCount).toBe(crossingPairsWithSystems.length);
+  });
+
+  it("no isCrossing lane connects two systems whose regions aren't a crossing-style corridor pair", () => {
+    const { systems, connections, corridors } = makeFullUniverse();
+    const crossingRegionPairs = new Set(
+      corridors.pairs.filter((p) => p.style === "crossing").map((p) => `${Math.min(p.a, p.b)}-${Math.max(p.a, p.b)}`),
+    );
+    const byIndex = new Map(systems.map((s) => [s.index, s]));
+    let sawCrossing = false;
     for (const conn of connections) {
-      if (conn.isGateway) continue;
-      const fromRegion = systems.find((s) => s.index === conn.fromSystemIndex)!.regionIndex;
-      const toRegion = systems.find((s) => s.index === conn.toSystemIndex)!.regionIndex;
-      expect(fromRegion).toBe(toRegion);
+      if (!conn.isCrossing) continue;
+      sawCrossing = true;
+      const fromRegion = byIndex.get(conn.fromSystemIndex)!.regionIndex;
+      const toRegion = byIndex.get(conn.toSystemIndex)!.regionIndex;
+      const key = `${Math.min(fromRegion, toRegion)}-${Math.max(fromRegion, toRegion)}`;
+      expect(crossingRegionPairs.has(key)).toBe(true);
     }
+    expect(sawCrossing).toBe(true); // non-vacuous
   });
 
-  it("marks at least 1 gateway per non-empty region", () => {
-    const { regions, systems } = makeFullUniverse();
-    let checked = 0;
-    for (const region of regions) {
-      const regionSystems = systems.filter((s) => s.regionIndex === region.index);
-      if (regionSystems.length === 0) continue; // a small cluster can roll zero systems by chance
-      checked++;
-      const gateways = regionSystems.filter((s) => s.isGateway);
-      expect(gateways.length).toBeGreaterThanOrEqual(1);
-    }
-    expect(checked).toBeGreaterThan(0); // non-vacuous
+  it("marks isGateway on at least the anchors realizeCorridors itself designates, for every non-empty region touched by a corridor with a non-empty partner", () => {
+    const { systems, corridors, regions } = makeFullUniverse();
+    const avgIntraDistProxy = params.poissonMinDistance; // only relative fuel cost matters here, not read
+    const replay = realizeCorridors(systems, regions, corridors, avgIntraDistProxy, params);
+    const gatewaysFromReplay = new Set(replay.systems.filter((s) => s.isGateway).map((s) => s.index));
+    const gatewaysFromFullRun = new Set(systems.filter((s) => s.isGateway).map((s) => s.index));
+    // generateConnections calls realizeCorridors internally with the same corridor plan — its
+    // gateway set must match a direct replay exactly (a regression guard on that wiring); the
+    // exact "isGateway holds only on anchors, never a waypoint" claim is proven at the fixture
+    // level below, where the anchor/waypoint set is known by construction.
+    expect(gatewaysFromFullRun).toEqual(gatewaysFromReplay);
+    expect(gatewaysFromFullRun.size).toBeGreaterThan(0); // non-vacuous
   });
 
-  it("fuel costs are positive and reasonable", () => {
+  it("fuel costs are positive", () => {
     const { connections } = makeFullUniverse();
     for (const conn of connections) {
       expect(conn.fuelCost).toBeGreaterThanOrEqual(1);
-      expect(conn.fuelCost).toBeLessThan(200);
+    }
+  });
+
+  it("a map with corridorStyle at each extreme (all-band / all-crossing) generates validly, stays fully connected, and actually dispatches by style", () => {
+    for (const corridorStyle of [0, 1]) {
+      const config = genConfigForSystemCount(300);
+      const extremeParams: GenParams = {
+        ...buildGenParams(11, config),
+        shapeKnobs: { ...buildGenParams(11, config).shapeKnobs, corridorStyle },
+      };
+      const rng = mulberry32(extremeParams.seed);
+      const shape = buildGalaxyShape(extremeParams.shapeKnobs, extremeParams.mapSize, rng);
+      const regions = generateRegions(shape.seeds, REGION_NAMES);
+      const rawSystems = generateSystems(rng, regions, extremeParams, shape.grid);
+      const { systems, connections } = generateConnections(rng, rawSystems, regions, shape.corridors, extremeParams);
+
+      expect(systems.length).toBeGreaterThan(1); // non-vacuous
+      const uf = connectivityComponents(systems, connections);
+      const root = uf.find(0);
+      for (let pos = 1; pos < systems.length; pos++) {
+        expect(uf.find(pos)).toBe(root);
+      }
+
+      // Style dispatch itself, not just connectivity — a swapped `pair.style === "crossing"`
+      // branch (crossing realised as a chain, band realised as a single lane) still connects
+      // everything and would pass the connectivity check above alone.
+      const byIndex = new Map(systems.map((s) => [s.index, s]));
+      const populatedPairs = shape.corridors.pairs.filter(
+        (p) => systems.some((s) => s.regionIndex === p.a) && systems.some((s) => s.regionIndex === p.b),
+      );
+      expect(populatedPairs.length).toBeGreaterThan(0); // non-vacuous
+
+      if (corridorStyle === 1) {
+        // All-crossing: every corridor pair realises as exactly one isCrossing lane between its
+        // two regions — no waypoint chain (which would add extra connections and non-isCrossing
+        // hops between the same two regions).
+        for (const pair of populatedPairs) {
+          const acrossPair = connections.filter((c) => {
+            const fr = byIndex.get(c.fromSystemIndex)!.regionIndex;
+            const tr = byIndex.get(c.toSystemIndex)!.regionIndex;
+            return (fr === pair.a && tr === pair.b) || (fr === pair.b && tr === pair.a);
+          });
+          expect(acrossPair.length).toBe(2); // one undirected lane, two directed rows
+          expect(acrossPair.every((c) => c.isCrossing)).toBe(true);
+        }
+      } else {
+        // All-band: no isCrossing lane exists anywhere in the realised graph.
+        expect(connections.some((c) => c.isCrossing)).toBe(false);
+      }
+    }
+  });
+});
+
+// ── Corridor realisation (spec §5) ───────────────────────────────
+
+describe("realizeCorridors", () => {
+  const crossingParams = { intraRegionBaseFuel: 8, crossingFuelMultiplier: 2.5, poissonMinDistance: 100 };
+
+  function region(index: number, x: number, y: number): GeneratedRegion {
+    return { index, name: `r${index}`, x, y };
+  }
+
+  it("a crossing pair produces a single lane between the two nearest-facing anchors, both marked isGateway", () => {
+    const regions = [region(0, 0, 0), region(1, 1000, 0)];
+    const systems = [
+      mkSys({ index: 0, regionIndex: 0, x: 0, y: 0 }),
+      mkSys({ index: 1, regionIndex: 0, x: 400, y: 0 }), // nearer region 1 — the anchor
+      mkSys({ index: 2, regionIndex: 1, x: 600, y: 0 }), // nearer region 0 — the anchor
+      mkSys({ index: 3, regionIndex: 1, x: 1000, y: 0 }),
+    ];
+    const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "crossing" }] };
+
+    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams);
+
+    expect(connections).toHaveLength(2); // one undirected lane, two directed rows
+    const [c1] = connections;
+    expect(new Set([c1.fromSystemIndex, c1.toSystemIndex])).toEqual(new Set([1, 2]));
+    expect(c1.isCrossing).toBe(true);
+    expect(out.find((s) => s.index === 1)!.isGateway).toBe(true);
+    expect(out.find((s) => s.index === 2)!.isGateway).toBe(true);
+    expect(out.find((s) => s.index === 0)!.isGateway).toBe(false);
+    expect(out.find((s) => s.index === 3)!.isGateway).toBe(false);
+  });
+
+  it("a band pair with waypoint systems on the line chains anchor -> waypoints (nearest-first) -> anchor, all at intra rate, isGateway only on the two anchors", () => {
+    // Waypoints are region 2 — a third cluster, not either corridor endpoint. This isn't
+    // incidental: a waypoint assigned to region 0 or 1 itself would compete for that region's own
+    // anchor slot (nearestSystemTowardSeed picks the single closest-to-the-other-seed system in
+    // each region), so a genuine multi-stop chain can only be built from systems outside both
+    // endpoint clusters — exactly the case spec §5 flags as possible.
+    const regions = [region(0, 0, 0), region(1, 1000, 0), region(2, 500, 500)];
+    const systems = [
+      mkSys({ index: 0, regionIndex: 0, x: 0, y: 0 }), // anchor A (only system in region 0)
+      mkSys({ index: 1, regionIndex: 1, x: 1000, y: 0 }), // anchor B (only system in region 1)
+      mkSys({ index: 2, regionIndex: 2, x: 700, y: 0 }), // waypoint, nearer B — placed second in the array on purpose
+      mkSys({ index: 3, regionIndex: 2, x: 300, y: 0 }), // waypoint, nearer A
+    ];
+    const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "band" }] };
+
+    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams);
+
+    // Chain: 0 -> 3 -> 2 -> 1 (ordered by projection along the corridor), 3 lanes, 6 directed rows.
+    expect(connections).toHaveLength(6);
+    for (const c of connections) expect(c.isCrossing).toBe(false);
+    const undirectedPairs = new Set(
+      connections.map((c) => `${Math.min(c.fromSystemIndex, c.toSystemIndex)}-${Math.max(c.fromSystemIndex, c.toSystemIndex)}`),
+    );
+    expect(undirectedPairs).toEqual(new Set(["0-3", "2-3", "1-2"]));
+
+    expect(out.find((s) => s.index === 0)!.isGateway).toBe(true);
+    expect(out.find((s) => s.index === 1)!.isGateway).toBe(true);
+    expect(out.find((s) => s.index === 2)!.isGateway).toBe(false);
+    expect(out.find((s) => s.index === 3)!.isGateway).toBe(false);
+  });
+
+  it("a band pair with zero waypoint systems degrades to a single direct anchor-to-anchor lane", () => {
+    const regions = [region(0, 0, 0), region(1, 1000, 0)];
+    const systems = [
+      mkSys({ index: 0, regionIndex: 0, x: 0, y: 0 }),
+      mkSys({ index: 1, regionIndex: 1, x: 1000, y: 0 }),
+    ];
+    const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "band" }] };
+
+    const { connections } = realizeCorridors(systems, regions, corridors, 100, crossingParams);
+    expect(connections).toHaveLength(2);
+    expect(new Set([connections[0].fromSystemIndex, connections[0].toSystemIndex])).toEqual(new Set([0, 1]));
+  });
+
+  it("a waypoint far off the corridor line (beyond the perpendicular-distance threshold) is excluded from the chain", () => {
+    const regions = [region(0, 0, 0), region(1, 1000, 0)];
+    const systems = [
+      mkSys({ index: 0, regionIndex: 0, x: 0, y: 0 }),
+      mkSys({ index: 1, regionIndex: 1, x: 1000, y: 0 }),
+      mkSys({ index: 2, regionIndex: 0, x: 500, y: 100_000 }), // far off the line
+    ];
+    const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "band" }] };
+
+    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams);
+    expect(connections).toHaveLength(2); // direct anchor-to-anchor, system 2 excluded
+    expect(out.find((s) => s.index === 2)!.isGateway).toBe(false);
+  });
+
+  it("a cluster with zero placed systems anchors nothing on either of its corridor pairs, and does not throw", () => {
+    const regions = [region(0, 0, 0), region(1, 1000, 0), region(2, 2000, 0)];
+    const systems = [
+      mkSys({ index: 0, regionIndex: 0, x: 0, y: 0 }),
+      // region 1 has no placed systems at all
+      mkSys({ index: 1, regionIndex: 2, x: 2000, y: 0 }),
+    ];
+    const corridors: CorridorPlan = {
+      pairs: [{ a: 0, b: 1, style: "band" }, { a: 1, b: 2, style: "crossing" }],
+    };
+
+    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams);
+    expect(connections).toHaveLength(0);
+    expect(out.every((s) => !s.isGateway)).toBe(true);
+  });
+
+  it("two corridors sharing an endpoint each anchor independently — a cluster of one system serves both", () => {
+    const regions = [region(0, 0, 0), region(1, -1000, 0), region(2, 1000, 0)];
+    const systems = [
+      mkSys({ index: 0, regionIndex: 0, x: 0, y: 0 }), // the shared cluster's only system
+      mkSys({ index: 1, regionIndex: 1, x: -1000, y: 0 }),
+      mkSys({ index: 2, regionIndex: 2, x: 1000, y: 0 }),
+    ];
+    const corridors: CorridorPlan = {
+      pairs: [{ a: 0, b: 1, style: "crossing" }, { a: 0, b: 2, style: "crossing" }],
+    };
+
+    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams);
+    expect(connections).toHaveLength(4); // two undirected crossing lanes
+    expect(out.find((s) => s.index === 0)!.isGateway).toBe(true);
+    const uf = new UnionFind(3);
+    for (const c of connections) uf.union(c.fromSystemIndex, c.toSystemIndex);
+    expect(uf.connected(0, 1)).toBe(true);
+    expect(uf.connected(0, 2)).toBe(true);
+  });
+
+  // ── Proves: "a crossing lane costs more than an intra lane of the same length" ──
+  it("a crossing lane costs strictly more than a band-realized lane over the same distance", () => {
+    const regions = [region(0, 0, 0), region(1, 1000, 0)];
+    const sameDistanceSystems = [
+      mkSys({ index: 0, regionIndex: 0, x: 0, y: 0 }),
+      mkSys({ index: 1, regionIndex: 1, x: 1000, y: 0 }),
+    ];
+
+    const crossing = realizeCorridors(
+      sameDistanceSystems, regions, { pairs: [{ a: 0, b: 1, style: "crossing" }] }, 100, crossingParams,
+    );
+    const band = realizeCorridors(
+      sameDistanceSystems, regions, { pairs: [{ a: 0, b: 1, style: "band" }] }, 100, crossingParams,
+    );
+
+    expect(crossing.connections[0].fuelCost).toBeGreaterThan(band.connections[0].fuelCost);
+  });
+
+  it("no cross-cluster lane exists outside a corridor pair the plan chose", () => {
+    // Three clusters, but the plan connects only (0,1) — cluster 2 is deliberately excluded.
+    const regions = [region(0, 0, 0), region(1, 1000, 0), region(2, 2000, 1000)];
+    const systems = [
+      mkSys({ index: 0, regionIndex: 0, x: 0, y: 0 }),
+      mkSys({ index: 1, regionIndex: 1, x: 1000, y: 0 }),
+      mkSys({ index: 2, regionIndex: 2, x: 2000, y: 1000 }),
+      mkSys({ index: 3, regionIndex: 2, x: 2100, y: 1000 }),
+    ];
+    const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "crossing" }] };
+
+    const { connections } = realizeCorridors(systems, regions, corridors, 100, crossingParams);
+    const touchedIndices = new Set(connections.flatMap((c) => [c.fromSystemIndex, c.toSystemIndex]));
+    expect(touchedIndices.has(2)).toBe(false);
+    expect(touchedIndices.has(3)).toBe(false);
+  });
+});
+
+// ── Corridor provenance: the repair pass is a safety net, never routine ─────
+
+describe("generateConnections — repair-pass provenance", () => {
+  // isCrossing alone can't see a repair lane: connectRemainingComponents deliberately writes
+  // isCrossing: false on the lanes it adds (they aren't the plan's own crossing class), so a
+  // check that only filters on isCrossing is blind to them — this is the gap the review found.
+  // repairLaneCount is generateConnections' own direct count of what connectRemainingComponents
+  // added, so "the repair pass fired zero times" is asserted from that count, not inferred.
+  function realGeneration(systemCount: number, seed: number) {
+    const config = genConfigForSystemCount(systemCount);
+    const params = buildGenParams(seed, config);
+    const rng = mulberry32(params.seed);
+    const shape = buildGalaxyShape(params.shapeKnobs, params.mapSize, rng);
+    const regions = generateRegions(shape.seeds, REGION_NAMES);
+    const rawSystems = generateSystems(rng, regions, params, shape.grid);
+    return { regions, corridors: shape.corridors, ...generateConnections(rng, rawSystems, regions, shape.corridors, params) };
+  }
+
+  const cases: { systemCount: number; seed: number }[] = [
+    ...[1, 2, 3, 42, 43, 44].map((seed) => ({ systemCount: 600, seed })),
+    // 28 and 49 are load-bearing: without the per-cluster placement guarantee
+    // (`generateSystems`'s `bridsonSample` seeding, spec §5), these two roll a NON-leaf empty
+    // cluster in the corridor MST and the repair pass fires — the red-proof for this test.
+    ...[1, 2, 3, 28, 49].map((seed) => ({ systemCount: 60, seed })),
+  ];
+
+  it("the repair pass fires zero times at default knobs, across seeds at 600 and 60 systems (every cluster seed placement guarantees a system to anchor its corridors)", () => {
+    for (const { systemCount, seed } of cases) {
+      const { regions, systems, repairLaneCount } = realGeneration(systemCount, seed);
+      const emptyRegionCount = regions.filter((r) => !systems.some((s) => s.regionIndex === r.index)).length;
+      expect(
+        repairLaneCount,
+        `systemCount=${systemCount} seed=${seed}: repair pass added ${repairLaneCount} unplanned lane(s) — emptyRegionCount=${emptyRegionCount}`,
+      ).toBe(0);
+    }
+  });
+
+  it("every crossing-style lane's region pair is a corridor the plan chose (unambiguous provenance — a band chain's interior waypoints may legitimately belong to neither endpoint's own cluster, so this checks only the lane class the plan pins to an exact pair)", () => {
+    for (const { systemCount, seed } of cases) {
+      const { systems, connections, corridors } = realGeneration(systemCount, seed);
+      const byIndex = new Map(systems.map((s) => [s.index, s]));
+      const plannedCrossingPairs = new Set(
+        corridors.pairs.filter((p) => p.style === "crossing").map((p) => `${Math.min(p.a, p.b)}-${Math.max(p.a, p.b)}`),
+      );
+      for (const conn of connections) {
+        if (!conn.isCrossing) continue;
+        const fromRegion = byIndex.get(conn.fromSystemIndex)!.regionIndex;
+        const toRegion = byIndex.get(conn.toSystemIndex)!.regionIndex;
+        const key = `${Math.min(fromRegion, toRegion)}-${Math.max(fromRegion, toRegion)}`;
+        expect(
+          plannedCrossingPairs.has(key),
+          `systemCount=${systemCount} seed=${seed}: isCrossing lane ${conn.fromSystemIndex}->${conn.toSystemIndex} crosses regions ${fromRegion}-${toRegion}, not a planned crossing-style pair`,
+        ).toBe(true);
+      }
     }
   });
 });

@@ -386,9 +386,11 @@ describe("runWorldTick", () => {
       ],
     };
     // 120 ticks was enough while random spawning also minted "event-" ids; with only relations
-    // creating events, this seed's first faction pair crosses into border conflict at tick 278 —
-    // run well past it.
-    const after = await runTicks(world, 320);
+    // creating events, this seed's first faction pair crosses into border conflict at tick 380 —
+    // border friction is driven by the cross-faction connection COUNT (`getBorderLengthsBetween`,
+    // spec `docs/planned/logistics-lanes.md` §5), which this seed's generated lane graph puts on
+    // this timeline; run well past it.
+    const after = await runTicks(world, 450);
 
     const eventIds = after.events.map((e) => e.id);
     const projectIds = after.constructionProjects.map((p) => p.id);

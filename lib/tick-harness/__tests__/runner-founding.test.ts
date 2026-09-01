@@ -47,20 +47,20 @@ describe("runTickHarness: the cycle-gated samplers", () => {
     // that a per-tick sampler cannot land in the band asserted below, not the rate's own magnitude.
     //
     // Under the construction-cost site ranking (which concentrates tier-1+ production into hubs),
-    // the rate grows with horizon and asymptotes near 0.0086 — probe-backed at ECONOMY_SCALE=1:
-    // 0.00380 (12,000 ticks), 0.00618 (16,000), 0.00735 (20,000), 0.00798 (24,000), successive
-    // deltas halving per 4,000 ticks (geometric tail ≈ 0.0086). Read at a fixed 20,000 — BUSY's
-    // own horizon plus 10,000 — and pin the measured band: above 0.005 (a per-tick sampler
-    // diluted by CYCLE_LENGTH would read ~0.0003 and can never clear it — the sampling-cadence
-    // discrimination this test exists for) and below 0.012 (~1.5× the asymptote; drifting past
-    // it means demand-hunting pressure has shifted regime again and the band needs re-deriving).
+    // the rate settles quickly with horizon — probe-backed at ECONOMY_SCALE=1: 0.00144 (12,000
+    // ticks), 0.00255 (16,000), 0.00254 (20,000), 0.00256 (24,000). Read at a fixed 20,000 — BUSY's
+    // own horizon plus 10,000 — and pin the measured band: above 0.0015 (a per-tick sampler
+    // diluted by CYCLE_LENGTH would read ~0.0001 and can never clear it — the sampling-cadence
+    // discrimination this test exists for) and below 0.0035 (comfortably above the settled rate;
+    // drifting past it means demand-hunting pressure has shifted regime again and the band needs
+    // re-deriving).
     const results = await runTickHarness({
       systemCount: BUSY.systemCount,
       seed: BUSY.seed,
       tickCount: BUSY.tickCount + 10_000,
     });
-    expect(results.demandHunting.flipRate).toBeGreaterThan(0.005);
-    expect(results.demandHunting.flipRate).toBeLessThan(0.012);
+    expect(results.demandHunting.flipRate).toBeGreaterThan(0.0015);
+    expect(results.demandHunting.flipRate).toBeLessThan(0.0035);
   }, 180_000);
 });
 
