@@ -188,14 +188,16 @@ function RouteBody() {
   // navigated to the map route and was immediately redirected straight back to `/start`).
   const isReplacing = useGameSlice(selectIsReplacing);
   const routeIsStart = route.name === "start";
+  // Renders nothing from the world, so the no-world redirect must leave it alone.
+  const routeIsWorldFree = route.name === "styleguide";
 
   useEffect(() => {
-    if (shouldRedirectToStart(worldVersion, routeIsStart, isReplacing)) {
+    if (shouldRedirectToStart(worldVersion, routeIsStart, isReplacing, routeIsWorldFree)) {
       navigate(startHref(), { replace: true });
     }
-  }, [worldVersion, routeIsStart, isReplacing, navigate]);
+  }, [worldVersion, routeIsStart, isReplacing, routeIsWorldFree, navigate]);
 
-  const gate = resolveRouteGate(worldVersion, routeIsStart, isReplacing);
+  const gate = resolveRouteGate(worldVersion, routeIsStart, isReplacing, routeIsWorldFree);
 
   if (gate === "boot-loading") return <BootLoading />;
   if (gate === "start") {

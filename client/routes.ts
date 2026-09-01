@@ -94,8 +94,12 @@ export function resolveRouteGate(
   worldVersion: number | null,
   routeIsStart: boolean,
   isReplacing: boolean,
+  routeIsWorldFree: boolean = false,
 ): RouteGateDecision {
   if (routeIsStart) return worldVersion === null ? "boot-loading" : "start";
+  // A world-free route (the styleguide) reads nothing from the world, so "no world exists"
+  // (worldVersion 0) must not gate it — only the boot window itself (null: no frame yet) does.
+  if (routeIsWorldFree) return worldVersion === null ? "boot-loading" : "route";
   if (isReplacing) return "boot-loading";
   if (worldVersion === null || worldVersion === 0) return "boot-loading";
   return "route";
@@ -112,6 +116,7 @@ export function shouldRedirectToStart(
   worldVersion: number | null,
   routeIsStart: boolean,
   isReplacing: boolean,
+  routeIsWorldFree: boolean = false,
 ): boolean {
-  return worldVersion === 0 && !isReplacing && !routeIsStart;
+  return worldVersion === 0 && !isReplacing && !routeIsStart && !routeIsWorldFree;
 }

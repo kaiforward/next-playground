@@ -137,6 +137,12 @@ describe("resolveRouteGate", () => {
   it("shows boot-loading (not start) on a non-start route while a replacement is in flight", () => {
     expect(resolveRouteGate(0, false, true)).toBe("boot-loading");
   });
+
+  it("renders a world-free route (the styleguide) with no world at all — only the boot window gates it", () => {
+    expect(resolveRouteGate(0, false, false, true)).toBe("route");
+    expect(resolveRouteGate(42, false, false, true)).toBe("route");
+    expect(resolveRouteGate(null, false, false, true)).toBe("boot-loading");
+  });
 });
 
 describe("shouldRedirectToStart", () => {
@@ -154,6 +160,10 @@ describe("shouldRedirectToStart", () => {
 
   it("never redirects once a world exists", () => {
     expect(shouldRedirectToStart(42, false, false)).toBe(false);
+  });
+
+  it("never redirects a world-free route (the styleguide), even with no world", () => {
+    expect(shouldRedirectToStart(0, false, false, true)).toBe(false);
   });
 });
 
