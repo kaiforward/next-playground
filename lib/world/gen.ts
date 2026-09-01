@@ -74,6 +74,7 @@ export function buildGenParams(
       voidFloor: config.VOID_FLOOR,
       corridorsPerCluster: config.CORRIDORS_PER_CLUSTER,
       corridorStyle: config.CORRIDOR_STYLE_MIX,
+      clusterTurbulence: config.CLUSTER_TURBULENCE,
     },
   };
 }

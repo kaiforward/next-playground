@@ -14,7 +14,7 @@
  */
 
 import { genConfigForSystemCount } from "@/lib/constants/universe-gen";
-import { distance, kruskalMST, type RNG } from "./generation-primitives";
+import { distance, kruskalMST, mulberry32, type RNG } from "./generation-primitives";
 
 // ── Output types ────────────────────────────────────────────────
 
@@ -32,6 +32,12 @@ export interface GalaxyShapeKnobs {
   corridorsPerCluster: number;
   /** Fraction of corridor pairs realised as a single crossing lane rather than a waypoint band. */
   corridorStyle: number;
+  /** How wildly per-cluster peak density swings between clusters, 0–1: 0 = every cluster's peak
+   *  density multiplier is exactly 1 (uniform peaks); higher values dampen some clusters toward
+   *  diffuse while others stay full. Rolled from a stream derived from each seed's own placement,
+   *  never the main `rng` draw sequence — so this can never perturb cluster positions, corridor
+   *  planning, or grid noise (see `rollPeakMultiplier` below). */
+  clusterTurbulence: number;
 }
 
 /** One placed cluster: an elliptical density footprint at (x, y). */
@@ -44,6 +50,9 @@ export interface ClusterSeed {
   stretch: number;
   /** Ellipse orientation, radians. */
   angle: number;
+  /** Peak-density multiplier rolled by `clusterTurbulence` — 1 when turbulence is 0, dampened
+   *  toward 0 for a seed the turbulence roll disfavours. */
+  peakMultiplier: number;
 }
 
 /** Coarse density field over the map: a flat, JSON-serialisable row-major array of 0–1 values. */
@@ -123,6 +132,7 @@ export function defaultGalaxyShapeKnobs(systemCount: number): GalaxyShapeKnobs {
     voidFloor: config.VOID_FLOOR,
     corridorsPerCluster: config.CORRIDORS_PER_CLUSTER,
     corridorStyle: config.CORRIDOR_STYLE_MIX,
+    clusterTurbulence: config.CLUSTER_TURBULENCE,
   };
 }
 
@@ -183,13 +193,36 @@ function placeClusterSeeds(rng: RNG, knobs: GalaxyShapeKnobs, mapSize: number): 
     }
   }
 
-  return centers.map((c) => ({
-    x: c.x,
-    y: c.y,
-    size: rollClusterSize(rng, sizeSkew, mapSize),
-    stretch: STRETCH_MIN + rng() * (STRETCH_MAX - STRETCH_MIN),
-    angle: rng() * Math.PI * 2,
-  }));
+  return centers.map((c, index) => {
+    const x = c.x;
+    const y = c.y;
+    return {
+      x,
+      y,
+      size: rollClusterSize(rng, sizeSkew, mapSize),
+      stretch: STRETCH_MIN + rng() * (STRETCH_MAX - STRETCH_MIN),
+      angle: rng() * Math.PI * 2,
+      peakMultiplier: rollPeakMultiplier(x, y, index, knobs.clusterTurbulence),
+    };
+  });
+}
+
+/**
+ * Roll one seed's peak-density multiplier from a stream seeded by a deterministic mix of that
+ * seed's own already-rolled position and its index — never a draw from the main `rng` passed into
+ * `buildGalaxyShape`, so consuming this stream cannot shift where the main stream's next draw
+ * lands (placement, corridor planning, and grid noise all read the main stream at the same
+ * position regardless of `turbulence`). `1 - turbulence * roll` (roll in [0, 1)): at turbulence 0
+ * the multiplier is exactly 1 for every seed, since the roll is multiplied away; higher turbulence
+ * dampens some seeds toward diffuse while others (a low roll) stay close to full.
+ */
+function rollPeakMultiplier(x: number, y: number, index: number, turbulence: number): number {
+  const mix =
+    Math.imul(Math.round(x) ^ index, 0x9e3779b1) ^
+    Math.imul(Math.round(y) ^ (index * 0x1000193), 0x85ebca6b) ^
+    Math.imul(index + 1, 0xc2b2ae35);
+  const roll = mulberry32(mix | 0)();
+  return 1 - Math.max(0, turbulence) * roll;
 }
 
 // ── Density grid ─────────────────────────────────────────────────
@@ -253,7 +286,7 @@ function seedInfluence(seed: ClusterSeed, wx: number, wy: number, warp: number):
   const d = Math.sqrt(rx * rx + (ry / seed.stretch) * (ry / seed.stretch)) / effectiveSize;
   if (d >= 1) return 0;
   const edge = 1 - d;
-  return edge * edge;
+  return edge * edge * seed.peakMultiplier;
 }
 
 /**

@@ -252,7 +252,7 @@ describe("bridsonSample", () => {
 describe("generateRegions", () => {
   function fakeSeeds(n: number): ClusterSeed[] {
     return Array.from({ length: n }, (_, i) => ({
-      x: i * 100, y: i * 200, size: 500, stretch: 1, angle: 0,
+      x: i * 100, y: i * 200, size: 500, stretch: 1, angle: 0, peakMultiplier: 1,
     }));
   }
 

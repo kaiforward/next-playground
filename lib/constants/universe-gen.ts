@@ -24,6 +24,11 @@ interface UniverseGenConfig {
   CORRIDORS_PER_CLUSTER: number;
   /** Fraction of corridor pairs realised as a single crossing lane rather than a waypoint band. */
   CORRIDOR_STYLE_MIX: number;
+  /** Per-cluster peak-density swing: 0 = every cluster's peak density reads the same; higher values
+   *  dampen some clusters toward diffuse while others stay full. Never a placement/corridor knob —
+   *  it rolls from a stream derived from each seed's own position, never the main draw sequence
+   *  (`lib/engine/density-field.ts`). */
+  CLUSTER_TURBULENCE: number;
 }
 
 // ── Anchor configs ──────────────────────────────────────────────
@@ -46,6 +51,7 @@ const BASE_CONFIG: UniverseGenConfig = {
   VOID_FLOOR: 0.08,
   CORRIDORS_PER_CLUSTER: 0.3,
   CORRIDOR_STYLE_MIX: 0.5,
+  CLUSTER_TURBULENCE: 0,
 };
 
 /**

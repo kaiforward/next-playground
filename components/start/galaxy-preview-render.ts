@@ -35,11 +35,14 @@ export interface GalaxyImpression {
   points: Point[];
 }
 
-/** Dev-exploration overrides for the placement levers the config normally fixes: overall star
- *  density (a scale on the Poisson minimum distance — smaller = denser everywhere) and the
- *  core-vs-band spacing contrast (the density-radius exponent). Defaults reproduce the engine's
- *  own values exactly, which is what keeps the `generateUniverse` parity seam intact. */
-export interface PlacementOverrides {
+/** Dev-exploration overrides for the levers the config normally fixes: overall map extent
+ *  (`mapSizeScale`, applied to `config.MAP_SIZE` before anything else reads it — shape authoring,
+ *  padding, placement all see the scaled size), overall star density (a scale on the Poisson
+ *  minimum distance — smaller = denser everywhere) and the core-vs-band spacing contrast (the
+ *  density-radius exponent). Defaults reproduce the engine's own values exactly, which is what
+ *  keeps the `generateUniverse` parity seam intact. */
+export interface ImpressionOverrides {
+  mapSizeScale?: number;
   minDistanceScale?: number;
   densityRadiusExponent?: number;
 }
@@ -53,10 +56,10 @@ export function buildGalaxyImpression(
   knobs: GalaxyShapeKnobs,
   seed: number,
   systemCount: number,
-  placement: PlacementOverrides = {},
+  overrides: ImpressionOverrides = {},
 ): GalaxyImpression {
   const config = genConfigForSystemCount(systemCount);
-  const mapSize = config.MAP_SIZE;
+  const mapSize = config.MAP_SIZE * (overrides.mapSizeScale ?? 1);
   const padding = mapSize * config.MAP_PADDING;
 
   const rng = mulberry32(seed);
@@ -65,13 +68,13 @@ export function buildGalaxyImpression(
     rng,
     mapSize,
     mapSize,
-    config.POISSON_MIN_DISTANCE * (placement.minDistanceScale ?? 1),
+    config.POISSON_MIN_DISTANCE * (overrides.minDistanceScale ?? 1),
     config.POISSON_K_CANDIDATES,
     padding,
     config.TOTAL_SYSTEMS,
     shape.grid,
     shape.seeds.map((s) => ({ x: s.x, y: s.y })),
-    placement.densityRadiusExponent ?? DENSITY_RADIUS_EXPONENT,
+    overrides.densityRadiusExponent ?? DENSITY_RADIUS_EXPONENT,
   );
 
   return { shape, mapSize, points };

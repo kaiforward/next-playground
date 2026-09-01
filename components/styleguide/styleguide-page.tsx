@@ -361,6 +361,10 @@ function GalaxyPreviewSection() {
   // = denser) and core-vs-band spacing contrast (density-radius exponent).
   const [minDistanceScale, setMinDistanceScale] = useState(1.0);
   const [densityRadiusExponent, setDensityRadiusExponent] = useState(0.05);
+  // Map-size lever, dev-exploration only: scales `config.MAP_SIZE` before everything else reads it
+  // (shape authoring, padding, placement) — same unclamped-for-exploration posture as the two
+  // levers above.
+  const [mapSizeScale, setMapSizeScale] = useState(1.0);
 
   function setKnob<K extends keyof GalaxyShapeKnobs>(key: K, value: GalaxyShapeKnobs[K]) {
     setKnobs((prev) => ({ ...prev, [key]: value }));
@@ -417,6 +421,16 @@ function GalaxyPreviewSection() {
             value={knobs.corridorsPerCluster}
             onChange={(e) => setKnob("corridorsPerCluster", Number(e.target.value))}
           />
+          <RangeInput
+            id="galaxy-preview-cluster-turbulence"
+            label="Cluster turbulence"
+            valueLabel={knobs.clusterTurbulence.toFixed(2)}
+            min={0}
+            max={1}
+            step={0.05}
+            value={knobs.clusterTurbulence}
+            onChange={(e) => setKnob("clusterTurbulence", Number(e.target.value))}
+          />
           <SegmentedControl
             name="galaxy-preview-corridor-style"
             label="Corridor style"
@@ -462,12 +476,22 @@ function GalaxyPreviewSection() {
             value={densityRadiusExponent}
             onChange={(e) => setDensityRadiusExponent(Number(e.target.value))}
           />
+          <RangeInput
+            id="galaxy-preview-map-size-scale"
+            label="Map size"
+            valueLabel={`×${mapSizeScale.toFixed(1)}`}
+            min={0.5}
+            max={2.0}
+            step={0.1}
+            value={mapSizeScale}
+            onChange={(e) => setMapSizeScale(Number(e.target.value))}
+          />
         </div>
         <GalaxyPreview
           knobs={knobs}
           seed={seed}
           systemCount={systemCount}
-          placement={{ minDistanceScale, densityRadiusExponent }}
+          overrides={{ minDistanceScale, densityRadiusExponent, mapSizeScale }}
         />
       </div>
     </StyleSection>

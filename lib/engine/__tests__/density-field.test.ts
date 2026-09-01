@@ -16,6 +16,7 @@ function knobs(overrides: Partial<GalaxyShapeKnobs> = {}): GalaxyShapeKnobs {
     voidFloor: 0.08,
     corridorsPerCluster: 0.3,
     corridorStyle: 0.5,
+    clusterTurbulence: 0,
     ...overrides,
   };
 }
@@ -158,5 +159,55 @@ describe("defaultGalaxyShapeKnobs", () => {
     const large = defaultGalaxyShapeKnobs(10_000);
     expect(small.clusterCount).toBeGreaterThan(0);
     expect(large.clusterCount).toBeGreaterThan(small.clusterCount);
+  });
+});
+
+describe("clusterTurbulence", () => {
+  // These pin the design constraint from the module docstring: turbulence rolls from a stream
+  // derived from each seed's own already-rolled position, never the main `rng` passed into
+  // buildGalaxyShape — so turbulence can perturb cell densities but must NEVER shift where the
+  // main stream's next draw lands (seed placement, corridor planning).
+  it("leaves seed positions and the corridor plan byte-identical at turbulence 0 vs 0.8 — only cell densities may differ", () => {
+    const many = knobs({ clusterCount: 20, clusterSpacing: 200, corridorsPerCluster: 0.3 });
+    const calm = buildGalaxyShape({ ...many, clusterTurbulence: 0 }, MAP_SIZE, mulberry32(2026));
+    const turbulent = buildGalaxyShape({ ...many, clusterTurbulence: 0.8 }, MAP_SIZE, mulberry32(2026));
+
+    // Seed positions/shape (everything but the derived peakMultiplier) are unperturbed.
+    const stripMultiplier = (seeds: typeof calm.seeds) =>
+      seeds.map(({ peakMultiplier: _peakMultiplier, ...rest }) => rest);
+    expect(stripMultiplier(turbulent.seeds)).toEqual(stripMultiplier(calm.seeds));
+
+    // Corridor planning consumes the main rng after placement — its draw position, and therefore
+    // its output, is untouched too.
+    expect(turbulent.corridors).toEqual(calm.corridors);
+
+    // The turbulence knob does something real: cell densities actually differ somewhere.
+    expect(turbulent.grid.cells).not.toEqual(calm.grid.cells);
+  });
+
+  it("holds every peak multiplier at exactly 1 when turbulence is 0", () => {
+    const shape = buildGalaxyShape(knobs({ clusterCount: 30, clusterSpacing: 200, clusterTurbulence: 0 }), MAP_SIZE, mulberry32(3));
+    for (const seed of shape.seeds) {
+      expect(seed.peakMultiplier).toBe(1);
+    }
+  });
+
+  it("produces at least two seeds with materially different peak multipliers at turbulence 0.8", () => {
+    const shape = buildGalaxyShape(
+      knobs({ clusterCount: 30, clusterSpacing: 200, clusterTurbulence: 0.8 }),
+      MAP_SIZE,
+      mulberry32(3),
+    );
+    const multipliers = shape.seeds.map((s) => s.peakMultiplier);
+    const min = Math.min(...multipliers);
+    const max = Math.max(...multipliers);
+    expect(max - min).toBeGreaterThan(0.3);
+  });
+
+  it("produces a byte-identical grid for the same knobs, seed, and turbulence twice", () => {
+    const t = knobs({ clusterCount: 15, clusterSpacing: 200, clusterTurbulence: 0.6 });
+    const first = buildGalaxyShape(t, MAP_SIZE, mulberry32(555));
+    const second = buildGalaxyShape(t, MAP_SIZE, mulberry32(555));
+    expect(JSON.stringify(second)).toBe(JSON.stringify(first));
   });
 });

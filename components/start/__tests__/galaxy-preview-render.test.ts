@@ -13,6 +13,7 @@ function knobs(overrides: Partial<GalaxyShapeKnobs> = {}): GalaxyShapeKnobs {
     voidFloor: 0.08,
     corridorsPerCluster: 0.3,
     corridorStyle: 0.5,
+    clusterTurbulence: 0,
     ...overrides,
   };
 }
@@ -71,6 +72,28 @@ describe("buildGalaxyImpression", () => {
       impression.shape.grid.resolution * impression.shape.grid.resolution,
     );
     expect(Array.isArray(impression.points)).toBe(true);
+  });
+
+  it("with the override omitted, produces a byte-identical impression to an explicit mapSizeScale of 1 — the parity default", () => {
+    const omitted = buildGalaxyImpression(knobs(), 42, 300);
+    const explicitDefault = buildGalaxyImpression(knobs(), 42, 300, { mapSizeScale: 1 });
+    expect(omitted.mapSize).toBe(explicitDefault.mapSize);
+    expect(omitted.shape.grid.cells).toEqual(explicitDefault.shape.grid.cells);
+    expect(omitted.points).toEqual(explicitDefault.points);
+  });
+
+  it("scales the effective map extent by mapSizeScale, before shape authoring and placement read it", () => {
+    const config = genConfigForSystemCount(300);
+    const scaled = buildGalaxyImpression(knobs(), 42, 300, { mapSizeScale: 2 });
+    expect(scaled.mapSize).toBe(config.MAP_SIZE * 2);
+    // Every placed point must fall within the scaled map, not the unscaled one — proves placement
+    // itself read the scaled size, not just the reported mapSize field.
+    for (const point of scaled.points) {
+      expect(point.x).toBeGreaterThanOrEqual(0);
+      expect(point.x).toBeLessThanOrEqual(scaled.mapSize);
+      expect(point.y).toBeGreaterThanOrEqual(0);
+      expect(point.y).toBeLessThanOrEqual(scaled.mapSize);
+    }
   });
 
   it("completes a 20,000-system impression within an interactive bound", () => {

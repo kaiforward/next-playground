@@ -7,7 +7,7 @@ import {
   renderDensityField,
   worldToCanvas,
   crossingSegments,
-  type PlacementOverrides,
+  type ImpressionOverrides,
   type GalaxyImpression,
 } from "./galaxy-preview-render";
 
@@ -33,8 +33,9 @@ export interface GalaxyPreviewProps {
   knobs: GalaxyShapeKnobs;
   seed: number;
   systemCount: number;
-  /** Dev-exploration placement levers (styleguide only for now); omitted = the engine's values. */
-  placement?: PlacementOverrides;
+  /** Dev-exploration overrides (styleguide only for now): map-size scale plus placement levers;
+   *  omitted = the engine's values. */
+  overrides?: ImpressionOverrides;
 }
 
 /**
@@ -48,7 +49,7 @@ export interface GalaxyPreviewProps {
  * reasoning. Under jsdom (component tests) `getContext("2d")` returns null; painting is skipped and
  * the canvas element still renders, so a test can assert structure/text without a real canvas.
  */
-export function GalaxyPreview({ knobs, seed, systemCount, placement }: GalaxyPreviewProps) {
+export function GalaxyPreview({ knobs, seed, systemCount, overrides }: GalaxyPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [impression, setImpression] = useState<GalaxyImpression | null>(null);
 
@@ -56,8 +57,9 @@ export function GalaxyPreview({ knobs, seed, systemCount, placement }: GalaxyPre
     const handle = window.setTimeout(() => {
       setImpression(
         buildGalaxyImpression(knobs, seed, systemCount, {
-          minDistanceScale: placement?.minDistanceScale,
-          densityRadiusExponent: placement?.densityRadiusExponent,
+          mapSizeScale: overrides?.mapSizeScale,
+          minDistanceScale: overrides?.minDistanceScale,
+          densityRadiusExponent: overrides?.densityRadiusExponent,
         }),
       );
     }, REGEN_DEBOUNCE_MS);
@@ -72,10 +74,12 @@ export function GalaxyPreview({ knobs, seed, systemCount, placement }: GalaxyPre
     knobs.voidFloor,
     knobs.corridorsPerCluster,
     knobs.corridorStyle,
+    knobs.clusterTurbulence,
     seed,
     systemCount,
-    placement?.minDistanceScale,
-    placement?.densityRadiusExponent,
+    overrides?.mapSizeScale,
+    overrides?.minDistanceScale,
+    overrides?.densityRadiusExponent,
   ]);
 
   useEffect(() => {
@@ -117,7 +121,7 @@ export function GalaxyPreview({ knobs, seed, systemCount, placement }: GalaxyPre
       />
       <p className="text-xs font-mono text-text-secondary">
         {impression
-          ? `${impression.points.length.toLocaleString()} systems placed · seed ${seed}`
+          ? `${impression.points.length.toLocaleString()} systems placed · seed ${seed} · ${impression.mapSize.toLocaleString()} × ${impression.mapSize.toLocaleString()} units`
           : "Generating…"}
       </p>
     </div>
