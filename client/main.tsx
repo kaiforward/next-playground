@@ -21,7 +21,7 @@ import { AxeAccessibility } from "@/components/dev-tools/axe-accessibility";
 import { StarMap } from "@/components/map/star-map";
 import { SystemPanel } from "@/components/panels/system-panel";
 import { FactionPanel } from "@/components/panels/faction-panel";
-import { StyleguidePanel } from "@/components/panels/styleguide-panel";
+import { StyleguidePage } from "@/components/styleguide/styleguide-page";
 import { StartScreen } from "@/components/start/start-screen";
 import { renderErrorFallback } from "@/components/ui/error-fallback";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -233,12 +233,10 @@ function RouteBody() {
           <MapRoot />
         </GameShell>
       );
+    // Full page on purpose — no GameShell: the styleguide is a world-free dev reference and the
+    // docked-panel frame was too narrow for component demos and the galaxy preview.
     case "styleguide":
-      return (
-        <GameShell>
-          <StyleguidePanel />
-        </GameShell>
-      );
+      return <StyleguidePage />;
   }
 }
 

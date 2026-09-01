@@ -1,6 +1,5 @@
 "use client";
 
-import { DetailPanel } from "@/components/ui/detail-panel";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,9 +16,9 @@ import { GalaxyPreview } from "@/components/start/galaxy-preview";
 import { defaultGalaxyShapeKnobs, type GalaxyShapeKnobs } from "@/lib/engine/density-field";
 import { useState } from "react";
 
-/** Moved from `app/(game)/@panel/styleguide/page.tsx` — this was DetailPanel's one caller outside a
- *  system/faction panel, and the reason DetailPanel had to become router-agnostic before this task
- *  could even compile it. */
+/** The `/styleguide` route's whole content — a full-width dev reference page, not a docked panel,
+ *  so component demos and the galaxy preview get real horizontal room. World-free: it reads
+ *  nothing from the game store (see `routeWorldNeed`). */
 
 function StyleSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -460,10 +459,15 @@ function FeedbackSection() {
 
 // ── Page ─────────────────────────────────────────────────────────
 
-export function StyleguidePanel() {
+export function StyleguidePage() {
   return (
-    <DetailPanel title="Foundry Style Guide">
-      <div className="space-y-10">
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="max-w-6xl mx-auto px-8 py-10 space-y-10">
+        <header className="border-b border-border-strong pb-4">
+          <h1 className="font-display font-bold uppercase tracking-widest text-2xl text-text-accent">
+            Foundry Style Guide
+          </h1>
+        </header>
         <ColorsSection />
         <TypographySection />
         <CardsSection />
@@ -476,6 +480,6 @@ export function StyleguidePanel() {
         <GalaxyPreviewSection />
         <FeedbackSection />
       </div>
-    </DetailPanel>
+    </div>
   );
 }
