@@ -31,15 +31,6 @@ const REGEN_DEBOUNCE_MS = 150;
 const CROSSING_LINE_COLOR = "rgba(208, 106, 66, 0.75)";
 const STAR_DOT_COLOR = "#e8dcc8";
 
-/** Exactly what `buildGalaxyImpression` is called with — serialised into `inputKey` so the
- *  regeneration effect depends on the input's values, never on object identity. */
-interface PreviewInput {
-  knobs: GalaxyShapeKnobs;
-  seed: number;
-  systemCount: number;
-  overrides?: ImpressionOverrides;
-}
-
 export interface GalaxyPreviewProps {
   knobs: GalaxyShapeKnobs;
   seed: number;
@@ -69,7 +60,7 @@ export function GalaxyPreview({ knobs, seed, systemCount, overrides }: GalaxyPre
   // later from silently never regenerating the preview, which a hand-listed field set would; the
   // ref carries the live objects across so the effect reads them without depending on identity.
   const inputKey = JSON.stringify({ knobs, seed, systemCount, overrides });
-  const input = useRef<PreviewInput>({ knobs, seed, systemCount, overrides });
+  const input = useRef<GalaxyPreviewProps>({ knobs, seed, systemCount, overrides });
   input.current = { knobs, seed, systemCount, overrides };
 
   useEffect(() => {

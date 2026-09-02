@@ -797,7 +797,7 @@ describe("realizeCorridors", () => {
   it("a band pair with waypoint systems on the line connects anchor, waypoints and the far anchor via the neighbourhood-graph criterion, isGateway only on the two anchors", () => {
     // Waypoints are region 2 — a third cluster, not either corridor endpoint. This isn't
     // incidental: a waypoint assigned to region 0 or 1 itself would compete for that region's own
-    // anchor slot (nearestSystemTowardSeed picks the single closest-to-the-other-seed system in
+    // anchor slot (corridorAnchors picks the single closest-to-the-other-seed system in
     // each region), so a genuine multi-stop chain can only be built from systems outside both
     // endpoint clusters — exactly the case spec §5 flags as possible.
     const regions = [region(0, 0, 0), region(1, 1000, 0), region(2, 500, 500)];
