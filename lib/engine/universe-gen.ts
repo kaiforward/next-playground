@@ -282,28 +282,105 @@ function segmentsProperlyIntersect(
   return o1 !== 0 && o2 !== 0 && o3 !== 0 && o4 !== 0 && o1 !== o2 && o3 !== o4;
 }
 
+/** One accepted lane's endpoints, as the crossing check reads them. */
+interface LaneSegment {
+  ax: number;
+  ay: number;
+  bx: number;
+  by: number;
+}
+
+/**
+ * Every accepted lane, bucketed by the coarse grid cells its bounding box covers, so the crossing
+ * check reads only lanes that could actually reach the candidate rather than every lane accepted so
+ * far. A lane whose box spans more cells than `LANE_INDEX_MAX_CELLS` goes into `overflow` instead of
+ * being smeared across hundreds of buckets — those are always scanned, and there are very few of
+ * them (a corridor spanning a large fraction of the map).
+ */
+interface AcceptedLaneIndex {
+  cellSize: number;
+  buckets: Map<string, LaneSegment[]>;
+  overflow: LaneSegment[];
+}
+
+/** Cells a lane's bounding box may cover before it is filed as overflow instead. */
+const LANE_INDEX_MAX_CELLS = 256;
+
+/** Bucket side, as a multiple of the galaxy's own Poisson minimum distance — a few typical hops, so
+ *  an ordinary lane lands in a handful of buckets and a query reads a handful of lanes. */
+const LANE_INDEX_CELL_MULTIPLE = 4;
+
+function newLaneIndex(poissonMinDistance: number): AcceptedLaneIndex {
+  return {
+    cellSize: Math.max(poissonMinDistance * LANE_INDEX_CELL_MULTIPLE, 1e-6),
+    buckets: new Map(),
+    overflow: [],
+  };
+}
+
+/** The grid cells (inclusive column/row ranges) a segment's bounding box covers. */
+function laneCellRange(
+  index: AcceptedLaneIndex, ax: number, ay: number, bx: number, by: number,
+): { colLo: number; colHi: number; rowLo: number; rowHi: number; cells: number } {
+  const colLo = Math.floor(Math.min(ax, bx) / index.cellSize);
+  const colHi = Math.floor(Math.max(ax, bx) / index.cellSize);
+  const rowLo = Math.floor(Math.min(ay, by) / index.cellSize);
+  const rowHi = Math.floor(Math.max(ay, by) / index.cellSize);
+  return { colLo, colHi, rowLo, rowHi, cells: (colHi - colLo + 1) * (rowHi - rowLo + 1) };
+}
+
+function addAcceptedLane(
+  index: AcceptedLaneIndex, ax: number, ay: number, bx: number, by: number,
+): void {
+  const segment: LaneSegment = { ax, ay, bx, by };
+  const range = laneCellRange(index, ax, ay, bx, by);
+  if (range.cells > LANE_INDEX_MAX_CELLS) {
+    index.overflow.push(segment);
+    return;
+  }
+  for (let row = range.rowLo; row <= range.rowHi; row++) {
+    for (let col = range.colLo; col <= range.colHi; col++) {
+      const key = `${col}:${row}`;
+      const bucket = index.buckets.get(key);
+      if (bucket) bucket.push(segment);
+      else index.buckets.set(key, [segment]);
+    }
+  }
+}
+
 /**
  * True iff the candidate lane (ax,ay)-(bx,by) properly crosses any lane already accepted into
- * `connections` (each undirected lane checked once — `pushLane` always writes both directed rows).
- * Only `realizeBandChain`'s CYCLE edges (beyond its own chain's spanning tree) are ever checked
- * against this — a chain's tree edges are its own required connectivity (never gated, same rule
- * Phase 1's neighbourhood graph and every other lane-selection path already follow) and every
- * OTHER lane-selection path (Phase 1 intra-cluster, a crossing-style single lane) is empirically
- * safe without this check (the PROOF intersection instrument measured zero intra×anything and
- * crossing×anything crossings across every sampled seed) — only two different corridors' band
- * chains, which the per-graph planarity guarantee says nothing about each other, can cross.
+ * `index` (each undirected lane recorded once — `pushLane` writes both directed rows but the index
+ * holds one segment). Only `realizeBandChain`'s CYCLE edges (beyond its own chain's spanning tree)
+ * are ever checked against this — a chain's tree edges are its own required connectivity (never
+ * gated, same rule Phase 1's neighbourhood graph and every other lane-selection path already follow)
+ * and every OTHER lane-selection path (Phase 1 intra-cluster, a crossing-style single lane) is
+ * empirically safe without this check (the PROOF intersection instrument measured zero
+ * intra×anything and crossing×anything crossings across every sampled seed) — only two different
+ * corridors' band chains, which the per-graph planarity guarantee says nothing about each other, can
+ * cross. Two segments can only properly intersect where their bounding boxes overlap, so reading
+ * just the candidate's own cells (plus the overflow list) is exact, not an approximation.
  */
 function wouldCrossAcceptedLane(
   ax: number, ay: number, bx: number, by: number,
-  connections: GeneratedConnection[],
-  coordByIndex: Map<number, { x: number; y: number }>,
+  index: AcceptedLaneIndex,
 ): boolean {
-  for (const c of connections) {
-    if (c.fromSystemIndex > c.toSystemIndex) continue; // undirected lane stored as two rows — check once
-    const p = coordByIndex.get(c.fromSystemIndex);
-    const q = coordByIndex.get(c.toSystemIndex);
-    if (!p || !q) continue;
-    if (segmentsProperlyIntersect(ax, ay, bx, by, p.x, p.y, q.x, q.y)) return true;
+  for (const s of index.overflow) {
+    if (segmentsProperlyIntersect(ax, ay, bx, by, s.ax, s.ay, s.bx, s.by)) return true;
+  }
+
+  const range = laneCellRange(index, ax, ay, bx, by);
+  const checked = new Set<LaneSegment>();
+  for (let row = range.rowLo; row <= range.rowHi; row++) {
+    for (let col = range.colLo; col <= range.colHi; col++) {
+      const bucket = index.buckets.get(`${col}:${row}`);
+      if (!bucket) continue;
+      for (const s of bucket) {
+        if (checked.has(s)) continue;
+        checked.add(s);
+        if (segmentsProperlyIntersect(ax, ay, bx, by, s.ax, s.ay, s.bx, s.by)) return true;
+      }
+    }
   }
   return false;
 }
@@ -339,25 +416,34 @@ function laneKey(aIndex: number, bIndex: number): string {
   return aIndex < bIndex ? `${aIndex}-${bIndex}` : `${bIndex}-${aIndex}`;
 }
 
+/** What corridor realisation has already accepted: which system pairs carry a lane, and where those
+ *  lanes run. Threaded through the whole pass so both the duplicate-pair guard and the crossing
+ *  check read the same ledger. */
+interface AcceptedLanes {
+  pairs: Set<string>;
+  index: AcceptedLaneIndex;
+}
+
 /**
- * `pushLane` guarded against realising a system pair that already carries a lane. A band chain
- * draws waypoints from the WHOLE galaxy, so a waypoint is routinely already a Phase 1 intra-cluster
- * neighbour of the anchor it chains to — pushing again would leave one physical lane holding four
- * directed rows, which every per-row consumer (border lengths, relations' lane census) reads as two
- * lanes. `accepted` holds every pair realised so far, seeded from the caller's existing connections.
+ * `pushLane` guarded against realising a system pair that already carries a lane, recording the
+ * lane's geometry for the crossing check as it goes. A band chain draws waypoints from the WHOLE
+ * galaxy, so a waypoint is routinely already a Phase 1 intra-cluster neighbour of the anchor it
+ * chains to — pushing again would leave one physical lane holding four directed rows, which every
+ * per-row consumer (border lengths, relations' lane census) reads as two lanes.
  */
 function pushLaneOnce(
   connections: GeneratedConnection[],
-  accepted: Set<string>,
-  aIndex: number,
-  bIndex: number,
+  accepted: AcceptedLanes,
+  from: GeneratedSystem,
+  to: GeneratedSystem,
   fuelCost: number,
   isCrossing: boolean,
 ): void {
-  const key = laneKey(aIndex, bIndex);
-  if (accepted.has(key)) return;
-  accepted.add(key);
-  pushLane(connections, aIndex, bIndex, fuelCost, isCrossing);
+  const key = laneKey(from.index, to.index);
+  if (accepted.pairs.has(key)) return;
+  accepted.pairs.add(key);
+  addAcceptedLane(accepted.index, from.x, from.y, to.x, to.y);
+  pushLane(connections, from.index, to.index, fuelCost, isCrossing);
 }
 
 /** The subset of `GenParams` corridor realisation needs — kept small so fixture tests don't have
@@ -469,8 +555,7 @@ function realizeBandChain(
   avgIntraDist: number,
   params: CorridorRealisationParams,
   connections: GeneratedConnection[],
-  coordByIndex: Map<number, { x: number; y: number }>,
-  acceptedPairs: Set<string>,
+  accepted: AcceptedLanes,
 ): void {
   const chainSystems = [anchorA, anchorB, ...waypoints];
   const edges = relativeNeighbourhoodGraphEdges(chainSystems);
@@ -478,7 +563,7 @@ function realizeBandChain(
   const crosses = (edge: Edge): boolean => {
     const from = chainSystems[edge.a];
     const to = chainSystems[edge.b];
-    return wouldCrossAcceptedLane(from.x, from.y, to.x, to.y, connections, coordByIndex);
+    return wouldCrossAcceptedLane(from.x, from.y, to.x, to.y, accepted.index);
   };
 
   // A planarity-aware Kruskal replay: Pass 1 builds the chain's spanning tree preferring edges
@@ -517,7 +602,7 @@ function realizeBandChain(
     const from = chainSystems[edge.a];
     const to = chainSystems[edge.b];
     pushLaneOnce(
-      connections, acceptedPairs, from.index, to.index,
+      connections, accepted, from, to,
       laneFuelCost(edge.dist, avgIntraDist, params.intraRegionBaseFuel, 1),
       false,
     );
@@ -555,8 +640,7 @@ function realizeCorridorPair(
   connections: GeneratedConnection[],
   grid: DensityGrid,
   mapSize: number,
-  coordByIndex: Map<number, { x: number; y: number }>,
-  acceptedPairs: Set<string>,
+  accepted: AcceptedLanes,
 ): void {
   const sysA = systemsByRegion.get(pair.a) ?? [];
   const sysB = systemsByRegion.get(pair.b) ?? [];
@@ -587,7 +671,7 @@ function realizeCorridorPair(
     );
     if (!demoted) {
       pushLaneOnce(
-        connections, acceptedPairs, anchorA.index, anchorB.index,
+        connections, accepted, anchorA, anchorB,
         laneFuelCost(
           distance(anchorA.x, anchorA.y, anchorB.x, anchorB.y),
           avgIntraDist, params.intraRegionBaseFuel, params.crossingFuelMultiplier,
@@ -598,9 +682,7 @@ function realizeCorridorPair(
     }
   }
 
-  realizeBandChain(
-    anchorA, anchorB, waypoints, avgIntraDist, params, connections, coordByIndex, acceptedPairs,
-  );
+  realizeBandChain(anchorA, anchorB, waypoints, avgIntraDist, params, connections, accepted);
 }
 
 /**
@@ -639,12 +721,22 @@ export function realizeCorridors(
   const connections: GeneratedConnection[] = [...existingConnections];
   const startLength = connections.length;
   // Seeded from the caller's already-realised lanes so a corridor never re-realises a pair Phase 1
-  // already drew, then grown as this pass accepts pairs of its own.
-  const acceptedPairs = new Set(existingConnections.map((c) => laneKey(c.fromSystemIndex, c.toSystemIndex)));
+  // already drew and every band chain sees Phase 1's geometry, then grown as this pass accepts
+  // lanes of its own.
+  const accepted: AcceptedLanes = { pairs: new Set(), index: newLaneIndex(params.poissonMinDistance) };
+  for (const c of existingConnections) {
+    const key = laneKey(c.fromSystemIndex, c.toSystemIndex);
+    if (accepted.pairs.has(key)) continue;
+    accepted.pairs.add(key);
+    const p = coordByIndex.get(c.fromSystemIndex);
+    const q = coordByIndex.get(c.toSystemIndex);
+    if (p && q) addAcceptedLane(accepted.index, p.x, p.y, q.x, q.y);
+  }
+
   for (const pair of corridors.pairs) {
     realizeCorridorPair(
       pair, systemsByRegion, updatedSystems, regions, avgIntraDist, params, connections, grid, mapSize,
-      coordByIndex, acceptedPairs,
+      accepted,
     );
   }
 
