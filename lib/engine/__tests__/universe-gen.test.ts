@@ -1061,6 +1061,84 @@ describe("generateConnections — repair-pass provenance", () => {
   });
 });
 
+// ── Duplicate-lane guard (`pushLaneOnce`) ───────────────────────
+
+describe("generateUniverse — one physical lane, one pair of directed rows", () => {
+  // A band chain draws waypoints from the WHOLE galaxy, so a waypoint is routinely already a
+  // Phase 1 intra-cluster neighbour of the anchor it chains to. Without the duplicate-pair guard
+  // that pair ends up with FOUR directed rows, which every per-row consumer (border lengths,
+  // relations' lane census) reads as two separate lanes.
+  it("never records the same system pair twice, across seeds", () => {
+    for (const seed of [42, 43, 44, 7, 2026]) {
+      const config = genConfigForSystemCount(600);
+      const universe = generateUniverse(buildGenParams(seed, config), REGION_NAMES);
+      expect(universe.connections.length).toBeGreaterThan(0); // non-vacuous
+
+      const rowsByPair = new Map<string, number>();
+      for (const c of universe.connections) {
+        const lo = Math.min(c.fromSystemIndex, c.toSystemIndex);
+        const hi = Math.max(c.fromSystemIndex, c.toSystemIndex);
+        const key = `${lo}-${hi}`;
+        rowsByPair.set(key, (rowsByPair.get(key) ?? 0) + 1);
+      }
+
+      const duplicated = [...rowsByPair.entries()].filter(([, rows]) => rows !== 2);
+      expect(
+        duplicated,
+        `seed=${seed}: ${duplicated.length} pair(s) hold something other than the two directed rows one lane writes`,
+      ).toEqual([]);
+    }
+  });
+});
+
+// ── Connectivity repair (Phase 3) actually firing ───────────────
+
+describe("generateConnections — connectRemainingComponents when it does fire", () => {
+  // Every other repair-pass test asserts repairLaneCount === 0 (the pass is a safety net, never
+  // routine), which leaves the repair path itself unexercised. An EMPTY corridor plan over two
+  // populated, far-apart clusters strands them by construction: Phase 1 connects each cluster
+  // internally, Phase 2 has no pair to realise, so only Phase 3 can join them.
+  it("bridges a stranded cluster at the nearest pair, priced at the crossing rate, leaving one component", () => {
+    const params: GenParams = buildGenParams(1, genConfigForSystemCount(600));
+    const regions = [
+      { index: 0, name: "r0", x: 50, y: 0 },
+      { index: 1, name: "r1", x: 5050, y: 0 },
+    ];
+    const systems = [
+      mkSys({ index: 0, regionIndex: 0, x: 0, y: 0 }),
+      mkSys({ index: 1, regionIndex: 0, x: 100, y: 0 }), // nearest to cluster 1
+      mkSys({ index: 2, regionIndex: 1, x: 5000, y: 0 }), // nearest to cluster 0
+      mkSys({ index: 3, regionIndex: 1, x: 5100, y: 0 }),
+    ];
+    const emptyPlan: CorridorPlan = { pairs: [] };
+
+    const { connections, repairLaneCount } = generateConnections(
+      systems, regions, emptyPlan, params, voidGrid(), 200_000,
+    );
+
+    expect(repairLaneCount).toBe(1);
+
+    // The bridge is the globally nearest cross-component pair (1-2 at 4900), not either cluster's
+    // far side (0-2 at 5000, 1-3 at 5000, 0-3 at 5100).
+    const repairRows = connections.slice(-2);
+    const bridged = new Set(repairRows.flatMap((c) => [c.fromSystemIndex, c.toSystemIndex]));
+    expect([...bridged].sort((a, b) => a - b)).toEqual([1, 2]);
+
+    // Priced at the crossing multiplier, not the intra rate: avgIntraDist is each cluster's own
+    // 100-unit MST hop, so 4900/100 x INTRA_REGION_BASE_FUEL x CROSSING_FUEL_MULTIPLIER.
+    const intraRate = 49 * params.intraRegionBaseFuel;
+    expect(repairRows[0].fuelCost).toBeCloseTo(intraRate * params.crossingFuelMultiplier, 6);
+    expect(repairRows[0].fuelCost).toBeGreaterThan(intraRate);
+    // Never a corridor's crossing CLASS — the repair pass is unplanned, not plan-authored.
+    expect(repairRows[0].isCrossing).toBe(false);
+
+    const uf = new UnionFind(systems.length);
+    for (const c of connections) uf.union(c.fromSystemIndex, c.toSystemIndex);
+    const root = uf.find(0);
+    for (let i = 1; i < systems.length; i++) expect(uf.find(i)).toBe(root);
+  });
+});
+
 // ── Emergent starting condition (home-system prefab) ────────────
 
 describe("stampHomeworldPrefabs", () => {

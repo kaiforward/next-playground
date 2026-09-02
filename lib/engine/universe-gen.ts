@@ -333,6 +333,33 @@ function pushLane(
   connections.push({ fromSystemIndex: bIndex, toSystemIndex: aIndex, fuelCost, isCrossing });
 }
 
+/** Canonical key for an undirected system pair — the identity the duplicate-lane guard below
+ *  dedupes on, independent of which direction a phase happens to realise the lane in. */
+function laneKey(aIndex: number, bIndex: number): string {
+  return aIndex < bIndex ? `${aIndex}-${bIndex}` : `${bIndex}-${aIndex}`;
+}
+
+/**
+ * `pushLane` guarded against realising a system pair that already carries a lane. A band chain
+ * draws waypoints from the WHOLE galaxy, so a waypoint is routinely already a Phase 1 intra-cluster
+ * neighbour of the anchor it chains to — pushing again would leave one physical lane holding four
+ * directed rows, which every per-row consumer (border lengths, relations' lane census) reads as two
+ * lanes. `accepted` holds every pair realised so far, seeded from the caller's existing connections.
+ */
+function pushLaneOnce(
+  connections: GeneratedConnection[],
+  accepted: Set<string>,
+  aIndex: number,
+  bIndex: number,
+  fuelCost: number,
+  isCrossing: boolean,
+): void {
+  const key = laneKey(aIndex, bIndex);
+  if (accepted.has(key)) return;
+  accepted.add(key);
+  pushLane(connections, aIndex, bIndex, fuelCost, isCrossing);
+}
+
 /** The subset of `GenParams` corridor realisation needs — kept small so fixture tests don't have
  *  to construct a full `GenParams` (shape knobs, map size, etc.) just to exercise this phase. */
 type CorridorRealisationParams = Pick<
@@ -443,6 +470,7 @@ function realizeBandChain(
   params: CorridorRealisationParams,
   connections: GeneratedConnection[],
   coordByIndex: Map<number, { x: number; y: number }>,
+  acceptedPairs: Set<string>,
 ): void {
   const chainSystems = [anchorA, anchorB, ...waypoints];
   const edges = relativeNeighbourhoodGraphEdges(chainSystems);
@@ -488,8 +516,8 @@ function realizeBandChain(
   const realize = (edge: Edge): void => {
     const from = chainSystems[edge.a];
     const to = chainSystems[edge.b];
-    pushLane(
-      connections, from.index, to.index,
+    pushLaneOnce(
+      connections, acceptedPairs, from.index, to.index,
       laneFuelCost(edge.dist, avgIntraDist, params.intraRegionBaseFuel, 1),
       false,
     );
@@ -528,6 +556,7 @@ function realizeCorridorPair(
   grid: DensityGrid,
   mapSize: number,
   coordByIndex: Map<number, { x: number; y: number }>,
+  acceptedPairs: Set<string>,
 ): void {
   const sysA = systemsByRegion.get(pair.a) ?? [];
   const sysB = systemsByRegion.get(pair.b) ?? [];
@@ -557,8 +586,8 @@ function realizeCorridorPair(
       thirdSystems, crossingDemotionThresholds(params.poissonMinDistance),
     );
     if (!demoted) {
-      pushLane(
-        connections, anchorA.index, anchorB.index,
+      pushLaneOnce(
+        connections, acceptedPairs, anchorA.index, anchorB.index,
         laneFuelCost(
           distance(anchorA.x, anchorA.y, anchorB.x, anchorB.y),
           avgIntraDist, params.intraRegionBaseFuel, params.crossingFuelMultiplier,
@@ -569,7 +598,9 @@ function realizeCorridorPair(
     }
   }
 
-  realizeBandChain(anchorA, anchorB, waypoints, avgIntraDist, params, connections, coordByIndex);
+  realizeBandChain(
+    anchorA, anchorB, waypoints, avgIntraDist, params, connections, coordByIndex, acceptedPairs,
+  );
 }
 
 /**
@@ -578,10 +609,11 @@ function realizeCorridorPair(
  * corridor's two anchors `isGateway`, and returns the lanes each pair added. `grid`/`mapSize` are
  * the fully-painted post-corridor density field the crossing-demotion check reads (spec §5C).
  * `existingConnections` (default none — every direct/fixture caller keeps today's isolated
- * behaviour) seeds the ONLY crossing-rejection check remaining (`wouldCrossAcceptedLane`, run
- * solely against a band chain's own cycle edges, `realizeBandChain`) so those edges see Phase 1's
- * already-placed intra-cluster lanes without those lanes being duplicated into this call's own
- * returned `connections`. Everywhere else, the neighbourhood-graph criterion is planar and
+ * behaviour) seeds two things over Phase 1's already-placed intra-cluster lanes, without those
+ * lanes being duplicated into this call's own returned `connections`: the ONLY crossing-rejection
+ * check remaining (`wouldCrossAcceptedLane`, run solely against a band chain's own cycle edges,
+ * `realizeBandChain`), and the duplicate-pair guard (`pushLaneOnce`) that keeps a band chain from
+ * re-realising a pair Phase 1 already drew. Everywhere else, the neighbourhood-graph criterion is planar and
  * MST-containing over each corridor's own {anchorA, anchorB, waypoints} set on its own — no
  * crossing check needed against other lanes.
  */
@@ -606,9 +638,13 @@ export function realizeCorridors(
 
   const connections: GeneratedConnection[] = [...existingConnections];
   const startLength = connections.length;
+  // Seeded from the caller's already-realised lanes so a corridor never re-realises a pair Phase 1
+  // already drew, then grown as this pass accepts pairs of its own.
+  const acceptedPairs = new Set(existingConnections.map((c) => laneKey(c.fromSystemIndex, c.toSystemIndex)));
   for (const pair of corridors.pairs) {
     realizeCorridorPair(
-      pair, systemsByRegion, updatedSystems, regions, avgIntraDist, params, connections, grid, mapSize, coordByIndex,
+      pair, systemsByRegion, updatedSystems, regions, avgIntraDist, params, connections, grid, mapSize,
+      coordByIndex, acceptedPairs,
     );
   }
 
