@@ -47,17 +47,15 @@ describe("buildGalaxyImpression", () => {
     const config = genConfigForSystemCount(systemCount);
     const rng = mulberry32(seed);
     const shape = buildGalaxyShape(knobs(), config.MAP_SIZE, rng);
-    const points = bridsonSample(
-      rng,
-      config.MAP_SIZE,
-      config.MAP_SIZE,
-      config.POISSON_MIN_DISTANCE,
-      config.POISSON_K_CANDIDATES,
-      config.MAP_SIZE * config.MAP_PADDING,
-      config.TOTAL_SYSTEMS,
-      shape.grid,
-      shape.seeds.map((s) => ({ x: s.x, y: s.y })),
-    );
+    const points = bridsonSample(rng, {
+      mapSize: config.MAP_SIZE,
+      baseMinDistance: config.POISSON_MIN_DISTANCE,
+      kCandidates: config.POISSON_K_CANDIDATES,
+      padding: config.MAP_SIZE * config.MAP_PADDING,
+      maxPoints: config.TOTAL_SYSTEMS,
+      grid: shape.grid,
+      clusterSeedPoints: shape.seeds.map((s) => ({ x: s.x, y: s.y })),
+    });
 
     expect(impression.points).toEqual(points);
     expect(impression.shape.seeds).toEqual(shape.seeds);

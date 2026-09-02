@@ -144,6 +144,32 @@ describe("buildGalaxyShape", () => {
     expect(midCell).toBeLessThan(0.5);
   });
 
+  it("keeps the band above the void floor it crosses, at a high floor as much as a low one", () => {
+    // The band level is floor-RELATIVE by design. A fixed absolute cap on top of it would invert
+    // that above a floor the cap can't clear: the band would paint below the void it rises out of,
+    // reading as sparse-adjacent-to-nothing rather than a chain of waypoint stars.
+    const voidFloor = 0.7;
+    const shape = buildGalaxyShape(
+      knobs({ clusterCount: 2, clusterSpacing: 3500, corridorsPerCluster: 0, corridorStyle: 0, voidFloor }),
+      MAP_SIZE,
+      mulberry32(5),
+    );
+
+    expect(shape.corridors.pairs.length).toBe(1);
+    const [pair] = shape.corridors.pairs;
+    expect(pair.style).toBe("band"); // non-vacuous: a crossing pair is deliberately grid-silent
+
+    const a = shape.seeds[pair.a];
+    const b = shape.seeds[pair.b];
+    const resolution = shape.grid.resolution;
+    const col = Math.min(resolution - 1, Math.floor((((a.x + b.x) / 2) / MAP_SIZE) * resolution));
+    const row = Math.min(resolution - 1, Math.floor((((a.y + b.y) / 2) / MAP_SIZE) * resolution));
+    const midCell = shape.grid.cells[row * resolution + col];
+
+    expect(midCell).toBeGreaterThan(voidFloor);
+    expect(midCell).toBeLessThanOrEqual(1);
+  });
+
   it("leaves crossing-style corridors grid-silent at the all-crossing extreme", () => {
     // Same void-spacing setup as the band test, but corridorStyle: 1 forces every pair crossing —
     // the seed-to-seed line must stay true void (0), not a raised band.
@@ -199,6 +225,30 @@ describe("buildGalaxyShape", () => {
     expect(pair.style).toBe("band");
   });
 
+  it("still returns every requested seed when rejection sampling cannot fit them — the grid-jitter fallback", () => {
+    // 100 seeds at 2,000-unit spacing over a 7,000-unit map cannot all be placed by rejection
+    // sampling: the fallback lays the leftovers out on a jittered grid instead, so the seed count
+    // never silently comes in short of the knob.
+    const clusterCount = 100;
+    const shape = buildGalaxyShape(
+      knobs({ clusterCount, clusterSpacing: 2000 }), MAP_SIZE, mulberry32(4),
+    );
+
+    expect(shape.seeds.length).toBe(clusterCount);
+
+    // Non-vacuous: the fallback really did fire — rejection sampling alone could never return a
+    // pair closer together than the spacing it enforces.
+    const violations = shape.seeds.filter((a, i) =>
+      shape.seeds.some((b, j) => j !== i && Math.hypot(a.x - b.x, a.y - b.y) < 2000),
+    );
+    expect(violations.length).toBeGreaterThan(0);
+
+    for (const seed of shape.seeds) {
+      expect(Number.isFinite(seed.x)).toBe(true);
+      expect(Number.isFinite(seed.y)).toBe(true);
+    }
+  });
+
   it("produces a byte-identical grid for the same knobs and seed", () => {
     const first = buildGalaxyShape(knobs(), MAP_SIZE, mulberry32(2024));
     const second = buildGalaxyShape(knobs(), MAP_SIZE, mulberry32(2024));
@@ -221,8 +271,11 @@ describe("buildGalaxyShape", () => {
 
   it("keeps the grid JSON-serialisable (no NaN/Infinity survive a round trip)", () => {
     const shape = buildGalaxyShape(knobs(), MAP_SIZE, mulberry32(11));
-    const roundTripped = JSON.parse(JSON.stringify(shape.grid)) as typeof shape.grid;
-    expect(roundTripped).toEqual(shape.grid);
+    // A NaN or Infinity anywhere in the grid comes back as null through JSON, so a round trip that
+    // still deep-equals the original is the whole proof — asserted on the serialised text, which
+    // needs no narrowing of the parsed value at all.
+    expect(JSON.parse(JSON.stringify(shape.grid))).toEqual(shape.grid);
+    expect(JSON.stringify(shape.grid)).not.toContain("null");
   });
 });
 

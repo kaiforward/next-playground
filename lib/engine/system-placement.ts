@@ -126,19 +126,32 @@ function radiusFromDensity(
  * their draws land, which output already varies by seed.
  * Uses a seeded RNG throughout for determinism.
  */
-export function bridsonSample(
-  rng: RNG,
-  width: number,
-  height: number,
-  baseMinDistance: number,
-  kCandidates: number,
-  padding: number,
-  maxPoints: number,
-  grid: DensityGrid,
-  clusterSeedPoints: Point[] = [],
-  densityRadiusExponent: number = DENSITY_RADIUS_EXPONENT,
-): Point[] {
-  const mapSize = width; // the density grid is authored over a square map, width === height in practice
+export interface BridsonSampleOptions {
+  /** Side of the square map — the density grid is authored over `mapSize` × `mapSize`. */
+  mapSize: number;
+  /** The tightest spacing anywhere, reached only at maximum density. */
+  baseMinDistance: number;
+  /** Candidate attempts per active point (Bridson's `k`). */
+  kCandidates: number;
+  /** Inset from every map edge that no point is placed inside. */
+  padding: number;
+  /** Placement stops here however much room is left. */
+  maxPoints: number;
+  grid: DensityGrid;
+  /** Placed before any random point, so every cluster gets at least one system. Default none. */
+  clusterSeedPoints?: Point[];
+  /** Density-to-radius falloff exponent; defaults to `DENSITY_RADIUS_EXPONENT`. */
+  densityRadiusExponent?: number;
+}
+
+export function bridsonSample(rng: RNG, options: BridsonSampleOptions): Point[] {
+  const {
+    mapSize, baseMinDistance, kCandidates, padding, maxPoints, grid,
+    clusterSeedPoints = [],
+    densityRadiusExponent = DENSITY_RADIUS_EXPONENT,
+  } = options;
+  const width = mapSize;
+  const height = mapSize;
   const cellSize = baseMinDistance / Math.SQRT2; // finest possible spacing, at max density
   const innerW = width - 2 * padding;
   const innerH = height - 2 * padding;

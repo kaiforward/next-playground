@@ -93,6 +93,14 @@ function nearestNeighbourDistance(sys: { x: number; y: number }, systems: { x: n
   return best;
 }
 
+/** `Map.get` that throws instead of returning undefined — the `!` carve-out covers `find(...)!`
+ *  only, and a silently-undefined lookup here would surface as a confusing property access. */
+function mustGet<K, V>(map: Map<K, V>, key: K): V {
+  const value = map.get(key);
+  if (value === undefined) throw new Error(`no entry for key ${String(key)}`);
+  return value;
+}
+
 /** Minimal GeneratedSystem for unit tests — only the fields under test matter; rest are inert defaults. */
 function mkSys(p: Partial<GeneratedSystem> & { index: number }): GeneratedSystem {
   return {
@@ -201,7 +209,7 @@ describe("bridsonSample", () => {
   it("generates well-spaced points with guaranteed minimum distance under a uniform (max-density) grid", () => {
     const rng = mulberry32(42);
     const minDist = 250;
-    const points = bridsonSample(rng, 7000, 7000, minDist, 30, 700, 600, uniformGrid());
+    const points = bridsonSample(rng, { mapSize: 7000, baseMinDistance: minDist, kCandidates: 30, padding: 700, maxPoints: 600, grid: uniformGrid() });
 
     for (let i = 0; i < points.length; i++) {
       for (let j = i + 1; j < points.length; j++) {
@@ -214,7 +222,7 @@ describe("bridsonSample", () => {
 
   it("respects maxPoints limit", () => {
     const rng = mulberry32(42);
-    const points = bridsonSample(rng, 7000, 7000, 250, 30, 700, 100, uniformGrid());
+    const points = bridsonSample(rng, { mapSize: 7000, baseMinDistance: 250, kCandidates: 30, padding: 700, maxPoints: 100, grid: uniformGrid() });
     expect(points.length).toBeLessThanOrEqual(100);
     expect(points.length).toBeGreaterThan(0);
   });
@@ -223,7 +231,7 @@ describe("bridsonSample", () => {
     const rng = mulberry32(42);
     const padding = 700;
     const size = 7000;
-    const points = bridsonSample(rng, size, size, 250, 30, padding, 600, uniformGrid());
+    const points = bridsonSample(rng, { mapSize: size, baseMinDistance: 250, kCandidates: 30, padding, maxPoints: 600, grid: uniformGrid() });
 
     for (const p of points) {
       expect(p.x).toBeGreaterThanOrEqual(padding);
@@ -234,8 +242,8 @@ describe("bridsonSample", () => {
   });
 
   it("is deterministic with the same RNG seed", () => {
-    const p1 = bridsonSample(mulberry32(42), 7000, 7000, 250, 30, 700, 600, uniformGrid());
-    const p2 = bridsonSample(mulberry32(42), 7000, 7000, 250, 30, 700, 600, uniformGrid());
+    const p1 = bridsonSample(mulberry32(42), { mapSize: 7000, baseMinDistance: 250, kCandidates: 30, padding: 700, maxPoints: 600, grid: uniformGrid() });
+    const p2 = bridsonSample(mulberry32(42), { mapSize: 7000, baseMinDistance: 250, kCandidates: 30, padding: 700, maxPoints: 600, grid: uniformGrid() });
     expect(p1).toEqual(p2);
   });
 
@@ -248,7 +256,7 @@ describe("bridsonSample", () => {
     });
     const grid: DensityGrid = { resolution, cells };
     const size = 7000;
-    const points = bridsonSample(mulberry32(7), size, size, 200, 30, 700, 400, grid);
+    const points = bridsonSample(mulberry32(7), { mapSize: size, baseMinDistance: 200, kCandidates: 30, padding: 700, maxPoints: 400, grid });
 
     expect(points.length).toBeGreaterThan(0); // non-vacuous: the right half did get placed
     for (const p of points) {
@@ -333,7 +341,7 @@ describe("generateSystems", () => {
     const grid: DensityGrid = { resolution, cells };
     const size = 4000;
     const rng = mulberry32(42);
-    const points = bridsonSample(rng, size, size, 60, 30, 200, 2000, grid);
+    const points = bridsonSample(rng, { mapSize: size, baseMinDistance: 60, kCandidates: 30, padding: 200, maxPoints: 2000, grid });
 
     const highHalf = points.filter((p) => p.x < size / 2);
     const lowHalf = points.filter((p) => p.x >= size / 2);
@@ -517,7 +525,7 @@ describe("generateConnections", () => {
 
       for (const conn of connections) {
         if (regionIndices.has(conn.fromSystemIndex) && regionIndices.has(conn.toSystemIndex)) {
-          adj.get(conn.fromSystemIndex)!.push(conn.toSystemIndex);
+          mustGet(adj, conn.fromSystemIndex).push(conn.toSystemIndex);
         }
       }
 
@@ -574,8 +582,8 @@ describe("generateConnections", () => {
     for (const conn of connections) {
       if (!conn.isCrossing) continue;
       sawCrossing = true;
-      const fromRegion = byIndex.get(conn.fromSystemIndex)!.regionIndex;
-      const toRegion = byIndex.get(conn.toSystemIndex)!.regionIndex;
+      const fromRegion = mustGet(byIndex, conn.fromSystemIndex).regionIndex;
+      const toRegion = mustGet(byIndex, conn.toSystemIndex).regionIndex;
       const key = `${Math.min(fromRegion, toRegion)}-${Math.max(fromRegion, toRegion)}`;
       expect(crossingRegionPairs.has(key)).toBe(true);
     }
@@ -585,9 +593,10 @@ describe("generateConnections", () => {
   it("marks isGateway on at least the anchors realizeCorridors itself designates, for every non-empty region touched by a corridor with a non-empty partner", () => {
     const { systems, corridors, regions } = makeFullUniverse();
     const avgIntraDistProxy = params.poissonMinDistance; // only relative fuel cost matters here, not read
-    const replay = realizeCorridors(
-      systems, regions, corridors, avgIntraDistProxy, params, shapeFor(params).grid, params.mapSize,
-    );
+    const replay = realizeCorridors({
+      systems, regions, corridors, avgIntraDist: avgIntraDistProxy, params,
+      grid: shapeFor(params).grid, mapSize: params.mapSize,
+    });
     const gatewaysFromReplay = new Set(replay.systems.filter((s) => s.isGateway).map((s) => s.index));
     const gatewaysFromFullRun = new Set(systems.filter((s) => s.isGateway).map((s) => s.index));
     // generateConnections calls realizeCorridors internally with the same corridor plan — its
@@ -634,7 +643,7 @@ describe("generateConnections", () => {
         for (const s of regionSys) adj.set(s.index, []);
         for (const conn of connections) {
           if (regionIndices.has(conn.fromSystemIndex) && regionIndices.has(conn.toSystemIndex)) {
-            adj.get(conn.fromSystemIndex)!.push(conn.toSystemIndex);
+            mustGet(adj, conn.fromSystemIndex).push(conn.toSystemIndex);
           }
         }
 
@@ -688,8 +697,8 @@ describe("generateConnections", () => {
         let sawRealCrossing = false;
         for (const pair of populatedPairs) {
           const acrossPair = connections.filter((c) => {
-            const fr = byIndex.get(c.fromSystemIndex)!.regionIndex;
-            const tr = byIndex.get(c.toSystemIndex)!.regionIndex;
+            const fr = mustGet(byIndex, c.fromSystemIndex).regionIndex;
+            const tr = mustGet(byIndex, c.toSystemIndex).regionIndex;
             return (fr === pair.a && tr === pair.b) || (fr === pair.b && tr === pair.a);
           });
           // Whichever way it realised, it must be internally consistent: either one isCrossing
@@ -773,7 +782,7 @@ describe("realizeCorridors", () => {
     ];
     const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "crossing" }] };
 
-    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
+    const { connections, systems: out } = realizeCorridors({ systems, regions, corridors, avgIntraDist: 100, params: crossingParams, grid, mapSize });
 
     expect(connections).toHaveLength(2); // one undirected lane, two directed rows
     const [c1] = connections;
@@ -800,7 +809,7 @@ describe("realizeCorridors", () => {
     ];
     const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "band" }] };
 
-    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
+    const { connections, systems: out } = realizeCorridors({ systems, regions, corridors, avgIntraDist: 100, params: crossingParams, grid, mapSize });
 
     // Collinear chain 0-3-2-1: the relative-neighbourhood graph over 4 collinear points connects
     // each consecutive pair (0-3, 3-2, 2-1) and nothing else (a non-adjacent pair like 0-2 always
@@ -825,7 +834,7 @@ describe("realizeCorridors", () => {
     ];
     const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "band" }] };
 
-    const { connections } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
+    const { connections } = realizeCorridors({ systems, regions, corridors, avgIntraDist: 100, params: crossingParams, grid, mapSize });
     expect(connections).toHaveLength(2);
     expect(new Set([connections[0].fromSystemIndex, connections[0].toSystemIndex])).toEqual(new Set([0, 1]));
   });
@@ -839,7 +848,7 @@ describe("realizeCorridors", () => {
     ];
     const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "band" }] };
 
-    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
+    const { connections, systems: out } = realizeCorridors({ systems, regions, corridors, avgIntraDist: 100, params: crossingParams, grid, mapSize });
     expect(connections).toHaveLength(2); // direct anchor-to-anchor, system 2 excluded
     expect(out.find((s) => s.index === 2)!.isGateway).toBe(false);
   });
@@ -855,7 +864,7 @@ describe("realizeCorridors", () => {
       pairs: [{ a: 0, b: 1, style: "band" }, { a: 1, b: 2, style: "crossing" }],
     };
 
-    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
+    const { connections, systems: out } = realizeCorridors({ systems, regions, corridors, avgIntraDist: 100, params: crossingParams, grid, mapSize });
     expect(connections).toHaveLength(0);
     expect(out.every((s) => !s.isGateway)).toBe(true);
   });
@@ -871,7 +880,7 @@ describe("realizeCorridors", () => {
       pairs: [{ a: 0, b: 1, style: "crossing" }, { a: 0, b: 2, style: "crossing" }],
     };
 
-    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
+    const { connections, systems: out } = realizeCorridors({ systems, regions, corridors, avgIntraDist: 100, params: crossingParams, grid, mapSize });
     expect(connections).toHaveLength(4); // two undirected crossing lanes
     expect(out.find((s) => s.index === 0)!.isGateway).toBe(true);
     const uf = new UnionFind(3);
@@ -888,12 +897,14 @@ describe("realizeCorridors", () => {
       mkSys({ index: 1, regionIndex: 1, x: 1000, y: 0 }),
     ];
 
-    const crossing = realizeCorridors(
-      sameDistanceSystems, regions, { pairs: [{ a: 0, b: 1, style: "crossing" }] }, 100, crossingParams, grid, mapSize,
-    );
-    const band = realizeCorridors(
-      sameDistanceSystems, regions, { pairs: [{ a: 0, b: 1, style: "band" }] }, 100, crossingParams, grid, mapSize,
-    );
+    const crossing = realizeCorridors({
+      systems: sameDistanceSystems, regions, corridors: { pairs: [{ a: 0, b: 1, style: "crossing" }] },
+      avgIntraDist: 100, params: crossingParams, grid, mapSize,
+    });
+    const band = realizeCorridors({
+      systems: sameDistanceSystems, regions, corridors: { pairs: [{ a: 0, b: 1, style: "band" }] },
+      avgIntraDist: 100, params: crossingParams, grid, mapSize,
+    });
 
     expect(crossing.connections[0].fuelCost).toBeGreaterThan(band.connections[0].fuelCost);
   });
@@ -909,7 +920,7 @@ describe("realizeCorridors", () => {
     ];
     const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "crossing" }] };
 
-    const { connections } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
+    const { connections } = realizeCorridors({ systems, regions, corridors, avgIntraDist: 100, params: crossingParams, grid, mapSize });
     const touchedIndices = new Set(connections.flatMap((c) => [c.fromSystemIndex, c.toSystemIndex]));
     expect(touchedIndices.has(2)).toBe(false);
     expect(touchedIndices.has(3)).toBe(false);
@@ -936,7 +947,7 @@ describe("realizeCorridors", () => {
       pairs: [{ a: 0, b: 1, style: "band" }, { a: 2, b: 3, style: "band" }],
     };
 
-    const { connections } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
+    const { connections } = realizeCorridors({ systems, regions, corridors, avgIntraDist: 100, params: crossingParams, grid, mapSize });
 
     const laneKeys = new Set(
       connections.map((c) => `${Math.min(c.fromSystemIndex, c.toSystemIndex)}-${Math.max(c.fromSystemIndex, c.toSystemIndex)}`),
@@ -965,7 +976,7 @@ describe("realizeCorridors", () => {
     // (isCrossing false) rather than the crossing lane the plan chose.
     const populatedGrid = uniformGrid();
 
-    const { connections } = realizeCorridors(systems, regions, corridors, 100, crossingParams, populatedGrid, mapSize);
+    const { connections } = realizeCorridors({ systems, regions, corridors, avgIntraDist: 100, params: crossingParams, grid: populatedGrid, mapSize });
     expect(connections).toHaveLength(2);
     expect(connections[0].isCrossing).toBe(false);
   });
@@ -978,7 +989,7 @@ describe("realizeCorridors", () => {
     ];
     const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "crossing" }] };
 
-    const { connections } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
+    const { connections } = realizeCorridors({ systems, regions, corridors, avgIntraDist: 100, params: crossingParams, grid, mapSize });
     expect(connections).toHaveLength(2);
     expect(connections[0].isCrossing).toBe(true);
   });
@@ -995,7 +1006,7 @@ describe("realizeCorridors", () => {
     ];
     const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "crossing" }] };
 
-    const { connections } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
+    const { connections } = realizeCorridors({ systems, regions, corridors, avgIntraDist: 100, params: crossingParams, grid, mapSize });
     expect(connections.some((c) => c.isCrossing)).toBe(false);
   });
 });
@@ -1005,7 +1016,7 @@ describe("realizeCorridors", () => {
 describe("generateConnections — repair-pass provenance", () => {
   // isCrossing alone can't see a repair lane: connectRemainingComponents deliberately writes
   // isCrossing: false on the lanes it adds (they aren't the plan's own crossing class), so a
-  // check that only filters on isCrossing is blind to them — this is the gap the review found.
+  // check that only filters on isCrossing is blind to them.
   // repairLaneCount is generateConnections' own direct count of what connectRemainingComponents
   // added, so "the repair pass fired zero times" is asserted from that count, not inferred.
   function realGeneration(systemCount: number, seed: number) {
@@ -1049,8 +1060,8 @@ describe("generateConnections — repair-pass provenance", () => {
       );
       for (const conn of connections) {
         if (!conn.isCrossing) continue;
-        const fromRegion = byIndex.get(conn.fromSystemIndex)!.regionIndex;
-        const toRegion = byIndex.get(conn.toSystemIndex)!.regionIndex;
+        const fromRegion = mustGet(byIndex, conn.fromSystemIndex).regionIndex;
+        const toRegion = mustGet(byIndex, conn.toSystemIndex).regionIndex;
         const key = `${Math.min(fromRegion, toRegion)}-${Math.max(fromRegion, toRegion)}`;
         expect(
           plannedCrossingPairs.has(key),
@@ -1058,6 +1069,58 @@ describe("generateConnections — repair-pass provenance", () => {
         ).toBe(true);
       }
     }
+  });
+});
+
+// ── Lane-density pruning (`lanePruneFraction`) ──────────────────
+
+describe("generateConnections — lanePruneFraction at a fraction between the extremes", () => {
+  // Fractions 0 and 1 are both order-blind: one prunes nothing, the other prunes every cycle edge.
+  // Only a fraction in between can tell "longest-first" apart from any other ordering.
+  it("drops exactly the longest cycle edges, never a tree edge, never a shorter cycle edge", () => {
+    const jitter = mulberry32(9);
+    const systems = Array.from({ length: 25 }, (_, i) => mkSys({
+      index: i,
+      regionIndex: 0,
+      x: (i % 5) * 100 + jitter() * 25,
+      y: Math.floor(i / 5) * 100 + jitter() * 25,
+    }));
+    const regions: GeneratedRegion[] = [{ index: 0, name: "r0", x: 200, y: 200 }];
+    const emptyPlan: CorridorPlan = { pairs: [] };
+    const base = buildGenParams(1, genConfigForSystemCount(600));
+    const laneKeys = (connections: { fromSystemIndex: number; toSystemIndex: number }[]) =>
+      new Set(connections.map((c) =>
+        `${Math.min(c.fromSystemIndex, c.toSystemIndex)}-${Math.max(c.fromSystemIndex, c.toSystemIndex)}`));
+
+    // Kruskal replay over exactly the graph Phase 1 selects, ascending — what the pruner itself
+    // does to decide which edges are cycle edges and therefore prunable.
+    const edges = relativeNeighbourhoodGraphEdges(systems);
+    const uf = new UnionFind(systems.length);
+    const cycleEdgesAscending = [...edges].sort((a, b) => a.dist - b.dist).filter((e) => !uf.union(e.a, e.b));
+    const pruneFraction = 0.5;
+    const pruneCount = Math.floor(cycleEdgesAscending.length * pruneFraction);
+    expect(pruneCount).toBeGreaterThan(0); // non-vacuous
+    expect(pruneCount).toBeLessThan(cycleEdgesAscending.length); // a strict subset, not "all of them"
+
+    const expectedRemoved = cycleEdgesAscending.slice(cycleEdgesAscending.length - pruneCount);
+    const expectedKeptCycle = cycleEdgesAscending.slice(0, cycleEdgesAscending.length - pruneCount);
+    // Every removed edge is longer than every kept cycle edge — the "longest-first" claim itself.
+    const longestKept = Math.max(...expectedKeptCycle.map((e) => e.dist));
+    for (const e of expectedRemoved) expect(e.dist).toBeGreaterThanOrEqual(longestKept);
+
+    const key = (e: { a: number; b: number }) =>
+      `${Math.min(systems[e.a].index, systems[e.b].index)}-${Math.max(systems[e.a].index, systems[e.b].index)}`;
+
+    const unpruned = laneKeys(generateConnections(
+      systems, regions, emptyPlan, { ...base, lanePruneFraction: 0 }, voidGrid(), 200_000,
+    ).connections);
+    const pruned = laneKeys(generateConnections(
+      systems, regions, emptyPlan, { ...base, lanePruneFraction: pruneFraction }, voidGrid(), 200_000,
+    ).connections);
+
+    const removed = [...unpruned].filter((k) => !pruned.has(k));
+    expect(new Set(removed)).toEqual(new Set(expectedRemoved.map(key)));
+    for (const e of expectedKeptCycle) expect(pruned.has(key(e))).toBe(true);
   });
 });
 

@@ -130,8 +130,11 @@ export interface GenParams {
  *  `buildGenParams`'s (`lib/world/gen.ts`) engine default, which is what keeps a knob-free
  *  `newGame` byte-identical to today's world. Field names here match the New Game schema
  *  (`lib/schemas/game-setup.ts`'s `galaxyShapeSchema`), not `GenParams`'s own — `starSpacing`/
- *  `clusterTightness` are the player-facing names for `minDistanceScale`/`densityRadiusExponent`. */
-export type GalaxyShapeInput = Partial<GalaxyShapeKnobs> & {
+ *  `clusterTightness` are the player-facing names for `minDistanceScale`/`densityRadiusExponent`.
+ *  Deliberately NOT the schema's own `z.infer` type: this is the engine's contract, reachable from
+ *  the tick harness and tests with no Zod dependency. `SchemaShapeKnobsReachTheEngine`
+ *  (`lib/services/game.ts`) is the compile-time pin that keeps the two key sets in step. */
+export type GenShapeOverrides = Partial<GalaxyShapeKnobs> & {
   starSpacing?: number;
   clusterTightness?: number;
   mapSizeScale?: number;
@@ -165,11 +168,16 @@ export function generateSystems(
   // one system, so every corridor has real systems to anchor (spec §5's connectivity requirement;
   // `connectRemainingComponents`, `generateConnections`, stays a pure safety net for the
   // degenerate cases this can't reach, not the routine mechanism).
-  const points = bridsonSample(
-    rng, mapSize, mapSize, poissonMinDistance, poissonKCandidates, padding, totalSystems, grid,
-    regions.map((r) => ({ x: r.x, y: r.y })),
+  const points = bridsonSample(rng, {
+    mapSize,
+    baseMinDistance: poissonMinDistance,
+    kCandidates: poissonKCandidates,
+    padding,
+    maxPoints: totalSystems,
+    grid,
+    clusterSeedPoints: regions.map((r) => ({ x: r.x, y: r.y })),
     densityRadiusExponent,
-  );
+  });
 
   // Step 2: Assign each point to its nearest region center
   const regionAssignments = assignRegions(points, regions);
@@ -677,16 +685,26 @@ function realizeCorridorPair(
  * MST-containing over each corridor's own {anchorA, anchorB, waypoints} set on its own — no
  * crossing check needed against other lanes.
  */
+export interface RealizeCorridorsInput {
+  systems: GeneratedSystem[];
+  regions: GeneratedRegion[];
+  corridors: CorridorPlan;
+  /** The typical intra-cluster hop, the divisor every lane's fuel cost is normalised against. */
+  avgIntraDist: number;
+  params: CorridorRealisationParams;
+  /** The fully-painted POST-corridor density field the crossing-demotion check reads (spec §5C). */
+  grid: DensityGrid;
+  mapSize: number;
+  /** Lanes already realised — see the docstring above. Default none. */
+  existingConnections?: GeneratedConnection[];
+}
+
 export function realizeCorridors(
-  systems: GeneratedSystem[],
-  regions: GeneratedRegion[],
-  corridors: CorridorPlan,
-  avgIntraDist: number,
-  params: CorridorRealisationParams,
-  grid: DensityGrid,
-  mapSize: number,
-  existingConnections: GeneratedConnection[] = [],
+  input: RealizeCorridorsInput,
 ): { connections: GeneratedConnection[]; systems: GeneratedSystem[] } {
+  const {
+    systems, regions, corridors, avgIntraDist, params, grid, mapSize, existingConnections = [],
+  } = input;
   const updatedSystems = systems.map((s) => ({ ...s }));
   const systemsByRegion = new Map<number, GeneratedSystem[]>();
   for (const sys of updatedSystems) {
@@ -850,9 +868,9 @@ export function generateConnections(
 
   // ── Phase 2: Corridor realisation (spec §5) — replaces the old region-centre MST + gateway
   // crossing phases entirely; between-cluster lanes now exist ONLY along the plan's corridors. ──
-  const { connections: corridorConnections, systems: updatedSystems } = realizeCorridors(
-    systems, regions, corridors, avgIntraDist, params, grid, mapSize, connections,
-  );
+  const { connections: corridorConnections, systems: updatedSystems } = realizeCorridors({
+    systems, regions, corridors, avgIntraDist, params, grid, mapSize, existingConnections: connections,
+  });
   connections.push(...corridorConnections);
 
   // ── Phase 3: Connectivity repair (rare) ──

@@ -167,10 +167,11 @@ describe("serialiseWorld / deserialiseWorld", () => {
       expect(deserialiseWorld(badMeta({ ...world.meta })).ok).toBe(true);
     });
 
-    // The three array fields `rebuildWorkedYieldColumns` dereferences unconditionally in the `ok`
-    // arm — a save with valid meta but a missing/malformed one of these must fail cleanly
+    // The four array fields the `ok` arm dereferences unconditionally —
+    // `rebuildWorkedYieldColumns` reads three, `normalizeConnectionCrossing` reads `connections`.
+    // A save with valid meta but a missing/malformed one of these must fail cleanly
     // ({ ok: false }), never throw out of deserialiseWorld.
-    const REQUIRED_ARRAY_FIELDS = ["systems", "bodies", "buildings"] as const;
+    const REQUIRED_ARRAY_FIELDS = ["systems", "bodies", "buildings", "connections"] as const;
     for (const field of REQUIRED_ARRAY_FIELDS) {
       it(`rejects a world with valid meta but no "${field}" array (never throws)`, () => {
         const { [field]: _omitted, ...rest } = world;

@@ -6,6 +6,19 @@ import { getSaveBackend } from "@/lib/world/save-backend";
 import type { SaveInfo } from "@/lib/world/save-backend";
 import type { WorldMeta } from "@/lib/world/types";
 import type { NewGameInput } from "@/lib/schemas/game-setup";
+import type { GenShapeOverrides } from "@/lib/engine/universe-gen";
+
+/** Constraint-carrying identity: instantiating it with an `A` outside `B` is a compile error. */
+type AssertExtends<A extends B, B> = A;
+
+/**
+ * Compile-time pin, no runtime cost: every galaxy-shape knob the New Game schema accepts must be a
+ * field the engine's own override type carries. `buildGenParams` reads those fields one by one, so
+ * a knob added to `galaxyShapeSchema` alone would validate, ride the command, and then be dropped
+ * without a word. Exported so the alias is a declaration rather than an unused local.
+ */
+export type SchemaShapeKnobsReachTheEngine =
+  AssertExtends<keyof NonNullable<NewGameInput["shape"]>, keyof GenShapeOverrides>;
 
 /**
  * Create a fresh world and swap it into the store. Pauses the tick loop first

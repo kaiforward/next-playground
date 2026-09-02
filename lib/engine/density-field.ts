@@ -78,7 +78,10 @@ export interface GalaxyShape {
   corridors: CorridorPlan;
 }
 
-// ── Tuning constants (proposals — Gate A owner-eyeball settles the shipped defaults) ────
+// ── Tuning constants ────────────────────────────────────────────
+//
+// Shape defaults, sweepable: none of these is exposed as a knob, and each is a value the galaxy's
+// look was settled on rather than a derived quantity.
 
 /** Cells per side of the authored density grid — coarse by design, consumed only by placement. */
 const DENSITY_GRID_RESOLUTION = 128;
@@ -109,14 +112,15 @@ const SMALL_NOISE_LATTICE = 33;
 const SMALL_NOISE_AMPLITUDE = 0.12;
 
 /**
- * Waypoint-band corridor density sits `BAND_ABOVE_FLOOR_MARGIN` above whichever `voidFloor` the
- * knobs set (never a fixed absolute — a high void floor must not silently erase the band), capped
- * at `BAND_DENSITY_CEILING` so it stays low relative to cluster cores — "a thin raised-density band
- * (a sparse chain of waypoint stars)" (spec §5). Both Gate-A-sweepable, like the noise/skew
- * constants above.
+ * Waypoint-band corridor density sits this far above whichever `voidFloor` the knobs set — always
+ * relative, never a fixed absolute, because the band's whole job is to read as raised against the
+ * void it crosses: "a thin raised-density band (a sparse chain of waypoint stars)" (spec §5). A
+ * fixed ceiling on top of it would silently invert that at a high floor (the band painting BELOW
+ * the void it is meant to rise out of), so the margin alone decides the level and the only cap is
+ * full density. It stays well under a cluster core at any floor the New Game screen offers.
+ * Sweepable like the noise/skew constants above.
  */
 const BAND_ABOVE_FLOOR_MARGIN = 0.1;
-const BAND_DENSITY_CEILING = 0.5;
 
 /** Band half-width, in grid cells either side of the seed-to-seed line. Gate-A-sweepable. */
 const BAND_HALF_WIDTH_CELLS = 1.5;
@@ -366,7 +370,9 @@ function paintCorridorBands(
   const { resolution } = baseGrid;
   const cellWorldSize = mapSize / resolution;
   const bandHalfWidth = BAND_HALF_WIDTH_CELLS * cellWorldSize;
-  const bandLevel = Math.min(knobs.voidFloor + BAND_ABOVE_FLOOR_MARGIN, BAND_DENSITY_CEILING);
+  // Strictly above the floor and never past full density. A floor of 1 leaves no headroom at all,
+  // so the band lands at 1 itself — the highest reading still distinguishable from true void.
+  const bandLevel = clamp01(Math.max(knobs.voidFloor + BAND_ABOVE_FLOOR_MARGIN, 0));
   const cells = baseGrid.cells.slice();
 
   for (let row = 0; row < resolution; row++) {

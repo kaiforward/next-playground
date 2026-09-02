@@ -6,7 +6,7 @@
  */
 
 import { createSystemMarkets } from "@/lib/world/markets";
-import { generateUniverse, type GenParams, type GalaxyShapeInput } from "@/lib/engine/universe-gen";
+import { generateUniverse, type GenParams, type GenShapeOverrides } from "@/lib/engine/universe-gen";
 import { DENSITY_RADIUS_EXPONENT } from "@/lib/engine/system-placement";
 import { deriveDominantEconomy, type PlayerFactionInput } from "@/lib/engine/faction-gen";
 import { countColumns, qualColumns, yieldColumns, effColumns } from "@/lib/engine/resources";
@@ -34,7 +34,7 @@ export interface GenerateWorldOptions {
   /** New Game's optional structure/placement knobs (`lib/schemas/game-setup.ts`'s
    *  `galaxyShapeSchema`) — omitted fields keep `buildGenParams`'s engine default, which is what
    *  keeps a knob-free `newGame` byte-identical to today's world. */
-  shape?: GalaxyShapeInput;
+  shape?: GenShapeOverrides;
 }
 
 /**
@@ -60,7 +60,7 @@ function mintId(minter: IdMinter, prefix: string): string {
 export function buildGenParams(
   seed: number,
   config: ReturnType<typeof genConfigForSystemCount>,
-  shape?: GalaxyShapeInput,
+  shape?: GenShapeOverrides,
 ): GenParams {
   return {
     seed,

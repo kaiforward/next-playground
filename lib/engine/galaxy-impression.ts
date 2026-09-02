@@ -74,18 +74,16 @@ export function buildGalaxyImpression(
   const poissonMinDistance = config.POISSON_MIN_DISTANCE * (overrides.minDistanceScale ?? 1);
   const rng = mulberry32(seed);
   const shape = buildGalaxyShape(knobs, mapSize, rng);
-  const points = bridsonSample(
-    rng,
+  const points = bridsonSample(rng, {
     mapSize,
-    mapSize,
-    poissonMinDistance,
-    config.POISSON_K_CANDIDATES,
+    baseMinDistance: poissonMinDistance,
+    kCandidates: config.POISSON_K_CANDIDATES,
     padding,
-    config.TOTAL_SYSTEMS,
-    shape.grid,
-    shape.seeds.map((s) => ({ x: s.x, y: s.y })),
-    overrides.densityRadiusExponent ?? DENSITY_RADIUS_EXPONENT,
-  );
+    maxPoints: config.TOTAL_SYSTEMS,
+    grid: shape.grid,
+    clusterSeedPoints: shape.seeds.map((s) => ({ x: s.x, y: s.y })),
+    densityRadiusExponent: overrides.densityRadiusExponent ?? DENSITY_RADIUS_EXPONENT,
+  });
 
   return { shape, mapSize, points, poissonMinDistance };
 }

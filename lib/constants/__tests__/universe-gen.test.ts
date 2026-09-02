@@ -80,6 +80,7 @@ describe("genConfigForSystemCount", () => {
       expect(config.VOID_FLOOR).toBe(0.08);
       expect(config.CORRIDORS_PER_CLUSTER).toBe(0.3);
       expect(config.CORRIDOR_STYLE_MIX).toBe(0.5);
+      expect(config.CLUSTER_TURBULENCE).toBe(0);
     }
   });
 
