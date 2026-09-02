@@ -115,25 +115,6 @@ export function kruskalMST(pointsInSet: { x: number; y: number }[]): Edge[] {
 const NEIGHBOURHOOD_EPS = 1e-9;
 
 /**
- * True iff no third point of `points` sits strictly inside the circle having (a,b) as diameter —
- * the Gabriel-graph test. A planar, MST-containing criterion: local, three-point, no global sort
- * or triangulation needed.
- */
-function isGabrielEdge(points: { x: number; y: number }[], a: number, b: number): boolean {
-  const ax = points[a].x, ay = points[a].y, bx = points[b].x, by = points[b].y;
-  const cx = (ax + bx) / 2;
-  const cy = (ay + by) / 2;
-  const radiusSq = ((ax - bx) * (ax - bx) + (ay - by) * (ay - by)) / 4;
-  for (let k = 0; k < points.length; k++) {
-    if (k === a || k === b) continue;
-    const dx = points[k].x - cx;
-    const dy = points[k].y - cy;
-    if (dx * dx + dy * dy < radiusSq - NEIGHBOURHOOD_EPS) return false;
-  }
-  return true;
-}
-
-/**
  * True iff no third point C has BOTH d(A,C) and d(B,C) shorter than d(A,B) — the relative-
  * neighbourhood-graph (RNG) test. Sparser than Gabriel (RNG ⊆ Gabriel ⊆ Delaunay) while staying
  * planar and MST-containing.
@@ -151,8 +132,8 @@ function isRelativeNeighbourEdge(points: { x: number; y: number }[], a: number, 
 
 /** Every candidate pair from `pointsInSet` (brute-force O(n²) candidates, each an O(n) empty-
  *  region test — O(n³) total, acceptable at generation-time cluster scale, never per-tick) that
- *  passes `test`. Both `isGabrielEdge` and `isRelativeNeighbourEdge` are planar and provably
- *  contain the Euclidean MST, so the returned edge set is always connected (when `pointsInSet` is)
+ *  passes `test`. `isRelativeNeighbourEdge` (the only caller today) is planar and provably
+ *  contains the Euclidean MST, so the returned edge set is always connected (when `pointsInSet` is)
  *  and never self-intersects — no separate crossing check or MST fallback is needed. */
 function neighbourhoodGraphEdges(
   pointsInSet: { x: number; y: number }[],
@@ -167,12 +148,6 @@ function neighbourhoodGraphEdges(
     }
   }
   return edges;
-}
-
-/** The Gabriel graph over `pointsInSet`: local-index edges, always connected and planar. */
-export function gabrielGraphEdges(pointsInSet: { x: number; y: number }[]): Edge[] {
-  if (pointsInSet.length < 2) return [];
-  return neighbourhoodGraphEdges(pointsInSet, isGabrielEdge);
 }
 
 /** The relative-neighbourhood graph (RNG) over `pointsInSet`: local-index edges, always connected

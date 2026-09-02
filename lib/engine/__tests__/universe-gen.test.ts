@@ -605,6 +605,49 @@ describe("generateConnections", () => {
     }
   });
 
+  // ── Proves: pruning cycle edges (never a tree edge) never disconnects a cluster ──
+  // Checked per-region (mirrors "all intra-region systems are connected (BFS)" above), not over
+  // the whole realised graph: a whole-graph check can't tell pruneLaneDensity's own tree-edge
+  // protection apart from Phase 3's connectivity repair silently patching a cluster it split —
+  // this test isolates Phase 1's own edge set instead.
+  it("every cluster's intra-region lanes stay fully connected across seeds at lanePruneFraction 1 (every cycle edge pruned, leaving each cluster's local lane graph its own Kruskal spanning tree)", () => {
+    const config = genConfigForSystemCount(300);
+    const seeds = [1, 2, 3, 4, 5, 6, 7];
+    for (const seed of seeds) {
+      const pruneParams: GenParams = { ...buildGenParams(seed, config), lanePruneFraction: 1 };
+      const rng = mulberry32(pruneParams.seed);
+      const shape = buildGalaxyShape(pruneParams.shapeKnobs, pruneParams.mapSize, rng);
+      const regions = generateRegions(shape.seeds, REGION_NAMES);
+      const rawSystems = generateSystems(rng, regions, pruneParams, shape.grid);
+      const { systems, connections } = generateConnections(
+        rawSystems, regions, shape.corridors, pruneParams, shape.grid, pruneParams.mapSize,
+      );
+
+      let checkedAnyRegion = false;
+      for (const region of regions) {
+        const regionSys = systems.filter((s) => s.regionIndex === region.index);
+        if (regionSys.length < 2) continue;
+        checkedAnyRegion = true;
+
+        const regionIndices = new Set(regionSys.map((s) => s.index));
+        const adj = new Map<number, number[]>();
+        for (const s of regionSys) adj.set(s.index, []);
+        for (const conn of connections) {
+          if (regionIndices.has(conn.fromSystemIndex) && regionIndices.has(conn.toSystemIndex)) {
+            adj.get(conn.fromSystemIndex)!.push(conn.toSystemIndex);
+          }
+        }
+
+        const reachable = bfsReachable(adj, regionSys[0].index);
+        expect(
+          reachable.size,
+          `seed=${seed} region=${region.index}: only ${reachable.size}/${regionSys.length} systems reachable at lanePruneFraction=1`,
+        ).toBe(regionSys.length);
+      }
+      expect(checkedAnyRegion, `seed=${seed}`).toBe(true); // non-vacuous
+    }
+  });
+
   it("a map with corridorStyle at each extreme (all-band / all-crossing) generates validly, stays fully connected, and actually dispatches by style", () => {
     for (const corridorStyle of [0, 1]) {
       const config = genConfigForSystemCount(300);
@@ -870,6 +913,43 @@ describe("realizeCorridors", () => {
     const touchedIndices = new Set(connections.flatMap((c) => [c.fromSystemIndex, c.toSystemIndex]));
     expect(touchedIndices.has(2)).toBe(false);
     expect(touchedIndices.has(3)).toBe(false);
+  });
+
+  // ── Two-pass band-chain crossing avoidance (`wouldCrossAcceptedLane`/`realizeBandChain`) ──
+  it("two band corridors whose only possible lanes properly cross force-accept the losing corridor's edge in pass 2, rather than leave its anchors disconnected", () => {
+    // Corridor A: two anchors only (no waypoint candidates — the third-cluster systems below all
+    // sit past the perpendicular-distance threshold), realizes as the direct horizontal lane
+    // (0,0)-(1000,0). Corridor B: two anchors only, realizes as the direct vertical lane
+    // (500,-500)-(500,500) — by construction this properly crosses A's lane at (500,0), interior
+    // to both segments, no shared endpoint. With only two points in B's own chain there is no
+    // alternative edge for pass 1 to prefer: it defers the sole edge (crosses A's already-accepted
+    // lane), and pass 2 must force-accept it — the genuine two-corridor conflict this mechanism
+    // exists for — or corridor B's anchors are left disconnected from each other entirely.
+    const regions = [region(0, 0, 0), region(1, 1000, 0), region(2, 500, -500), region(3, 500, 500)];
+    const systems = [
+      mkSys({ index: 0, regionIndex: 0, x: 0, y: 0 }),
+      mkSys({ index: 1, regionIndex: 1, x: 1000, y: 0 }),
+      mkSys({ index: 2, regionIndex: 2, x: 500, y: -500 }),
+      mkSys({ index: 3, regionIndex: 3, x: 500, y: 500 }),
+    ];
+    const corridors: CorridorPlan = {
+      pairs: [{ a: 0, b: 1, style: "band" }, { a: 2, b: 3, style: "band" }],
+    };
+
+    const { connections } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
+
+    const laneKeys = new Set(
+      connections.map((c) => `${Math.min(c.fromSystemIndex, c.toSystemIndex)}-${Math.max(c.fromSystemIndex, c.toSystemIndex)}`),
+    );
+    expect(laneKeys.has("0-1"), "corridor A's own (first-realized) lane must exist").toBe(true);
+    expect(
+      laneKeys.has("2-3"),
+      "corridor B's crossing-conflicted lane must be force-accepted in pass 2, not silently dropped",
+    ).toBe(true);
+
+    const uf = new UnionFind(4);
+    for (const c of connections) uf.union(c.fromSystemIndex, c.toSystemIndex);
+    expect(uf.connected(2, 3), "corridor B's anchors must stay connected despite the crossing conflict").toBe(true);
   });
 
   // ── Crossing demotion (spec §5C) ──────────────────────────────

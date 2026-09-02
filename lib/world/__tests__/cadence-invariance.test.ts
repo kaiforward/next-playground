@@ -92,10 +92,10 @@ const TREASURY_TOL = 6e-2; // cycle12 arm only — honest baseline 2.0e-3–3.4e
  * neighbourhood-graph lane selection replacing uniform placement) moves this fixture's honest
  * reading again — colony founding timing rides the new lane/cluster topology, exactly the
  * "colony timing" AGENTS names as expected to move with that rework. Re-measured on this fixture:
- * build12 now reads 7.68e-2 (up from 3.56e-2). The break-line ratio from the prior measurement
- * (break/honest ≈ 2.63x) is extrapolated rather than re-verified against a mis-scaled catchUp this
- * pass — projected break ≈ 2.0e-1. The tolerance moves to sit between: 1.1e-1 clears the new
- * honest baseline with ~1.4x headroom and stays comfortably under the projected break.
+ * build12 now reads 7.682e-2 (up from 3.56e-2). The break line was re-verified directly against
+ * the mis-scaled `spent = plan.cost × share × catchUp` mutation (directed-build.ts:737) rather than
+ * extrapolated: it now measures 1.357e-1. The tolerance sits between: 1.1e-1 clears the honest
+ * baseline with ~1.43x headroom, and the break sits ~1.23x above the tolerance — still caught.
  */
 const FOUNDING_TOL = 1.1e-1;
 // Adaptive-expectation guard: the memory update sub-steps at catchUpFactor(cadence.cycle) rather
