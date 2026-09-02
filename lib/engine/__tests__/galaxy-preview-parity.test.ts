@@ -1,7 +1,7 @@
 /**
- * The determinism-seam parity proof the galaxy-preview build plan (Task 5, spec
- * `docs/planned/logistics-lanes.md` §5) actually promises: "the dots match a world generated from
- * the same inputs." `components/start/__tests__/galaxy-preview-render.test.ts` only checks
+ * The determinism-seam parity proof the galaxy preview promises (spec
+ * `docs/planned/logistics-lanes.md` §5): "the dots match a world generated from
+ * the same inputs." `lib/engine/__tests__/galaxy-impression.test.ts` only checks
  * `buildGalaxyImpression` against a hand-reconstruction of its OWN steps (same module, hard-coded
  * to agree with itself) — that catches a regression WITHIN the preview module but says nothing
  * about whether the preview still matches the real engine's orchestration. This file runs the real
@@ -19,7 +19,7 @@
  * `bridsonSample` placed, unperturbed by anything downstream.
  */
 import { describe, it, expect } from "vitest";
-import { buildGalaxyImpression, crossingSegments } from "@/components/start/galaxy-preview-render";
+import { buildGalaxyImpression, crossingSegments } from "@/lib/engine/galaxy-impression";
 import { generateUniverse } from "@/lib/engine/universe-gen";
 import { buildGenParams } from "@/lib/world/gen";
 import { genConfigForSystemCount, REGION_NAMES } from "@/lib/constants/universe-gen";
@@ -146,5 +146,35 @@ describe("galaxy-preview crossing-set parity with the engine's realised isCrossi
     const plannedCrossingCount = impression.shape.corridors.pairs.filter((p) => p.style === "crossing").length;
     expect(engineKeys.size).toBeLessThan(plannedCrossingCount);
     expect(previewKeys).toEqual(engineKeys);
+  });
+
+  it("draws nothing for a pair whose cluster placed no system — far more clusters than systems", () => {
+    // 100 clusters over 50 systems leaves half of them empty, and all-crossing corridor style over
+    // a high void floor plans hundreds of crossing pairs across them. The engine anchors nothing on
+    // a pair with an empty side and skips it; a preview that substituted the seed centre instead
+    // draws crossings the generated world does not have (measured at this fixture: five that
+    // survive the demotion check too, so they would reach the canvas).
+    const seed = 10;
+    const systemCount = 50;
+    const config = genConfigForSystemCount(systemCount);
+    const params = buildGenParams(seed, config, {
+      clusterCount: 100, corridorStyle: 1, voidFloor: 0.5, corridorsPerCluster: 2,
+    });
+    const universe = generateUniverse(params, REGION_NAMES);
+    const impression = buildGalaxyImpression(params.shapeKnobs, seed, systemCount);
+
+    // Non-vacuous: the fixture really does strand clusters, and the skip path really does fire —
+    // planned crossing pairs with an empty side exist, and far outnumber the realised lanes.
+    const occupied = new Set(universe.systems.map((s) => s.regionIndex));
+    expect(universe.regions.length - occupied.size).toBeGreaterThan(0);
+    const plannedCrossings = impression.shape.corridors.pairs.filter((p) => p.style === "crossing");
+    const emptySidedCrossings = plannedCrossings.filter(
+      (p) => !occupied.has(p.a) || !occupied.has(p.b),
+    );
+    expect(emptySidedCrossings.length).toBeGreaterThan(0);
+
+    const engineKeys = engineCrossingPairKeys(universe);
+    expect(engineKeys.size).toBeLessThan(plannedCrossings.length);
+    expect(previewCrossingPairKeys(impression)).toEqual(engineKeys);
   });
 });

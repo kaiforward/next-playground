@@ -26,7 +26,7 @@ import {
   type GalaxyShapeKnobs, type DensityGrid, type CorridorPlan,
 } from "./density-field";
 import {
-  generateRegions, bridsonSample, assignRegions, type GeneratedRegion,
+  generateRegions, bridsonSample, assignRegions, corridorAnchors, type GeneratedRegion,
 } from "./system-placement";
 
 // Re-exported so existing consumers (`@/lib/engine/universe-gen` importers throughout the tick,
@@ -452,27 +452,6 @@ type CorridorRealisationParams = Pick<
   GenParams, "intraRegionBaseFuel" | "crossingFuelMultiplier" | "poissonMinDistance"
 >;
 
-/** The system in `candidates` nearest world point (targetX, targetY) — the corridor-anchoring
- *  rule (judgement call, not spec-mandated): each side's corridor endpoint is whichever placed
- *  system in that cluster reaches furthest toward the OTHER cluster's seed. `candidates` must be
- *  non-empty. */
-function nearestSystemTowardSeed(
-  candidates: GeneratedSystem[],
-  targetX: number,
-  targetY: number,
-): GeneratedSystem {
-  let best = candidates[0];
-  let bestDist = distance(best.x, best.y, targetX, targetY);
-  for (let i = 1; i < candidates.length; i++) {
-    const d = distance(candidates[i].x, candidates[i].y, targetX, targetY);
-    if (d < bestDist) {
-      bestDist = d;
-      best = candidates[i];
-    }
-  }
-  return best;
-}
-
 /** How far (world units) a system may sit from the direct seed-to-seed line and still count as a
  *  band waypoint — a multiple of the Poisson minimum distance so it scales with the galaxy's own
  *  spacing, Gate-A-sweepable like the rest of §5's tuning constants. Judgement call: a fixed
@@ -642,14 +621,13 @@ function realizeCorridorPair(
   mapSize: number,
   accepted: AcceptedLanes,
 ): void {
-  const sysA = systemsByRegion.get(pair.a) ?? [];
-  const sysB = systemsByRegion.get(pair.b) ?? [];
-  if (sysA.length === 0 || sysB.length === 0) return;
-
   const seedA = regions[pair.a];
   const seedB = regions[pair.b];
-  const anchorA = nearestSystemTowardSeed(sysA, seedB.x, seedB.y);
-  const anchorB = nearestSystemTowardSeed(sysB, seedA.x, seedA.y);
+  const anchors = corridorAnchors(
+    systemsByRegion.get(pair.a) ?? [], systemsByRegion.get(pair.b) ?? [], seedA, seedB,
+  );
+  if (anchors === null) return;
+  const { anchorA, anchorB } = anchors;
 
   anchorA.isGateway = true;
   anchorB.isGateway = true;

@@ -498,7 +498,7 @@ export function crossingDemotionThresholds(poissonMinDistance: number): Crossing
  * placed system except the two anchors themselves — callers filter) sits within
  * `thresholds.minThirdSystemDistance` of the line. Shared, pure, browser-safe (no import reaching
  * `lib/constants/economy-scale`): both `generateConnections` (`universe-gen.ts`) and the galaxy
- * preview's `crossingSegments` (`components/start/galaxy-preview-render.ts`) call this so the
+ * preview's `crossingSegments` (`lib/engine/galaxy-impression.ts`) call this so the
  * engine and the preview demote exactly the same pairs — the parity requirement spec §5C states.
  */
 export function crossingShouldDemote(

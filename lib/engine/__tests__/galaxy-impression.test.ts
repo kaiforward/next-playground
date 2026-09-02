@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildGalaxyImpression, renderDensityField, worldToCanvas } from "../galaxy-preview-render";
+import { buildGalaxyImpression, renderDensityField, worldToCanvas } from "../galaxy-impression";
 import { genConfigForSystemCount } from "@/lib/constants/universe-gen";
 import { mulberry32 } from "@/lib/engine/generation-primitives";
 import { buildGalaxyShape, type GalaxyShapeKnobs } from "@/lib/engine/density-field";
@@ -34,7 +34,7 @@ describe("buildGalaxyImpression", () => {
   // orchestration (an rng draw generateUniverse inserts, GenParams-derived padding diverging from
   // genConfigForSystemCount, etc.) would sail through untouched. The authoritative cross-check
   // against the real `generateUniverse` orchestration lives in
-  // `lib/engine/__tests__/galaxy-preview-parity.test.ts` (a `.test.ts`/node test, so it can import
+  // `lib/engine/__tests__/galaxy-preview-parity.test.ts` (a node test, so it can import
   // `universe-gen.ts` freely — that module's economy-scale import graph only matters for the
   // browser bundle this preview itself renders in).
   it("reconstructs the same points as its own internal step sequence (self-consistency pin, not engine parity)", () => {

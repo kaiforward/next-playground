@@ -251,6 +251,21 @@ export function bridsonSample(
 
 // ── Voronoi region assignment ───────────────────────────────────
 
+/** Index of the centre in `centres` nearest (x, y) — the Voronoi rule cluster membership uses
+ *  everywhere: region assignment at generation, and the preview's own membership pass. */
+function nearestCentreIndex(x: number, y: number, centres: ReadonlyArray<Point>): number {
+  let bestIdx = 0;
+  let bestDist = distance(x, y, centres[0].x, centres[0].y);
+  for (let i = 1; i < centres.length; i++) {
+    const d = distance(x, y, centres[i].x, centres[i].y);
+    if (d < bestDist) {
+      bestDist = d;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+
 /**
  * Assign each system to its nearest region center (Voronoi partition).
  */
@@ -258,16 +273,52 @@ export function assignRegions(
   points: Point[],
   regionCenters: GeneratedRegion[],
 ): number[] {
-  return points.map((p) => {
-    let bestIdx = 0;
-    let bestDist = distance(p.x, p.y, regionCenters[0].x, regionCenters[0].y);
-    for (let i = 1; i < regionCenters.length; i++) {
-      const d = distance(p.x, p.y, regionCenters[i].x, regionCenters[i].y);
-      if (d < bestDist) {
-        bestDist = d;
-        bestIdx = i;
-      }
+  return points.map((p) => nearestCentreIndex(p.x, p.y, regionCenters));
+}
+
+/** The same Voronoi partition as `assignRegions`, returned as one member list per seed (empty
+ *  lists included, so the array is parallel to `seeds`). */
+export function groupByNearestSeed<T extends Point>(
+  points: ReadonlyArray<T>,
+  seeds: ReadonlyArray<Point>,
+): T[][] {
+  const byCluster: T[][] = seeds.map(() => []);
+  if (seeds.length === 0) return byCluster;
+  for (const p of points) byCluster[nearestCentreIndex(p.x, p.y, seeds)].push(p);
+  return byCluster;
+}
+
+/** The member of `candidates` nearest world point (targetX, targetY). `candidates` must be
+ *  non-empty. */
+function nearestToward<T extends Point>(candidates: ReadonlyArray<T>, targetX: number, targetY: number): T {
+  let best = candidates[0];
+  let bestDist = distance(best.x, best.y, targetX, targetY);
+  for (let i = 1; i < candidates.length; i++) {
+    const d = distance(candidates[i].x, candidates[i].y, targetX, targetY);
+    if (d < bestDist) {
+      bestDist = d;
+      best = candidates[i];
     }
-    return bestIdx;
-  });
+  }
+  return best;
+}
+
+/**
+ * The corridor anchor rule (judgement call, not spec-mandated), shared by lane realisation and the
+ * New Game preview so the two can never drift: each side's corridor endpoint is whichever placed
+ * system assigned to that cluster reaches furthest toward the OTHER cluster's seed. `null` when
+ * either cluster placed no system at all — such a pair anchors nothing and is skipped, on both
+ * sides (whole-graph connectivity repair covers any stranding it leaves).
+ */
+export function corridorAnchors<T extends Point>(
+  membersA: ReadonlyArray<T>,
+  membersB: ReadonlyArray<T>,
+  seedA: Point,
+  seedB: Point,
+): { anchorA: T; anchorB: T } | null {
+  if (membersA.length === 0 || membersB.length === 0) return null;
+  return {
+    anchorA: nearestToward(membersA, seedB.x, seedB.y),
+    anchorB: nearestToward(membersB, seedA.x, seedA.y),
+  };
 }

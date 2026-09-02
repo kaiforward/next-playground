@@ -9,7 +9,7 @@ import {
   crossingSegments,
   type ImpressionOverrides,
   type GalaxyImpression,
-} from "./galaxy-preview-render";
+} from "@/lib/engine/galaxy-impression";
 
 /** Square canvas side, in CSS pixels — the density field and every dot/line project onto this.
  *  Big on purpose: at small sizes dense cluster cores merge into a single blob and crossings
@@ -45,7 +45,7 @@ export interface GalaxyPreviewProps {
  * crossing lines. Regenerates whenever `knobs`/`seed`/`systemCount` change (debounced).
  *
  * Renders on the MAIN THREAD (New Game dialog), so nothing this module imports may reach
- * `lib/constants/economy-scale` — see `galaxy-preview-render.ts`'s docstring for the import-graph
+ * `lib/constants/economy-scale` — see `lib/engine/galaxy-impression.ts`'s docstring for the import-graph
  * reasoning. Under jsdom (component tests) `getContext("2d")` returns null; painting is skipped and
  * the canvas element still renders, so a test can assert structure/text without a real canvas.
  */

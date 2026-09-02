@@ -2,8 +2,8 @@
  * Pure maths behind the galaxy-preview canvas (spec `docs/planned/logistics-lanes.md` §5): builds
  * one galaxy's density grid + star placement from structure knobs, and rasterises the density grid
  * into an RGBA byte array a canvas can paint directly. No DOM/canvas API anywhere in this module —
- * it is exercised in node tests, with `galaxy-preview.tsx` supplying the actual `<canvas>` element
- * and `ImageData` wrapper.
+ * it is exercised in node tests, with `components/start/galaxy-preview.tsx` supplying the actual
+ * `<canvas>` element and `ImageData` wrapper.
  *
  * Placement parity: `buildGalaxyImpression` reproduces exactly the draw sequence
  * `generateUniverse` runs before it starts consuming substrate RNG draws — `mulberry32(seed)` →
@@ -22,7 +22,9 @@ import {
   buildGalaxyShape, crossingShouldDemote, crossingDemotionThresholds,
   type GalaxyShape, type GalaxyShapeKnobs,
 } from "@/lib/engine/density-field";
-import { bridsonSample, DENSITY_RADIUS_EXPONENT } from "@/lib/engine/system-placement";
+import {
+  bridsonSample, corridorAnchors, groupByNearestSeed, DENSITY_RADIUS_EXPONENT,
+} from "@/lib/engine/system-placement";
 
 export interface Point {
   x: number;
@@ -130,56 +132,26 @@ export function renderDensityField(
 
 /**
  * World-space endpoints for each crossing-style corridor the engine would ACTUALLY realise as a
- * crossing lane, anchored the way the lane graph does it: the placed system in each cluster
- * nearest to the OTHER cluster's seed — never seed-center to seed-center, which overstates how
- * deep into a cluster a crossing reaches. A cluster with no placed system falls back to its seed
- * position (matches the degenerate case the engine repairs). A pair whose realised anchor-to-
- * anchor line no longer reads as genuine emptiness is excluded (`crossingShouldDemote`,
- * `lib/engine/density-field.ts`, spec §5C) — the exact same rule `generateConnections` applies, so
- * the preview never draws a crossing the generated world wouldn't actually have.
+ * crossing lane, anchored the way the lane graph does it — both sides call the one shared rule
+ * (`corridorAnchors`, `lib/engine/system-placement.ts`): the placed system in each cluster nearest
+ * to the OTHER cluster's seed, never seed-center to seed-center, which overstates how deep into a
+ * cluster a crossing reaches. A pair with an empty cluster on either side anchors nothing and is
+ * skipped, exactly as `realizeCorridorPair` skips it. A pair whose realised anchor-to-anchor line
+ * no longer reads as genuine emptiness is excluded too (`crossingShouldDemote`,
+ * `lib/engine/density-field.ts`, spec §5C) — the same rule `generateConnections` applies, so the
+ * preview never draws a crossing the generated world wouldn't actually have.
  */
 export function crossingSegments(impression: GalaxyImpression): Array<{ a: Point; b: Point }> {
   const { seeds } = impression.shape;
-  // Cluster membership = nearest seed, the same Voronoi rule region assignment uses.
-  const byCluster: Point[][] = seeds.map(() => []);
-  for (const point of impression.points) {
-    let best = 0;
-    let bestDist = Number.MAX_VALUE;
-    for (let s = 0; s < seeds.length; s++) {
-      const dx = point.x - seeds[s].x;
-      const dy = point.y - seeds[s].y;
-      const d = dx * dx + dy * dy;
-      if (d < bestDist) {
-        bestDist = d;
-        best = s;
-      }
-    }
-    byCluster[best].push(point);
-  }
-
-  const anchorToward = (cluster: number, target: Point): Point => {
-    const members = byCluster[cluster];
-    if (members.length === 0) return { x: seeds[cluster].x, y: seeds[cluster].y };
-    let best = members[0];
-    let bestDist = Number.MAX_VALUE;
-    for (const m of members) {
-      const dx = m.x - target.x;
-      const dy = m.y - target.y;
-      const d = dx * dx + dy * dy;
-      if (d < bestDist) {
-        bestDist = d;
-        best = m;
-      }
-    }
-    return best;
-  };
-
+  const byCluster = groupByNearestSeed(impression.points, seeds);
   const thresholds = crossingDemotionThresholds(impression.poissonMinDistance);
   const segments: Array<{ a: Point; b: Point }> = [];
+
   for (const pair of impression.shape.corridors.pairs) {
     if (pair.style !== "crossing") continue;
-    const a = anchorToward(pair.a, seeds[pair.b]);
-    const b = anchorToward(pair.b, seeds[pair.a]);
+    const anchors = corridorAnchors(byCluster[pair.a], byCluster[pair.b], seeds[pair.a], seeds[pair.b]);
+    if (anchors === null) continue;
+    const { anchorA: a, anchorB: b } = anchors;
     const thirdSystems = impression.points.filter((p) => p !== a && p !== b);
     if (crossingShouldDemote(impression.shape.grid, impression.mapSize, a.x, a.y, b.x, b.y, thirdSystems, thresholds)) {
       continue;

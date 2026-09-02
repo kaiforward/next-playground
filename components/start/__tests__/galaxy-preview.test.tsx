@@ -2,16 +2,16 @@
  * Component-level proves for `GalaxyPreview` (spec `docs/planned/logistics-lanes.md` §5): jsdom has
  * no canvas (`getContext("2d")` returns null), so this asserts structure/text — never pixels — per
  * AGENTS Testing gotchas. The maths this renders (density-field byte array, placement parity, no-
- * crash extremes, perf ceiling) is proved separately in `galaxy-preview-render.test.ts` (node).
+ * crash extremes, perf ceiling) is proved separately in `lib/engine/__tests__/galaxy-impression.test.ts` (node).
  */
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import { GalaxyPreview } from "../galaxy-preview";
-import { buildGalaxyImpression } from "../galaxy-preview-render";
+import { buildGalaxyImpression } from "@/lib/engine/galaxy-impression";
 import { defaultGalaxyShapeKnobs, type GalaxyShapeKnobs } from "@/lib/engine/density-field";
 
-vi.mock("../galaxy-preview-render", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../galaxy-preview-render")>();
+vi.mock("@/lib/engine/galaxy-impression", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/engine/galaxy-impression")>();
   return { ...actual, buildGalaxyImpression: vi.fn(actual.buildGalaxyImpression) };
 });
 
