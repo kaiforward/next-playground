@@ -93,6 +93,7 @@ const EXPECTED_TERM_IDS: readonly TermId[] = [
   "alliance",
   "region",
   "jumpLane",
+  "crossingLane",
   "fuelCost",
   "gateway",
   // The player's layer

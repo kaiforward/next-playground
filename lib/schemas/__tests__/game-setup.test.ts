@@ -126,7 +126,7 @@ describe("newGameSchema — shape (galaxy structure knobs)", () => {
     ["sizeSkew", -0.01],
     ["sizeSkew", 1.01],
     ["clusterSpacing", 99],
-    ["clusterSpacing", 2001],
+    ["clusterSpacing", 4001],
     ["voidFloor", -0.01],
     ["voidFloor", 1.0], // 1.0 would be all-void — explicitly rejected, not just "out of range"
     ["corridorsPerCluster", -0.01],
