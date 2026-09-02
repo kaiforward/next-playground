@@ -439,6 +439,14 @@ Raw (report + diag, verbatim):
   foreignBlocked=5137/697707.7 trulyUnreachable=0/0.0
 ```
 
+Follow-up (owner-directed, same day): the instrument was aligned to the shipped router so the
+divergence cannot recur — reachability is now ownership-blind with the router's own MAX_HOPS cut,
+and foreign transit is its own metric. Post-alignment simulate (defaults, 10K): unreachable 0/0
+both horizons, foreign-transit share 0.178 of placed volume, top-decile concentration 0.365
+(above the ≥0.35 acceptance line; the pre-alignment 0.339 was an artefact of foreign-space-closed
+placement). The numbers above stay as measured under the OLD projection — they are the record of
+the divergence, not current readings.
+
 ### Premise 1 — flow concentration (measured 2026-08-31)
 
 ```
