@@ -15,6 +15,7 @@ import {
   type GenParams,
   type GeneratedRegion,
   type GeneratedSystem,
+  type GeneratedConnection,
 } from "../universe-gen";
 import {
   buildGalaxyShape,
@@ -639,6 +640,48 @@ describe("generateConnections", () => {
   });
 });
 
+// ── Aesthetic crossing rejection: an extra intra-cluster edge is never realised crossing an
+// already-accepted lane mid-segment — it isn't connectivity-critical (the region's own MST
+// already guarantees that), so a crossing candidate is dropped rather than drawn. ──
+describe("generateConnections — extra-edge crossing rejection", () => {
+  it("an extra intra-cluster edge candidate that would properly cross an already-accepted lane is rejected, not drawn", () => {
+    const regions = [
+      { index: 0, name: "r0", x: 0, y: 0 },
+      { index: 1, name: "r1", x: 0, y: 0 },
+    ];
+    const systems = [
+      // Region 0: a single MST lane, a vertical line x=50 from y=-50 to y=150.
+      mkSys({ index: 0, regionIndex: 0, x: 50, y: -50 }),
+      mkSys({ index: 1, regionIndex: 0, x: 50, y: 150 }),
+      // Region 1: three points whose MST leaves exactly one candidate extra edge — the diagonal
+      // (0,0)-(100,100) — which crosses region 0's lane at (50,50), interior to both segments.
+      mkSys({ index: 2, regionIndex: 1, x: 0, y: 0 }),
+      mkSys({ index: 3, regionIndex: 1, x: 100, y: 100 }),
+      mkSys({ index: 4, regionIndex: 1, x: 100, y: 0 }),
+    ];
+    const params: GenParams = { ...defaultParams(), extraEdgeFraction: 1 };
+    const rng = mulberry32(1);
+
+    const { connections } = generateConnections(rng, systems, regions, { pairs: [] }, params);
+
+    const undirectedPairs = new Set(
+      connections.map((c) => `${Math.min(c.fromSystemIndex, c.toSystemIndex)}-${Math.max(c.fromSystemIndex, c.toSystemIndex)}`),
+    );
+    // Region 1's MST is (2,4) and (3,4) (both distance 100, shorter than the (2,3) diagonal at
+    // ~141.4) — the diagonal (2,3) is the only candidate extra edge, and it must be absent: this
+    // is the fixture's whole point, not incidental.
+    expect(
+      undirectedPairs.has("2-3"),
+      "extra edge 2-3 (the diagonal crossing region 0's lane at (50,50)) was drawn despite properly crossing an already-accepted lane",
+    ).toBe(false);
+    // Region 0's own lane and region 1's MST are still both present — rejection cost nothing but
+    // the discretionary extra.
+    expect(undirectedPairs.has("0-1")).toBe(true);
+    expect(undirectedPairs.has("2-4")).toBe(true);
+    expect(undirectedPairs.has("3-4")).toBe(true);
+  });
+});
+
 // ── Corridor realisation (spec §5) ───────────────────────────────
 
 describe("realizeCorridors", () => {
@@ -797,6 +840,50 @@ describe("realizeCorridors", () => {
     const touchedIndices = new Set(connections.flatMap((c) => [c.fromSystemIndex, c.toSystemIndex]));
     expect(touchedIndices.has(2)).toBe(false);
     expect(touchedIndices.has(3)).toBe(false);
+  });
+
+  // ── Aesthetic crossing rejection: a band chain's optional waypoint hop is never realised
+  // crossing an already-accepted lane — dropping it costs the chain nothing but a shortcut (its
+  // system already has its own intra-cluster connectivity), so the greedy walk skips straight to
+  // the next candidate instead. The chain's closing link back to the far anchor is never subject
+  // to this: it is the corridor's own required connectivity. ──
+  it("a band chain's waypoint hop that would properly cross an already-accepted lane is skipped, not drawn — the chain still closes to the far anchor", () => {
+    const regions = [region(0, 0, 0), region(1, 1000, 0)];
+    const systems = [
+      mkSys({ index: 0, regionIndex: 0, x: 0, y: 0 }), // anchor A
+      mkSys({ index: 1, regionIndex: 1, x: 1000, y: 0 }), // anchor B
+      mkSys({ index: 2, regionIndex: 2, x: 300, y: 30 }), // waypoint 1 — A-to-W1 crosses the seeded lane
+      mkSys({ index: 3, regionIndex: 2, x: 600, y: 20 }), // waypoint 2 — A-to-W2 does not cross it
+      // regionIndex 2 (not 0 or 1) — these two must never be candidates for either corridor
+      // anchor. Placed with x outside [0, 1000] (so their own projection onto the corridor line
+      // falls outside the anchors' own span and they're never candidate waypoints either) but
+      // joined by a lane that still cuts across the corridor's interior at y=25.
+      mkSys({ index: 4, regionIndex: 2, x: -50, y: 25 }), // pre-existing lane endpoint (unrelated system)
+      mkSys({ index: 5, regionIndex: 2, x: 1050, y: 25 }), // pre-existing lane endpoint
+    ];
+    const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "band" }] };
+    // Seeded as an already-accepted lane (both directed rows, mirroring `pushLane`) — a long,
+    // near-horizontal segment at y=25. The A→W1 candidate (0,0)-(300,30) rises to y=30 by x=300,
+    // crossing y=25 at (250,25) — interior to both segments. The A→W2 candidate (0,0)-(600,20)
+    // never reaches y=25 (its own endpoint tops out at y=20), so it never crosses this lane.
+    const existingConnections: GeneratedConnection[] = [
+      { fromSystemIndex: 4, toSystemIndex: 5, fuelCost: 1, isCrossing: false },
+      { fromSystemIndex: 5, toSystemIndex: 4, fuelCost: 1, isCrossing: false },
+    ];
+
+    const { connections } = realizeCorridors(systems, regions, corridors, 100, crossingParams, existingConnections);
+
+    const undirectedPairs = new Set(
+      connections.map((c) => `${Math.min(c.fromSystemIndex, c.toSystemIndex)}-${Math.max(c.fromSystemIndex, c.toSystemIndex)}`),
+    );
+    expect(
+      undirectedPairs.has("0-2"),
+      "waypoint hop 0-2 (A to W1, crossing the seeded lane at (250,25)) was drawn despite properly crossing an already-accepted lane",
+    ).toBe(false);
+    // The chain still reaches both anchors: A links straight through to W2, then W2 closes to B —
+    // W1 is skipped entirely, not stranded (Phase 1 gives every system its own intra-cluster
+    // lane; this fixture only exercises corridor realisation in isolation).
+    expect(undirectedPairs).toEqual(new Set(["0-3", "1-3"]));
   });
 });
 

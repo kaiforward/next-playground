@@ -222,6 +222,67 @@ function extraEdgeCandidates(points: { x: number; y: number }[], mst: Edge[]): E
 }
 
 /**
+ * True iff segment (ax1,ay1)-(ax2,ay2) and segment (bx1,by1)-(bx2,by2) cross at a point interior
+ * to BOTH segments — an exact orientation test (Cormen et al.'s standard four-orientation
+ * check), not a distance heuristic. Sharing an endpoint (including sharing a system) is never a
+ * proper crossing: two lanes fanning out from the same star are not "crossing lanes" in the
+ * visual sense the map cares about, only a lane cutting across another lane's open middle is.
+ */
+function segmentsProperlyIntersect(
+  ax1: number, ay1: number, ax2: number, ay2: number,
+  bx1: number, by1: number, bx2: number, by2: number,
+): boolean {
+  const EPS = 1e-9;
+  const sameSystem = (px: number, py: number, qx: number, qy: number): boolean =>
+    Math.abs(px - qx) < EPS && Math.abs(py - qy) < EPS;
+  if (
+    sameSystem(ax1, ay1, bx1, by1) || sameSystem(ax1, ay1, bx2, by2)
+    || sameSystem(ax2, ay2, bx1, by1) || sameSystem(ax2, ay2, bx2, by2)
+  ) return false;
+
+  const orientation = (ox: number, oy: number, px: number, py: number, qx: number, qy: number): number => {
+    const val = (py - oy) * (qx - px) - (px - ox) * (qy - py);
+    if (Math.abs(val) < EPS) return 0;
+    return val > 0 ? 1 : -1;
+  };
+
+  const o1 = orientation(ax1, ay1, ax2, ay2, bx1, by1);
+  const o2 = orientation(ax1, ay1, ax2, ay2, bx2, by2);
+  const o3 = orientation(bx1, by1, bx2, by2, ax1, ay1);
+  const o4 = orientation(bx1, by1, bx2, by2, ax2, ay2);
+
+  // Collinear/touching cases (any orientation exactly 0) are deliberately excluded rather than
+  // resolved by an on-segment check: with shared systems already ruled out above, a zero
+  // orientation here means one segment's line merely grazes the other's endpoint or overlaps
+  // collinearly — never the "cuts across the open middle" shape the map report describes.
+  return o1 !== 0 && o2 !== 0 && o3 !== 0 && o4 !== 0 && o1 !== o2 && o3 !== o4;
+}
+
+/**
+ * True iff the candidate lane (ax,ay)-(bx,by) properly crosses any lane already accepted into
+ * `connections` (each undirected lane checked once — `pushLane` always writes both directed
+ * rows). This is the aesthetic-only gate: a candidate lane that isn't required for connectivity
+ * (an extra intra-cluster edge, a band chain's optional waypoint hop) is rejected outright rather
+ * than realised crossing another lane mid-segment; a lane connectivity actually depends on (an
+ * MST edge, a corridor's mandatory closing link, a crossing-style lane) is never run through
+ * this gate at all.
+ */
+function crossesAcceptedLane(
+  ax: number, ay: number, bx: number, by: number,
+  connections: GeneratedConnection[],
+  coordByIndex: Map<number, { x: number; y: number }>,
+): boolean {
+  for (const c of connections) {
+    if (c.fromSystemIndex > c.toSystemIndex) continue; // undirected lane stored as two rows — check once
+    const p = coordByIndex.get(c.fromSystemIndex);
+    const q = coordByIndex.get(c.toSystemIndex);
+    if (!p || !q) continue;
+    if (segmentsProperlyIntersect(ax, ay, bx, by, p.x, p.y, q.x, q.y)) return true;
+  }
+  return false;
+}
+
+/**
  * Fuel cost of one lane, normalised against the average intra-region hop and rounded to 0.1.
  * `multiplier` prices a lane class above the intra-region baseline (gateways cost more).
  */
@@ -355,6 +416,7 @@ function realizeCorridorPair(
   avgIntraDist: number,
   params: CorridorRealisationParams,
   connections: GeneratedConnection[],
+  coordByIndex: Map<number, { x: number; y: number }>,
 ): void {
   const sysA = systemsByRegion.get(pair.a) ?? [];
   const sysB = systemsByRegion.get(pair.b) ?? [];
@@ -389,27 +451,46 @@ function realizeCorridorPair(
     Math.min(anchorAT, anchorBT), Math.max(anchorAT, anchorBT),
   );
 
+  // Waypoints are confined to strictly between `tLow`/`tHigh` (`waypointsAlongCorridor`), which
+  // are themselves the two anchors' own projections — so the two chain positions at the sorted
+  // extremes are always {anchorA, anchorB}, in whichever order their projections fall. Walking
+  // the chain greedily from one extreme, an interior waypoint whose link would visibly cross an
+  // already-realised lane is skipped (its own system already has intra-cluster connectivity from
+  // Phase 1 — dropping it from THIS chain loses nothing but the shortcut) rather than blocking
+  // the corridor; the closing link to the far extreme (the other anchor) is never skipped — that
+  // link is the corridor's own required connectivity, same rule as the crossing style's one lane.
   const chain = [anchorA, anchorB, ...waypoints].sort(
     (p, q) =>
       projectOntoLine(p.x, p.y, seedA.x, seedA.y, seedB.x, seedB.y)
       - projectOntoLine(q.x, q.y, seedA.x, seedA.y, seedB.x, seedB.y),
   );
-  for (let i = 0; i < chain.length - 1; i++) {
+  let current = chain[0];
+  for (let i = 1; i < chain.length; i++) {
+    const candidate = chain[i];
+    const isClosingLink = i === chain.length - 1;
+    if (!isClosingLink && crossesAcceptedLane(current.x, current.y, candidate.x, candidate.y, connections, coordByIndex)) {
+      continue;
+    }
     pushLane(
-      connections, chain[i].index, chain[i + 1].index,
+      connections, current.index, candidate.index,
       laneFuelCost(
-        distance(chain[i].x, chain[i].y, chain[i + 1].x, chain[i + 1].y),
+        distance(current.x, current.y, candidate.x, candidate.y),
         avgIntraDist, params.intraRegionBaseFuel, 1,
       ),
       false,
     );
+    current = candidate;
   }
 }
 
 /**
  * Realise every chosen corridor (spec §5): clones `systems` (so callers keep their own,
  * unflagged copy — mirrors the old gateway-designation phase this replaces), marks each
- * corridor's two anchors `isGateway`, and returns the lanes each pair added.
+ * corridor's two anchors `isGateway`, and returns the lanes each pair added. `existingConnections`
+ * (default none — every direct/fixture caller keeps today's isolated behaviour) seeds the
+ * crossing-rejection check a band chain's optional waypoint hops run against, so a chain built
+ * inside `generateConnections` sees Phase 1's already-placed intra-cluster lanes without those
+ * lanes being duplicated into this call's own returned `connections`.
  */
 export function realizeCorridors(
   systems: GeneratedSystem[],
@@ -417,6 +498,7 @@ export function realizeCorridors(
   corridors: CorridorPlan,
   avgIntraDist: number,
   params: CorridorRealisationParams,
+  existingConnections: GeneratedConnection[] = [],
 ): { connections: GeneratedConnection[]; systems: GeneratedSystem[] } {
   const updatedSystems = systems.map((s) => ({ ...s }));
   const systemsByRegion = new Map<number, GeneratedSystem[]>();
@@ -426,12 +508,15 @@ export function realizeCorridors(
     else systemsByRegion.set(sys.regionIndex, [sys]);
   }
 
-  const connections: GeneratedConnection[] = [];
+  const coordByIndex = new Map(updatedSystems.map((s) => [s.index, { x: s.x, y: s.y }]));
+
+  const connections: GeneratedConnection[] = [...existingConnections];
+  const startLength = connections.length;
   for (const pair of corridors.pairs) {
-    realizeCorridorPair(pair, systemsByRegion, updatedSystems, regions, avgIntraDist, params, connections);
+    realizeCorridorPair(pair, systemsByRegion, updatedSystems, regions, avgIntraDist, params, connections, coordByIndex);
   }
 
-  return { connections, systems: updatedSystems };
+  return { connections: connections.slice(startLength), systems: updatedSystems };
 }
 
 /**
@@ -536,6 +621,7 @@ export function generateConnections(
     }
   }
   const avgIntraDist = totalIntraEdges > 0 ? totalIntraDist / totalIntraEdges : params.poissonMinDistance;
+  const coordByIndex = new Map(systems.map((s) => [s.index, { x: s.x, y: s.y }]));
 
   // ── Phase 1: Intra-cluster connections (per-region MST + extra edges) ──
   for (const [, regionSys] of regionSystems) {
@@ -552,10 +638,13 @@ export function generateConnections(
         false,
       );
 
-    // MST edges (guaranteed connectivity)
+    // MST edges (guaranteed connectivity — never gated on crossing, unlike the extras below)
     for (const edge of mstEdges) addIntraLane(edge);
 
-    // Extra edges for route variety
+    // Extra edges for route variety — none of them connectivity-critical (the MST above already
+    // guarantees this region's connectivity), so a candidate whose segment would visibly cross an
+    // already-accepted lane (this region's own MST/extras, or any other region's lanes realised
+    // before this one) is rejected outright rather than added crossing it.
     const extraCount = Math.floor(mstEdges.length * extraEdgeFraction);
     const candidates = extraEdgeCandidates(regionSys, mstEdges);
 
@@ -567,15 +656,20 @@ export function generateConnections(
       const idx = randInt(rng, 0, pool.length - 1);
       if (picked.has(idx)) continue;
       picked.add(idx);
-      addIntraLane(pool[idx]);
+      const edge = pool[idx];
+      const sysA = regionSys[edge.a];
+      const sysB = regionSys[edge.b];
+      if (crossesAcceptedLane(sysA.x, sysA.y, sysB.x, sysB.y, connections, coordByIndex)) continue;
+      addIntraLane(edge);
       added++;
     }
   }
 
   // ── Phase 2: Corridor realisation (spec §5) — replaces the old region-centre MST + gateway
-  // crossing phases entirely; between-cluster lanes now exist ONLY along the plan's corridors. ──
+  // crossing phases entirely; between-cluster lanes now exist ONLY along the plan's corridors.
+  // Phase 1's lanes are passed in so a band chain's crossing check can see them too. ──
   const { connections: corridorConnections, systems: updatedSystems } = realizeCorridors(
-    systems, regions, corridors, avgIntraDist, params,
+    systems, regions, corridors, avgIntraDist, params, connections,
   );
   connections.push(...corridorConnections);
 
