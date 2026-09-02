@@ -11,9 +11,11 @@ import {
   type GalaxyImpression,
 } from "@/lib/engine/galaxy-impression";
 
-/** Square canvas side, in CSS pixels — the density field and every dot/line project onto this.
+/** Square canvas side, in device pixels — the density field and every dot/line project onto this.
  *  Big on purpose: at small sizes dense cluster cores merge into a single blob and crossings
- *  vanish; 900 keeps individual dots readable at the default 600-system count. */
+ *  vanish; 900 keeps individual dots readable at the default 600-system count. The element itself
+ *  scales down to whatever width the dialog leaves it (`max-w-full h-auto`), so a narrow viewport
+ *  shrinks the picture rather than clipping it. */
 const CANVAS_SIZE = 900;
 
 /** Regeneration debounce: a slider drag fires many onChange events per second, and rebuilding a
@@ -28,6 +30,15 @@ const REGEN_DEBOUNCE_MS = 150;
  *  crossing is always exactly one segment. */
 const CROSSING_LINE_COLOR = "rgba(208, 106, 66, 0.75)";
 const STAR_DOT_COLOR = "#e8dcc8";
+
+/** Exactly what `buildGalaxyImpression` is called with — serialised into `inputKey` so the
+ *  regeneration effect depends on the input's values, never on object identity. */
+interface PreviewInput {
+  knobs: GalaxyShapeKnobs;
+  seed: number;
+  systemCount: number;
+  overrides?: ImpressionOverrides;
+}
 
 export interface GalaxyPreviewProps {
   knobs: GalaxyShapeKnobs;
@@ -53,34 +64,27 @@ export function GalaxyPreview({ knobs, seed, systemCount, overrides }: GalaxyPre
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [impression, setImpression] = useState<GalaxyImpression | null>(null);
 
+  // Callers rebuild the `knobs`/`overrides` objects every render, so their identity is never the
+  // real dependency — their VALUES are. Serialising the whole input is what keeps a knob added
+  // later from silently never regenerating the preview, which a hand-listed field set would; the
+  // ref carries the live objects across so the effect reads them without depending on identity.
+  const inputKey = JSON.stringify({ knobs, seed, systemCount, overrides });
+  const input = useRef<PreviewInput>({ knobs, seed, systemCount, overrides });
+  input.current = { knobs, seed, systemCount, overrides };
+
   useEffect(() => {
     const handle = window.setTimeout(() => {
+      const { knobs: liveKnobs, seed: liveSeed, systemCount: liveCount, overrides: liveOverrides } = input.current;
       setImpression(
-        buildGalaxyImpression(knobs, seed, systemCount, {
-          mapSizeScale: overrides?.mapSizeScale,
-          minDistanceScale: overrides?.minDistanceScale,
-          densityRadiusExponent: overrides?.densityRadiusExponent,
+        buildGalaxyImpression(liveKnobs, liveSeed, liveCount, {
+          mapSizeScale: liveOverrides?.mapSizeScale,
+          minDistanceScale: liveOverrides?.minDistanceScale,
+          densityRadiusExponent: liveOverrides?.densityRadiusExponent,
         }),
       );
     }, REGEN_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- individual knob fields, not the
-    // `knobs` object identity, are the real dependency: callers rebuild the knobs object every
-    // render.
-  }, [
-    knobs.clusterCount,
-    knobs.sizeSkew,
-    knobs.clusterSpacing,
-    knobs.voidFloor,
-    knobs.corridorsPerCluster,
-    knobs.corridorStyle,
-    knobs.clusterTurbulence,
-    seed,
-    systemCount,
-    overrides?.mapSizeScale,
-    overrides?.minDistanceScale,
-    overrides?.densityRadiusExponent,
-  ]);
+  }, [inputKey]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -110,14 +114,14 @@ export function GalaxyPreview({ knobs, seed, systemCount, overrides }: GalaxyPre
   }, [impression]);
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 w-full max-w-[900px] min-w-0">
       <canvas
         ref={canvasRef}
         width={CANVAS_SIZE}
         height={CANVAS_SIZE}
         role="img"
         aria-label="Galaxy generation preview"
-        className="border border-border bg-background"
+        className="border border-border bg-background max-w-full h-auto"
       />
       <p className="text-xs font-mono text-text-secondary">
         {impression

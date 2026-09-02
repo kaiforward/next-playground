@@ -26,7 +26,9 @@ export const galaxyShapeSchema = z.object({
   clusterSpacing: z
     .number("Cluster spacing must be a number")
     .min(100, "Cluster spacing must be at least 100")
-    .max(2000, "Cluster spacing must be at most 2,000")
+    // Covers the engine's own default at the largest galaxy New Game offers (≈3,431 at 20,000
+    // systems) — a lower ceiling would reject the value an untouched form submits there.
+    .max(4000, "Cluster spacing must be at most 4,000")
     .optional(),
   voidFloor: z
     .number("Void floor must be a number")

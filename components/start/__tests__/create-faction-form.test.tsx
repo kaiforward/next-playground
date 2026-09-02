@@ -9,6 +9,8 @@ import {
   deliverCommandResult,
   type AnyCommandEnvelope,
 } from "@/lib/runtime/command-client";
+import { defaultGalaxyShapeKnobs } from "@/lib/engine/density-field";
+import type { NewGameInput } from "@/lib/schemas/game-setup";
 
 // Proves 1's client half: new game from a live game lands on
 // the map root — pinned here as "a successful newGame command navigates to the map root and resets
@@ -34,6 +36,13 @@ beforeEach(() => {
 afterEach(() => {
   configureCommandTransport(null);
 });
+
+/** The `newGame` payload off a posted envelope, narrowed on the envelope's own `type` discriminant
+ *  rather than cast — every other command carries a different payload shape. */
+function newGamePayload(envelope: AnyCommandEnvelope): NewGameInput {
+  if (envelope.type !== "newGame") throw new Error(`expected a newGame command, got ${envelope.type}`);
+  return envelope.payload;
+}
 
 async function fillAndSubmit() {
   const user = userEvent.setup();
@@ -97,7 +106,7 @@ describe("CreateFactionForm — galaxy shape knobs", () => {
     await user.click(screen.getByRole("button", { name: "Launch New Galaxy" }));
 
     await waitFor(() => expect(posted).toHaveLength(1));
-    const payload = posted[0].payload as { shape?: { clusterCount?: number; corridorStyle?: number } };
+    const payload = newGamePayload(posted[0]);
     expect(payload.shape?.clusterCount).toBe(12);
     expect(payload.shape?.corridorStyle).toBe(0.85);
   });
@@ -108,27 +117,70 @@ describe("CreateFactionForm — galaxy shape knobs", () => {
     await fillAndSubmit();
     await waitFor(() => expect(posted).toHaveLength(1));
 
-    const payload = posted[0].payload as {
-      shape?: { clusterCount: number; starSpacing: number; clusterTightness: number; mapSizeScale: number };
-    };
+    const payload = newGamePayload(posted[0]);
+    const engineDefaults = defaultGalaxyShapeKnobs(600);
     expect(payload.shape).toBeDefined();
+    expect(payload.shape?.clusterCount).toBe(engineDefaults.clusterCount);
+    expect(payload.shape?.clusterSpacing).toBe(engineDefaults.clusterSpacing);
     expect(payload.shape?.starSpacing).toBe(1);
     expect(payload.shape?.clusterTightness).toBe(0.05);
     expect(payload.shape?.mapSizeScale).toBe(1);
   });
 
+  // The engine scales cluster count and spacing by sqrt(N). A frozen default set would submit a
+  // 600-system galaxy's structure whatever size the player picked, and the engine's own
+  // `?? config.X` fallbacks would never fire because the form always sends every knob.
+  it("re-derives the untouched shape defaults from the system count — a 10,000-system galaxy submits the scaled values, not the 600-system ones", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText("Faction name"), "Aurelian League");
+    const systemCount = screen.getByLabelText("Systems");
+    await user.clear(systemCount);
+    await user.type(systemCount, "10000");
+    await user.click(screen.getByRole("button", { name: "Launch New Galaxy" }));
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    const scaled = defaultGalaxyShapeKnobs(10_000);
+    const frozen = defaultGalaxyShapeKnobs(600);
+    expect(scaled.clusterCount).not.toBe(frozen.clusterCount); // non-vacuous: the scale really moves
+    expect(newGamePayload(posted[0]).shape?.clusterCount).toBe(scaled.clusterCount);
+    expect(newGamePayload(posted[0]).shape?.clusterSpacing).toBe(scaled.clusterSpacing);
+  });
+
+  it("leaves a knob the player edited alone when the system count changes, while still rescaling the untouched ones", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText("Faction name"), "Aurelian League");
+    const clusterCount = screen.getByLabelText("Cluster count");
+    await user.clear(clusterCount);
+    await user.type(clusterCount, "12");
+
+    const systemCount = screen.getByLabelText("Systems");
+    await user.clear(systemCount);
+    await user.type(systemCount, "10000");
+    await user.click(screen.getByRole("button", { name: "Launch New Galaxy" }));
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    const payload = newGamePayload(posted[0]);
+    expect(payload.shape?.clusterCount).toBe(12);
+    expect(payload.shape?.clusterSpacing).toBe(defaultGalaxyShapeKnobs(10_000).clusterSpacing);
+  });
+
   it("opens with a concrete seed pre-filled and submits exactly that seed untouched — the previewed galaxy is the played one", async () => {
     renderForm();
 
-    const seedInput = screen.getByLabelText("Seed", { exact: true });
-    const shown = Number((seedInput as HTMLInputElement).value);
+    // Typed through the query's own element parameter, not a cast.
+    const seedInput = screen.getByRole<HTMLInputElement>("textbox", { name: "Seed" });
+    const shown = Number(seedInput.value);
     expect(Number.isInteger(shown)).toBe(true);
+    expect(shown).toBeGreaterThan(0);
 
     await fillAndSubmit();
     await waitFor(() => expect(posted).toHaveLength(1));
 
-    const payload = posted[0].payload as { seed?: number };
-    expect(payload.seed).toBe(shown);
+    expect(newGamePayload(posted[0]).seed).toBe(shown);
   });
 });
 

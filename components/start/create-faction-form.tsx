@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { GalaxyPreview } from "@/components/start/galaxy-preview";
 import { useNewGameMutation } from "@/lib/hooks/use-game-lifecycle";
 import { useNavigate } from "@/components/ui/link-provider";
 import { mapHref } from "@/lib/utils/route-hrefs";
+import { finiteOr } from "@/lib/utils/math";
 import { newGameSchema, type NewGameInput, type GalaxyShapeInput } from "@/lib/schemas/game-setup";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { DOCTRINES } from "@/lib/constants/doctrines";
@@ -37,29 +38,40 @@ import {
 function presetFor(value: number): CorridorStylePreset {
   let best: CorridorStylePreset = "mixed";
   let bestDistance = Number.POSITIVE_INFINITY;
-  for (const [preset, presetValue] of Object.entries(CORRIDOR_STYLE_PRESETS) as Array<
-    [CorridorStylePreset, number]
-  >) {
-    const distance = Math.abs(value - presetValue);
+  for (const option of CORRIDOR_STYLE_OPTIONS) {
+    const distance = Math.abs(value - CORRIDOR_STYLE_PRESETS[option.value]);
     if (distance < bestDistance) {
       bestDistance = distance;
-      best = preset;
+      best = option.value;
     }
   }
   return best;
 }
 
-/** The Gate-A defaults, as concrete numbers rather than `undefined` — submitting these produces a
- *  world byte-identical to omitting `shape` entirely (`buildGenParams`, `lib/world/gen.ts`), which
- *  is what keeps "the form's default knob values" and "no knobs at all" the same played galaxy.
- *  Filling every field also means the preview always has a real number to render, never a
- *  half-drawn slider waiting on a first change. */
-const DEFAULT_SHAPE: Required<GalaxyShapeInput> = {
-  ...defaultGalaxyShapeKnobs(DEFAULT_SYSTEM_COUNT),
-  starSpacing: 1,
-  clusterTightness: DENSITY_RADIUS_EXPONENT,
-  mapSizeScale: 1,
-};
+/** The engine's own defaults for a galaxy of this size, as concrete numbers rather than
+ *  `undefined` — submitting these produces a world byte-identical to omitting `shape` entirely
+ *  (`buildGenParams`, `lib/world/gen.ts`), which is what keeps "the form's default knob values" and
+ *  "no knobs at all" the same played galaxy. Filling every field also means the preview always has a
+ *  real number to render, never a half-drawn slider waiting on a first change. Derived from the
+ *  system count rather than frozen at one: `defaultGalaxyShapeKnobs` scales cluster count and
+ *  spacing by √N, so a frozen set would submit a 600-system galaxy's structure for a 20,000-system
+ *  one and the `?? config.X` fallbacks downstream would never get a chance to fire. */
+function defaultShapeFor(systemCount: number): Required<GalaxyShapeInput> {
+  return {
+    ...defaultGalaxyShapeKnobs(systemCount),
+    starSpacing: 1,
+    clusterTightness: DENSITY_RADIUS_EXPONENT,
+    mapSizeScale: 1,
+  };
+}
+
+/** The seven structure knobs `defaultShapeFor` rescales with the system count — the placement
+ *  levers (`starSpacing`/`clusterTightness`/`mapSizeScale`) are pure multipliers on the engine's
+ *  own values and never move with N. */
+const SCALED_SHAPE_KEYS = [
+  "clusterCount", "sizeSkew", "clusterSpacing", "voidFloor",
+  "corridorsPerCluster", "corridorStyle", "clusterTurbulence",
+] as const;
 
 /** The form always opens with a concrete random seed already filled in, so the previewed galaxy
  *  IS the one a submit generates — a blank field used to randomise invisibly at generation while
@@ -92,7 +104,8 @@ export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
     control,
     handleSubmit,
     setError,
-    formState: { errors, isSubmitting },
+    setValue,
+    formState: { errors, isSubmitting, dirtyFields },
   } = useForm<NewGameInput>({
     resolver: zodResolver(newGameSchema),
     defaultValues: {
@@ -101,26 +114,39 @@ export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
       governmentType: "federation",
       doctrine: "expansionist",
       seed: initialSeed,
-      shape: DEFAULT_SHAPE,
+      shape: defaultShapeFor(DEFAULT_SYSTEM_COUNT),
     },
   });
 
-  const systemCount = useWatch({ control, name: "systemCount" }) ?? DEFAULT_SYSTEM_COUNT;
+  const systemCount = finiteOr(useWatch({ control, name: "systemCount" }), DEFAULT_SYSTEM_COUNT);
   const seed = useWatch({ control, name: "seed" });
-  const shape = useWatch({ control, name: "shape" }) ?? DEFAULT_SHAPE;
+  const shape = useWatch({ control, name: "shape" }) ?? {};
+  const shapeDefaults = defaultShapeFor(systemCount);
+
+  // Re-derive the structure knobs the player has NOT touched whenever the galaxy's size changes, so
+  // an untouched form always submits the engine's own √N-scaled values for the count it is actually
+  // generating. A knob the player edited is theirs and stays put.
+  const touchedShapeFields = dirtyFields.shape;
+  useEffect(() => {
+    const scaled = defaultShapeFor(systemCount);
+    for (const key of SCALED_SHAPE_KEYS) {
+      if (touchedShapeFields?.[key]) continue;
+      setValue(`shape.${key}`, scaled[key]);
+    }
+  }, [systemCount, setValue, touchedShapeFields]);
 
   const previewKnobs: GalaxyShapeKnobs = {
-    clusterCount: shape.clusterCount ?? DEFAULT_SHAPE.clusterCount,
-    sizeSkew: shape.sizeSkew ?? DEFAULT_SHAPE.sizeSkew,
-    clusterSpacing: shape.clusterSpacing ?? DEFAULT_SHAPE.clusterSpacing,
-    voidFloor: shape.voidFloor ?? DEFAULT_SHAPE.voidFloor,
-    corridorsPerCluster: shape.corridorsPerCluster ?? DEFAULT_SHAPE.corridorsPerCluster,
-    corridorStyle: shape.corridorStyle ?? DEFAULT_SHAPE.corridorStyle,
-    clusterTurbulence: shape.clusterTurbulence ?? DEFAULT_SHAPE.clusterTurbulence,
+    clusterCount: finiteOr(shape.clusterCount, shapeDefaults.clusterCount),
+    sizeSkew: finiteOr(shape.sizeSkew, shapeDefaults.sizeSkew),
+    clusterSpacing: finiteOr(shape.clusterSpacing, shapeDefaults.clusterSpacing),
+    voidFloor: finiteOr(shape.voidFloor, shapeDefaults.voidFloor),
+    corridorsPerCluster: finiteOr(shape.corridorsPerCluster, shapeDefaults.corridorsPerCluster),
+    corridorStyle: finiteOr(shape.corridorStyle, shapeDefaults.corridorStyle),
+    clusterTurbulence: finiteOr(shape.clusterTurbulence, shapeDefaults.clusterTurbulence),
   };
-  const mapSizeScale = shape.mapSizeScale ?? DEFAULT_SHAPE.mapSizeScale;
-  const starSpacing = shape.starSpacing ?? DEFAULT_SHAPE.starSpacing;
-  const clusterTightness = shape.clusterTightness ?? DEFAULT_SHAPE.clusterTightness;
+  const mapSizeScale = finiteOr(shape.mapSizeScale, shapeDefaults.mapSizeScale);
+  const starSpacing = finiteOr(shape.starSpacing, shapeDefaults.starSpacing);
+  const clusterTightness = finiteOr(shape.clusterTightness, shapeDefaults.clusterTightness);
 
   const onSubmit = handleSubmit(async (values) => {
     try {
@@ -208,7 +234,7 @@ export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
             <RangeInput
               id="shape-size-skew"
               label="Size skew"
-              valueLabel={(shape.sizeSkew ?? DEFAULT_SHAPE.sizeSkew).toFixed(2)}
+              valueLabel={previewKnobs.sizeSkew.toFixed(2)}
               min={0}
               max={1}
               step={0.05}
@@ -217,16 +243,16 @@ export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
             <RangeInput
               id="shape-cluster-spacing"
               label="Cluster spacing"
-              valueLabel={String(shape.clusterSpacing ?? DEFAULT_SHAPE.clusterSpacing)}
+              valueLabel={String(previewKnobs.clusterSpacing)}
               min={100}
-              max={2000}
+              max={4000}
               step={50}
               {...register("shape.clusterSpacing", { valueAsNumber: true })}
             />
             <RangeInput
               id="shape-void-floor"
               label="Void floor"
-              valueLabel={(shape.voidFloor ?? DEFAULT_SHAPE.voidFloor).toFixed(2)}
+              valueLabel={previewKnobs.voidFloor.toFixed(2)}
               min={0}
               max={0.9}
               step={0.02}
@@ -235,7 +261,7 @@ export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
             <RangeInput
               id="shape-corridors-per-cluster"
               label="Corridors per cluster"
-              valueLabel={(shape.corridorsPerCluster ?? DEFAULT_SHAPE.corridorsPerCluster).toFixed(2)}
+              valueLabel={previewKnobs.corridorsPerCluster.toFixed(2)}
               min={0}
               max={2}
               step={0.1}
@@ -244,7 +270,7 @@ export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
             <RangeInput
               id="shape-cluster-turbulence"
               label="Cluster turbulence"
-              valueLabel={(shape.clusterTurbulence ?? DEFAULT_SHAPE.clusterTurbulence).toFixed(2)}
+              valueLabel={previewKnobs.clusterTurbulence.toFixed(2)}
               min={0}
               max={1}
               step={0.05}
@@ -257,7 +283,7 @@ export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
                 <SegmentedControl
                   name="shape-corridor-style"
                   label="Corridor style"
-                  value={presetFor(field.value ?? DEFAULT_SHAPE.corridorStyle)}
+                  value={presetFor(finiteOr(field.value, shapeDefaults.corridorStyle))}
                   onChange={(preset) => field.onChange(CORRIDOR_STYLE_PRESETS[preset])}
                   options={CORRIDOR_STYLE_OPTIONS}
                 />

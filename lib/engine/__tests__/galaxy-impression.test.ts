@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildGalaxyImpression, renderDensityField, worldToCanvas } from "../galaxy-impression";
+import { buildGalaxyImpression, crossingSegments, renderDensityField, worldToCanvas } from "../galaxy-impression";
 import { genConfigForSystemCount } from "@/lib/constants/universe-gen";
 import { mulberry32 } from "@/lib/engine/generation-primitives";
 import { buildGalaxyShape, type GalaxyShapeKnobs } from "@/lib/engine/density-field";
@@ -94,6 +94,24 @@ describe("buildGalaxyImpression", () => {
       expect(point.y).toBeGreaterThanOrEqual(0);
       expect(point.y).toBeLessThanOrEqual(scaled.mapSize);
     }
+  });
+
+  // The paint effect (`components/start/galaxy-preview.tsx`) runs this whole chain synchronously
+  // on the main thread every time a knob settles, so the interactive budget is the WHOLE chain,
+  // not just placement. What this cannot cover is the canvas half — putImageData plus one fillRect
+  // per system — which needs a real 2D context and so has no node equivalent; those two calls sit
+  // downstream of the work bracketed here.
+  it("completes the whole 20,000-system regeneration chain — placement, raster and crossing segments — within an interactive bound", () => {
+    const start = performance.now();
+    const impression = buildGalaxyImpression(knobs({ clusterCount: 60 }), 99, 20_000);
+    const bytes = renderDensityField(impression.shape.grid, 900, 900);
+    const segments = crossingSegments(impression);
+    const elapsedMs = performance.now() - start;
+
+    expect(impression.points.length).toBeGreaterThan(0);
+    expect(bytes.length).toBe(900 * 900 * 4);
+    expect(Array.isArray(segments)).toBe(true);
+    expect(elapsedMs).toBeLessThan(8000);
   });
 
   it("completes a 20,000-system impression within an interactive bound", () => {
