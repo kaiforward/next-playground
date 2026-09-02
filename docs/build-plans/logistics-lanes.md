@@ -240,6 +240,23 @@ One item: **`GalaxyPreview`** (canvas + ImageData density field + star dots — 
 styleguide section (Task 5) and is the owner-approved prototype before the New Game wiring
 (Task 6) starts.
 
+### Carried into the lane-mechanics sub-project
+
+Items the gitignored session ledger (`temp/sdd/map-gen-geography/progress.md`) holds that must
+survive this branch, since a ledger row not booked here dies with the branch:
+
+- **Test blind spot**: no test catches a band waypoint cross-wired into the wrong pair's chain when
+  two band corridors run geometrically close — the lane still reads `isCrossing: false` and the
+  repair-lane count stays 0, invisible to today's provenance assertions.
+- **Parked lane-length observation (Kai)**: intra-cluster lanes occasionally run longer than
+  crossing lanes — intra p95/max 242/626 at default knobs vs crossing min/median 164-673/693-780;
+  at 100 clusters intra max reaches 963 while zero crossing pairs realise at all.
+- **Foreign-transit share** reads 0.178 of placed haul volume at 10K equilibrium (the shipped
+  router is ownership-blind and routes through foreign-held systems) — a future routing rule
+  (transit through friendly factions allowed, hostile closed) is an owner decision, not yet made.
+- **`lanePruneFraction` ships at its connectivity-tested default of 0** — becomes player-facing
+  only alongside a lane-mechanics design decision.
+
 ## Spec
 
 Written 2026-08-31 from the evidence below plus the session's settled decisions:

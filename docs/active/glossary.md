@@ -155,7 +155,7 @@ band, funded fraction, charter fee, manifest.
 
 **Territory and politics** — unclaimed / controlled / developed, claim, colonise, colony, faction,
 government, doctrine, faction status, relation score and its five tiers, alliance, region,
-gateway, jump lane, fuel cost.
+gateway, jump lane, crossing lane, fuel cost.
 
 **The player's layer** — automation switch, pin, tracker section, alert category and its three
 tiers, funded front, ghost row.
@@ -414,13 +414,19 @@ high relation score and dissolved when the score falls back.
 carries a dominant-economy label; it does not bound anyone's territory.
 
 **Jump lane** — A connection between two systems. Goods, people and ships all move along lanes and
-nowhere else.
+nowhere else. Most lanes sit inside one region; a lane crossing between two regions exists only
+where the galaxy's generated corridors put one.
+
+**Crossing lane** — A jump lane the galaxy generator marks as a corridor's single long-haul link
+directly between two regions' anchor systems. Styled distinctly on the map (a glowing amber line,
+against the ordinary dashed line every other lane draws) and priced at a fuel-cost multiplier
+above every other lane.
 
 **Fuel cost** — What crossing one jump lane costs. It sets how far hauls and migration reach, and
-gateway lanes cost the most.
+crossing lanes cost the most.
 
-**Gateway** — A system holding the lanes between two regions, and the chokepoint anything crossing
-that border must pass.
+**Gateway** — A system anchoring one end of a corridor between two regions — the chokepoint
+anything travelling between those regions is funnelled through.
 
 ### The player's layer
 
