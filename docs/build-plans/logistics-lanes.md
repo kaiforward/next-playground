@@ -405,6 +405,40 @@ Falsifier: if, at either horizon, more than 1% of TOTAL haul volume is unroutabl
 (ownership-blind, hop-unbounded) adjacency, the claim is false — the rework genuinely
 disconnected hauls and the reading is real degradation, back to design.
 
+Measured 2026-09-02 (instrument: temporary classification inside computeGeographyProjection —
+each unreachable haul retried under full unfiltered adjacency; identity check classes-sum ==
+unreachable counter; reverted same session, grep clean):
+
+```
+Meaning:  No cargo is lost or lane-disconnected. Every "unreachable" haul was placed by the
+          shipped ownership-blind router through foreign-held systems; the metric counts the gap
+          between the instrument's foreign-space-closed model and the router the game actually
+          runs, and the sparser lane graph widens that gap by removing redundant own-space detours.
+Claim:    The 12.3% unreachable-haul share is entirely foreign-space blocking under the
+          projection's own+unclaimed adjacency; nothing is unroutable under full adjacency.
+Number:   10K, seed defaults: flows=43493, unreachable=5137 hauls / 697,707.7 volume (12.3%
+          share); classification: foreignBlocked=5137/697707.7, trulyUnreachable=0/0.0,
+          donorUnclaimed=0/0.0; identity OK (classes sum == counter). Falsifier line (>1%
+          truly-unroutable) reads 0.0%.
+Horizon:  1000t: zero flow events (pre-founding — projection early-returns empty; report reads
+          unreachable 0 / share 0.000). 10,000t: the reading above. Both quoted.
+Cohort:   All directed-logistics flow events in the trailing FLOW_HISTORY_TICKS window at run
+          end, classified per haul; ownership read off final-tick systems (same as the metric).
+Licenses: Supports: the 4.5%→12.3% rise is not degradation — no haul volume became unroutable;
+          goods moved. Supports: the shipped router routes ~12% of haul volume through foreign
+          space at equilibrium — a real divergence between spec §2's "foreign space is closed"
+          and the ownership-blind hop-BFS, amplified by the sparser RNG graph; that is lane-
+          sub-project material (interdiction surface), not a map-gen defect. Does NOT support:
+          any claim about pre-rework composition (4.5% was not re-classified); any claim that
+          12.3% is stable across seeds (one seed measured).
+
+Raw (report + diag, verbatim):
+  1000t block:  Unreachable hauls 0 · Unreachable haul volume 0 · Unreachable volume share 0.000
+  10K block:    Unreachable hauls 5137 · Unreachable haul volume 697.7K · share 0.123
+  DIAG-UNREACH flows=43493 unreachN=5137 classSumN=5137 identity=OK donorUnclaimed=0/0.0
+  foreignBlocked=5137/697707.7 trulyUnreachable=0/0.0
+```
+
 ### Premise 1 — flow concentration (measured 2026-08-31)
 
 ```
