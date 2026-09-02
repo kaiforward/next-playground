@@ -925,13 +925,14 @@ export function formatTable(results: HarnessResults): string {
     }
   }
 
-  // Geography acceptance instruments (map-generation sub-project, spec §5) — corrected flow
-  // concentration, fuel-cost spread over both cohorts, cross-faction lane count, beyond-crossing
-  // migration cohort. Relations-score distribution and border_conflict count are existing state,
-  // surfaced here as new rows rather than a new mechanic.
+  // Geography acceptance instruments (spec §5) — flow concentration, fuel-cost spread over both
+  // cohorts, cross-faction lane count, beyond-crossing migration cohort. Relations-score
+  // distribution and border_conflict count are existing state, surfaced here as rows rather than a
+  // new mechanic.
   {
     lines.push("");
     lines.push("Geography Acceptance (map generation, whole run):");
+    lines.push("  hauls classified against ownership at haul time (per-cycle snapshot); lane cohorts read the final world");
     const gRows: [string, string][] = [
       ["Top-decile flow share", geography.topDecileShare.toFixed(3)],
       ["Fuel p90/p10 (all)", geography.fuelP90P10All.toFixed(2)],

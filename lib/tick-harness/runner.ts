@@ -20,7 +20,7 @@ import {
 } from "./event-analysis";
 import { summariseLogistics, fundingBoundCensus, LOGISTICS_WARMUP_TICKS } from "./logistics-analysis";
 import type { LogisticsBudgetTotals } from "./logistics-analysis";
-import { summariseGeography } from "./geography-analysis";
+import { summariseGeography, type OwnershipSnapshot } from "./geography-analysis";
 import {
   summariseBuildBursts, trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample,
   summariseFoundingStock, recordFoundingManifest, newFoundingStallTotals, recordFoundingStall,
@@ -177,6 +177,14 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   // numerator, folded by world cohort at the end via computeWorldCohorts. Transient instrumentation
   // (`runWorldTick().instrumentation`), so like migrationMoved it is accumulated per tick.
   const colonistDeliveryTotals = new Map<string, number>();
+  // Ownership as it stood at each cycle boundary — the basis geography classifies each haul
+  // against. Ownership only ever changes on a cycle boundary (colonisation lands and abandonment
+  // reverts there), so a snapshot per boundary is exact for every tick until the next one, and the
+  // end-of-run world alone would credit a system settled late with hauls that crossed it while it
+  // was still empty.
+  const ownershipSnapshots: OwnershipSnapshot[] = [
+    { fromTick: 0, systemFactionById: new Map(world.systems.map((s) => [s.id, s.factionId])) },
+  ];
   // Whole-run abandonment counts by cause (famine-collapse vs decline-to-empty), folded from
   // `abandonedSystemsByCause` each cycle. Not cohorted: an abandoned system reverts to unclaimed
   // this same cycle (`applyAbandonments`), so it never appears in a settled-only cohort read again.
@@ -295,6 +303,13 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       migrationCycleCount++;
       migrationColonistsTotal += result.instrumentation.migrationMoved.colonists;
       migrationDiffusionTotal += result.instrumentation.migrationMoved.diffusion;
+    }
+
+    if (world.meta.currentTick % cycleLength === 0) {
+      ownershipSnapshots.push({
+        fromTick: world.meta.currentTick,
+        systemFactionById: new Map(world.systems.map((s) => [s.id, s.factionId])),
+      });
     }
 
     if (result.instrumentation.colonistDeliveryBySystem) {
@@ -474,6 +489,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
 
   const geography = summariseGeography(
     finalTickSystems, toTickConnections(world), world.factions, logisticsFlows, colonistDeliveryTotals,
+    ownershipSnapshots,
   );
 
   const episodeCosts = summariseEpisodeCostsByCohort(episodeCostTotals, finalTickSystems, homeworldIds);

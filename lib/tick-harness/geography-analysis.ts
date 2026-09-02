@@ -23,6 +23,16 @@
  * always placed, even when its modelled path happens to transit a foreign-held system in between —
  * that transit is measured, not excluded (`foreignTransitHaul*` below).
  *
+ * Ownership basis: a haul is classified against who held each system AT HAUL TIME, not at the end
+ * of the run. The runner samples ownership once per cycle (`ownershipSnapshots`, `runner.ts`) and
+ * this module resolves every flow through the latest snapshot at or before its own tick, so a
+ * transit system that was unclaimed when the goods moved and was settled later does not count as
+ * foreign transit, and a donor whose faction has since abandoned it still attributes its hauls.
+ * Ownership sampled per cycle is an approximation only within one cycle — ownership changes on
+ * cycle boundaries (colonisation, abandonment), so a snapshot taken at each boundary is exact for
+ * every tick until the next one. The lane-cohort reads below (fuel spread, cross-faction lanes,
+ * beyond-crossing cohort) stay END-OF-RUN reads: they describe the map as it finished, not a haul.
+ *
  * NaN rule throughout, matching `logistics-analysis.ts`: a zero denominator reports 0, never NaN —
  * `JSON.stringify` renders NaN as null, which reads as "not measured" rather than "measured, and
  * broken".
@@ -54,8 +64,9 @@ export interface GeographyFactionInput {
 /**
  * Trafficked-edge floor below which a per-faction top-decile share is omitted, not zero-filled —
  * a handful of edges cannot carry a meaningful decile, and a printed 0 there would read as "flat
- * traffic" rather than "too small to measure". Matches the premise-1 attribution run's own
- * cross-check line ("gated at >=20 trafficked edges", `docs/build-plans/logistics-lanes.md`).
+ * traffic" rather than "too small to measure". Twenty is the smallest cohort whose top decile is
+ * more than one or two edges, so the share it reports is a distribution reading rather than a
+ * single lane's share of its faction.
  */
 export const GEOGRAPHY_MIN_TRAFFICKED_EDGES = 20;
 
@@ -66,6 +77,44 @@ export const GEOGRAPHY_MIN_TRAFFICKED_EDGES = 20;
  *  is over the undirected physical lane. */
 function edgeKey(a: string, b: string): string {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+// ── Ownership over time ──────────────────────────────────────────
+
+/** Who held each system over one window of ticks — the reading applies from `fromTick` until the
+ *  next snapshot's `fromTick`. */
+export interface OwnershipSnapshot {
+  fromTick: number;
+  systemFactionById: ReadonlyMap<string, string | null>;
+}
+
+/** One snapshot covering the whole run — what a caller with only an end-of-run ownership map (a
+ *  unit test, or a world that never changed hands) passes. */
+export function singleOwnershipSnapshot(
+  systemFactionById: ReadonlyMap<string, string | null>,
+): OwnershipSnapshot[] {
+  return [{ fromTick: 0, systemFactionById }];
+}
+
+/** The latest snapshot at or before `tick`, by binary search over an ascending-`fromTick` list.
+ *  A tick before the first snapshot reads that first snapshot — the run's opening ownership is the
+ *  only reading available for it, and it is the correct one. */
+function ownershipAt(
+  snapshots: ReadonlyArray<OwnershipSnapshot>, tick: number,
+): ReadonlyMap<string, string | null> {
+  let lo = 0;
+  let hi = snapshots.length - 1;
+  let best = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (snapshots[mid].fromTick <= tick) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return snapshots[best].systemFactionById;
 }
 
 // ── Flow projection ──────────────────────────────────────────────
@@ -135,9 +184,9 @@ function emptyProjection(): GeographyProjection {
 export function computeGeographyProjection(
   flowEvents: ReadonlyArray<WorldFlowEvent>,
   connections: ReadonlyArray<ConnectionInfo>,
-  systemFactionById: ReadonlyMap<string, string | null>,
+  ownershipSnapshots: ReadonlyArray<OwnershipSnapshot>,
 ): GeographyProjection {
-  if (flowEvents.length === 0) return emptyProjection();
+  if (flowEvents.length === 0 || ownershipSnapshots.length === 0) return emptyProjection();
 
   const projection = emptyProjection();
   // Both graphs are ownership-blind and built once over every declared connection, matching the
@@ -145,8 +194,13 @@ export function computeGeographyProjection(
   // is this module's own fuel-weighted placement model over the same full connection set.
   const hopDistances = computeBoundedHopDistances([...connections], DIRECTED_LOGISTICS.MAX_HOPS);
   const adjacency = buildFuelAdjacency([...connections]);
+  // A run's hauls repeat the same few hundred donor/receiver pairs thousands of times over a fixed
+  // topology. Pathing reads only `adjacency`, which is ownership-blind — ownership decides how a
+  // haul is CLASSIFIED, never where it routes — so one cache serves every snapshot window.
+  const pathCache = new Map<string, string[] | null>();
 
   for (const flow of flowEvents) {
+    const systemFactionById = ownershipAt(ownershipSnapshots, flow.tick);
     const factionId = systemFactionById.get(flow.fromSystemId) ?? null;
 
     const hopDistance = hopDistances.get(flow.fromSystemId)?.get(flow.toSystemId);
@@ -156,21 +210,27 @@ export function computeGeographyProjection(
       continue;
     }
 
-    const result = findShortestPath(flow.fromSystemId, flow.toSystemId, [], undefined, adjacency);
-    if (result === null) {
+    const cacheKey = `${flow.fromSystemId}>${flow.toSystemId}`;
+    let path = pathCache.get(cacheKey);
+    if (path === undefined) {
+      const computed = findShortestPath(flow.fromSystemId, flow.toSystemId, [], undefined, adjacency);
+      path = computed === null ? null : computed.path;
+      pathCache.set(cacheKey, path);
+    }
+    if (path === null) {
       // Router-reachable by hop count but the fuel-weighted model finds no path — should not occur
       // given the two graphs share connectivity, but if it does this haul is router-routable and
       // must not be double-counted as unreachable; it simply has no lane path to place.
       continue;
     }
 
-    const pathEdgeCount = result.path.length - 1;
+    const pathEdgeCount = path.length - 1;
     projection.totalHaulPathProduct += flow.quantity * pathEdgeCount;
     projection.placedHaulVolume += flow.quantity;
 
     let transitsForeign = false;
-    for (let i = 1; i < result.path.length - 1; i++) {
-      const owner = systemFactionById.get(result.path[i]) ?? null;
+    for (let i = 1; i < path.length - 1; i++) {
+      const owner = systemFactionById.get(path[i]) ?? null;
       if (owner !== null && owner !== factionId) transitsForeign = true;
     }
     if (transitsForeign) {
@@ -188,7 +248,7 @@ export function computeGeographyProjection(
     }
 
     for (let i = 0; i < pathEdgeCount; i++) {
-      const key = edgeKey(result.path[i], result.path[i + 1]);
+      const key = edgeKey(path[i], path[i + 1]);
       projection.aggregateEdgeVolume.set(key, (projection.aggregateEdgeVolume.get(key) ?? 0) + flow.quantity);
       if (perFaction) perFaction.set(key, (perFaction.get(key) ?? 0) + flow.quantity);
     }
@@ -362,6 +422,10 @@ export function countBorderConflicts(events: ReadonlyArray<{ type: string }>): n
  * system (`TickInstrumentation.colonistDeliveryBySystem`, folded across the run) — absent (e.g. a
  * unit test with no run to accumulate) reads every system's inflow as 0, not unmeasured, since
  * "no colonists delivered" and "not tracked" are the same reading for a cohort mean.
+ *
+ * `systems` is the END-OF-RUN world, which is the right basis for every lane cohort here. Haul
+ * classification is not a lane cohort: it reads `ownershipSnapshots` instead (see the module
+ * docstring), defaulting to the end-of-run reading when a caller has no history to give.
  */
 export function summariseGeography(
   systems: ReadonlyArray<GeographySystemInput>,
@@ -369,9 +433,16 @@ export function summariseGeography(
   factions: ReadonlyArray<GeographyFactionInput>,
   flowEvents: ReadonlyArray<WorldFlowEvent>,
   migrantInflowBySystem: ReadonlyMap<string, number> = new Map(),
+  ownershipSnapshots?: ReadonlyArray<OwnershipSnapshot>,
 ): GeographySummary {
   const systemFactionById = new Map(systems.map((s) => [s.id, s.factionId]));
-  const projection = computeGeographyProjection(flowEvents, connections, systemFactionById);
+  const projection = computeGeographyProjection(
+    flowEvents,
+    connections,
+    ownershipSnapshots && ownershipSnapshots.length > 0
+      ? ownershipSnapshots
+      : singleOwnershipSnapshot(systemFactionById),
+  );
 
   const { share: topDecileShare } = topDecileConcentration(projection.aggregateEdgeVolume.values());
 

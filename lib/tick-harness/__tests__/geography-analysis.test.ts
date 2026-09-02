@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   summariseGeography, computeGeographyProjection, sameFactionEdgeFuelCosts,
   crossFactionLaneCount, beyondCrossingCohort, summariseRelationsScores, countBorderConflicts,
-  GEOGRAPHY_MIN_TRAFFICKED_EDGES,
+  GEOGRAPHY_MIN_TRAFFICKED_EDGES, singleOwnershipSnapshot,
 } from "../geography-analysis";
 import type { GeographySystemInput, GeographyFactionInput } from "../geography-analysis";
 import type { WorldFlowEvent } from "@/lib/world/types";
@@ -37,9 +37,12 @@ const faction = (id: string, homeworldId: string): GeographyFactionInput => ({ i
 const factionById = (systems: GeographySystemInput[]): Map<string, string | null> =>
   new Map(systems.map((s) => [s.id, s.factionId]));
 
+/** One ownership window covering the whole run — the fixtures below that never change hands. */
+const ownershipOf = (systems: GeographySystemInput[]) => singleOwnershipSnapshot(factionById(systems));
+
 describe("computeGeographyProjection", () => {
   it("reports a flow-less world as zeroes, never NaN", () => {
-    const projection = computeGeographyProjection([], [], new Map());
+    const projection = computeGeographyProjection([], [], singleOwnershipSnapshot(new Map()));
     expect(projection.aggregateEdgeVolume.size).toBe(0);
     expect(projection.totalPlacedVolume).toBe(0);
     expect(projection.totalHaulPathProduct).toBe(0);
@@ -60,7 +63,7 @@ describe("computeGeographyProjection", () => {
     ];
     const flows = [flow("h1", "c1", 10), flow("h1", "c2", 5)];
 
-    const projection = computeGeographyProjection(flows, connections, factionById(systems));
+    const projection = computeGeographyProjection(flows, connections, ownershipOf(systems));
 
     // Independently computed sides: one accumulated during placement, the other by re-summing
     // the map placement wrote — a mis-keyed edge would make these disagree.
@@ -78,7 +81,7 @@ describe("computeGeographyProjection", () => {
     const connections: ConnectionInfo[] = [];
     const flows = [flow("h1", "c2", 7)];
 
-    const projection = computeGeographyProjection(flows, connections, factionById(systems));
+    const projection = computeGeographyProjection(flows, connections, ownershipOf(systems));
 
     expect(projection.unreachableHaulCount).toBe(1);
     expect(projection.unreachableHaulVolume).toBe(7);
@@ -93,7 +96,7 @@ describe("computeGeographyProjection", () => {
     const connections = biConn("u1", "c1", 5);
     const flows = [flow("u1", "c1", 4)];
 
-    const projection = computeGeographyProjection(flows, connections, factionById(systems));
+    const projection = computeGeographyProjection(flows, connections, ownershipOf(systems));
 
     expect(projection.unreachableHaulCount).toBe(0);
     expect(projection.totalPlacedVolume).toBe(4);
@@ -114,7 +117,7 @@ describe("computeGeographyProjection", () => {
     ];
     const flows = [flow("h1", "h2", 3)];
 
-    const projection = computeGeographyProjection(flows, connections, factionById(systems));
+    const projection = computeGeographyProjection(flows, connections, ownershipOf(systems));
 
     expect(projection.unreachableHaulCount).toBe(1);
     expect(projection.unreachableHaulVolume).toBe(3);
@@ -140,7 +143,7 @@ describe("computeGeographyProjection", () => {
     ];
     const flows = [flow("h1", "h2", 5)];
 
-    const projection = computeGeographyProjection(flows, connections, factionById(systems));
+    const projection = computeGeographyProjection(flows, connections, ownershipOf(systems));
 
     expect(projection.unreachableHaulCount).toBe(0);
     // Placed onto the cheaper 6-edge route, proving the model path (6 edges, over MAX_HOPS) was NOT
@@ -154,11 +157,55 @@ describe("computeGeographyProjection", () => {
     const connections = [...biConn("h1", "m", 5), ...biConn("m", "h2", 5)];
     const flows = [flow("h1", "h2", 6)];
 
-    const projection = computeGeographyProjection(flows, connections, factionById(systems));
+    const projection = computeGeographyProjection(flows, connections, ownershipOf(systems));
 
     expect(projection.unreachableHaulCount).toBe(0);
     expect(projection.foreignTransitHaulCount).toBe(1);
     expect(projection.foreignTransitHaulVolume).toBe(6);
+  });
+
+  // Ownership at HAUL time, not at run end: a transit system settled after the goods moved was
+  // not foreign space when they moved through it, and a donor whose faction later abandoned it
+  // still hauled for that faction at the time.
+  it("classifies each haul against the ownership window covering its own tick", () => {
+    const unclaimedMid = [sys("h1", "f1", "r1"), sys("m", null, "r1"), sys("h2", "f1", "r1")];
+    const foreignMid = [sys("h1", "f1", "r1"), sys("m", "f2", "r1"), sys("h2", "f1", "r1")];
+    const connections = [...biConn("h1", "m", 5), ...biConn("m", "h2", 5)];
+    const snapshots = [
+      { fromTick: 0, systemFactionById: factionById(unclaimedMid) },
+      { fromTick: 100, systemFactionById: factionById(foreignMid) },
+    ];
+    // One haul before m was settled, one after.
+    const flows = [flow("h1", "h2", 6, 50), flow("h1", "h2", 4, 150)];
+
+    const projection = computeGeographyProjection(flows, connections, snapshots);
+
+    expect(projection.foreignTransitHaulCount).toBe(1);
+    expect(projection.foreignTransitHaulVolume).toBe(4);
+
+    // Read against the END-OF-RUN map alone, both hauls would count — the anachronism this fixes.
+    const endOfRunOnly = computeGeographyProjection(flows, connections, ownershipOf(foreignMid));
+    expect(endOfRunOnly.foreignTransitHaulCount).toBe(2);
+    expect(endOfRunOnly.foreignTransitHaulVolume).toBe(10);
+  });
+
+  it("attributes a haul to the faction that held the donor at haul time, not to whoever holds it at run end", () => {
+    const held = [sys("h1", "f1", "r1"), sys("c1", "f1", "r1")];
+    const abandoned = [sys("h1", null, "r1"), sys("c1", "f1", "r1")];
+    const connections = biConn("h1", "c1", 5);
+    const snapshots = [
+      { fromTick: 0, systemFactionById: factionById(held) },
+      { fromTick: 100, systemFactionById: factionById(abandoned) },
+    ];
+    const flows = [flow("h1", "c1", 9, 50)];
+
+    const projection = computeGeographyProjection(flows, connections, snapshots);
+
+    expect(projection.perFactionEdgeVolume.get("f1")?.get("c1|h1")).toBe(9);
+    // The end-of-run reading loses the haul entirely — an unclaimed donor has no faction bucket.
+    expect(
+      computeGeographyProjection(flows, connections, ownershipOf(abandoned)).perFactionEdgeVolume.size,
+    ).toBe(0);
   });
 
   it("does not count an all-own-space path as a foreign transit", () => {
@@ -166,7 +213,7 @@ describe("computeGeographyProjection", () => {
     const connections = [...biConn("h1", "m", 5), ...biConn("m", "h2", 5)];
     const flows = [flow("h1", "h2", 4)];
 
-    const projection = computeGeographyProjection(flows, connections, factionById(systems));
+    const projection = computeGeographyProjection(flows, connections, ownershipOf(systems));
 
     expect(projection.foreignTransitHaulCount).toBe(0);
     expect(projection.foreignTransitHaulVolume).toBe(0);
@@ -182,7 +229,7 @@ describe("sameFactionEdgeFuelCosts / trafficked subset", () => {
 
     const fuelById = factionById(systems);
     const allEdges = sameFactionEdgeFuelCosts(connections, fuelById);
-    const projection = computeGeographyProjection(flows, connections, fuelById);
+    const projection = computeGeographyProjection(flows, connections, singleOwnershipSnapshot(fuelById));
     const traffickedKeys = [...allEdges.keys()].filter((k) => (projection.aggregateEdgeVolume.get(k) ?? 0) > 0);
 
     expect(allEdges.size).toBe(2);
@@ -237,7 +284,7 @@ describe("summariseGeography", () => {
     ];
     const flows = [flow("h1", "c1", 6), flow("h1", "h2", 4)];
 
-    const projection = computeGeographyProjection(flows, connections, factionById(systems));
+    const projection = computeGeographyProjection(flows, connections, ownershipOf(systems));
     const summary = summariseGeography(systems, connections, [], flows);
 
     expect(projection.unreachableHaulCount).toBe(1);
@@ -255,7 +302,7 @@ describe("summariseGeography", () => {
     const connections = [...biConn("h1", "m", 5), ...biConn("m", "h2", 5), ...biConn("h1", "own", 5)];
     const flows = [flow("h1", "h2", 6), flow("h1", "own", 4)];
 
-    const projection = computeGeographyProjection(flows, connections, factionById(systems));
+    const projection = computeGeographyProjection(flows, connections, ownershipOf(systems));
     const summary = summariseGeography(systems, connections, [], flows);
 
     expect(projection.foreignTransitHaulCount).toBe(1);
