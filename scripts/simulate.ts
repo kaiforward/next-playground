@@ -940,6 +940,9 @@ export function formatTable(results: HarnessResults): string {
       ["Unreachable hauls", String(geography.unreachableHaulCount)],
       ["Unreachable haul volume", fmtNum(geography.unreachableHaulVolume)],
       ["Unreachable volume share", geography.unreachableHaulVolumeShare.toFixed(3)],
+      ["Foreign-transit hauls", String(geography.foreignTransitHaulCount)],
+      ["Foreign-transit haul volume", fmtNum(geography.foreignTransitHaulVolume)],
+      ["Foreign-transit volume share", geography.foreignTransitHaulVolumeShare.toFixed(3)],
     ];
     lines.push(...renderTable(["Metric", "Value"], [26, 16], gRows.map(([l, v]) => [l, v])));
     if (geography.topDecileShareByFaction.length > 0) {

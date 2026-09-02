@@ -556,8 +556,10 @@ export interface BeyondCrossingCohortEntry {
 /**
  * The map-generation acceptance instruments (spec §5): whether the generated galaxy's geography
  * actually concentrates flow, differentiates lane cost, and makes settling beyond a crossing
- * measurably costlier — read against the corrected projection (own+unclaimed adjacency,
- * fuel-weighted shortest paths), not the flat premise-1 hop-BFS instrument.
+ * measurably costlier — reachability mirrors the shipped, ownership-blind router exactly (hop-BFS
+ * over the full connection graph, `DIRECTED_LOGISTICS.MAX_HOPS`-capped); the specific lane path a
+ * haul is placed onto is this module's own fuel-weighted shortest-path model over that same full
+ * adjacency, since the real matcher never records a chosen path.
  */
 export interface GeographySummary {
   /** Share of edge-crossing haul volume the top decile of trafficked edges carries, aggregate
@@ -578,15 +580,25 @@ export interface GeographySummary {
   /** Colony-cluster-vs-homeworld-cluster cohort: `["interior", "beyond-crossing"]`, always both
    *  rows present even at 0 colonies (an empty cohort reads 0/0/0, never a missing row). */
   beyondCrossingCohort: BeyondCrossingCohortEntry[];
-  /** Hauls the projection never placed — the donor system had no faction to route within, or no
-   *  path existed under own+unclaimed adjacency (foreign space closes the route this pass). A
-   *  projection that silently drops most hauls must be visible here, not read as low traffic. */
+  /** Hauls the shipped router itself could not have routed: no path at all over the full,
+   *  ownership-blind connection graph, or hop-minimal distance over `DIRECTED_LOGISTICS.MAX_HOPS`.
+   *  A projection that silently drops most hauls must be visible here, not read as low traffic. */
   unreachableHaulCount: number;
   unreachableHaulVolume: number;
   /** unreachableHaulVolume / (total haul volume across every flow event, placed or not). 0 when
    *  no hauls were recorded at all (never NaN) — the share reads directly against total volume
    *  rather than needing `unreachableHaulVolume` compared against a number computed elsewhere. */
   unreachableHaulVolumeShare: number;
+  /** Placed hauls whose modelled lane path transits at least one intermediate system owned by a
+   *  faction that is neither the hauling faction nor null — the spec-divergence metric: the shipped
+   *  router is ownership-blind and routes through foreign-held space freely; this counts how much
+   *  of the traffic actually does. */
+  foreignTransitHaulCount: number;
+  foreignTransitHaulVolume: number;
+  /** foreignTransitHaulVolume / (total PLACED haul volume, not edge-multiplied). 0 when nothing was
+   *  placed (never NaN). Denominator is placed volume, not total recorded volume — an unreachable
+   *  haul has no path to transit anything with. */
+  foreignTransitHaulVolumeShare: number;
 }
 
 // ── Region overview ─────────────────────────────────────────────

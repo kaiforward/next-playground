@@ -3,19 +3,32 @@
  * measure of whether the generated galaxy actually produces the geography the spec claims:
  * concentrated traffic, cost-differentiated lanes, and a real cost to settling beyond a crossing.
  *
- * The concentration read is the premise-1 instrument, corrected: the shipped router travels over
- * own-plus-unclaimed adjacency with fuel-weighted shortest paths (`buildFuelAdjacency` + the
- * Dijkstra, `lib/engine/pathfinding.ts`), not the old same-faction-only hop-BFS — so this module
- * projects every recorded haul onto the path the real router would choose and places its quantity
- * on each traversed lane. That projection is this module's first job; everything else (fuel-cost
- * spread, cross-faction lane count, the beyond-crossing cohort) reads off the same connection
- * graph, which is why this is the first harness module to touch it at all.
+ * The concentration read is the premise-1 instrument. Its reachability now mirrors the shipped
+ * router exactly (`world/tick.ts`'s directed-logistics block): the router is ownership-blind — it
+ * hauls over an unweighted hop-BFS across ALL connections (`computeBoundedHopDistances`), gated
+ * only by `DIRECTED_LOGISTICS.MAX_HOPS`, with no adjacency filter for foreign-held systems. A haul
+ * is unreachable here iff the router itself could not have routed it: no path at all (disconnected
+ * component) or hop-minimal distance over `DIRECTED_LOGISTICS.MAX_HOPS`. That hop-minimal distance
+ * is judged independently of the edge-placement path below — a fuel-weighted shortest path can
+ * legitimately take more hops than the hop-BFS minimum, so the two are never substituted for each
+ * other.
+ *
+ * The specific lane path a haul is placed onto, however, stays a MODELLING CHOICE, not a claim
+ * about the router: the real matcher (`matchFactionTransfers`) only ever compares a cost number
+ * between a donor and a receiver — it never records or chooses a lane sequence. This module models
+ * that unrecorded path as the fuel-weighted shortest path (`buildFuelAdjacency` + Dijkstra) over
+ * the same full, ownership-blind adjacency the router routes over, so it can attribute volume to
+ * individual lanes for the concentration and fuel-spread reads. A haul the router itself could not
+ * route contributes to neither side of the conservation identity below; a haul it could route is
+ * always placed, even when its modelled path happens to transit a foreign-held system in between —
+ * that transit is measured, not excluded (`foreignTransitHaul*` below).
  *
  * NaN rule throughout, matching `logistics-analysis.ts`: a zero denominator reports 0, never NaN —
  * `JSON.stringify` renders NaN as null, which reads as "not measured" rather than "measured, and
  * broken".
  */
-import { buildFuelAdjacency, findShortestPath } from "@/lib/engine/pathfinding";
+import { buildFuelAdjacency, computeBoundedHopDistances, findShortestPath } from "@/lib/engine/pathfinding";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
 import { quantile } from "@/lib/utils/math";
 import type { SystemControl, WorldFlowEvent } from "@/lib/world/types";
@@ -66,23 +79,34 @@ function edgeKey(a: string, b: string): string {
  * dropped an edge.
  */
 export interface GeographyProjection {
-  /** edgeKey -> volume, summed across every faction's own placements. */
+  /** edgeKey -> volume, summed across every faction's own placements (plus independent/unclaimed
+   *  hauls, which have no faction to attribute to — see `perFactionEdgeVolume`). */
   aggregateEdgeVolume: Map<string, number>;
-  /** factionId -> edgeKey -> volume, the hauling faction's own placements only. Because a lane
-   *  between two same-faction systems can only appear in ITS OWN faction's own+unclaimed graph
-   *  (no other faction's graph admits either endpoint), same-faction edges attribute cleanly to
-   *  one faction. */
+  /** factionId -> edgeKey -> volume, one hauling faction's own placements only. Independent hauls
+   *  (donor system unclaimed) still land in `aggregateEdgeVolume` above but have no faction bucket
+   *  here — there is no faction to attribute them to. */
   perFactionEdgeVolume: Map<string, Map<string, number>>;
-  /** Σ (haul quantity × path edge count), accumulated during placement. */
+  /** Σ (haul quantity × modelled-path edge count), accumulated during placement. */
   totalHaulPathProduct: number;
   /** Σ over `aggregateEdgeVolume`'s final values — the independent re-read side of the identity. */
   totalPlacedVolume: number;
-  /** Hauls with no faction to route within (donor system unclaimed/independent) or no path at all
-   *  under own+unclaimed adjacency (foreign space blocks the route this pass) — never placed, so
-   *  they contribute 0 to both sides of the conservation identity above. Reported so a projection
-   *  that silently drops most hauls is visible rather than reading as low traffic. */
+  /** Σ haul quantity for every PLACED haul (not edge-multiplied) — the denominator for
+   *  `foreignTransitHaulVolumeShare` below; distinct from `totalPlacedVolume`, which double-counts
+   *  a multi-hop haul once per traversed edge. */
+  placedHaulVolume: number;
+  /** Hauls the shipped router itself could not have routed: no path at all over the full,
+   *  ownership-blind connection graph (disconnected component), or hop-minimal distance over
+   *  `DIRECTED_LOGISTICS.MAX_HOPS` — mirrors `world/tick.ts`'s own routeCost cutoff exactly. Never
+   *  placed, so they contribute 0 to both sides of the conservation identity above. Reported so a
+   *  projection that silently drops most hauls is visible rather than reading as low traffic. */
   unreachableHaulCount: number;
   unreachableHaulVolume: number;
+  /** Placed hauls whose MODELLED path (see module docstring) transits at least one intermediate
+   *  system owned by a faction that is neither the hauling faction nor null — i.e. the router
+   *  routed this haul through foreign-held space, which the projection now places rather than
+   *  excludes. Volume-weighted so a few large diversions aren't buried by many small direct ones. */
+  foreignTransitHaulCount: number;
+  foreignTransitHaulVolume: number;
 }
 
 function emptyProjection(): GeographyProjection {
@@ -91,16 +115,22 @@ function emptyProjection(): GeographyProjection {
     perFactionEdgeVolume: new Map(),
     totalHaulPathProduct: 0,
     totalPlacedVolume: 0,
+    placedHaulVolume: 0,
     unreachableHaulCount: 0,
     unreachableHaulVolume: 0,
+    foreignTransitHaulCount: 0,
+    foreignTransitHaulVolume: 0,
   };
 }
 
 /**
- * Project every flow event onto the path the shipped router would have chosen for it: adjacency
- * restricted to the hauling faction's own systems plus unclaimed ones (foreign space is closed to
- * routing this pass, spec §2), fuel-weighted shortest path. The hauling faction is read off the
- * haul's donor system (`fromSystemId`) — goods only ever depart a system their own faction holds.
+ * Project every flow event the shipped router could have routed onto a modelled lane path (see
+ * module docstring for the reachability/placement split). The hauling faction is read off the
+ * haul's donor system (`fromSystemId`) — goods only ever depart a system their own faction holds,
+ * or `null` for an independent/unclaimed donor. Independent hauls are NOT treated as unreachable:
+ * `world/tick.ts` groups directed-logistics rows by faction key including `null` and runs that
+ * group through the identical matcher with `funded = 1` (uncapped) — the router hauls for
+ * independents exactly as it does for factions, so this projection must too.
  */
 export function computeGeographyProjection(
   flowEvents: ReadonlyArray<WorldFlowEvent>,
@@ -110,50 +140,57 @@ export function computeGeographyProjection(
   if (flowEvents.length === 0) return emptyProjection();
 
   const projection = emptyProjection();
-  const adjacencyByFaction = new Map<string, ReturnType<typeof buildFuelAdjacency>>();
-
-  const adjacencyFor = (factionId: string): ReturnType<typeof buildFuelAdjacency> => {
-    let adj = adjacencyByFaction.get(factionId);
-    if (adj) return adj;
-    const filtered = connections.filter((c) => {
-      const a = systemFactionById.get(c.fromSystemId) ?? null;
-      const b = systemFactionById.get(c.toSystemId) ?? null;
-      return (a === factionId || a === null) && (b === factionId || b === null);
-    });
-    adj = buildFuelAdjacency(filtered);
-    adjacencyByFaction.set(factionId, adj);
-    return adj;
-  };
+  // Both graphs are ownership-blind and built once over every declared connection, matching the
+  // router: `hopDistances` is the exact reachability test (unweighted BFS, hop-capped); `adjacency`
+  // is this module's own fuel-weighted placement model over the same full connection set.
+  const hopDistances = computeBoundedHopDistances([...connections], DIRECTED_LOGISTICS.MAX_HOPS);
+  const adjacency = buildFuelAdjacency([...connections]);
 
   for (const flow of flowEvents) {
     const factionId = systemFactionById.get(flow.fromSystemId) ?? null;
-    if (factionId === null) {
+
+    const hopDistance = hopDistances.get(flow.fromSystemId)?.get(flow.toSystemId);
+    if (hopDistance === undefined || hopDistance > DIRECTED_LOGISTICS.MAX_HOPS) {
       projection.unreachableHaulCount++;
       projection.unreachableHaulVolume += flow.quantity;
       continue;
     }
 
-    const adj = adjacencyFor(factionId);
-    const result = findShortestPath(flow.fromSystemId, flow.toSystemId, [], undefined, adj);
+    const result = findShortestPath(flow.fromSystemId, flow.toSystemId, [], undefined, adjacency);
     if (result === null) {
-      projection.unreachableHaulCount++;
-      projection.unreachableHaulVolume += flow.quantity;
+      // Router-reachable by hop count but the fuel-weighted model finds no path — should not occur
+      // given the two graphs share connectivity, but if it does this haul is router-routable and
+      // must not be double-counted as unreachable; it simply has no lane path to place.
       continue;
     }
 
     const pathEdgeCount = result.path.length - 1;
     projection.totalHaulPathProduct += flow.quantity * pathEdgeCount;
+    projection.placedHaulVolume += flow.quantity;
 
-    let perFaction = projection.perFactionEdgeVolume.get(factionId);
-    if (!perFaction) {
-      perFaction = new Map();
-      projection.perFactionEdgeVolume.set(factionId, perFaction);
+    let transitsForeign = false;
+    for (let i = 1; i < result.path.length - 1; i++) {
+      const owner = systemFactionById.get(result.path[i]) ?? null;
+      if (owner !== null && owner !== factionId) transitsForeign = true;
+    }
+    if (transitsForeign) {
+      projection.foreignTransitHaulCount++;
+      projection.foreignTransitHaulVolume += flow.quantity;
+    }
+
+    let perFaction: Map<string, number> | undefined;
+    if (factionId !== null) {
+      perFaction = projection.perFactionEdgeVolume.get(factionId);
+      if (!perFaction) {
+        perFaction = new Map();
+        projection.perFactionEdgeVolume.set(factionId, perFaction);
+      }
     }
 
     for (let i = 0; i < pathEdgeCount; i++) {
       const key = edgeKey(result.path[i], result.path[i + 1]);
       projection.aggregateEdgeVolume.set(key, (projection.aggregateEdgeVolume.get(key) ?? 0) + flow.quantity);
-      perFaction.set(key, (perFaction.get(key) ?? 0) + flow.quantity);
+      if (perFaction) perFaction.set(key, (perFaction.get(key) ?? 0) + flow.quantity);
     }
   }
 
@@ -318,9 +355,9 @@ export function countBorderConflicts(events: ReadonlyArray<{ type: string }>): n
 // ── Summary ──────────────────────────────────────────────────────
 
 /**
- * The map-generation acceptance instruments, spec §5: corrected flow concentration
- * (aggregate + per-faction, gated), fuel-cost spread over both the premise-4 cohort and its
- * trafficked sub-cohort, cross-faction lane count, and the beyond-crossing migration/population
+ * The map-generation acceptance instruments, spec §5: flow concentration (aggregate + per-faction,
+ * gated) read against router-true reachability, fuel-cost spread over both the premise-4 cohort and
+ * its trafficked sub-cohort, cross-faction lane count, and the beyond-crossing migration/population
  * cohort. `migrantInflowBySystem` is the runner's own accumulated colonist-delivery total per
  * system (`TickInstrumentation.colonistDeliveryBySystem`, folded across the run) — absent (e.g. a
  * unit test with no run to accumulate) reads every system's inflow as 0, not unmeasured, since
@@ -367,5 +404,10 @@ export function summariseGeography(
     unreachableHaulCount: projection.unreachableHaulCount,
     unreachableHaulVolume: projection.unreachableHaulVolume,
     unreachableHaulVolumeShare: totalHaulVolume === 0 ? 0 : projection.unreachableHaulVolume / totalHaulVolume,
+    foreignTransitHaulCount: projection.foreignTransitHaulCount,
+    foreignTransitHaulVolume: projection.foreignTransitHaulVolume,
+    foreignTransitHaulVolumeShare: projection.placedHaulVolume === 0
+      ? 0
+      : projection.foreignTransitHaulVolume / projection.placedHaulVolume,
   };
 }

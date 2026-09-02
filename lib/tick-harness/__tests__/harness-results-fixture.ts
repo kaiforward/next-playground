@@ -100,6 +100,9 @@ export function minimalHarnessResults(): HarnessResults {
       unreachableHaulCount: 0,
       unreachableHaulVolume: 0,
       unreachableHaulVolumeShare: 0,
+      foreignTransitHaulCount: 0,
+      foreignTransitHaulVolume: 0,
+      foreignTransitHaulVolumeShare: 0,
     },
   };
 }

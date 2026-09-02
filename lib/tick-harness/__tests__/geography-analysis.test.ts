@@ -22,7 +22,8 @@ const conn = (fromSystemId: string, toSystemId: string, fuelCost: number): Conne
 });
 
 // Connections are stored one row per declared direction — mirror that so fixtures match
-// production shape (buildFuelAdjacency is directional).
+// production shape (buildFuelAdjacency is directional; buildHopAdjacency, which the reachability
+// test now runs over, folds both directions in regardless).
 const biConn = (a: string, b: string, fuelCost: number): ConnectionInfo[] => [
   conn(a, b, fuelCost), conn(b, a, fuelCost),
 ];
@@ -42,8 +43,11 @@ describe("computeGeographyProjection", () => {
     expect(projection.aggregateEdgeVolume.size).toBe(0);
     expect(projection.totalPlacedVolume).toBe(0);
     expect(projection.totalHaulPathProduct).toBe(0);
+    expect(projection.placedHaulVolume).toBe(0);
     expect(projection.unreachableHaulCount).toBe(0);
     expect(projection.unreachableHaulVolume).toBe(0);
+    expect(projection.foreignTransitHaulCount).toBe(0);
+    expect(projection.foreignTransitHaulVolume).toBe(0);
   });
 
   it("conserves exactly: Σ placed edge volume = Σ haul quantity × path length", () => {
@@ -62,11 +66,14 @@ describe("computeGeographyProjection", () => {
     // the map placement wrote — a mis-keyed edge would make these disagree.
     expect(projection.totalHaulPathProduct).toBe(10 * 1 + 5 * 2);
     expect(projection.totalPlacedVolume).toBe(projection.totalHaulPathProduct);
+    expect(projection.placedHaulVolume).toBe(15);
     expect(projection.unreachableHaulCount).toBe(0);
+    // The h1->c2 path transits u1, which is unclaimed (null), not foreign — no foreign transit.
+    expect(projection.foreignTransitHaulCount).toBe(0);
   });
 
-  it("counts a haul with no reachable path as unreachable, placing nothing", () => {
-    // c2 sits in a disconnected component under f1's own+unclaimed graph.
+  it("counts a haul with no reachable path at all as unreachable, placing nothing", () => {
+    // c2 sits in a disconnected component — no connections in this world at all.
     const systems = [sys("h1", "f1", "r1"), sys("c2", "f1", "r2")];
     const connections: ConnectionInfo[] = [];
     const flows = [flow("h1", "c2", 7)];
@@ -79,16 +86,90 @@ describe("computeGeographyProjection", () => {
     expect(projection.totalHaulPathProduct).toBe(0);
   });
 
-  it("counts a haul from an unowned donor as unreachable — no faction graph to route within", () => {
+  it("routes a haul from an unowned (independent) donor — the shipped router hauls for independents too", () => {
+    // world/tick.ts groups directed-logistics rows by faction key including null and matches that
+    // group with funded=1 — an independent donor is not special-cased out of routing.
     const systems = [sys("u1", null, "r1"), sys("c1", "f1", "r1")];
     const connections = biConn("u1", "c1", 5);
     const flows = [flow("u1", "c1", 4)];
 
     const projection = computeGeographyProjection(flows, connections, factionById(systems));
 
+    expect(projection.unreachableHaulCount).toBe(0);
+    expect(projection.totalPlacedVolume).toBe(4);
+    expect(projection.aggregateEdgeVolume.get("c1|u1")).toBe(4);
+    // No faction to attribute an independent haul's lane volume to.
+    expect(projection.perFactionEdgeVolume.size).toBe(0);
+  });
+
+  it("marks a haul unreachable when hop-minimal distance exceeds MAX_HOPS, even though a path exists", () => {
+    // Five-edge chain, no shortcut — hop-minimal distance is 5, over DIRECTED_LOGISTICS.MAX_HOPS (4).
+    const systems = [
+      sys("h1", "f1", "r1"), sys("a", null, "r1"), sys("b", null, "r1"), sys("c", null, "r1"),
+      sys("d", null, "r1"), sys("h2", "f1", "r1"),
+    ];
+    const connections = [
+      ...biConn("h1", "a", 1), ...biConn("a", "b", 1), ...biConn("b", "c", 1),
+      ...biConn("c", "d", 1), ...biConn("d", "h2", 1),
+    ];
+    const flows = [flow("h1", "h2", 3)];
+
+    const projection = computeGeographyProjection(flows, connections, factionById(systems));
+
     expect(projection.unreachableHaulCount).toBe(1);
-    expect(projection.unreachableHaulVolume).toBe(4);
+    expect(projection.unreachableHaulVolume).toBe(3);
     expect(projection.totalPlacedVolume).toBe(0);
+  });
+
+  it("gates reachability on hop-minimal distance, not the fuel-weighted model path's own edge count", () => {
+    // Route A (direct, high fuel): h1-a-b-c-h2, 4 hops — at exactly MAX_HOPS.
+    // Route B (roundabout, cheap fuel): h1-x1..x5-h2, 6 hops — over MAX_HOPS.
+    // Dijkstra (fuel-weighted) prefers route B (total fuel 6) over route A (total fuel 40), so the
+    // MODELLED placement path is 6 edges long — but the router itself only cares about hop-minimal
+    // distance (4, via route A), which is within the cap. If reachability were judged off the
+    // modelled path's own edge count instead, this haul would be wrongly marked unreachable.
+    const systems = [
+      sys("h1", "f1", "r1"), sys("a", null, "r1"), sys("b", null, "r1"), sys("c", null, "r1"),
+      sys("x1", null, "r1"), sys("x2", null, "r1"), sys("x3", null, "r1"), sys("x4", null, "r1"),
+      sys("x5", null, "r1"), sys("h2", "f1", "r1"),
+    ];
+    const connections = [
+      ...biConn("h1", "a", 10), ...biConn("a", "b", 10), ...biConn("b", "c", 10), ...biConn("c", "h2", 10),
+      ...biConn("h1", "x1", 1), ...biConn("x1", "x2", 1), ...biConn("x2", "x3", 1),
+      ...biConn("x3", "x4", 1), ...biConn("x4", "x5", 1), ...biConn("x5", "h2", 1),
+    ];
+    const flows = [flow("h1", "h2", 5)];
+
+    const projection = computeGeographyProjection(flows, connections, factionById(systems));
+
+    expect(projection.unreachableHaulCount).toBe(0);
+    // Placed onto the cheaper 6-edge route, proving the model path (6 edges, over MAX_HOPS) was NOT
+    // what gated reachability.
+    expect(projection.totalHaulPathProduct).toBe(5 * 6);
+  });
+
+  it("counts a placed haul whose modelled path transits a foreign-held system", () => {
+    // h1 (f1) can only reach h2 (f1) via m, held by a different faction f2.
+    const systems = [sys("h1", "f1", "r1"), sys("m", "f2", "r1"), sys("h2", "f1", "r1")];
+    const connections = [...biConn("h1", "m", 5), ...biConn("m", "h2", 5)];
+    const flows = [flow("h1", "h2", 6)];
+
+    const projection = computeGeographyProjection(flows, connections, factionById(systems));
+
+    expect(projection.unreachableHaulCount).toBe(0);
+    expect(projection.foreignTransitHaulCount).toBe(1);
+    expect(projection.foreignTransitHaulVolume).toBe(6);
+  });
+
+  it("does not count an all-own-space path as a foreign transit", () => {
+    const systems = [sys("h1", "f1", "r1"), sys("m", "f1", "r1"), sys("h2", "f1", "r1")];
+    const connections = [...biConn("h1", "m", 5), ...biConn("m", "h2", 5)];
+    const flows = [flow("h1", "h2", 4)];
+
+    const projection = computeGeographyProjection(flows, connections, factionById(systems));
+
+    expect(projection.foreignTransitHaulCount).toBe(0);
+    expect(projection.foreignTransitHaulVolume).toBe(0);
   });
 });
 
@@ -137,15 +218,24 @@ describe("summariseGeography", () => {
     expect(summary.unreachableHaulCount).toBe(0);
     expect(summary.unreachableHaulVolume).toBe(0);
     expect(summary.unreachableHaulVolumeShare).toBe(0);
+    expect(summary.foreignTransitHaulCount).toBe(0);
+    expect(summary.foreignTransitHaulVolume).toBe(0);
+    expect(summary.foreignTransitHaulVolumeShare).toBe(0);
   });
 
   it("pins the unreachable-haul pass-through against the projection it is read from", () => {
-    // c2 sits in a disconnected component under f1's own+unclaimed graph (mirrors the
-    // computeGeographyProjection unreachable-haul fixture above), alongside one reachable haul so
-    // the share is a real fraction, not a vacuous 1 or 0.
-    const systems = [sys("h1", "f1", "r1"), sys("c1", "f1", "r1"), sys("c2", "f1", "r2")];
-    const connections = biConn("h1", "c1", 5);
-    const flows = [flow("h1", "c1", 6), flow("h1", "c2", 4)];
+    // h2 sits five hops out — over MAX_HOPS — alongside one reachable haul so the share is a real
+    // fraction, not a vacuous 1 or 0.
+    const systems = [
+      sys("h1", "f1", "r1"), sys("c1", "f1", "r1"), sys("a", null, "r2"), sys("b", null, "r2"),
+      sys("c", null, "r2"), sys("d", null, "r2"), sys("h2", "f1", "r2"),
+    ];
+    const connections = [
+      ...biConn("h1", "c1", 5),
+      ...biConn("h1", "a", 1), ...biConn("a", "b", 1), ...biConn("b", "c", 1),
+      ...biConn("c", "d", 1), ...biConn("d", "h2", 1),
+    ];
+    const flows = [flow("h1", "c1", 6), flow("h1", "h2", 4)];
 
     const projection = computeGeographyProjection(flows, connections, factionById(systems));
     const summary = summariseGeography(systems, connections, [], flows);
@@ -155,6 +245,25 @@ describe("summariseGeography", () => {
     expect(summary.unreachableHaulCount).toBe(projection.unreachableHaulCount);
     expect(summary.unreachableHaulVolume).toBe(projection.unreachableHaulVolume);
     expect(summary.unreachableHaulVolumeShare).toBeCloseTo(4 / 10, 9);
+  });
+
+  it("pins the foreign-transit pass-through against the projection it is read from, weighted by volume", () => {
+    // One haul transits foreign space (f2's "m"), one stays entirely in f1's own space.
+    const systems = [
+      sys("h1", "f1", "r1"), sys("m", "f2", "r1"), sys("h2", "f1", "r1"), sys("own", "f1", "r1"),
+    ];
+    const connections = [...biConn("h1", "m", 5), ...biConn("m", "h2", 5), ...biConn("h1", "own", 5)];
+    const flows = [flow("h1", "h2", 6), flow("h1", "own", 4)];
+
+    const projection = computeGeographyProjection(flows, connections, factionById(systems));
+    const summary = summariseGeography(systems, connections, [], flows);
+
+    expect(projection.foreignTransitHaulCount).toBe(1);
+    expect(projection.foreignTransitHaulVolume).toBe(6);
+    expect(summary.foreignTransitHaulCount).toBe(1);
+    expect(summary.foreignTransitHaulVolume).toBe(6);
+    // Denominator is placed volume (6 + 4 = 10), not total recorded volume.
+    expect(summary.foreignTransitHaulVolumeShare).toBeCloseTo(6 / 10, 9);
   });
 
   it("gates a per-faction top-decile row on a minimum trafficked-edge count", () => {
