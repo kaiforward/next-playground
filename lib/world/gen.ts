@@ -251,7 +251,10 @@ export function generateWorld(options: GenerateWorldOptions): World {
     meta: {
       seed,
       systemCount: config.TOTAL_SYSTEMS,
-      mapSize: config.MAP_SIZE,
+      // The EFFECTIVE extent placement actually used (`mapSizeScale` already applied), never the
+      // raw config value — client tile bounds and the Voronoi cache divide coordinates by this, so
+      // recording the unscaled size would leave every system past it with no tile and no cell.
+      mapSize: universe.mapSize,
       currentTick: 0,
     },
     player,

@@ -233,6 +233,24 @@ describe("generateWorld — shape knobs back-compat pin", () => {
     const perturbed = generateWorld({ systemCount: 300, seed: 99, shape: { starSpacing: 0.5 } });
     expect(perturbed).not.toEqual(base);
   });
+
+  // meta.mapSize is the divisor client tile bounds and the Voronoi cache use — a system placed
+  // past it gets no tile and no cell, invisible and unclickable, baked into every save.
+  it("records the EFFECTIVE map extent in meta.mapSize, so every system coordinate falls inside it at a non-default mapSizeScale", () => {
+    const scale = 1.5;
+    const config = genConfigForSystemCount(400);
+    const world = generateWorld({ systemCount: 400, seed: 7, shape: { mapSizeScale: scale } });
+
+    expect(world.meta.mapSize).toBe(config.MAP_SIZE * scale);
+    expect(world.meta.mapSize).toBeGreaterThan(config.MAP_SIZE); // non-vacuous: the scale really moved it
+    expect(world.systems.length).toBeGreaterThan(0);
+    for (const s of world.systems) {
+      expect(s.x).toBeGreaterThanOrEqual(0);
+      expect(s.x).toBeLessThan(world.meta.mapSize);
+      expect(s.y).toBeGreaterThanOrEqual(0);
+      expect(s.y).toBeLessThan(world.meta.mapSize);
+    }
+  });
 });
 
 describe("generateWorld: market seeding", () => {

@@ -68,6 +68,11 @@ export interface GeneratedConnection {
 }
 
 export interface GeneratedUniverse {
+  /** The extent every coordinate in `systems`/`regions` was actually placed over —
+   *  `GenParams.mapSize × GenParams.mapSizeScale`, not the raw config value. The single source of
+   *  truth for the map's extent: `world.meta.mapSize` is written from this, and every consumer that
+   *  divides a coordinate by the map extent (tile bounds, the Voronoi cache) reads it from there. */
+  mapSize: number;
   regions: GeneratedRegion[];
   systems: GeneratedSystem[];
   connections: GeneratedConnection[];
@@ -843,6 +848,7 @@ export function generateUniverse(
     : null;
 
   return {
+    mapSize: effectiveMapSize,
     regions,
     systems,
     connections,
