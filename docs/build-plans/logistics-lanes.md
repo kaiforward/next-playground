@@ -384,6 +384,27 @@ chosen mechanics.
 
 ## Evidence
 
+### Unreachable-haul share rise under the neighbourhood-graph rework (claim + falsifier committed 2026-09-02, pre-measurement)
+
+Question: post-rework the geography instrument reads unreachable-haul volume share 12.3% at 10K
+(pre-rework 4.5%). Real degradation, or an artefact of how the projection models routing?
+
+Code read (pre-measurement): the shipped router is ownership-blind — `computeBoundedHopDistances`
+(lib/engine/pathfinding, called at lib/world/tick.ts:1608) BFSes over ALL connections with only a
+hop cap; the projection (lib/tick-harness/geography-analysis.ts:115-142) restricts adjacency to
+the hauling faction's own + unclaimed systems, read off FINAL-tick ownership. So a haul is counted
+"unreachable" when its endpoints have no own+unclaimed lane path at end-state, even though the
+shipped matcher actually placed it through foreign-held systems.
+
+Claim: the 12.3% is entirely foreign-space blocking under the projection's own+unclaimed
+adjacency (plus any unclaimed-donor hauls) — every "unreachable" haul has a lane path under full
+ownership-blind adjacency, so no haul volume is genuinely lane-disconnected; the rise vs 4.5%
+reflects the sparser RNG lane graph offering fewer redundant own-space detours, not lost cargo.
+
+Falsifier: if, at either horizon, more than 1% of TOTAL haul volume is unroutable even under full
+(ownership-blind, hop-unbounded) adjacency, the claim is false — the rework genuinely
+disconnected hauls and the reading is real degradation, back to design.
+
 ### Premise 1 — flow concentration (measured 2026-08-31)
 
 ```
