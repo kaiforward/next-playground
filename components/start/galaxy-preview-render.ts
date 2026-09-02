@@ -18,7 +18,10 @@
 
 import { genConfigForSystemCount } from "@/lib/constants/universe-gen";
 import { mulberry32 } from "@/lib/engine/generation-primitives";
-import { buildGalaxyShape, type GalaxyShape, type GalaxyShapeKnobs } from "@/lib/engine/density-field";
+import {
+  buildGalaxyShape, crossingShouldDemote, crossingDemotionThresholds,
+  type GalaxyShape, type GalaxyShapeKnobs,
+} from "@/lib/engine/density-field";
 import { bridsonSample, DENSITY_RADIUS_EXPONENT } from "@/lib/engine/system-placement";
 
 export interface Point {
@@ -33,6 +36,10 @@ export interface GalaxyImpression {
   /** Side length of the square map these coordinates are authored over. */
   mapSize: number;
   points: Point[];
+  /** The galaxy's own Poisson minimum distance (post `minDistanceScale`) — `crossingSegments`
+   *  reads it to build the same demotion thresholds `generateConnections` builds from
+   *  `GenParams.poissonMinDistance`, so the two sides scale identically. */
+  poissonMinDistance: number;
 }
 
 /** Dev-exploration overrides for the levers the config normally fixes: overall map extent
@@ -62,13 +69,14 @@ export function buildGalaxyImpression(
   const mapSize = config.MAP_SIZE * (overrides.mapSizeScale ?? 1);
   const padding = mapSize * config.MAP_PADDING;
 
+  const poissonMinDistance = config.POISSON_MIN_DISTANCE * (overrides.minDistanceScale ?? 1);
   const rng = mulberry32(seed);
   const shape = buildGalaxyShape(knobs, mapSize, rng);
   const points = bridsonSample(
     rng,
     mapSize,
     mapSize,
-    config.POISSON_MIN_DISTANCE * (overrides.minDistanceScale ?? 1),
+    poissonMinDistance,
     config.POISSON_K_CANDIDATES,
     padding,
     config.TOTAL_SYSTEMS,
@@ -77,7 +85,7 @@ export function buildGalaxyImpression(
     overrides.densityRadiusExponent ?? DENSITY_RADIUS_EXPONENT,
   );
 
-  return { shape, mapSize, points };
+  return { shape, mapSize, points, poissonMinDistance };
 }
 
 // ── Rasterisation ────────────────────────────────────────────────
@@ -121,11 +129,14 @@ export function renderDensityField(
 }
 
 /**
- * World-space endpoints for each crossing-style corridor, anchored the way the lane graph actually
- * realises them: the placed system in each cluster nearest to the OTHER cluster's seed — never
- * seed-center to seed-center, which overstates how deep into a cluster a crossing reaches. A
- * cluster with no placed system falls back to its seed position (matches the degenerate case the
- * engine repairs).
+ * World-space endpoints for each crossing-style corridor the engine would ACTUALLY realise as a
+ * crossing lane, anchored the way the lane graph does it: the placed system in each cluster
+ * nearest to the OTHER cluster's seed — never seed-center to seed-center, which overstates how
+ * deep into a cluster a crossing reaches. A cluster with no placed system falls back to its seed
+ * position (matches the degenerate case the engine repairs). A pair whose realised anchor-to-
+ * anchor line no longer reads as genuine emptiness is excluded (`crossingShouldDemote`,
+ * `lib/engine/density-field.ts`, spec §5C) — the exact same rule `generateConnections` applies, so
+ * the preview never draws a crossing the generated world wouldn't actually have.
  */
 export function crossingSegments(impression: GalaxyImpression): Array<{ a: Point; b: Point }> {
   const { seeds } = impression.shape;
@@ -163,13 +174,17 @@ export function crossingSegments(impression: GalaxyImpression): Array<{ a: Point
     return best;
   };
 
+  const thresholds = crossingDemotionThresholds(impression.poissonMinDistance);
   const segments: Array<{ a: Point; b: Point }> = [];
   for (const pair of impression.shape.corridors.pairs) {
     if (pair.style !== "crossing") continue;
-    segments.push({
-      a: anchorToward(pair.a, seeds[pair.b]),
-      b: anchorToward(pair.b, seeds[pair.a]),
-    });
+    const a = anchorToward(pair.a, seeds[pair.b]);
+    const b = anchorToward(pair.b, seeds[pair.a]);
+    const thirdSystems = impression.points.filter((p) => p !== a && p !== b);
+    if (crossingShouldDemote(impression.shape.grid, impression.mapSize, a.x, a.y, b.x, b.y, thirdSystems, thresholds)) {
+      continue;
+    }
+    segments.push({ a, b });
   }
   return segments;
 }

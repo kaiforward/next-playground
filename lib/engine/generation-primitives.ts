@@ -106,3 +106,79 @@ export function kruskalMST(pointsInSet: { x: number; y: number }[]): Edge[] {
 
   return mst;
 }
+
+// ── Neighbourhood graphs (empty-region criteria) ────────────────
+
+/** Tolerance for the strict inequalities the empty-region tests use — without it, a system
+ *  exactly on a circle boundary or exactly equidistant (both realistic with grid-ish placement)
+ *  could flip either way under float rounding. */
+const NEIGHBOURHOOD_EPS = 1e-9;
+
+/**
+ * True iff no third point of `points` sits strictly inside the circle having (a,b) as diameter —
+ * the Gabriel-graph test. A planar, MST-containing criterion: local, three-point, no global sort
+ * or triangulation needed.
+ */
+function isGabrielEdge(points: { x: number; y: number }[], a: number, b: number): boolean {
+  const ax = points[a].x, ay = points[a].y, bx = points[b].x, by = points[b].y;
+  const cx = (ax + bx) / 2;
+  const cy = (ay + by) / 2;
+  const radiusSq = ((ax - bx) * (ax - bx) + (ay - by) * (ay - by)) / 4;
+  for (let k = 0; k < points.length; k++) {
+    if (k === a || k === b) continue;
+    const dx = points[k].x - cx;
+    const dy = points[k].y - cy;
+    if (dx * dx + dy * dy < radiusSq - NEIGHBOURHOOD_EPS) return false;
+  }
+  return true;
+}
+
+/**
+ * True iff no third point C has BOTH d(A,C) and d(B,C) shorter than d(A,B) — the relative-
+ * neighbourhood-graph (RNG) test. Sparser than Gabriel (RNG ⊆ Gabriel ⊆ Delaunay) while staying
+ * planar and MST-containing.
+ */
+function isRelativeNeighbourEdge(points: { x: number; y: number }[], a: number, b: number): boolean {
+  const ab = distance(points[a].x, points[a].y, points[b].x, points[b].y);
+  for (let k = 0; k < points.length; k++) {
+    if (k === a || k === b) continue;
+    const ak = distance(points[a].x, points[a].y, points[k].x, points[k].y);
+    const bk = distance(points[b].x, points[b].y, points[k].x, points[k].y);
+    if (Math.max(ak, bk) < ab - NEIGHBOURHOOD_EPS) return false;
+  }
+  return true;
+}
+
+/** Every candidate pair from `pointsInSet` (brute-force O(n²) candidates, each an O(n) empty-
+ *  region test — O(n³) total, acceptable at generation-time cluster scale, never per-tick) that
+ *  passes `test`. Both `isGabrielEdge` and `isRelativeNeighbourEdge` are planar and provably
+ *  contain the Euclidean MST, so the returned edge set is always connected (when `pointsInSet` is)
+ *  and never self-intersects — no separate crossing check or MST fallback is needed. */
+function neighbourhoodGraphEdges(
+  pointsInSet: { x: number; y: number }[],
+  test: (points: { x: number; y: number }[], a: number, b: number) => boolean,
+): Edge[] {
+  const n = pointsInSet.length;
+  const edges: Edge[] = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (!test(pointsInSet, i, j)) continue;
+      edges.push({ a: i, b: j, dist: distance(pointsInSet[i].x, pointsInSet[i].y, pointsInSet[j].x, pointsInSet[j].y) });
+    }
+  }
+  return edges;
+}
+
+/** The Gabriel graph over `pointsInSet`: local-index edges, always connected and planar. */
+export function gabrielGraphEdges(pointsInSet: { x: number; y: number }[]): Edge[] {
+  if (pointsInSet.length < 2) return [];
+  return neighbourhoodGraphEdges(pointsInSet, isGabrielEdge);
+}
+
+/** The relative-neighbourhood graph (RNG) over `pointsInSet`: local-index edges, always connected
+ *  and planar, sparser than the Gabriel graph. This is the base local-lane graph (spec §5 rework —
+ *  chosen over Gabriel by measured lanes/system, see `density-field.ts`/`universe-gen.ts` callers). */
+export function relativeNeighbourhoodGraphEdges(pointsInSet: { x: number; y: number }[]): Edge[] {
+  if (pointsInSet.length < 2) return [];
+  return neighbourhoodGraphEdges(pointsInSet, isRelativeNeighbourEdge);
+}

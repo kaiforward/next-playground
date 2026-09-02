@@ -6,7 +6,14 @@ interface UniverseGenConfig {
   MAP_PADDING: number;
   POISSON_MIN_DISTANCE: number;
   POISSON_K_CANDIDATES: number;
-  INTRA_REGION_EXTRA_EDGES: number;
+  /** Fraction (0–1) of the local-lane neighbourhood graph's cycle edges to prune, longest-first
+   *  (spec §5A). Formerly `INTRA_REGION_EXTRA_EDGES`, which ADDED random extra edges on top of an
+   *  MST — repurposed rather than retired now that the neighbourhood-graph criterion already
+   *  supplies the base lane graph, so this only trims surplus density. 0 (the shipped default):
+   *  measured relative-neighbourhood-graph density already lands in the ~1.3–1.6 lanes/system
+   *  target band without pruning (`lib/engine/universe-gen.ts`'s `GenParams.lanePruneFraction`
+   *  docstring carries the measurement). */
+  LANE_PRUNE_FRACTION: number;
   CROSSING_FUEL_MULTIPLIER: number;
   INTRA_REGION_BASE_FUEL: number;
   /** Minor factions seeded alongside the 8 majors. */
@@ -48,7 +55,7 @@ const BASE_CONFIG: UniverseGenConfig = {
   // fill (owner-accepted 2026-09-01).
   POISSON_MIN_DISTANCE: 117,
   POISSON_K_CANDIDATES: 30,
-  INTRA_REGION_EXTRA_EDGES: 0.5,
+  LANE_PRUNE_FRACTION: 0,
   CROSSING_FUEL_MULTIPLIER: 2.5,
   INTRA_REGION_BASE_FUEL: 8,
   MINOR_FACTION_COUNT: 12,

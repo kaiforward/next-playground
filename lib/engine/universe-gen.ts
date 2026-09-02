@@ -18,9 +18,11 @@ import {
   type GeneratedFaction,
   type PlayerFactionInput,
 } from "./faction-gen";
-import { distance, mulberry32, kruskalMST, UnionFind, type RNG, type Edge } from "./generation-primitives";
 import {
-  buildGalaxyShape,
+  distance, mulberry32, kruskalMST, relativeNeighbourhoodGraphEdges, UnionFind, type RNG, type Edge,
+} from "./generation-primitives";
+import {
+  buildGalaxyShape, crossingShouldDemote, crossingDemotionThresholds,
   type GalaxyShapeKnobs, type DensityGrid, type CorridorPlan,
 } from "./density-field";
 import {
@@ -85,7 +87,16 @@ export interface GenParams {
   mapPadding: number;
   poissonMinDistance: number;
   poissonKCandidates: number;
-  extraEdgeFraction: number;
+  /** Fraction (0–1) of the local-lane graph's CYCLE edges — edges whose removal keeps every system
+   *  in its cluster connected, never a bridge — to prune, longest-first, after the neighbourhood-
+   *  graph criterion selects the base graph (spec §5A). Formerly `INTRA_REGION_EXTRA_EDGES`/
+   *  `extraEdgeFraction`, which added random extra edges on top of an MST; repurposed rather than
+   *  retired because the shape (a density knob on top of a structurally-connected graph) still
+   *  applies, just in the opposite direction — the neighbourhood graph already supplies more lanes
+   *  than the old MST did, so this now trims rather than adds. Default 0: measured relative-
+   *  neighbourhood-graph density already lands in the ~1.3–1.6 lanes/system target band (spec §5A)
+   *  without pruning; Gate-A may raise it if the shipped default reads too dense. */
+  lanePruneFraction: number;
   /** Crossing-class multiplier: prices a corridor's crossing-style lane above the intra-cluster
    *  baseline. The only lane class this pass has — no separate "gateways per border" knob (the old
    *  region-adjacency phase this replaced had one; corridor count is `shapeKnobs.corridorsPerCluster`
@@ -201,32 +212,40 @@ export function generateSystems(
 // ── Connection generation ───────────────────────────────────────
 
 /**
- * Candidate extra edges for route variety: every local-index pair NOT already joined by `mst`,
- * nearest first.
+ * Prunes a `pruneFraction` (0–1) share of `edges`' CYCLE edges — never a bridge — from a graph
+ * already known connected over `pointCount` local-index points (spec §5A: the neighbourhood-graph
+ * criterion already guarantees this before pruning ever runs). A spanning tree is picked by
+ * replaying Kruskal's algorithm (nearest-first) over exactly this edge set — not a fresh MST over
+ * all possible pairs, which could pick an edge this graph never offered — and every edge Kruskal
+ * accepts is a tree edge, kept unconditionally; every edge it rejects (would have closed a cycle)
+ * is prunable. Longest-first pruning: the longest cycle edges are the least-useful shortcuts, so
+ * they go first, deterministically (no `rng` draw — same edge set always prunes the same way).
  */
-function extraEdgeCandidates(points: { x: number; y: number }[], mst: Edge[]): Edge[] {
-  const inMst = new Set(mst.map((e) => `${Math.min(e.a, e.b)}-${Math.max(e.a, e.b)}`));
-  const candidates: Edge[] = [];
-  for (let i = 0; i < points.length; i++) {
-    for (let j = i + 1; j < points.length; j++) {
-      if (inMst.has(`${i}-${j}`)) continue;
-      candidates.push({
-        a: i,
-        b: j,
-        dist: distance(points[i].x, points[i].y, points[j].x, points[j].y),
-      });
-    }
+function pruneLaneDensity(edges: Edge[], pointCount: number, pruneFraction: number): Edge[] {
+  if (pruneFraction <= 0 || edges.length === 0) return edges;
+  const byDistAscending = [...edges].sort((a, b) => a.dist - b.dist);
+  const uf = new UnionFind(pointCount);
+  const treeEdges: Edge[] = [];
+  const cycleEdges: Edge[] = []; // collected in ascending-distance order
+  for (const e of byDistAscending) {
+    if (uf.union(e.a, e.b)) treeEdges.push(e);
+    else cycleEdges.push(e);
   }
-  candidates.sort((a, b) => a.dist - b.dist);
-  return candidates;
+  const pruneCount = Math.floor(cycleEdges.length * Math.min(1, Math.max(0, pruneFraction)));
+  const kept = pruneCount === 0 ? cycleEdges : cycleEdges.slice(0, cycleEdges.length - pruneCount);
+  return [...treeEdges, ...kept];
 }
 
 /**
  * True iff segment (ax1,ay1)-(ax2,ay2) and segment (bx1,by1)-(bx2,by2) cross at a point interior
- * to BOTH segments — an exact orientation test (Cormen et al.'s standard four-orientation
- * check), not a distance heuristic. Sharing an endpoint (including sharing a system) is never a
- * proper crossing: two lanes fanning out from the same star are not "crossing lanes" in the
- * visual sense the map cares about, only a lane cutting across another lane's open middle is.
+ * to BOTH segments — an exact orientation test (Cormen et al.'s standard four-orientation check),
+ * not a distance heuristic. Sharing an endpoint (including sharing a system) is never a proper
+ * crossing: two lanes fanning out from the same star are not "crossing lanes" in the visual sense
+ * the map cares about, only a lane cutting across another lane's open middle is. Used ONLY by
+ * `wouldCrossAcceptedLane` below — the per-cluster and per-corridor neighbourhood graphs are each
+ * individually planar (spec §5A/§5B), but planarity is a per-graph guarantee, not a cross-graph
+ * one: two DIFFERENT corridors' band chains can still cross each other (measured: rare, but real —
+ * the PROOF intersection instrument found one at clusterCount=100).
  */
 function segmentsProperlyIntersect(
   ax1: number, ay1: number, ax2: number, ay2: number,
@@ -260,14 +279,16 @@ function segmentsProperlyIntersect(
 
 /**
  * True iff the candidate lane (ax,ay)-(bx,by) properly crosses any lane already accepted into
- * `connections` (each undirected lane checked once — `pushLane` always writes both directed
- * rows). This is the aesthetic-only gate: a candidate lane that isn't required for connectivity
- * (an extra intra-cluster edge, a band chain's optional waypoint hop) is rejected outright rather
- * than realised crossing another lane mid-segment; a lane connectivity actually depends on (an
- * MST edge, a corridor's mandatory closing link, a crossing-style lane) is never run through
- * this gate at all.
+ * `connections` (each undirected lane checked once — `pushLane` always writes both directed rows).
+ * Only `realizeBandChain`'s CYCLE edges (beyond its own chain's spanning tree) are ever checked
+ * against this — a chain's tree edges are its own required connectivity (never gated, same rule
+ * Phase 1's neighbourhood graph and every other lane-selection path already follow) and every
+ * OTHER lane-selection path (Phase 1 intra-cluster, a crossing-style single lane) is empirically
+ * safe without this check (the PROOF intersection instrument measured zero intra×anything and
+ * crossing×anything crossings across every sampled seed) — only two different corridors' band
+ * chains, which the per-graph planarity guarantee says nothing about each other, can cross.
  */
-function crossesAcceptedLane(
+function wouldCrossAcceptedLane(
   ax: number, ay: number, bx: number, by: number,
   connections: GeneratedConnection[],
   coordByIndex: Map<number, { x: number; y: number }>,
@@ -395,16 +416,99 @@ function waypointsAlongCorridor(
 }
 
 /**
+ * Realises a band-style corridor's own lanes: the neighbourhood-graph criterion (spec §5A) over
+ * exactly {anchorA, anchorB, waypoints} — planar and MST-containing over that set, so anchorA and
+ * anchorB always end up connected (through the waypoints when there are any, directly when there
+ * are none — no separate direct-lane fallback needed, a 2-point set has no third point to fail
+ * either empty-region test). A per-graph planarity guarantee says nothing about two DIFFERENT
+ * corridors' band chains crossing EACH OTHER (measured rare but real), so this chain's own
+ * connectivity is built by a planarity-AWARE Kruskal replay: an edge that would join two still-
+ * separate components is drawn immediately when it doesn't cross an already-accepted (foreign)
+ * lane, deferred when it does (tried again only once nothing better is left, and accepted then only
+ * if the chain would otherwise stay disconnected — a genuine two-corridor conflict with no
+ * alternative route), and any edge left over once the chain is fully connected (pure route-variety
+ * redundancy) is dropped outright on ANY crossing, never forced. Every edge realises at the intra
+ * rate; `isGateway` is the caller's job (marks only the two anchors, never an interior waypoint).
+ */
+function realizeBandChain(
+  anchorA: GeneratedSystem,
+  anchorB: GeneratedSystem,
+  waypoints: GeneratedSystem[],
+  avgIntraDist: number,
+  params: CorridorRealisationParams,
+  connections: GeneratedConnection[],
+  coordByIndex: Map<number, { x: number; y: number }>,
+): void {
+  const chainSystems = [anchorA, anchorB, ...waypoints];
+  const edges = relativeNeighbourhoodGraphEdges(chainSystems);
+  const byDistAscending = [...edges].sort((a, b) => a.dist - b.dist);
+  const crosses = (edge: Edge): boolean => {
+    const from = chainSystems[edge.a];
+    const to = chainSystems[edge.b];
+    return wouldCrossAcceptedLane(from.x, from.y, to.x, to.y, connections, coordByIndex);
+  };
+
+  // A planarity-aware Kruskal replay: Pass 1 builds the chain's spanning tree preferring edges
+  // that DON'T cross an already-accepted (foreign, different-corridor) lane, deferring any that do
+  // — so connectivity between two components routes around a conflict whenever this chain's own
+  // edge set offers an alternative. Pass 2 only spends a deferred (crossing) edge when nothing else
+  // in Pass 1 already joined the same two components — a genuine two-corridor conflict with no
+  // alternative route, accepted rather than leaving the chain disconnected. Every edge neither pass
+  // needed for connectivity is pure route-variety cycle redundancy, dropped on ANY crossing.
+  const uf = new UnionFind(chainSystems.length);
+  const drawn: Edge[] = [];
+  const deferred: Edge[] = [];
+  const cycleCandidates: Edge[] = [];
+  for (const e of byDistAscending) {
+    if (uf.connected(e.a, e.b)) {
+      cycleCandidates.push(e);
+      continue;
+    }
+    if (crosses(e)) {
+      deferred.push(e);
+      continue;
+    }
+    uf.union(e.a, e.b);
+    drawn.push(e);
+  }
+  for (const e of deferred) {
+    if (uf.connected(e.a, e.b)) {
+      cycleCandidates.push(e); // no longer needed once Pass 1 connected it another way
+      continue;
+    }
+    uf.union(e.a, e.b); // genuinely required — no crossing-free alternative existed
+    drawn.push(e);
+  }
+
+  const realize = (edge: Edge): void => {
+    const from = chainSystems[edge.a];
+    const to = chainSystems[edge.b];
+    pushLane(
+      connections, from.index, to.index,
+      laneFuelCost(edge.dist, avgIntraDist, params.intraRegionBaseFuel, 1),
+      false,
+    );
+  };
+
+  for (const edge of drawn) realize(edge);
+  for (const edge of cycleCandidates) {
+    if (crosses(edge)) continue;
+    realize(edge);
+  }
+}
+
+/**
  * Realise one chosen cluster-seed pair (spec §5) as actual lanes. A crossing-style pair becomes a
  * single lane, at the crossing multiplier, between the two systems nearest-facing each other's
- * cluster. A band-style pair chains through whatever waypoint stars the band placed, at intra
- * rates, in corridor order (anchorA, waypoints and anchorB all sorted by their own projection
- * along the seed-to-seed line — the nearest-facing anchor rule does not guarantee anchorA/anchorB
- * sit at the chain's extreme ends, so the whole chain is sorted together rather than assuming
- * it) — when the band placed zero waypoint systems (a low-density knob set can do this), the chain
- * is just [anchorA, anchorB]: a direct lane, the same fallback the crossing style always uses,
- * needing no special case. `isGateway` marks exactly the two anchors — "the system at each end
- * where a corridor meets a cluster" (spec §5) — never an interior waypoint. A cluster with no
+ * cluster — UNLESS the realised anchor-to-anchor line no longer reads as genuine emptiness
+ * (`crossingShouldDemote`, spec §5C: the line clips band-raised/populated grid beyond tolerance,
+ * or runs close to some third placed system), in which case it demotes to band-style realisation
+ * using the same waypoint chain a planned band pair would. A band-style pair (or a demoted
+ * crossing) chains through whatever waypoint stars the corridor's band placed, via
+ * `realizeBandChain` — when the band placed zero waypoint systems (a low-density knob set can do
+ * this), that chain degrades to the direct anchor-to-anchor lane on its own (spec §5A: no third
+ * point, no special case needed). `isGateway` marks exactly the two anchors — "the system at each
+ * end where a corridor meets a cluster" (spec §5) — never an interior waypoint. A cluster with no
  * placed systems on either side anchors nothing and is skipped: there is nothing there to connect
  * (§8's `connectRemainingComponents` repairs any resulting stranding at the whole-graph level).
  */
@@ -416,6 +520,8 @@ function realizeCorridorPair(
   avgIntraDist: number,
   params: CorridorRealisationParams,
   connections: GeneratedConnection[],
+  grid: DensityGrid,
+  mapSize: number,
   coordByIndex: Map<number, { x: number; y: number }>,
 ): void {
   const sysA = systemsByRegion.get(pair.a) ?? [];
@@ -430,18 +536,6 @@ function realizeCorridorPair(
   anchorA.isGateway = true;
   anchorB.isGateway = true;
 
-  if (pair.style === "crossing") {
-    pushLane(
-      connections, anchorA.index, anchorB.index,
-      laneFuelCost(
-        distance(anchorA.x, anchorA.y, anchorB.x, anchorB.y),
-        avgIntraDist, params.intraRegionBaseFuel, params.crossingFuelMultiplier,
-      ),
-      true,
-    );
-    return;
-  }
-
   const anchorAT = projectOntoLine(anchorA.x, anchorA.y, seedA.x, seedA.y, seedB.x, seedB.y);
   const anchorBT = projectOntoLine(anchorB.x, anchorB.y, seedA.x, seedA.y, seedB.x, seedB.y);
   const waypoints = waypointsAlongCorridor(
@@ -451,46 +545,40 @@ function realizeCorridorPair(
     Math.min(anchorAT, anchorBT), Math.max(anchorAT, anchorBT),
   );
 
-  // Waypoints are confined to strictly between `tLow`/`tHigh` (`waypointsAlongCorridor`), which
-  // are themselves the two anchors' own projections — so the two chain positions at the sorted
-  // extremes are always {anchorA, anchorB}, in whichever order their projections fall. Walking
-  // the chain greedily from one extreme, an interior waypoint whose link would visibly cross an
-  // already-realised lane is skipped (its own system already has intra-cluster connectivity from
-  // Phase 1 — dropping it from THIS chain loses nothing but the shortcut) rather than blocking
-  // the corridor; the closing link to the far extreme (the other anchor) is never skipped — that
-  // link is the corridor's own required connectivity, same rule as the crossing style's one lane.
-  const chain = [anchorA, anchorB, ...waypoints].sort(
-    (p, q) =>
-      projectOntoLine(p.x, p.y, seedA.x, seedA.y, seedB.x, seedB.y)
-      - projectOntoLine(q.x, q.y, seedA.x, seedA.y, seedB.x, seedB.y),
-  );
-  let current = chain[0];
-  for (let i = 1; i < chain.length; i++) {
-    const candidate = chain[i];
-    const isClosingLink = i === chain.length - 1;
-    if (!isClosingLink && crossesAcceptedLane(current.x, current.y, candidate.x, candidate.y, connections, coordByIndex)) {
-      continue;
-    }
-    pushLane(
-      connections, current.index, candidate.index,
-      laneFuelCost(
-        distance(current.x, current.y, candidate.x, candidate.y),
-        avgIntraDist, params.intraRegionBaseFuel, 1,
-      ),
-      false,
+  if (pair.style === "crossing") {
+    const thirdSystems = allSystems.filter((s) => s.index !== anchorA.index && s.index !== anchorB.index);
+    const demoted = crossingShouldDemote(
+      grid, mapSize, anchorA.x, anchorA.y, anchorB.x, anchorB.y,
+      thirdSystems, crossingDemotionThresholds(params.poissonMinDistance),
     );
-    current = candidate;
+    if (!demoted) {
+      pushLane(
+        connections, anchorA.index, anchorB.index,
+        laneFuelCost(
+          distance(anchorA.x, anchorA.y, anchorB.x, anchorB.y),
+          avgIntraDist, params.intraRegionBaseFuel, params.crossingFuelMultiplier,
+        ),
+        true,
+      );
+      return;
+    }
   }
+
+  realizeBandChain(anchorA, anchorB, waypoints, avgIntraDist, params, connections, coordByIndex);
 }
 
 /**
  * Realise every chosen corridor (spec §5): clones `systems` (so callers keep their own,
  * unflagged copy — mirrors the old gateway-designation phase this replaces), marks each
- * corridor's two anchors `isGateway`, and returns the lanes each pair added. `existingConnections`
- * (default none — every direct/fixture caller keeps today's isolated behaviour) seeds the
- * crossing-rejection check a band chain's optional waypoint hops run against, so a chain built
- * inside `generateConnections` sees Phase 1's already-placed intra-cluster lanes without those
- * lanes being duplicated into this call's own returned `connections`.
+ * corridor's two anchors `isGateway`, and returns the lanes each pair added. `grid`/`mapSize` are
+ * the fully-painted post-corridor density field the crossing-demotion check reads (spec §5C).
+ * `existingConnections` (default none — every direct/fixture caller keeps today's isolated
+ * behaviour) seeds the ONLY crossing-rejection check remaining (`wouldCrossAcceptedLane`, run
+ * solely against a band chain's own cycle edges, `realizeBandChain`) so those edges see Phase 1's
+ * already-placed intra-cluster lanes without those lanes being duplicated into this call's own
+ * returned `connections`. Everywhere else, the neighbourhood-graph criterion is planar and
+ * MST-containing over each corridor's own {anchorA, anchorB, waypoints} set on its own — no
+ * crossing check needed against other lanes.
  */
 export function realizeCorridors(
   systems: GeneratedSystem[],
@@ -498,6 +586,8 @@ export function realizeCorridors(
   corridors: CorridorPlan,
   avgIntraDist: number,
   params: CorridorRealisationParams,
+  grid: DensityGrid,
+  mapSize: number,
   existingConnections: GeneratedConnection[] = [],
 ): { connections: GeneratedConnection[]; systems: GeneratedSystem[] } {
   const updatedSystems = systems.map((s) => ({ ...s }));
@@ -507,13 +597,14 @@ export function realizeCorridors(
     if (list) list.push(sys);
     else systemsByRegion.set(sys.regionIndex, [sys]);
   }
-
   const coordByIndex = new Map(updatedSystems.map((s) => [s.index, { x: s.x, y: s.y }]));
 
   const connections: GeneratedConnection[] = [...existingConnections];
   const startLength = connections.length;
   for (const pair of corridors.pairs) {
-    realizeCorridorPair(pair, systemsByRegion, updatedSystems, regions, avgIntraDist, params, connections, coordByIndex);
+    realizeCorridorPair(
+      pair, systemsByRegion, updatedSystems, regions, avgIntraDist, params, connections, grid, mapSize, coordByIndex,
+    );
   }
 
   return { connections: connections.slice(startLength), systems: updatedSystems };
@@ -590,13 +681,14 @@ function connectRemainingComponents(
 }
 
 export function generateConnections(
-  rng: RNG,
   systems: GeneratedSystem[],
   regions: GeneratedRegion[],
   corridors: CorridorPlan,
   params: GenParams,
+  grid: DensityGrid,
+  mapSize: number,
 ): { connections: GeneratedConnection[]; systems: GeneratedSystem[]; repairLaneCount: number } {
-  const { extraEdgeFraction, intraRegionBaseFuel } = params;
+  const { lanePruneFraction, intraRegionBaseFuel } = params;
   const connections: GeneratedConnection[] = [];
 
   // Group systems by region
@@ -608,8 +700,9 @@ export function generateConnections(
     regionSystems.get(sys.regionIndex)!.push(sys);
   }
 
-  // Compute average intra-region distance for fuel normalisation
-  // (replaces the old fixed systemScatterRadius divisor)
+  // Compute average intra-region distance for fuel normalisation (replaces the old fixed
+  // systemScatterRadius divisor) — the MST's own average hop is still the right "typical hop"
+  // proxy for normalisation, independent of which edges Phase 1 actually realises as lanes.
   let totalIntraDist = 0;
   let totalIntraEdges = 0;
   for (const [, regionSys] of regionSystems) {
@@ -621,15 +714,19 @@ export function generateConnections(
     }
   }
   const avgIntraDist = totalIntraEdges > 0 ? totalIntraDist / totalIntraEdges : params.poissonMinDistance;
-  const coordByIndex = new Map(systems.map((s) => [s.index, { x: s.x, y: s.y }]));
 
-  // ── Phase 1: Intra-cluster connections (per-region MST + extra edges) ──
+  // ── Phase 1: Intra-cluster connections — the neighbourhood-graph criterion (spec §5A) replaces
+  // the old per-region MST + random extra edges entirely. The relative-neighbourhood graph is
+  // planar (no two of its own edges ever cross) and provably contains the Euclidean MST (so every
+  // cluster with ≥ 2 systems stays connected) — no separate MST pass, no crossing-rejection gate,
+  // no `rng` draw. `lanePruneFraction` (formerly `INTRA_REGION_EXTRA_EDGES`/`extraEdgeFraction`,
+  // repurposed) optionally trims surplus cycle edges afterward; default 0 (measured graph density
+  // already lands in the target band, see the field's own docstring). ──
   for (const [, regionSys] of regionSystems) {
     if (regionSys.length < 2) continue;
 
-    const mstEdges = kruskalMST(regionSys);
-    /** An intra-region lane at the baseline fuel rate, between two systems of THIS region. */
-    const addIntraLane = (edge: Edge): void =>
+    const edges = pruneLaneDensity(relativeNeighbourhoodGraphEdges(regionSys), regionSys.length, lanePruneFraction);
+    for (const edge of edges) {
       pushLane(
         connections,
         regionSys[edge.a].index,
@@ -637,39 +734,13 @@ export function generateConnections(
         laneFuelCost(edge.dist, avgIntraDist, intraRegionBaseFuel, 1),
         false,
       );
-
-    // MST edges (guaranteed connectivity — never gated on crossing, unlike the extras below)
-    for (const edge of mstEdges) addIntraLane(edge);
-
-    // Extra edges for route variety — none of them connectivity-critical (the MST above already
-    // guarantees this region's connectivity), so a candidate whose segment would visibly cross an
-    // already-accepted lane (this region's own MST/extras, or any other region's lanes realised
-    // before this one) is rejected outright rather than added crossing it.
-    const extraCount = Math.floor(mstEdges.length * extraEdgeFraction);
-    const candidates = extraEdgeCandidates(regionSys, mstEdges);
-
-    // Pick random extras from the shorter-distance candidates
-    const pool = candidates.slice(0, Math.min(candidates.length, extraCount * 3));
-    const picked = new Set<number>();
-    let added = 0;
-    while (added < extraCount && picked.size < pool.length) {
-      const idx = randInt(rng, 0, pool.length - 1);
-      if (picked.has(idx)) continue;
-      picked.add(idx);
-      const edge = pool[idx];
-      const sysA = regionSys[edge.a];
-      const sysB = regionSys[edge.b];
-      if (crossesAcceptedLane(sysA.x, sysA.y, sysB.x, sysB.y, connections, coordByIndex)) continue;
-      addIntraLane(edge);
-      added++;
     }
   }
 
   // ── Phase 2: Corridor realisation (spec §5) — replaces the old region-centre MST + gateway
-  // crossing phases entirely; between-cluster lanes now exist ONLY along the plan's corridors.
-  // Phase 1's lanes are passed in so a band chain's crossing check can see them too. ──
+  // crossing phases entirely; between-cluster lanes now exist ONLY along the plan's corridors. ──
   const { connections: corridorConnections, systems: updatedSystems } = realizeCorridors(
-    systems, regions, corridors, avgIntraDist, params, connections,
+    systems, regions, corridors, avgIntraDist, params, grid, mapSize, connections,
   );
   connections.push(...corridorConnections);
 
@@ -754,7 +825,7 @@ export function generateUniverse(
   const regions = generateRegions(shape.seeds, names);
   const rawSystems = generateSystems(rng, regions, effectiveParams, shape.grid);
   const { connections, systems } = generateConnections(
-    rng, rawSystems, regions, shape.corridors, effectiveParams,
+    rawSystems, regions, shape.corridors, effectiveParams, shape.grid, effectiveMapSize,
   );
 
   const factions = generateFactions(rng, systems, {

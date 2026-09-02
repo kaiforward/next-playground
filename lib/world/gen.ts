@@ -69,7 +69,7 @@ export function buildGenParams(
     mapPadding: config.MAP_PADDING,
     poissonMinDistance: config.POISSON_MIN_DISTANCE,
     poissonKCandidates: config.POISSON_K_CANDIDATES,
-    extraEdgeFraction: config.INTRA_REGION_EXTRA_EDGES,
+    lanePruneFraction: config.LANE_PRUNE_FRACTION,
     crossingFuelMultiplier: config.CROSSING_FUEL_MULTIPLIER,
     intraRegionBaseFuel: config.INTRA_REGION_BASE_FUEL,
     minorFactionCount: config.MINOR_FACTION_COUNT,

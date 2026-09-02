@@ -261,8 +261,9 @@ function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
-/** Shortest distance from point (px, py) to the segment (ax, ay)–(bx, by). */
-function pointSegmentDistance(
+/** Shortest distance from point (px, py) to the segment (ax, ay)–(bx, by). Exported: shared by
+ *  `crossingShouldDemote`'s third-system-proximity test. */
+export function pointSegmentDistance(
   px: number, py: number, ax: number, ay: number, bx: number, by: number,
 ): number {
   const dx = bx - ax;
@@ -407,9 +408,10 @@ const MAX_STYLE_SAMPLES = 200;
  * Fraction of `sampleCount` evenly-spaced points along the (ax,ay)-(bx,by) segment that land on a
  * true-void cell (density exactly 0) in `grid`. Reads the grid as-is — callers are responsible for
  * passing the pre-corridor base grid when the reading must reflect the world before any corridor
- * has painted itself onto it.
+ * has painted itself onto it. Exported: `crossingShouldDemote` below reuses it against the
+ * POST-paint grid to read the realised line as it actually exists.
  */
-function sampleSegmentVoidFraction(
+export function sampleSegmentVoidFraction(
   grid: DensityGrid, mapSize: number, ax: number, ay: number, bx: number, by: number,
 ): number {
   const { resolution, cells } = grid;
@@ -447,6 +449,71 @@ function corridorStyleFor(voidFraction: number, corridorStyle: number): "band" |
   if (corridorStyle <= 0) return "band";
   const threshold = 1 - corridorStyle;
   return voidFraction >= threshold ? "crossing" : "band";
+}
+
+// ── Crossing demotion (spec §5C) ─────────────────────────────────
+
+/**
+ * Thresholds `crossingShouldDemote` reads. Both Gate-A-sweepable, like every other §5 constant.
+ * `maxPopulatedFraction` is deliberately stricter than `corridorStyleFor`'s own planning threshold
+ * (which, at the default `corridorStyle` 0.5, is 0.5 void-fraction i.e. 0.5 populated) — that
+ * threshold decides style from the SEED-to-seed line before any system is placed; this one reads
+ * the REALISED anchor-to-anchor line after placement, and a crossing that no longer reads as
+ * genuinely empty should demote even if the seed line that planned it looked fine.
+ */
+export interface CrossingDemotionThresholds {
+  /** Populated (non-void) sample fraction along the realised line above which a crossing demotes
+   *  to band realisation — the line no longer runs through "genuine emptiness". */
+  maxPopulatedFraction: number;
+  /** Any third system (neither anchor) within this world-distance of the realised line also
+   *  demotes, even when the grid-sampled fraction alone would not have. */
+  minThirdSystemDistance: number;
+}
+
+const CROSSING_DEMOTION_MAX_POPULATED_FRACTION = 0.3;
+
+/** A multiple of the galaxy's own Poisson minimum distance — deliberately BELOW 1 (measured: the
+ *  galaxy's own background system spacing already puts SOME system within 1-1.3× the minimum
+ *  distance of almost any few-hundred-unit line, since that minimum distance is the floor spacing
+ *  everywhere, not just in clusters — a multiple ≥ 1 would demote nearly every crossing regardless
+ *  of whether its line runs through genuine emptiness. 0.5 catches a system essentially clipping
+ *  the line, not the galaxy's ordinary background spacing. */
+const CROSSING_DEMOTION_THIRD_SYSTEM_DISTANCE_MULTIPLE = 0.5;
+
+/** Build the demotion thresholds for one galaxy from its own Poisson minimum distance — so the
+ *  "small distance" third-system test scales with the galaxy's own spacing rather than a fixed
+ *  world-unit constant. */
+export function crossingDemotionThresholds(poissonMinDistance: number): CrossingDemotionThresholds {
+  return {
+    maxPopulatedFraction: CROSSING_DEMOTION_MAX_POPULATED_FRACTION,
+    minThirdSystemDistance: poissonMinDistance * CROSSING_DEMOTION_THIRD_SYSTEM_DISTANCE_MULTIPLE,
+  };
+}
+
+/**
+ * True iff the REALISED anchor-to-anchor line (ax,ay)-(bx,by) no longer runs through genuine
+ * emptiness: either its sampled populated fraction against `grid` (the fully-painted, POST-corridor
+ * grid — the world as it actually exists, not the pre-placement planning grid `corridorStyleFor`
+ * reads) exceeds `thresholds.maxPopulatedFraction`, or some placed system in `thirdSystems` (every
+ * placed system except the two anchors themselves — callers filter) sits within
+ * `thresholds.minThirdSystemDistance` of the line. Shared, pure, browser-safe (no import reaching
+ * `lib/constants/economy-scale`): both `generateConnections` (`universe-gen.ts`) and the galaxy
+ * preview's `crossingSegments` (`components/start/galaxy-preview-render.ts`) call this so the
+ * engine and the preview demote exactly the same pairs — the parity requirement spec §5C states.
+ */
+export function crossingShouldDemote(
+  grid: DensityGrid,
+  mapSize: number,
+  ax: number, ay: number, bx: number, by: number,
+  thirdSystems: Array<{ x: number; y: number }>,
+  thresholds: CrossingDemotionThresholds,
+): boolean {
+  const populatedFraction = 1 - sampleSegmentVoidFraction(grid, mapSize, ax, ay, bx, by);
+  if (populatedFraction > thresholds.maxPopulatedFraction) return true;
+  for (const s of thirdSystems) {
+    if (pointSegmentDistance(s.x, s.y, ax, ay, bx, by) < thresholds.minThirdSystemDistance) return true;
+  }
+  return false;
 }
 
 /**

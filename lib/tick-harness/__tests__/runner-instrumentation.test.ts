@@ -473,7 +473,7 @@ describe("runTickHarness: episode costs, founding trajectory, the ratchet check"
     //
     // totalTeardownLevels is deliberately pinned rather than dropped. Post-strip (no random event
     // spawning left at all — only the relations trio remains, and it spawns far past this
-    // horizon) BUSY sheds 191 levels over its horizon on this fixture's generated galaxy (its
+    // horizon) BUSY sheds 196 levels over its horizon on this fixture's generated galaxy (its
     // cluster/lane topology, spec `docs/planned/logistics-lanes.md` §5, sets which systems decay
     // and when — POISSON_MIN_DISTANCE 117 changes which systems and corridors world-gen places).
     // Pinned exactly as the regime's signature; a drift in either direction is a mechanics or
@@ -487,7 +487,7 @@ describe("runTickHarness: episode costs, founding trajectory, the ratchet check"
     // `totalTeardownLevels` and asserts the total. Together they cover both hops of the wire this
     // test cannot exercise on a dormant galaxy.
     const results = await runBusy();
-    expect(results.episodeCosts.totalTeardownLevels).toBe(191);
+    expect(results.episodeCosts.totalTeardownLevels).toBe(196);
     expect(results.foundingTrajectory.buckets[0].n).toBeGreaterThan(0); // colonies founded in-window
     expect(results.provisionRatchet.buckets.length).toBeGreaterThan(0);
 

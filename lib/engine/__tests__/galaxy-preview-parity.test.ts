@@ -19,7 +19,7 @@
  * `bridsonSample` placed, unperturbed by anything downstream.
  */
 import { describe, it, expect } from "vitest";
-import { buildGalaxyImpression } from "@/components/start/galaxy-preview-render";
+import { buildGalaxyImpression, crossingSegments } from "@/components/start/galaxy-preview-render";
 import { generateUniverse } from "@/lib/engine/universe-gen";
 import { buildGenParams } from "@/lib/world/gen";
 import { genConfigForSystemCount, REGION_NAMES } from "@/lib/constants/universe-gen";
@@ -76,5 +76,75 @@ describe("galaxy-preview parity with the real engine orchestration (generateUniv
     expect(universe.systems.length).toBe(impression.points.length);
     const coords = universe.systems.map((s) => ({ x: s.x, y: s.y }));
     expect(coords).toEqual(impression.points);
+  });
+});
+
+describe("galaxy-preview crossing-set parity with the engine's realised isCrossing lanes (spec §5C)", () => {
+  /** The set of undirected coordinate-pair keys the engine actually realised as isCrossing lanes —
+   *  coordinates, not indices, because `stampHomeworldPrefabs`/faction assignment renumber nothing
+   *  but do run after connection generation, and coordinates are the seam the module docstring
+   *  already establishes as stable end-to-end. */
+  function engineCrossingPairKeys(universe: ReturnType<typeof generateUniverse>): Set<string> {
+    const byIndex = new Map(universe.systems.map((s) => [s.index, s]));
+    const keys = new Set<string>();
+    for (const c of universe.connections) {
+      if (!c.isCrossing) continue;
+      const from = byIndex.get(c.fromSystemIndex)!;
+      const to = byIndex.get(c.toSystemIndex)!;
+      const a = `${from.x},${from.y}`;
+      const b = `${to.x},${to.y}`;
+      keys.add(a < b ? `${a}|${b}` : `${b}|${a}`);
+    }
+    return keys;
+  }
+
+  function previewCrossingPairKeys(
+    impression: ReturnType<typeof buildGalaxyImpression>,
+  ): Set<string> {
+    const keys = new Set<string>();
+    for (const seg of crossingSegments(impression)) {
+      const a = `${seg.a.x},${seg.a.y}`;
+      const b = `${seg.b.x},${seg.b.y}`;
+      keys.add(a < b ? `${a}|${b}` : `${b}|${a}`);
+    }
+    return keys;
+  }
+
+  it("matches exactly at a seed where demotion never fires (every planned crossing pair survives realisation)", () => {
+    // Measured: systemCount=600 seed=42 (default knobs) — all 5 planned crossing pairs stay
+    // crossings at realisation (no demotion), per the density-field diagnostics this build's
+    // demotion thresholds were calibrated against.
+    const seed = 42;
+    const systemCount = 600;
+    const config = genConfigForSystemCount(systemCount);
+    const params = buildGenParams(seed, config);
+    const universe = generateUniverse(params, REGION_NAMES);
+    const impression = buildGalaxyImpression(params.shapeKnobs, seed, systemCount);
+
+    const engineKeys = engineCrossingPairKeys(universe);
+    const previewKeys = previewCrossingPairKeys(impression);
+    expect(engineKeys.size).toBeGreaterThan(0); // non-vacuous
+    expect(previewKeys).toEqual(engineKeys);
+  });
+
+  it("matches exactly at a seed where demotion DOES fire (some planned crossing pairs demote to band)", () => {
+    // Measured: systemCount=600 seed=43 — 2 of 7 planned crossing pairs demote (their realised
+    // anchor-to-anchor line reads mostly populated or runs close to a third system); the preview
+    // must exclude exactly those two, not just draw every planned pair.
+    const seed = 43;
+    const systemCount = 600;
+    const config = genConfigForSystemCount(systemCount);
+    const params = buildGenParams(seed, config);
+    const universe = generateUniverse(params, REGION_NAMES);
+    const impression = buildGalaxyImpression(params.shapeKnobs, seed, systemCount);
+
+    const engineKeys = engineCrossingPairKeys(universe);
+    const previewKeys = previewCrossingPairKeys(impression);
+    expect(engineKeys.size).toBeGreaterThan(0); // non-vacuous
+    // Fewer real crossings than planned pairs — proves this seed actually exercises demotion,
+    // not just that the two sides happen to agree on an empty set.
+    const plannedCrossingCount = impression.shape.corridors.pairs.filter((p) => p.style === "crossing").length;
+    expect(engineKeys.size).toBeLessThan(plannedCrossingCount);
+    expect(previewKeys).toEqual(engineKeys);
   });
 });

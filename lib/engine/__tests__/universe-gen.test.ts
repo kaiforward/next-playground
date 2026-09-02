@@ -2,8 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   mulberry32,
   distance,
-  randInt,
   UnionFind,
+  relativeNeighbourhoodGraphEdges,
+} from "../generation-primitives";
+import {
+  randInt,
   bridsonSample,
   assignRegions,
   generateRegions,
@@ -15,7 +18,6 @@ import {
   type GenParams,
   type GeneratedRegion,
   type GeneratedSystem,
-  type GeneratedConnection,
 } from "../universe-gen";
 import {
   buildGalaxyShape,
@@ -47,6 +49,14 @@ function defaultParams(): GenParams {
  *  behaviour whenever every cell reads 1 (max density everywhere). */
 function uniformGrid(n = 4): DensityGrid {
   return { resolution: n, cells: new Array(n * n).fill(1) };
+}
+
+/** A fully-void grid (every cell reads 0) — used by corridor-realisation fixtures that plant
+ *  systems directly (never consulting the grid for placement) and want `crossingShouldDemote`'s
+ *  grid-populated-fraction test to read "genuinely empty" unconditionally, so the fixture exercises
+ *  only the geometry under test, not demotion (which gets its own dedicated tests below). */
+function voidGrid(n = 4): DensityGrid {
+  return { resolution: n, cells: new Array(n * n).fill(0) };
 }
 
 /** Same lookup `densityAt` (universe-gen.ts, not exported) performs — a test-only oracle so tests
@@ -473,7 +483,7 @@ describe("generateConnections", () => {
     const shape = buildGalaxyShape(params.shapeKnobs, params.mapSize, rng);
     const regions = generateRegions(shape.seeds, REGION_NAMES);
     const rawSystems = generateSystems(rng, regions, params, shape.grid);
-    const result = generateConnections(rng, rawSystems, regions, shape.corridors, params);
+    const result = generateConnections(rawSystems, regions, shape.corridors, params, shape.grid, params.mapSize);
     return { regions, corridors: shape.corridors, ...result };
   }
 
@@ -537,7 +547,7 @@ describe("generateConnections", () => {
   });
 
   // ── Proves: "no cross-cluster lane exists outside a corridor pair the plan chose" ──
-  it("isCrossing lanes exist exactly one per crossing-style corridor pair with both sides populated", () => {
+  it("isCrossing lanes exist at most one per crossing-style corridor pair with both sides populated (some demote to band per spec §5C)", () => {
     const { systems, connections, corridors } = makeFullUniverse();
     const crossingPairsWithSystems = corridors.pairs.filter(
       (p) => p.style === "crossing"
@@ -546,9 +556,12 @@ describe("generateConnections", () => {
     );
     expect(crossingPairsWithSystems.length).toBeGreaterThan(0); // non-vacuous — default corridorStyle mix
 
-    // Undirected count: pushLane always writes both directed rows.
+    // Undirected count: pushLane always writes both directed rows. At most one isCrossing lane
+    // per planned pair — some demote to a band chain (spec §5C) when their realised anchor-to-
+    // anchor line no longer reads as genuine emptiness, so the count can come in under the planned
+    // total; it must never exceed it (a planned pair realises at most one crossing lane).
     const crossingLaneCount = connections.filter((c) => c.isCrossing).length / 2;
-    expect(crossingLaneCount).toBe(crossingPairsWithSystems.length);
+    expect(crossingLaneCount).toBeLessThanOrEqual(crossingPairsWithSystems.length);
   });
 
   it("no isCrossing lane connects two systems whose regions aren't a crossing-style corridor pair", () => {
@@ -572,7 +585,9 @@ describe("generateConnections", () => {
   it("marks isGateway on at least the anchors realizeCorridors itself designates, for every non-empty region touched by a corridor with a non-empty partner", () => {
     const { systems, corridors, regions } = makeFullUniverse();
     const avgIntraDistProxy = params.poissonMinDistance; // only relative fuel cost matters here, not read
-    const replay = realizeCorridors(systems, regions, corridors, avgIntraDistProxy, params);
+    const replay = realizeCorridors(
+      systems, regions, corridors, avgIntraDistProxy, params, shapeFor(params).grid, params.mapSize,
+    );
     const gatewaysFromReplay = new Set(replay.systems.filter((s) => s.isGateway).map((s) => s.index));
     const gatewaysFromFullRun = new Set(systems.filter((s) => s.isGateway).map((s) => s.index));
     // generateConnections calls realizeCorridors internally with the same corridor plan — its
@@ -601,7 +616,9 @@ describe("generateConnections", () => {
       const shape = buildGalaxyShape(extremeParams.shapeKnobs, extremeParams.mapSize, rng);
       const regions = generateRegions(shape.seeds, REGION_NAMES);
       const rawSystems = generateSystems(rng, regions, extremeParams, shape.grid);
-      const { systems, connections } = generateConnections(rng, rawSystems, regions, shape.corridors, extremeParams);
+      const { systems, connections } = generateConnections(
+        rawSystems, regions, shape.corridors, extremeParams, shape.grid, extremeParams.mapSize,
+      );
 
       expect(systems.length).toBeGreaterThan(1); // non-vacuous
       const uf = connectivityComponents(systems, connections);
@@ -620,18 +637,25 @@ describe("generateConnections", () => {
       expect(populatedPairs.length).toBeGreaterThan(0); // non-vacuous
 
       if (corridorStyle === 1) {
-        // All-crossing: every corridor pair realises as exactly one isCrossing lane between its
-        // two regions — no waypoint chain (which would add extra connections and non-isCrossing
-        // hops between the same two regions).
+        // All-crossing (planned): every populated pair is PLANNED as a crossing, but spec §5C's
+        // realised-line demotion can still knock some of them down to a band chain (their realised
+        // anchor-to-anchor line doesn't actually read as empty) — so this checks style dispatch
+        // fired at all (at least one real crossing lane survives), not that every planned pair
+        // stayed a crossing.
+        let sawRealCrossing = false;
         for (const pair of populatedPairs) {
           const acrossPair = connections.filter((c) => {
             const fr = byIndex.get(c.fromSystemIndex)!.regionIndex;
             const tr = byIndex.get(c.toSystemIndex)!.regionIndex;
             return (fr === pair.a && tr === pair.b) || (fr === pair.b && tr === pair.a);
           });
-          expect(acrossPair.length).toBe(2); // one undirected lane, two directed rows
-          expect(acrossPair.every((c) => c.isCrossing)).toBe(true);
+          // Whichever way it realised, it must be internally consistent: either one isCrossing
+          // lane (not demoted) or a band chain with none (demoted) — never a mix.
+          const crossingCount = acrossPair.filter((c) => c.isCrossing).length;
+          expect(crossingCount === 0 || crossingCount === acrossPair.length).toBe(true);
+          if (crossingCount > 0) sawRealCrossing = true;
         }
+        expect(sawRealCrossing).toBe(true); // non-vacuous: demotion isn't swallowing every pair
       } else {
         // All-band: no isCrossing lane exists anywhere in the realised graph.
         expect(connections.some((c) => c.isCrossing)).toBe(false);
@@ -640,45 +664,44 @@ describe("generateConnections", () => {
   });
 });
 
-// ── Aesthetic crossing rejection: an extra intra-cluster edge is never realised crossing an
-// already-accepted lane mid-segment — it isn't connectivity-critical (the region's own MST
-// already guarantees that), so a crossing candidate is dropped rather than drawn. ──
-describe("generateConnections — extra-edge crossing rejection", () => {
-  it("an extra intra-cluster edge candidate that would properly cross an already-accepted lane is rejected, not drawn", () => {
-    const regions = [
-      { index: 0, name: "r0", x: 0, y: 0 },
-      { index: 1, name: "r1", x: 0, y: 0 },
-    ];
+// ── Local-lane neighbourhood graph (spec §5A): the empty-region criterion (Gabriel /
+// relative-neighbourhood test) replaces the old per-region MST + random extra edges. Both tests
+// are planar and MST-containing by construction, so "no two lanes ever cross" and "every cluster
+// stays connected" are structural guarantees, not a separate rejection gate. ──
+describe("generateConnections — neighbourhood-graph lane selection", () => {
+  it("a long edge past a near-third system is excluded (fails the relative-neighbourhood test), while the two short edges to that third system are included", () => {
+    // A, B on the x-axis 300 apart; C sits almost exactly between them, 10 units off-axis — well
+    // inside the lens max(d(A,C), d(B,C)) < d(A,B) needs to fail the direct A-B edge. The two
+    // short hops A-C and C-B (each ~150) must both pass: no fourth point can invalidate them.
+    const regions = [{ index: 0, name: "r0", x: 0, y: 0 }];
     const systems = [
-      // Region 0: a single MST lane, a vertical line x=50 from y=-50 to y=150.
-      mkSys({ index: 0, regionIndex: 0, x: 50, y: -50 }),
-      mkSys({ index: 1, regionIndex: 0, x: 50, y: 150 }),
-      // Region 1: three points whose MST leaves exactly one candidate extra edge — the diagonal
-      // (0,0)-(100,100) — which crosses region 0's lane at (50,50), interior to both segments.
-      mkSys({ index: 2, regionIndex: 1, x: 0, y: 0 }),
-      mkSys({ index: 3, regionIndex: 1, x: 100, y: 100 }),
-      mkSys({ index: 4, regionIndex: 1, x: 100, y: 0 }),
+      mkSys({ index: 0, regionIndex: 0, x: 0, y: 0 }), // A
+      mkSys({ index: 1, regionIndex: 0, x: 300, y: 0 }), // B
+      mkSys({ index: 2, regionIndex: 0, x: 150, y: 10 }), // C
     ];
-    const params: GenParams = { ...defaultParams(), extraEdgeFraction: 1 };
-    const rng = mulberry32(1);
+    const params: GenParams = { ...defaultParams(), lanePruneFraction: 0 };
 
-    const { connections } = generateConnections(rng, systems, regions, { pairs: [] }, params);
+    const { connections } = generateConnections(systems, regions, { pairs: [] }, params, voidGrid(), 2000);
 
     const undirectedPairs = new Set(
       connections.map((c) => `${Math.min(c.fromSystemIndex, c.toSystemIndex)}-${Math.max(c.fromSystemIndex, c.toSystemIndex)}`),
     );
-    // Region 1's MST is (2,4) and (3,4) (both distance 100, shorter than the (2,3) diagonal at
-    // ~141.4) — the diagonal (2,3) is the only candidate extra edge, and it must be absent: this
-    // is the fixture's whole point, not incidental.
     expect(
-      undirectedPairs.has("2-3"),
-      "extra edge 2-3 (the diagonal crossing region 0's lane at (50,50)) was drawn despite properly crossing an already-accepted lane",
+      undirectedPairs.has("0-1"),
+      "long edge A-B was drawn despite a near-third system C invalidating it under the relative-neighbourhood test",
     ).toBe(false);
-    // Region 0's own lane and region 1's MST are still both present — rejection cost nothing but
-    // the discretionary extra.
-    expect(undirectedPairs.has("0-1")).toBe(true);
-    expect(undirectedPairs.has("2-4")).toBe(true);
-    expect(undirectedPairs.has("3-4")).toBe(true);
+    expect(undirectedPairs.has("0-2")).toBe(true);
+    expect(undirectedPairs.has("1-2")).toBe(true);
+  });
+
+  it("red-proof: without the third point, the same criterion draws the long edge — proving the third-system test is what excludes it, not the edge's own length", () => {
+    const a = { x: 0, y: 0 };
+    const b = { x: 300, y: 0 };
+    const c = { x: 150, y: 10 };
+    const withoutThirdPoint = relativeNeighbourhoodGraphEdges([a, b]);
+    expect(withoutThirdPoint.some((e) => e.a === 0 && e.b === 1)).toBe(true);
+    const withThirdPoint = relativeNeighbourhoodGraphEdges([a, b, c]);
+    expect(withThirdPoint.some((e) => (e.a === 0 && e.b === 1))).toBe(false);
   });
 });
 
@@ -686,6 +709,12 @@ describe("generateConnections — extra-edge crossing rejection", () => {
 
 describe("realizeCorridors", () => {
   const crossingParams = { intraRegionBaseFuel: 8, crossingFuelMultiplier: 2.5, poissonMinDistance: 100 };
+  // A fully-void grid at a map size generous enough to cover every fixture's coordinates — these
+  // fixtures plant systems directly (never consulting the grid), and use `voidGrid` so
+  // `crossingShouldDemote`'s grid-populated-fraction test never fires, isolating the geometry
+  // under test from the demotion feature (which has its own dedicated tests below).
+  const grid = voidGrid();
+  const mapSize = 200_000;
 
   function region(index: number, x: number, y: number): GeneratedRegion {
     return { index, name: `r${index}`, x, y };
@@ -701,7 +730,7 @@ describe("realizeCorridors", () => {
     ];
     const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "crossing" }] };
 
-    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams);
+    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
 
     expect(connections).toHaveLength(2); // one undirected lane, two directed rows
     const [c1] = connections;
@@ -713,7 +742,7 @@ describe("realizeCorridors", () => {
     expect(out.find((s) => s.index === 3)!.isGateway).toBe(false);
   });
 
-  it("a band pair with waypoint systems on the line chains anchor -> waypoints (nearest-first) -> anchor, all at intra rate, isGateway only on the two anchors", () => {
+  it("a band pair with waypoint systems on the line connects anchor, waypoints and the far anchor via the neighbourhood-graph criterion, isGateway only on the two anchors", () => {
     // Waypoints are region 2 — a third cluster, not either corridor endpoint. This isn't
     // incidental: a waypoint assigned to region 0 or 1 itself would compete for that region's own
     // anchor slot (nearestSystemTowardSeed picks the single closest-to-the-other-seed system in
@@ -728,10 +757,11 @@ describe("realizeCorridors", () => {
     ];
     const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "band" }] };
 
-    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams);
+    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
 
-    // Chain: 0 -> 3 -> 2 -> 1 (ordered by projection along the corridor), 3 lanes, 6 directed rows.
-    expect(connections).toHaveLength(6);
+    // Collinear chain 0-3-2-1: the relative-neighbourhood graph over 4 collinear points connects
+    // each consecutive pair (0-3, 3-2, 2-1) and nothing else (a non-adjacent pair like 0-2 always
+    // fails the RNG test against the point directly between them).
     for (const c of connections) expect(c.isCrossing).toBe(false);
     const undirectedPairs = new Set(
       connections.map((c) => `${Math.min(c.fromSystemIndex, c.toSystemIndex)}-${Math.max(c.fromSystemIndex, c.toSystemIndex)}`),
@@ -752,7 +782,7 @@ describe("realizeCorridors", () => {
     ];
     const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "band" }] };
 
-    const { connections } = realizeCorridors(systems, regions, corridors, 100, crossingParams);
+    const { connections } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
     expect(connections).toHaveLength(2);
     expect(new Set([connections[0].fromSystemIndex, connections[0].toSystemIndex])).toEqual(new Set([0, 1]));
   });
@@ -766,7 +796,7 @@ describe("realizeCorridors", () => {
     ];
     const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "band" }] };
 
-    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams);
+    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
     expect(connections).toHaveLength(2); // direct anchor-to-anchor, system 2 excluded
     expect(out.find((s) => s.index === 2)!.isGateway).toBe(false);
   });
@@ -782,7 +812,7 @@ describe("realizeCorridors", () => {
       pairs: [{ a: 0, b: 1, style: "band" }, { a: 1, b: 2, style: "crossing" }],
     };
 
-    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams);
+    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
     expect(connections).toHaveLength(0);
     expect(out.every((s) => !s.isGateway)).toBe(true);
   });
@@ -798,7 +828,7 @@ describe("realizeCorridors", () => {
       pairs: [{ a: 0, b: 1, style: "crossing" }, { a: 0, b: 2, style: "crossing" }],
     };
 
-    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams);
+    const { connections, systems: out } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
     expect(connections).toHaveLength(4); // two undirected crossing lanes
     expect(out.find((s) => s.index === 0)!.isGateway).toBe(true);
     const uf = new UnionFind(3);
@@ -816,10 +846,10 @@ describe("realizeCorridors", () => {
     ];
 
     const crossing = realizeCorridors(
-      sameDistanceSystems, regions, { pairs: [{ a: 0, b: 1, style: "crossing" }] }, 100, crossingParams,
+      sameDistanceSystems, regions, { pairs: [{ a: 0, b: 1, style: "crossing" }] }, 100, crossingParams, grid, mapSize,
     );
     const band = realizeCorridors(
-      sameDistanceSystems, regions, { pairs: [{ a: 0, b: 1, style: "band" }] }, 100, crossingParams,
+      sameDistanceSystems, regions, { pairs: [{ a: 0, b: 1, style: "band" }] }, 100, crossingParams, grid, mapSize,
     );
 
     expect(crossing.connections[0].fuelCost).toBeGreaterThan(band.connections[0].fuelCost);
@@ -836,54 +866,57 @@ describe("realizeCorridors", () => {
     ];
     const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "crossing" }] };
 
-    const { connections } = realizeCorridors(systems, regions, corridors, 100, crossingParams);
+    const { connections } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
     const touchedIndices = new Set(connections.flatMap((c) => [c.fromSystemIndex, c.toSystemIndex]));
     expect(touchedIndices.has(2)).toBe(false);
     expect(touchedIndices.has(3)).toBe(false);
   });
 
-  // ── Aesthetic crossing rejection: a band chain's optional waypoint hop is never realised
-  // crossing an already-accepted lane — dropping it costs the chain nothing but a shortcut (its
-  // system already has its own intra-cluster connectivity), so the greedy walk skips straight to
-  // the next candidate instead. The chain's closing link back to the far anchor is never subject
-  // to this: it is the corridor's own required connectivity. ──
-  it("a band chain's waypoint hop that would properly cross an already-accepted lane is skipped, not drawn — the chain still closes to the far anchor", () => {
+  // ── Crossing demotion (spec §5C) ──────────────────────────────
+  it("a crossing pair whose realised line clips a populated grid cell beyond tolerance demotes to band realisation", () => {
     const regions = [region(0, 0, 0), region(1, 1000, 0)];
     const systems = [
-      mkSys({ index: 0, regionIndex: 0, x: 0, y: 0 }), // anchor A
-      mkSys({ index: 1, regionIndex: 1, x: 1000, y: 0 }), // anchor B
-      mkSys({ index: 2, regionIndex: 2, x: 300, y: 30 }), // waypoint 1 — A-to-W1 crosses the seeded lane
-      mkSys({ index: 3, regionIndex: 2, x: 600, y: 20 }), // waypoint 2 — A-to-W2 does not cross it
-      // regionIndex 2 (not 0 or 1) — these two must never be candidates for either corridor
-      // anchor. Placed with x outside [0, 1000] (so their own projection onto the corridor line
-      // falls outside the anchors' own span and they're never candidate waypoints either) but
-      // joined by a lane that still cuts across the corridor's interior at y=25.
-      mkSys({ index: 4, regionIndex: 2, x: -50, y: 25 }), // pre-existing lane endpoint (unrelated system)
-      mkSys({ index: 5, regionIndex: 2, x: 1050, y: 25 }), // pre-existing lane endpoint
+      mkSys({ index: 0, regionIndex: 0, x: 0, y: 0 }),
+      mkSys({ index: 1, regionIndex: 1, x: 1000, y: 0 }),
     ];
-    const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "band" }] };
-    // Seeded as an already-accepted lane (both directed rows, mirroring `pushLane`) — a long,
-    // near-horizontal segment at y=25. The A→W1 candidate (0,0)-(300,30) rises to y=30 by x=300,
-    // crossing y=25 at (250,25) — interior to both segments. The A→W2 candidate (0,0)-(600,20)
-    // never reaches y=25 (its own endpoint tops out at y=20), so it never crosses this lane.
-    const existingConnections: GeneratedConnection[] = [
-      { fromSystemIndex: 4, toSystemIndex: 5, fuelCost: 1, isCrossing: false },
-      { fromSystemIndex: 5, toSystemIndex: 4, fuelCost: 1, isCrossing: false },
+    const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "crossing" }] };
+    // Every cell reads 1 (fully populated) — the realised anchor-to-anchor line samples 100%
+    // populated, far past `maxPopulatedFraction` (0.3), so it must demote to a direct band lane
+    // (isCrossing false) rather than the crossing lane the plan chose.
+    const populatedGrid = uniformGrid();
+
+    const { connections } = realizeCorridors(systems, regions, corridors, 100, crossingParams, populatedGrid, mapSize);
+    expect(connections).toHaveLength(2);
+    expect(connections[0].isCrossing).toBe(false);
+  });
+
+  it("red-proof: disabling demotion (reading the pre-paint/void grid) realises the same pair as an actual crossing lane", () => {
+    const regions = [region(0, 0, 0), region(1, 1000, 0)];
+    const systems = [
+      mkSys({ index: 0, regionIndex: 0, x: 0, y: 0 }),
+      mkSys({ index: 1, regionIndex: 1, x: 1000, y: 0 }),
     ];
+    const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "crossing" }] };
 
-    const { connections } = realizeCorridors(systems, regions, corridors, 100, crossingParams, existingConnections);
+    const { connections } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
+    expect(connections).toHaveLength(2);
+    expect(connections[0].isCrossing).toBe(true);
+  });
 
-    const undirectedPairs = new Set(
-      connections.map((c) => `${Math.min(c.fromSystemIndex, c.toSystemIndex)}-${Math.max(c.fromSystemIndex, c.toSystemIndex)}`),
-    );
-    expect(
-      undirectedPairs.has("0-2"),
-      "waypoint hop 0-2 (A to W1, crossing the seeded lane at (250,25)) was drawn despite properly crossing an already-accepted lane",
-    ).toBe(false);
-    // The chain still reaches both anchors: A links straight through to W2, then W2 closes to B —
-    // W1 is skipped entirely, not stranded (Phase 1 gives every system its own intra-cluster
-    // lane; this fixture only exercises corridor realisation in isolation).
-    expect(undirectedPairs).toEqual(new Set(["0-3", "1-3"]));
+  it("a crossing pair with a third system planted close to the realised line demotes even though the grid alone reads void", () => {
+    const regions = [region(0, 0, 0), region(1, 1000, 0)];
+    const systems = [
+      mkSys({ index: 0, regionIndex: 0, x: 0, y: 0 }),
+      mkSys({ index: 1, regionIndex: 1, x: 1000, y: 0 }),
+      // Outside both anchors' waypoint window (its own region is neither 0 nor 1, but that no
+      // longer matters for demotion — any THIRD system counts) and within
+      // `poissonMinDistance * 0.5` (50) of the (0,0)-(1000,0) line.
+      mkSys({ index: 2, regionIndex: 2, x: 500, y: 30 }),
+    ];
+    const corridors: CorridorPlan = { pairs: [{ a: 0, b: 1, style: "crossing" }] };
+
+    const { connections } = realizeCorridors(systems, regions, corridors, 100, crossingParams, grid, mapSize);
+    expect(connections.some((c) => c.isCrossing)).toBe(false);
   });
 });
 
@@ -902,7 +935,10 @@ describe("generateConnections — repair-pass provenance", () => {
     const shape = buildGalaxyShape(params.shapeKnobs, params.mapSize, rng);
     const regions = generateRegions(shape.seeds, REGION_NAMES);
     const rawSystems = generateSystems(rng, regions, params, shape.grid);
-    return { regions, corridors: shape.corridors, ...generateConnections(rng, rawSystems, regions, shape.corridors, params) };
+    return {
+      regions, corridors: shape.corridors,
+      ...generateConnections(rawSystems, regions, shape.corridors, params, shape.grid, params.mapSize),
+    };
   }
 
   const cases: { systemCount: number; seed: number }[] = [
