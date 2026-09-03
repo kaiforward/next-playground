@@ -197,8 +197,19 @@ describe("serialiseWorld / deserialiseWorld", () => {
   // NOT throw: every market would silently price against nameplate capacity instead of realised
   // output. Nothing but this constant stands between the two, which is why the number is pinned
   // rather than left to drift.
-  it("is at save format version 17 (alert-category key set shrinks; WorldEvent.type union shrinks)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(17);
+  it("is at save format version 18 (world.lanes added)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(18);
+  });
+
+  it("rejects a v17 (pre-lanes) save with the clean version error", () => {
+    // A v17 save's world has no `lanes` array at all — the version bump is what makes this fail
+    // cleanly instead of loading with `world.lanes` silently `undefined` for every reader.
+    const { lanes: _dropped, ...v17World } = world;
+    const json = JSON.stringify({ formatVersion: 17, world: v17World });
+    const result = deserialiseWorld(json);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe(`Unsupported save formatVersion (expected ${SAVE_FORMAT_VERSION})`);
   });
 
   it("rejects a v16 (pre-events-strip) save with the clean version error", () => {

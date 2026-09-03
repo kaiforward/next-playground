@@ -10,6 +10,7 @@ import { generateUniverse, type GenParams, type GenShapeOverrides } from "@/lib/
 import { DENSITY_RADIUS_EXPONENT } from "@/lib/engine/system-placement";
 import { deriveDominantEconomy, type PlayerFactionInput } from "@/lib/engine/faction-gen";
 import { countColumns, qualColumns, yieldColumns, effColumns } from "@/lib/engine/resources";
+import { laneKey } from "@/lib/engine/lanes";
 import { genConfigForSystemCount, REGION_NAMES } from "@/lib/constants/universe-gen";
 import { DEFAULT_TAX_LEVEL } from "@/lib/constants/treasury";
 import { DEFAULT_ALERT_CATEGORIES, DEFAULT_TRACKER_SECTIONS } from "@/lib/constants/attention";
@@ -20,6 +21,7 @@ import type {
   WorldBody,
   WorldBuilding,
   WorldConnection,
+  WorldLane,
   WorldMarket,
   WorldFaction,
   WorldFactionRelation,
@@ -192,6 +194,24 @@ export function generateWorld(options: GenerateWorldOptions): World {
     fuelCost: c.fuelCost,
   }));
 
+  // ── Lanes (one persistent row per undirected pair a connection carries) ──
+  // The generator's connections are already bidirectional (a pair realises as two directed rows,
+  // `pushLane`/`pushLaneOnce`, `lib/engine/universe-gen.ts`), so collapsing on `laneKey` here is a
+  // dedup, not a fresh pairing decision — first occurrence wins, every generated lane starts
+  // untouched (level 0, no booked/blocked load, no idle history).
+  const seenLaneKeys = new Set<string>();
+  const lanes: WorldLane[] = [];
+  for (const c of universe.connections) {
+    const fromId = systemIds[c.fromSystemIndex];
+    const toId = systemIds[c.toSystemIndex];
+    const key = laneKey(fromId, toId);
+    if (seenLaneKeys.has(key)) continue;
+    seenLaneKeys.add(key);
+    // Sorted so `aId < bId` and `key === `${aId}|${bId}`` always — `WorldLane`'s own contract.
+    const [aId, bId] = fromId < toId ? [fromId, toId] : [toId, fromId];
+    lanes.push({ key, aId, bId, level: 0, bookedLoad: 0, blockedVolume: 0, idleCycles: 0 });
+  }
+
   // ── Markets (developed systems only) ──
   // An unclaimed system has no market: no one there produces, consumes, or stores anything. Rows are
   // created when a system is settled (`lib/world/tick.ts`), opening empty. Seeding every rock would
@@ -263,6 +283,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
     buildings,
     constructionProjects: [],
     connections,
+    lanes,
     markets,
     factions,
     relations,

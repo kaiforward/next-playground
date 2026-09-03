@@ -36,7 +36,15 @@ import { effColumns, yieldColumns } from "@/lib/engine/resources";
 // stored preference, and an old world.events row naming a stripped type would be silently expired by
 // the events processor's stale-type guard (`lib/tick/processors/events.ts`) rather than surfacing
 // anywhere — the bump makes both fail loudly at load instead of drifting unnoticed.
-export const SAVE_FORMAT_VERSION = 17;
+//
+// v18 adds `world.lanes` (`WorldLane`, `lib/world/types.ts`) — one persistent row per undirected
+// system pair carrying a `WorldConnection`, a new REQUIRED array. A pre-bump save has no such array
+// at all, not merely an old shape of one: loading it as-is would hand every reader of `world.lanes`
+// `undefined` instead of a lane row for every existing connection, and there is no per-lane default
+// to backfill from (a lane's `level`/`bookedLoad`/`blockedVolume`/`idleCycles` are runtime state, not
+// derivable from `world.connections` alone once play has invested in any of them) — so old saves are
+// refused rather than silently loading with zero lanes.
+export const SAVE_FORMAT_VERSION = 18;
 
 /** Reserved save name the tick loop autosaves to; the start screen's "Continue" loads it. */
 export const AUTOSAVE_NAME = "autosave";

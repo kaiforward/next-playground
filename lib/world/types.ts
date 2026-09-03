@@ -445,6 +445,33 @@ export interface WorldConnection {
   fuelCost: number;
 }
 
+/**
+ * A persistent, undirected jump lane — one row per system pair that carries a `WorldConnection`
+ * (docs/planned/logistics-lanes.md §1). `aId < bId`, and `key` is exactly `${aId}|${bId}` — the same
+ * sorted-pair key `buildOpenEdges` dedupes reciprocal connection rows on
+ * (`lib/tick/world/trade-flow-topology.ts`) — so a lane and its open-edge view always agree on
+ * identity.
+ *
+ * `level` is the invested upgrade tier (float, ≥ 0; capacity rises with it, `laneCapacity` in
+ * `lib/engine/lanes.ts`) — level 0 is a lane nobody has invested in, not an impassable one: every
+ * generated lane carries a small baseline capacity with no investment (§1). `bookedLoad` is a
+ * per-run quota the logistics processor writes and resets each logistics run; `blockedVolume` is the
+ * volume a saturated edge turned away the same run; both read 0 until a logistics run has visited the
+ * lane. Booked + blocked is the "attempted load" figure lane decay reads. `idleCycles` is the lane
+ * analogue of `WorldBuilding.idleCycles`: a sustained-idle counter (the lane decay dead band, §1)
+ * that only advances while a whole level's capacity goes unused and resets on any run that uses it;
+ * it reads 0 until decay assessment runs against the lane.
+ */
+export interface WorldLane {
+  key: string;
+  aId: string;
+  bId: string;
+  level: number;
+  bookedLoad: number;
+  blockedVolume: number;
+  idleCycles: number;
+}
+
 // ── Markets ─────────────────────────────────────────────────────
 
 /** One (system, good) market row. Good catalog data (basePrice, floor/ceiling) lives in code constants, not here. */
@@ -800,6 +827,8 @@ export interface World {
   /** Open (in-flight) construction projects across all factions; a landed/completed project is removed. */
   constructionProjects: WorldConstructionProject[];
   connections: WorldConnection[];
+  /** One persistent row per undirected system pair carrying a connection — see `WorldLane`. */
+  lanes: WorldLane[];
   markets: WorldMarket[];
   factions: WorldFaction[];
   relations: WorldFactionRelation[];
