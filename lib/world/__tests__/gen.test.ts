@@ -373,8 +373,8 @@ describe("generateWorld — player faction", () => {
   });
 });
 
-describe("generateWorld: connections carry the engine's isCrossing flag", () => {
-  it("world connection rows match generateUniverse's own isCrossing exactly, lane for lane", () => {
+describe("generateWorld: connections carry the engine's fuelCost", () => {
+  it("world connection rows match generateUniverse's own fuelCost exactly, lane for lane", () => {
     const systemCount = 600;
     const seed = 1;
 
@@ -386,21 +386,14 @@ describe("generateWorld: connections carry the engine's isCrossing flag", () => 
     const universe = generateUniverse(params, REGION_NAMES);
     const world = generateWorld({ systemCount, seed });
 
-    // Non-vacuity: the fixture must actually mix crossing and non-crossing lanes, or this test
-    // could pass by coincidence (e.g. every lane false).
-    const crossingCount = universe.connections.filter((c) => c.isCrossing).length;
-    const nonCrossingCount = universe.connections.length - crossingCount;
-    expect(crossingCount, "fixture must contain at least one crossing-class lane").toBeGreaterThan(0);
-    expect(nonCrossingCount, "fixture must contain at least one non-crossing lane").toBeGreaterThan(0);
-
     // `gen.ts` mints one system id per generated system in array order (`systemIds = universe.
     // systems.map(() => mintId(...))`), so `world.systems[i].id` names `universe.systems[i]`.
     const idAtIndex = world.systems.map((s) => s.id);
-    const worldIsCrossingByPair = new Map(world.connections.map((c) => [`${c.fromId}|${c.toId}`, c.isCrossing]));
+    const worldFuelCostByPair = new Map(world.connections.map((c) => [`${c.fromId}|${c.toId}`, c.fuelCost]));
 
     for (const conn of universe.connections) {
       const key = `${idAtIndex[conn.fromSystemIndex]}|${idAtIndex[conn.toSystemIndex]}`;
-      expect(worldIsCrossingByPair.get(key)).toBe(conn.isCrossing);
+      expect(worldFuelCostByPair.get(key)).toBe(conn.fuelCost);
     }
   });
 });

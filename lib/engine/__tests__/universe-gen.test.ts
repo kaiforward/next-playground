@@ -963,6 +963,55 @@ describe("realizeCorridors", () => {
     expect(uf.connected(2, 3), "corridor B's anchors must stay connected despite the crossing conflict").toBe(true);
   });
 
+  // ── Waypoint cross-wiring (`waypointsAlongCorridor`'s per-corridor perpendicular filter) ──
+  it("a waypoint near one of two close, parallel band corridors is realized only into ITS OWN corridor's chain, never the other's", () => {
+    // Two parallel horizontal band corridors 400 world units apart — closer together than most
+    // galaxy layouts would place two independent corridors, deliberately stressing the case spec
+    // §5's own build plan flagged: "a band waypoint cross-wired into the wrong corridor pair's
+    // chain when two band-style corridors run geometrically close." Each corridor's own waypoint
+    // sits exactly ON its own corridor's line (perpendicular distance 0) and 400 units off the
+    // OTHER corridor's line — outside the default tolerance (`poissonMinDistance` 100 ×
+    // `BAND_WAYPOINT_MAX_PERP_DISTANCE_MULTIPLE` 3 = 300), so under a correct per-corridor filter
+    // neither waypoint can ever qualify for the other corridor's chain.
+    const regions = [
+      region(0, 0, 0), region(1, 1000, 0),       // corridor A's anchors' clusters
+      region(2, 0, 400), region(3, 1000, 400),   // corridor B's anchors' clusters
+      region(4, 500, -500), region(5, 500, 900), // waypoints' own (third) clusters
+    ];
+    const systems = [
+      mkSys({ index: 0, regionIndex: 0, x: 0, y: 0 }),
+      mkSys({ index: 1, regionIndex: 1, x: 1000, y: 0 }),
+      mkSys({ index: 2, regionIndex: 2, x: 0, y: 400 }),
+      mkSys({ index: 3, regionIndex: 3, x: 1000, y: 400 }),
+      mkSys({ index: 4, regionIndex: 4, x: 500, y: 0 }),   // corridor A's own waypoint, on A's line
+      mkSys({ index: 5, regionIndex: 5, x: 500, y: 400 }), // corridor B's own waypoint, on B's line
+    ];
+    const corridors: CorridorPlan = {
+      pairs: [{ a: 0, b: 1, style: "band" }, { a: 2, b: 3, style: "band" }],
+    };
+
+    const { connections } = realizeCorridors({ systems, regions, corridors, avgIntraDist: 100, params: crossingParams, grid, mapSize });
+
+    // Non-vacuity: both waypoints must actually have been drawn into a chain at all, or the
+    // "never the other's" assertions below would pass vacuously on an empty set.
+    const touches = (index: number) =>
+      connections.filter((c) => c.fromSystemIndex === index || c.toSystemIndex === index);
+    expect(touches(4).length, "corridor A's own waypoint must be realized into a lane").toBeGreaterThan(0);
+    expect(touches(5).length, "corridor B's own waypoint must be realized into a lane").toBeGreaterThan(0);
+
+    // Corridor A's waypoint (4) may only ever pair with corridor A's own anchors (0, 1) or itself
+    // being chained through — never with corridor B's anchors (2, 3) or B's waypoint (5).
+    for (const c of touches(4)) {
+      const other = c.fromSystemIndex === 4 ? c.toSystemIndex : c.fromSystemIndex;
+      expect([0, 1], `waypoint 4 (corridor A) must not link to ${other} (corridor B's territory)`).toContain(other);
+    }
+    // Symmetrically for corridor B's waypoint (5).
+    for (const c of touches(5)) {
+      const other = c.fromSystemIndex === 5 ? c.toSystemIndex : c.fromSystemIndex;
+      expect([2, 3], `waypoint 5 (corridor B) must not link to ${other} (corridor A's territory)`).toContain(other);
+    }
+  });
+
   // ── Crossing demotion (spec §5C) ──────────────────────────────
   it("a crossing pair whose realised line clips a populated grid cell beyond tolerance demotes to band realisation", () => {
     const regions = [region(0, 0, 0), region(1, 1000, 0)];

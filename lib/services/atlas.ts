@@ -41,7 +41,6 @@ export function getAtlas(): AtlasData {
       fromSystemId: c.fromId,
       toSystemId: c.toId,
       fuelCost: c.fuelCost,
-      isCrossing: c.isCrossing,
     })),
     factions: factions.map((f) => ({
       id: f.id,

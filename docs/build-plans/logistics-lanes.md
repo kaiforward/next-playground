@@ -242,20 +242,23 @@ styleguide section (Task 5) and is the owner-approved prototype before the New G
 
 ### Carried into the lane-mechanics sub-project
 
-Items the gitignored session ledger (`temp/sdd/map-gen-geography/progress.md`) holds that must
-survive this branch, since a ledger row not booked here dies with the branch:
+Items the gitignored session ledger (`temp/sdd/map-gen-geography/progress.md`) held that had to
+survive the map-gen branch, with the owner decisions taken on them (2026-09-03):
 
-- **Test blind spot**: no test catches a band waypoint cross-wired into the wrong pair's chain when
-  two band corridors run geometrically close — the lane still reads `isCrossing: false` and the
-  repair-lane count stays 0, invisible to today's provenance assertions.
-- **Parked lane-length observation (Kai)**: intra-cluster lanes occasionally run longer than
-  crossing lanes — intra p95/max 242/626 at default knobs vs crossing min/median 164-673/693-780;
-  at 100 clusters intra max reaches 963 while zero crossing pairs realise at all.
-- **Foreign-transit share** reads 0.178 of placed haul volume at 10K equilibrium (the shipped
-  router is ownership-blind and routes through foreign-held systems) — a future routing rule
-  (transit through friendly factions allowed, hostile closed) is an owner decision, not yet made.
-- **`lanePruneFraction` ships at its connectivity-tested default of 0** — becomes player-facing
-  only alongside a lane-mechanics design decision.
+- **Test blind spot** (open, engineering): no test catches a band waypoint cross-wired into the
+  wrong pair's chain when two band corridors run geometrically close — the repair-lane count stays
+  0 and today's provenance assertions cannot see it. Lands on this branch with a red-proof.
+- **Lane-length observation → crossings are just lanes** (decided). Intra-cluster lanes sometimes
+  out-run corridor crossings; the only reader of `WorldConnection.isCrossing` was the map's line
+  style, so the ordering the name implied was never a mechanic. The flag leaves the connection row;
+  the map draws every lane by its fuel cost. The New Game preview keeps drawing crossings from the
+  corridor plan (a generation-time exception the player should see). The tech-gated deep-space
+  lane class (spec §5) stays the one real second class; wormholes, if ever, a third.
+- **Foreign transit** (decided, spec §2 amended): traversable when the holder's relation tier with
+  the hauler is friendly or allied; neutral and below closed; negotiated rights stay the future slot.
+- **`lanePruneFraction`** stays internal at its connectivity-tested 0 — the preview cannot show
+  lanes and the knob has no felt effect until lane investment exists; revisit only if the
+  lane-mechanics sim shows lane density changes play.
 
 ## Spec
 

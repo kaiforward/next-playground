@@ -60,10 +60,12 @@ export interface GeneratedConnection {
   /** True exactly for a corridor's single crossing-style lane (spec §5) — priced through
    *  `laneFuelCost`'s multiplier, the crossing class. False for every intra-cluster lane AND
    *  every band-style corridor's chain link, even one that crosses a cluster boundary: crossing
-   *  the map's regions and being priced as the expensive "crossing" class are separate facts. The
-   *  cosmetic, persisted `isGateway` flag lives on the SYSTEM instead (`GeneratedSystem.isGateway`
-   *  / `WorldSystem.isGateway`, `lib/world/types.ts:107`) — a corridor-endpoint system, not a
-   *  connection-level concept. */
+   *  the map's regions and being priced as the expensive "crossing" class are separate facts.
+   *  Generation-internal only — it feeds the crossing/band planarity checks below and never reaches
+   *  `WorldConnection` (there is no distinct crossing lane class once a lane is realised; only its
+   *  `fuelCost` persists). The cosmetic, persisted `isGateway` flag lives on the SYSTEM instead
+   *  (`GeneratedSystem.isGateway` / `WorldSystem.isGateway`, `lib/world/types.ts:107`) — a
+   *  corridor-endpoint system, not a connection-level concept. */
   isCrossing: boolean;
 }
 

@@ -1,6 +1,7 @@
 import { Container, Graphics } from "pixi.js";
 import type { ConnectionData } from "@/lib/hooks/use-map-data";
 import { EDGE, SIZES } from "../theme";
+import { laneStyleForFuel } from "./lane-style";
 
 export class ConnectionObject extends Container {
   connectionId = "";
@@ -22,27 +23,29 @@ export class ConnectionObject extends Container {
     toX: number,
     toY: number,
   ) {
+    const laneStyle = laneStyleForFuel(data.fuelCost);
     // Style fingerprint: skip redraw when only style-relevant flags are unchanged
     // Positions are immutable (static tile data), so only style flags matter
-    const fingerprint = `${data.isCrossing}`;
+    const fingerprint = laneStyle.tier;
     if (this.connectionId === data.id && fingerprint === this.styleFingerprint) return;
     this.connectionId = data.id;
     this.styleFingerprint = fingerprint;
 
     this.line.clear();
 
-    if (data.isCrossing) {
-      // Crossing-class lane — amber "lit pathway": a wide soft glow underlay
+    if (laneStyle.tier === "major") {
+      // Crossing-priced lane — amber "lit pathway": a wide soft glow underlay
       // with a crisp core line stroked over it.
-      for (const s of [EDGE.crossingGlow, EDGE.crossing]) {
-        this.line.moveTo(fromX, fromY);
-        this.line.lineTo(toX, toY);
-        this.line.stroke({ color: s.color, width: s.width, alpha: s.alpha });
-      }
+      this.line.moveTo(fromX, fromY);
+      this.line.lineTo(toX, toY);
+      this.line.stroke({ color: EDGE.majorGlow.color, width: EDGE.majorGlow.width, alpha: EDGE.majorGlow.alpha });
+      this.line.moveTo(fromX, fromY);
+      this.line.lineTo(toX, toY);
+      this.line.stroke({ color: EDGE.major.color, width: laneStyle.width, alpha: laneStyle.alpha });
     } else {
-      // Dashed line for ordinary connections
-      const style = EDGE.default;
-      drawDashedLine(this.line, fromX, fromY, toX, toY, style.color, style.alpha, style.width);
+      // Dashed line for ordinary and notable connections — colour and weight scale with fuel cost.
+      const color = laneStyle.tier === "notable" ? EDGE.notable.color : EDGE.default.color;
+      drawDashedLine(this.line, fromX, fromY, toX, toY, color, laneStyle.alpha, laneStyle.width);
     }
   }
 }

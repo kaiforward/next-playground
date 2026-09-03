@@ -46,7 +46,6 @@ export function getUniverse(): UniverseData {
       fromSystemId: c.fromId,
       toSystemId: c.toId,
       fuelCost: c.fuelCost,
-      isCrossing: c.isCrossing,
     })),
     factions: world.factions.map((f) => ({
       id: f.id,

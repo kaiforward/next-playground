@@ -9,11 +9,6 @@
  * legitimately omit does NOT need a bump: the field simply stays `undefined` on
  * load, which is correct.
  *
- * A new REQUIRED field does not need a bump where the load boundary itself supplies the only value
- * an old save could ever have carried: `WorldConnection.isCrossing` postdates every save through
- * v17 and `normalizeConnectionCrossing` (below) defaults it to `false`, which is exactly what a
- * pre-crossing world's every lane was — so an old save loads correct rather than merely loadable.
- *
  * A REMOVED field needs a bump only where losing its value misreads the world.
  * Removing purely transient state does not: `WorldBuilding.collapseDebt` moved to
  * `WorldSystem.collapseDebt` unbumped because the decay channel's debt is a regime
@@ -100,24 +95,7 @@ export function deserialiseWorld(json: string): DeserialiseResult {
     return { ok: false, error: "Save file's world is missing required meta fields" };
   }
 
-  return { ok: true, world: rebuildWorkedYieldColumns(normalizeConnectionCrossing(parsed.world)) };
-}
-
-/**
- * `WorldConnection.isCrossing` postdates every save through v17 — an old save's connection rows
- * simply lack the key despite the guard above asserting the parsed value already matches `World`.
- * Defaulting it to `false` (not crossing) is the safe reading: it's the same value an intra-cluster
- * or band-chain lane already carries, so a pre-migration save just shows no crossing-class lanes
- * until the world regenerates them, rather than mis-highlighting ordinary lanes orange.
- */
-function normalizeConnectionCrossing(world: World): World {
-  return {
-    ...world,
-    connections: world.connections.map((c) => ({
-      ...c,
-      isCrossing: typeof c.isCrossing === "boolean" ? c.isCrossing : false,
-    })),
-  };
+  return { ok: true, world: rebuildWorkedYieldColumns(parsed.world) };
 }
 
 /**

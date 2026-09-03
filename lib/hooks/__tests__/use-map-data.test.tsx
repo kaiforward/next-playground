@@ -30,12 +30,8 @@ function universe(): UniverseData {
     ],
     systems,
     connections: [
-      // Same region, engine-flagged crossing-class (the rare priced lane) — must render crossing
-      // even though its endpoints share a region, proving the flag isn't a region comparison at all.
-      { id: "a-b", fromSystemId: "a", toSystemId: "b", fuelCost: 1, isCrossing: true },
-      // Different regions, an ordinary band-chain link — the bug: the old region-comparison
-      // heuristic would have flagged this crossing; the engine says it is not.
-      { id: "b-c", fromSystemId: "b", toSystemId: "c", fuelCost: 1, isCrossing: false },
+      { id: "a-b", fromSystemId: "a", toSystemId: "b", fuelCost: 3 },
+      { id: "b-c", fromSystemId: "b", toSystemId: "c", fuelCost: 7 },
     ],
     factions: [],
   };
@@ -55,16 +51,10 @@ function baseOptions() {
   };
 }
 
-describe("useMapData — connection crossing flag", () => {
-  it("marks a same-region connection crossing when the engine says so", () => {
+describe("useMapData — connection rows", () => {
+  it("carries each connection's fuelCost through untouched", () => {
     const { result } = renderHook(() => useMapData(baseOptions()));
-    const conn = result.current.connections.find((c) => c.id === "a-b");
-    expect(conn?.isCrossing).toBe(true);
-  });
-
-  it("does NOT mark a cross-region band link crossing merely because its endpoints sit in different regions", () => {
-    const { result } = renderHook(() => useMapData(baseOptions()));
-    const conn = result.current.connections.find((c) => c.id === "b-c");
-    expect(conn?.isCrossing).toBe(false);
+    expect(result.current.connections.find((c) => c.id === "a-b")?.fuelCost).toBe(3);
+    expect(result.current.connections.find((c) => c.id === "b-c")?.fuelCost).toBe(7);
   });
 });

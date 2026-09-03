@@ -94,6 +94,7 @@ Non-obvious, stack-specific traps. (`/uber-review`'s `rules/code-standards.md` m
 
 **Testing**
 - Two Vitest projects split by extension: `.test.tsx` renders in jsdom (`components/**`, `app/**`); `.test.ts` is pure logic in node.
+- **A test that imports `pixi.js` (directly or through the module under test) must be `.test.tsx`.** pixi reads the global `navigator` at import time; CI's Node lacks it, so the node-project suite dies at import, while newer local Node defines `navigator` and masks it — local green, CI red. Pure map maths belongs in a pixi-free helper so it can stay `.test.ts`.
 - **A component test asserts roles, accessible names, text and what interaction changes — never classes or styles.** jsdom has no CSS or layout, so a class assertion would pass with the stylesheet deleted. Carve-out: whether an element renders at all. Where a number's only observable is a style (bar width, rule position), move the maths to a node-tested helper.
 - Three ways such a test passes vacuously: an accessible name built from props rather than the DOM can't fail when the element stops rendering; `toHaveTextContent` can't see a `NaN` in a style attribute (assert on `container.innerHTML`); a mutation mocked over a fixed data object never removes the row, so anything downstream of unmounting (focus handoff, empty states) is asserted in a state the app never reaches.
 

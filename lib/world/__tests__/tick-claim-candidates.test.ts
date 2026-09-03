@@ -70,7 +70,7 @@ function claimWorld(specs: CandidateSpec[]): { world: World; candidateIds: strin
 
   const byId = [...spare].sort((a, b) => a.id.localeCompare(b.id));
   const overrides = new Map<string, WorldSystem>();
-  const links: { fromId: string; toId: string; fuelCost: number; isCrossing: boolean }[] = [];
+  const links: { fromId: string; toId: string; fuelCost: number }[] = [];
   const touched = new Set<string>([home.id]);
   const candidateIds: string[] = [];
 
@@ -93,8 +93,8 @@ function claimWorld(specs: CandidateSpec[]): { world: World; candidateIds: strin
     touched.add(candidate.id);
     candidateIds.push(candidate.id);
     for (const [j, from] of chain.slice(0, -1).entries()) {
-      links.push({ fromId: from, toId: chain[j + 1], fuelCost: 1, isCrossing: false });
-      links.push({ fromId: chain[j + 1], toId: from, fuelCost: 1, isCrossing: false });
+      links.push({ fromId: from, toId: chain[j + 1], fuelCost: 1 });
+      links.push({ fromId: chain[j + 1], toId: from, fuelCost: 1 });
     }
   }
 
@@ -151,13 +151,13 @@ function twoOwnerWorld(farHops: number, farOwnerFirst: boolean) {
 
   const farChain = [far.id, ...relays.map((r) => r.id), prize.id];
   const links = [
-    { fromId: near.id, toId: prize.id, fuelCost: 1, isCrossing: false },
-    { fromId: prize.id, toId: near.id, fuelCost: 1, isCrossing: false },
-    { fromId: near.id, toId: rival.id, fuelCost: 1, isCrossing: false },
-    { fromId: rival.id, toId: near.id, fuelCost: 1, isCrossing: false },
+    { fromId: near.id, toId: prize.id, fuelCost: 1 },
+    { fromId: prize.id, toId: near.id, fuelCost: 1 },
+    { fromId: near.id, toId: rival.id, fuelCost: 1 },
+    { fromId: rival.id, toId: near.id, fuelCost: 1 },
     ...farChain.slice(0, -1).flatMap((from, i) => [
-      { fromId: from, toId: farChain[i + 1], fuelCost: 1, isCrossing: false },
-      { fromId: farChain[i + 1], toId: from, fuelCost: 1, isCrossing: false },
+      { fromId: from, toId: farChain[i + 1], fuelCost: 1 },
+      { fromId: farChain[i + 1], toId: from, fuelCost: 1 },
     ]),
   ];
   const touched = new Set([near.id, far.id, prize.id, rival.id, ...relays.map((r) => r.id)]);

@@ -39,11 +39,11 @@ describe("findSeedSource", () => {
     unreachableDev.factionId = FACTION; unreachableDev.control = "developed";
 
     const connections: WorldConnection[] = [
-      { fromId: origin.id, toId: foreignDev.id, fuelCost: 1, isCrossing: false },
-      { fromId: origin.id, toId: ownControlled.id, fuelCost: 1, isCrossing: false },
-      { fromId: origin.id, toId: relayA.id, fuelCost: 1, isCrossing: false },
-      { fromId: relayA.id, toId: ownDevNear.id, fuelCost: 1, isCrossing: false },
-      { fromId: ownDevNear.id, toId: ownDevFarther.id, fuelCost: 1, isCrossing: false },
+      { fromId: origin.id, toId: foreignDev.id, fuelCost: 1 },
+      { fromId: origin.id, toId: ownControlled.id, fuelCost: 1 },
+      { fromId: origin.id, toId: relayA.id, fuelCost: 1 },
+      { fromId: relayA.id, toId: ownDevNear.id, fuelCost: 1 },
+      { fromId: ownDevNear.id, toId: ownDevFarther.id, fuelCost: 1 },
     ];
     // unreachableDev placed FIRST: if a guard silently forgets to skip an out-of-range candidate, the
     // `best === null` clause lets it become `best` unconditionally on the very first iteration, and no
@@ -65,8 +65,8 @@ describe("findSeedSource", () => {
     smaller.factionId = FACTION; smaller.control = "developed";
     larger.factionId = FACTION; larger.control = "developed";
     const connections: WorldConnection[] = [
-      { fromId: origin.id, toId: smaller.id, fuelCost: 1, isCrossing: false },
-      { fromId: origin.id, toId: larger.id, fuelCost: 1, isCrossing: false },
+      { fromId: origin.id, toId: smaller.id, fuelCost: 1 },
+      { fromId: origin.id, toId: larger.id, fuelCost: 1 },
     ];
     // smaller processed BEFORE larger: correct code keeps `smaller` on the tie; a comparator broken to
     // "always overwrite on a tie" (<=, >=) or "no id check at all" would instead take `larger`, the
@@ -84,8 +84,8 @@ describe("findSeedSource", () => {
     smaller.factionId = FACTION; smaller.control = "developed";
     larger.factionId = FACTION; larger.control = "developed";
     const connections: WorldConnection[] = [
-      { fromId: origin.id, toId: larger.id, fuelCost: 1, isCrossing: false },
-      { fromId: origin.id, toId: smaller.id, fuelCost: 1, isCrossing: false },
+      { fromId: origin.id, toId: larger.id, fuelCost: 1 },
+      { fromId: origin.id, toId: smaller.id, fuelCost: 1 },
     ];
     // larger processed FIRST this time: a comparator with the tie-break disabled entirely (never
     // updates on `h === best.h`) would freeze on whichever was seen first — `larger` — instead of
@@ -107,9 +107,9 @@ describe("findSeedSource", () => {
     candNear.factionId = FACTION; candNear.control = "developed";
     candFar.factionId = FACTION; candFar.control = "developed";
     const connections: WorldConnection[] = [
-      { fromId: origin.id, toId: candNear.id, fuelCost: 1, isCrossing: false }, // h=1
-      { fromId: origin.id, toId: relayA.id, fuelCost: 1, isCrossing: false },
-      { fromId: relayA.id, toId: candFar.id, fuelCost: 1, isCrossing: false },  // h=2
+      { fromId: origin.id, toId: candNear.id, fuelCost: 1 }, // h=1
+      { fromId: origin.id, toId: relayA.id, fuelCost: 1 },
+      { fromId: relayA.id, toId: candFar.id, fuelCost: 1 },  // h=2
     ];
     setWorld({ ...isolate(w), systems: [origin, candNear, relayA, candFar], connections });
 
@@ -138,10 +138,10 @@ describe("findSeedSource", () => {
     const [origin, h1, h2, h3, farSystem] = w.systems;
     farSystem.factionId = FACTION; farSystem.control = "developed";
     const connections: WorldConnection[] = [
-      { fromId: origin.id, toId: h1.id, fuelCost: 1, isCrossing: false },
-      { fromId: h1.id, toId: h2.id, fuelCost: 1, isCrossing: false },
-      { fromId: h2.id, toId: h3.id, fuelCost: 1, isCrossing: false },
-      { fromId: h3.id, toId: farSystem.id, fuelCost: 1, isCrossing: false }, // exactly COLONY_REACH_HOPS away
+      { fromId: origin.id, toId: h1.id, fuelCost: 1 },
+      { fromId: h1.id, toId: h2.id, fuelCost: 1 },
+      { fromId: h2.id, toId: h3.id, fuelCost: 1 },
+      { fromId: h3.id, toId: farSystem.id, fuelCost: 1 }, // exactly COLONY_REACH_HOPS away
     ];
     setWorld({ ...isolate(w), systems: [origin, h1, h2, h3, farSystem], connections });
 
@@ -164,7 +164,7 @@ describe("colonyEligibility", () => {
     target.factionId = faction.id;
     target.control = "controlled";
     target.peopleLand = 50;
-    const connections: WorldConnection[] = [{ fromId: source.id, toId: target.id, fuelCost: 1, isCrossing: false }];
+    const connections: WorldConnection[] = [{ fromId: source.id, toId: target.id, fuelCost: 1 }];
     setWorld({
       ...isolate(w),
       connections,
