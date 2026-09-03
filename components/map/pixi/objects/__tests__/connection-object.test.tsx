@@ -5,8 +5,8 @@ import { ConnectionObject } from "../connection-object";
 import { EDGE } from "../../theme";
 import type { ConnectionData } from "@/lib/hooks/use-map-data";
 
-function conn(isCrossing: boolean): ConnectionData {
-  return { id: "a-b", fromId: "a", toId: "b", fuelCost: 1, isCrossing };
+function conn(fuelCost: number): ConnectionData {
+  return { id: "a-b", fromId: "a", toId: "b", fuelCost };
 }
 
 /** `ConnectionObject.update` only ever strokes an object style ({ color, alpha, width }), never a
@@ -26,40 +26,40 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("ConnectionObject.update — crossing-class styling", () => {
-  it("strokes the crossing glow+core colours when the connection is crossing-class", () => {
+describe("ConnectionObject.update — fuel-cost lane styling", () => {
+  it("strokes the major glow+core colours when the lane's fuel cost is in the major tier", () => {
     const strokeSpy = vi.spyOn(Graphics.prototype, "stroke");
     const object = new ConnectionObject();
-    object.update(conn(true), 0, 0, 100, 0);
+    object.update(conn(25), 0, 0, 100, 0);
     const colors = strokeSpy.mock.calls.map(([style]) => strokeColor(style));
-    expect(colors).toEqual([EDGE.crossingGlow.color, EDGE.crossing.color]);
+    expect(colors).toEqual([EDGE.majorGlow.color, EDGE.major.color]);
   });
 
-  it("strokes the default dashed colour, never the crossing colour, for an ordinary lane", () => {
+  it("strokes the default colour, never the major colour, for a cheap ordinary lane", () => {
     const strokeSpy = vi.spyOn(Graphics.prototype, "stroke");
     const object = new ConnectionObject();
-    object.update(conn(false), 0, 0, 100, 0);
+    object.update(conn(1), 0, 0, 100, 0);
     const colors = strokeSpy.mock.calls.map(([style]) => strokeColor(style));
     expect(colors.length).toBeGreaterThan(0);
     for (const color of colors) {
       expect(color).toBe(EDGE.default.color);
-      expect(color).not.toBe(EDGE.crossing.color);
+      expect(color).not.toBe(EDGE.major.color);
     }
   });
 
-  it("skips redraw (dirty-checked) when the same connection id updates with an unchanged isCrossing", () => {
+  it("skips redraw (dirty-checked) when the same connection id updates with an unchanged fuel tier", () => {
     const object = new ConnectionObject();
-    object.update(conn(true), 0, 0, 100, 0);
+    object.update(conn(25), 0, 0, 100, 0);
     const clearSpy = vi.spyOn(Graphics.prototype, "clear");
-    object.update(conn(true), 0, 0, 100, 0);
+    object.update(conn(25), 0, 0, 100, 0);
     expect(clearSpy).not.toHaveBeenCalled();
   });
 
-  it("redraws when isCrossing flips for the same connection id", () => {
+  it("redraws when the fuel tier changes for the same connection id", () => {
     const object = new ConnectionObject();
-    object.update(conn(false), 0, 0, 100, 0);
+    object.update(conn(1), 0, 0, 100, 0);
     const clearSpy = vi.spyOn(Graphics.prototype, "clear");
-    object.update(conn(true), 0, 0, 100, 0);
+    object.update(conn(25), 0, 0, 100, 0);
     expect(clearSpy).toHaveBeenCalled();
   });
 });

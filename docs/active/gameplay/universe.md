@@ -79,7 +79,7 @@ The map uses a WebGL canvas (Pixi.js) with two rendering tiers that crossfade ba
 - Tile-based viewport loading — only systems in visible tiles are fetched from the API
 - Full SystemObject rendering — layered glyph with economy core, overlay halo, rings, and corner pills (see [System Glyph Anatomy](#system-glyph-anatomy))
 - System names and economy badges
-- Connection lines between systems — dashed for ordinary lanes, a glowing amber line for crossing-class lanes (styled from the engine's own `isCrossing` flag end-to-end, not a region-boundary heuristic) — with fuel cost labels
+- Connection lines between systems — styled by fuel-cost tier, not by any lane class: dashed slate for an ordinary lane, dashed gold for one pricier than about one and a half typical hops, and a glowing amber line for one priced at or beyond a crossing at typical spacing (so a corridor's crossing lane reads amber because of its cost, and a long intra-cluster lane reads the same way) — with fuel cost labels
 
 **Crossfade (0.3–0.4)**: Smooth alpha transition between tiers using cubic smoothstep. SystemObject creation begins slightly before the crossfade (zoom 0.28) so objects are ready when they fade in.
 
@@ -97,7 +97,7 @@ Each system renders as a layered glyph with a fixed radial budget so indicators 
 - **Halo (r ≈ 20) — the overlay lens.** A translucent disc carrying the *active overlay*: a faint economy tint by default, recoloured to the price ramp when the Price overlay is on. Overlap-forgiving; the halo channel is designed to host future per-system lenses (danger, stability).
 - **Navigation ring (r ≈ 34, outermost, dashed)** — drawn only during routing, on the origin/destination, plus a subtle dashed focus ring on the selected system. `reachable` nodes keep a thin solid ring; `unreachable` dim to ~0.3 alpha.
 
-There is no per-glyph gateway ring — gateway status now reads through the amber crossing-lane colour it shares (a corridor-endpoint system is where a crossing lane, or a band chain, actually terminates), a larger dot in the universe-zoom point cloud, and an amber "Gateway" badge in the system side panel.
+There is no per-glyph gateway ring — gateway status now reads through the amber colour it shares with the priciest lanes (a corridor-endpoint system is where a crossing lane, or a band chain, actually terminates), a larger dot in the universe-zoom point cloud, and an amber "Gateway" badge in the system side panel.
 
 **Corner pills.** Four fixed corners, all sharing one height and radial offset, each pinned to a channel so the map reads without a legend:
 

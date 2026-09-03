@@ -35,6 +35,7 @@ When you flag a violation, use the matching slug below so dedup is deterministic
 | `debounce-in-render-loop` | debounce (not throttle) on a Pixi-ticker → `setState` loop |
 | `simulate-not-run` | a game-logic change (tick processor, engine economy behaviour, or a constant feeding one) with no quoted `npm run simulate` output at both horizons — see nuance below |
 | `component-test-asserts-style` | a `.test.tsx` asserting classes or inline styles instead of roles / accessible names / text — see nuance below |
+| `pixi-in-node-test` | a `.test.ts` whose import graph reaches `pixi.js` (pixi reads the global `navigator` at import; CI's Node has none) — rename to `.test.tsx` or test a pixi-free helper |
 | `deferred-in-reach` | a new `docs/ROADMAP.md` row deferring a cheap, self-contained problem in a file this diff already edits — see nuance below |
 | `stranded-by-own-change` | a field/prop/helper this diff leaves with no readers — dead code the same diff created — see nuance below |
 

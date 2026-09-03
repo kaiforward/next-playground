@@ -77,8 +77,8 @@ quoted:
   new capability serving latent unserved demand, never a formalisation of existing behaviour.
 
 **Not claimed:** This spec does not design war interdiction mechanics (only the substrate query
-they will call), transit rights through foreign space (a named future slot; borders stay closed to
-routing this pass), the markets redesign (the substrate is deliberately market-agnostic so that
+they will call), negotiated transit rights (transit through foreign space follows the relation
+tier, §2 — treaties, tolls and per-lane grants are a named future slot), the markets redesign (the substrate is deliberately market-agnostic so that
 redesign swaps the client, not the substrate), or the rehosting of migration / colonist delivery /
 founding-manifest staging onto the path engine (future passes; their current mechanics are
 untouched). It does not commit tuning values — every constant below is a proposal carrying its
@@ -211,14 +211,18 @@ Every haul travels a real cheapest path over open lanes, computed per logistics 
   `DIRECTED_BUILD.MAX_HOPS` (`lib/world/tick.ts:1667`), `EXPANSION.REACH_JUMPS`
   (`lib/constants/expansion.ts:20` — though AI claiming's reach changes separately, §1), and the
   market panel's own local cap (`components/market/market-comparison-panel.tsx:17`).
-- **Traversable space:** a route may cross the hauling faction's own systems and **unclaimed**
-  systems. Foreign systems are closed to routing this pass (the transit-rights slot). This
-  *narrows* today's behaviour — the current hop BFS is faction-blind
+- **Traversable space:** a route may cross the hauling faction's own systems, **unclaimed**
+  systems, and systems held by a faction whose relation tier with the hauler is **friendly or
+  allied** (`RELATION_TIERS`, `lib/constants/relations.ts`); neutral, unfriendly and hostile
+  space is closed. Transit is a property of the route at dispatch: a relation that drops below
+  friendly while a haul is in flight is handled by the same lazy interdiction query war will use
+  (§3) — nothing re-paths mid-transit. Negotiated rights beyond the tier rule are the transit-rights
+  slot (not claimed). This *narrows* today's behaviour — the current hop BFS is faction-blind
   (`lib/world/tick.ts:1605-1614`, over all connections). **How much the narrowing strands is
   unmeasured**: the premise-1 projection ran only on the same-faction graph, and its 3.6–8.6%
   unreachable residual is licensed as instrument noise from abandonment, not a stranding
   estimate — no faction-blind baseline was ever produced. Resolved by the §8 calibration A/B
-  (own+unclaimed vs faction-blind arm; unserved shortfall and cross-faction-dependent haul
+  (tier rule — own+unclaimed+friendly-or-allied — vs faction-blind arm; unserved shortfall and cross-faction-dependent haul
   volume, cohorted, both horizons).
 - **Capacity billing:** each haul books its quantity onto every edge it crosses for that run.
   **Booked load is pooled per lane across all factions** — a lane is one physical corridor; all
@@ -513,7 +517,7 @@ substrate change.
   material rise against the pre-change baseline blocks — `GENERATION_PER_POP` is retuned instead),
   per-faction unserved shortfall attributable to shared-corridor contention (the match-order
   first-mover read), queued lane levels against realised load (the overshoot-then-decay watch),
-  and the §2 traversability A/B (own+unclaimed vs faction-blind arm).
+  and the §2 traversability A/B (tier rule — own+unclaimed+friendly-or-allied — vs faction-blind arm).
 - **Wall-clock gate:** the logistics processor's run median and share of total tick time are read
   at both horizons and both galaxy sizes against the measured baseline (9.0–13.3 ms / 7.2–8.6% of
   tick at 600 systems; 17.6 ms / 2.2% at 10,000 — equilibrium-window runs, all factions). The P2
@@ -579,7 +583,7 @@ modules.
 | Directed build / planner | Gains the lane-upgrade opportunity type on the existing ROI ordering (§4); reads the new binding-edge signal. | — |
 | Colonisation + founding manifest | Founding-manifest staging keeps its current (non-routed) draw this pass — rehost slot only. Colony ROI is *indirectly* moved: a colony behind a void is more expensive to supply once routing is real; accepted, watched in calibration. Claims gain a new motive (chokepoint estate) with zero mechanic change. | — |
 | Treasury / purse | Lane builds fund from the construction band. Lane upkeep is a new TERM beside the building bill (`maintenanceBill` is buildingType-keyed and cannot carry it, `lib/engine/treasury.ts:104-118`), summed into `bills.maintenance` — deliberately coupling into `funded.maintenance`'s two faction-wide consumers and the ladder's crowd-out of the logistics band (§1, hazard-1 row). No fourth band. | — |
-| Factions + relations | The relations MECHANIC is unchanged but its input is not: border friction counts cross-faction connection rows uncapped (`lib/tick/adapters/memory/relations.ts:146-157`), and §5 re-authors the lane graph — drift rates and border_conflict spawn rates move with it (§5 acceptance measure). Claiming changes (§1) also reshape borders. Foreign-transit rights are the named future hook. | — |
+| Factions + relations | The relations MECHANIC is unchanged but its input is not: border friction counts cross-faction connection rows uncapped (`lib/tick/adapters/memory/relations.ts:146-157`), and §5 re-authors the lane graph — drift rates and border_conflict spawn rates move with it (§5 acceptance measure). Claiming changes (§1) also reshape borders. Routing now READS the relation tier (§2: friendly-or-allied space is traversable), so a relation drift can open or close routes — a coupling relations never had; the reverse direction (hauls affecting relations) stays absent. Negotiated transit rights are the named future hook. | — |
 | Save format (`World` shape) | **Breaks saves** (pre-1.0 policy): new `world.lanes`, new pending-arrivals collection, map-gen output differs. All new state JSON-serialisable arrays. | — |
 | Harness metrics | New metrics §8; conservation identity extended over the in-transit ledger; interval-invariance must hold for arrival scheduling (`catchUpFactor` discipline). | — |
 
