@@ -287,7 +287,7 @@ be reviewed while the prototype is being looked at. One PR if the owner prefers.
 | `GENERATION_PER_POP` re-denominated so spend keeps today's small fraction | exists (`lib/constants/directed-logistics.ts:8-16`) | Task 5 (value chosen at Gate B from the measured spend fraction) |
 | `MAX_HOPS` / `HOP_WEIGHT` / `FUEL_WEIGHT` deleted | exists (`lib/constants/directed-logistics.ts:94-98`; readers `lib/world/tick.ts:1610,1627`) | Task 5 |
 | traversable: own + unclaimed + friendly-or-allied holder | new predicate over existing data | Task 5 `laneOpenFor` (`getRelationTier(score)`, `lib/constants/relations.ts:143-156`; ownership `factionId`) |
-| faction match order: faction id ascending, pooled booking | new | Task 5 (independents' `null` group last — assumption, see Not covered) |
+| faction match order: faction id ascending, pooled booking | new | Task 5 (the `null` group last — decided 2026-09-03; moot today, every system belongs to a faction) |
 | `arrival = now + max(0, round(Σ path fuelCost / FREIGHT_SPEED))` | new | Task 3 `freightArrivalTick`; `FREIGHT_SPEED` Task 1 |
 | scheduled inbound per (system, good) | new | Task 3 `scheduledInbound` over the ledger; Task 4 consumes at the sink test |
 | dispatch sizing against `maxStock − stock − scheduled inbound` | exists cap (`marketBandForRow(...).maxStock`, processor `:177-181`) | Task 5 adds the inbound term at the transfer clamp |
@@ -612,8 +612,8 @@ Arms: one browser-viewable HTML prototype of the Net-new UI list (below): lane s
 the invest and claim verbs' enabled/disabled states, the restyled lane layer (level → weight, load
 → colour, in-flight → particles), the Logistics tab's in-transit rows, the third automation switch.
 Reads: owner review by eye.
-Merge condition: prototype approved (AGENTS UI rule) before Task 12 starts; the lane-card surface
-decision (route-docked panel vs map popover — recommendation in Net-new UI) taken.
+Merge condition: prototype approved (AGENTS UI rule) before Task 12 starts. The lane-card surface is
+decided (owner, 2026-09-03): a route-docked panel; the prototype shows that shape.
 
 ### Task 12 — Map: lane state slice, lane layer restyle, lane selection, chord overlay retired
 
@@ -732,18 +732,16 @@ deleted there.
   system's own surface pass.
 - **`lanePruneFraction`** — stays internal (decided at #278); revisited only if Gate B shows lane
   density changing play.
-- **Independents' match order** (`null` group last) — an assumption stated in Task 5; overturnable by
-  the owner before Task 5 starts. Return-leg rules are decided (Task 3).
+- **Independents' match order** (`null` group last) — decided (owner: independents are a concept,
+  not a population, today). Return-leg rules are decided (Task 3).
 - **`REACH_JUMPS`** kept at 1 rather than deleted — the constant keeps its reader; the spec's
   "untouched" applies to the hop-cap cleanup, not to claiming's reach.
 
 ### Net-new UI
 
-- **Lane card surface** — decision for Gate C. Recommendation: a route-docked panel
-  (`/lane/:key`, `components/panels/lane-panel.tsx`) like the system and faction panels, because
-  the card carries a verb, an open project row and a cancel, which the detail-panel conventions
-  already handle; a map popover is the lighter alternative if the owner wants the card to feel
-  ephemeral.
+- **Lane card surface** — decided: a route-docked panel (`/lane/:key`,
+  `components/panels/lane-panel.tsx`) like the system and faction panels, because the card carries
+  a verb, an open project row and a cancel, which the detail-panel conventions already handle.
 - **Lane hit-test** (`lane-hit-test.ts`) — segment selection on the Pixi stage.
 - **Lane layer restyle** — level → weight, load → colour, in-flight → particles on the lane itself;
   the chord overlay goes.
