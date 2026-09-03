@@ -292,7 +292,7 @@ export function CreateFactionForm({ onSuccess, onCancel }: CreateFactionFormProp
           </div>
         </FloatingPanel>
 
-        <FloatingPanel title="Cluster shape" className="top-5 right-5 w-[380px]">
+        <FloatingPanel title="Cluster shape" className="top-5 right-5 w-[450px]">
           <div className="grid grid-cols-2 gap-x-4 gap-y-3">
             <NumberInput
               id="shape-cluster-count"
