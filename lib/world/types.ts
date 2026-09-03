@@ -443,12 +443,6 @@ export interface WorldConnection {
   fromId: string;
   toId: string;
   fuelCost: number;
-  /** True exactly for a corridor's single crossing-style lane (`GeneratedConnection.isCrossing`,
-   *  `lib/engine/universe-gen.ts`) — the priced "crossing" class, not merely a lane whose endpoints
-   *  fall in different regions/clusters. False for every intra-cluster lane and every band-style
-   *  chain link, even one that crosses a cluster boundary. Old saves predate this field — the load
-   *  boundary (`lib/world/save.ts`) defaults a missing value to false. */
-  isCrossing: boolean;
 }
 
 // ── Markets ─────────────────────────────────────────────────────

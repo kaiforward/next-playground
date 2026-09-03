@@ -27,14 +27,16 @@ export const TERRITORY = {
 
 // ── Edge colors ──────────────────────────────────────────────────
 
+// Lane colour by fuel-cost tier (`lane-style.ts`'s `LaneTier`, which owns width/alpha) — this is
+// only the colour each tier draws in. Ordinary lanes stay neutral slate, dashed; a notable lane
+// brightens toward gold; a major (crossing-priced) lane gets the full amber "lit pathway": a wide
+// soft glow under a crisp core line. Amber matches TEXT_COLORS.gateway so a galaxy's priciest lanes
+// and gateway-system labels share one identity.
 export const EDGE = {
-  default:  { color: 0x94a3b8, alpha: 0.4,  width: 1.5 },
-  // Crossing-class lanes (the engine's single priced crossing lane per corridor) — amber "lit
-  // pathway": a wide soft glow under a crisp core line. Amber matches TEXT_COLORS.gateway so these
-  // lanes and gateway-system labels share one identity (replaces the old per-system fuchsia gateway
-  // ring), even though the two are separate concepts (lane crossing-class vs. corridor-endpoint system).
-  crossing:     { color: 0xf59e0b, alpha: 0.85, width: 2.5 },
-  crossingGlow: { color: 0xf59e0b, alpha: 0.15, width: 7.0 },
+  default: { color: 0x94a3b8 },
+  notable: { color: 0xd4a04a },
+  major: { color: 0xf59e0b },
+  majorGlow: { color: 0xf59e0b, alpha: 0.15, width: 7.0 },
 } as const;
 
 // ── Point cloud (universe view) ─────────────────────────────────

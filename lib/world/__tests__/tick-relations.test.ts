@@ -45,8 +45,8 @@ describe("runWorldTick — system ownership reaches the relations border graph",
       meta: { ...base.meta, currentTick: BEFORE_RELATIONS_TICK },
       connections: [
         ...base.connections,
-        { fromId: aSystem.id, toId: bSystem.id, fuelCost: 1, isCrossing: false },
-        { fromId: bSystem.id, toId: aSystem.id, fuelCost: 1, isCrossing: false },
+        { fromId: aSystem.id, toId: bSystem.id, fuelCost: 1 },
+        { fromId: bSystem.id, toId: aSystem.id, fuelCost: 1 },
       ],
     };
 
