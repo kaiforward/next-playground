@@ -36,6 +36,7 @@ function buildWorld(systems: WorldSystem[]): World {
     constructionProjects: [],
     connections: [],
     lanes: [],
+    pendingArrivals: [],
     markets: [],
     factions: [],
     relations: [],

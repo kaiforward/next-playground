@@ -44,6 +44,13 @@ import { effColumns, yieldColumns } from "@/lib/engine/resources";
 // to backfill from (a lane's `level`/`bookedLoad`/`blockedVolume`/`idleCycles` are runtime state, not
 // derivable from `world.connections` alone once play has invested in any of them) — so old saves are
 // refused rather than silently loading with zero lanes.
+//
+// The same v18 bump also adds `world.pendingArrivals` (`WorldPendingArrival`, `lib/world/types.ts`)
+// — the scheduled-freight ledger, a new REQUIRED array drained every tick by the unconditional
+// goods-arrivals stage. A pre-bump save has no such array either; unlike lanes there is no
+// pre-existing state to lose (nothing dispatches onto the ledger yet), but an undefined array would
+// still crash the stage's first read rather than reading as "empty" — riding the same bump as lanes
+// rather than earning its own means one refusal covers both new arrays instead of two.
 export const SAVE_FORMAT_VERSION = 18;
 
 /** Reserved save name the tick loop autosaves to; the start screen's "Continue" loads it. */

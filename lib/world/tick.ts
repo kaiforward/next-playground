@@ -76,6 +76,7 @@ import { buildModifiersForPhase } from "@/lib/engine/events";
 import type { GovernmentType, ResourceVector } from "@/lib/types/game";
 
 import { runShipArrivalsProcessor } from "@/lib/tick/processors/ship-arrivals";
+import { runGoodsArrivalsProcessor } from "@/lib/tick/processors/goods-arrivals";
 import { runEventsProcessor } from "@/lib/tick/processors/events";
 import { runEconomyProcessor, economyMidCyclePayload } from "@/lib/tick/processors/economy";
 import { runInfrastructureDecayProcessor } from "@/lib/tick/processors/infrastructure-decay";
@@ -89,6 +90,7 @@ import { runRelationsProcessor } from "@/lib/tick/processors/relations";
 import { runTreasuryProcessor } from "@/lib/tick/processors/treasury";
 
 import { InMemoryShipArrivalsWorld } from "@/lib/tick/adapters/memory/ship-arrivals";
+import { InMemoryGoodsArrivalsWorld } from "@/lib/tick/adapters/memory/goods-arrivals";
 import { InMemoryEventsWorld } from "@/lib/tick/adapters/memory/events";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { InMemoryInfrastructureWorld } from "@/lib/tick/adapters/memory/infrastructure";
@@ -1255,6 +1257,7 @@ export async function runWorldTick(
   let markets = world.markets;
   const connections = toTickConnections(world);
   let ships = world.ships;
+  let pendingArrivals = world.pendingArrivals;
   let flowEvents = world.flowEvents;
   let relations = world.relations;
   let alliancePacts = world.alliancePacts;
@@ -1329,12 +1332,28 @@ export async function runWorldTick(
     processorsRun.push("ship-arrivals");
   }
 
+  // ── goods-arrivals ──
+  // Load-bearing for the market alias above (see `let markets`): this stage is unconditional and
+  // the FIRST to touch markets (moved ahead of events, which held that role before this stage
+  // existed), and its adapter copies every row on construction — so `markets` stops aliasing
+  // `world.markets` here, before any stage writes. Gating this stage, or moving it after another
+  // market writer, would leave the previous world's rows exposed to mutation. Modelled on
+  // ship-arrivals: an unconditional per-tick drain, never a phase of directed-logistics (which
+  // structurally cannot run off its own boundary tick — docs/planned/logistics-lanes.md §3).
+  let goodsArrivals: TickInstrumentation["goodsArrivals"];
+  {
+    const goodsArrivalsWorld = new InMemoryGoodsArrivalsWorld({ markets, pendingArrivals });
+    const result = await runGoodsArrivalsProcessor(goodsArrivalsWorld, { tick }, {
+      mintId: () => `goods-arrival-${nextId++}`,
+    });
+    markets = goodsArrivalsWorld.markets;
+    pendingArrivals = goodsArrivalsWorld.pendingArrivals;
+    flowEvents = [...flowEvents, ...goodsArrivalsWorld.flows];
+    goodsArrivals = result.goodsArrivals;
+    processorsRun.push("goods-arrivals");
+  }
+
   // ── events ──
-  // Load-bearing for the market alias above (see `let markets`): this stage is
-  // unconditional and the first to touch markets, and its adapter copies every
-  // row on construction — so `markets` stops aliasing `world.markets` here,
-  // before any stage writes. Gating this stage, or moving it after another
-  // market writer, would leave the previous world's rows exposed to mutation.
   {
     const eventsWorld = new InMemoryEventsWorld(
       { events, modifiers: [], markets },
@@ -2035,10 +2054,11 @@ export async function runWorldTick(
     }
   }
 
-  // Directed-logistics is the only writer of flowEvents, and it only appends on the
-  // cycle start — but the prune stays every-tick, outside the gate above, so the retention
-  // window is enforced on the tick it expires rather than up to a cycle late. It is a
-  // filter over an already-bounded log; the cycle-start gate is not worth the drift.
+  // flowEvents has two writers now: directed-logistics appends on the cycle start, and
+  // goods-arrivals appends whenever a due row credits — every tick, not just cycle starts. The
+  // prune stays every-tick, outside any gate, so the retention window is enforced on the tick it
+  // expires rather than up to a cycle late. It is a filter over an already-bounded log; a
+  // cycle-start gate here is not worth the drift.
   const flowRetentionFloor = tick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
   flowEvents = flowEvents.filter((f) => f.tick >= flowRetentionFloor);
 
@@ -2092,6 +2112,7 @@ export async function runWorldTick(
     buildings: flattenBuildings(systems),
     constructionProjects,
     markets,
+    pendingArrivals,
     events,
     modifiers: rebuildWorldModifiers(events, EVENT_DEFINITIONS),
     ships,
@@ -2120,7 +2141,7 @@ export async function runWorldTick(
     markets,
     instrumentation: {
       buildCommitmentsByGood, migrationMoved, colonistDeliveryBySystem, foundingManifests, foundingStalls,
-      logisticsBudget, strikeSuppressedProposals, overshootDeathBySystem, growthBySystem,
+      logisticsBudget, goodsArrivals, strikeSuppressedProposals, overshootDeathBySystem, growthBySystem,
       teardownLevelsBySystem, abandonedSystemsByCause,
     },
   };

@@ -25,6 +25,7 @@ function fakeWorld(): World {
     constructionProjects: [],
     connections: [],
     lanes: [],
+    pendingArrivals: [],
     markets: [],
     factions: [],
     relations: [],

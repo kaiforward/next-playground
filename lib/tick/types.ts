@@ -143,6 +143,15 @@ export interface TickProcessorResult {
    *  folded into the harness's population/cohort analysis. Surfaced via
    *  `runWorldTick().instrumentation`, never broadcast or persisted. */
   growthBySystem?: Map<string, number>;
+  /**
+   * This tick's scheduled-freight ledger drain (goods-arrivals): total quantity credited across
+   * both outbound and return legs, total quantity sent back as return-leg volume, how many return
+   * rows that volume minted, and the part of credited outbound volume landing on a market already
+   * at or above its warehousing target. Calibration instrumentation only — the oscillation gate
+   * (spec §8) reads `overshootVolume`; nothing else this pass reads any of these fields as a
+   * decision input. Surfaced via `runWorldTick().instrumentation`, never broadcast or persisted.
+   */
+  goodsArrivals?: { credited: number; returned: number; returnedRows: number; overshootVolume: number };
   /** Per-system whole building levels torn down this cycle — both infrastructure-decay channels
    *  (sustained-idle contraction and the unrest-collapse catastrophe) combined, since both remove
    *  capacity a population must live without either way. A system absent from the map lost no levels
@@ -236,6 +245,7 @@ export type TickInstrumentation = Pick<
   | "foundingManifests"
   | "foundingStalls"
   | "logisticsBudget"
+  | "goodsArrivals"
   | "strikeSuppressedProposals"
   | "overshootDeathBySystem"
   | "growthBySystem"

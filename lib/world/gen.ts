@@ -284,6 +284,9 @@ export function generateWorld(options: GenerateWorldOptions): World {
     constructionProjects: [],
     connections,
     lanes,
+    // Nothing dispatches onto the scheduled-freight ledger yet (directed-logistics dispatch is a
+    // future pass) — every generated world starts with an empty ledger.
+    pendingArrivals: [],
     markets,
     factions,
     relations,

@@ -61,6 +61,7 @@ A row type earns a `Tick*` shape only by differing from its `World` row. Markets
 | Processor | World interface | In-memory adapter |
 |---|---|---|
 | ship-arrivals | ✓ | ✓ |
+| goods-arrivals | ✓ | ✓ |
 | events | ✓ | ✓ |
 | economy | ✓ | ✓ |
 | infrastructure-decay | ✓ | ✓ |

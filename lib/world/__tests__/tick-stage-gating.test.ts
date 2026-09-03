@@ -41,10 +41,40 @@ function withFactionCount(world: World, count: number): World {
 describe("runWorldTick — stage gating", () => {
   const world = generateWorld({ systemCount: 40, seed: 7 });
 
-  it("runs only the two unconditional stages on a tick where no cadence resolves", async () => {
+  it("runs only the three unconditional stages on a tick where no cadence resolves", async () => {
     expect(QUIET_TICK % RELATIONS_FREQUENCY).not.toBe(0); // premise: relations is off too
     const result = await runWorldTick(atTick(world, QUIET_TICK - 1), { cadence: NOTHING_RESOLVES });
-    expect(result.events.processors).toEqual(["ship-arrivals", "events"]);
+    expect(result.events.processors).toEqual(["ship-arrivals", "goods-arrivals", "events"]);
+  });
+
+  it("drains a due arrival on a non-boundary (mid-cycle) tick — goods-arrivals is unconditional", async () => {
+    // A market row that already exists, forced to 0 stock so the tiny quantity below is
+    // guaranteed to sit under its band cap and credit in full — isolates "the ledger drains" from
+    // the credit-cap rule, which is a different test's job.
+    const market = world.markets[0];
+    const arrivalTick = QUIET_TICK - 1;
+    const withArrival: World = {
+      ...world,
+      markets: world.markets.map((m) => (m === market ? { ...m, stock: 0 } : m)),
+      pendingArrivals: [
+        {
+          id: "arrival-gate-test",
+          factionId: null,
+          fromSystemId: market.systemId,
+          toSystemId: market.systemId,
+          goodId: market.goodId,
+          quantity: 1,
+          dispatchTick: arrivalTick - 1,
+          arrivalTick,
+          routeEdges: [],
+          leg: "outbound",
+        },
+      ],
+    };
+    const result = await runWorldTick(atTick(withArrival, arrivalTick - 1), {
+      cadence: NOTHING_RESOLVES,
+    });
+    expect(result.world.pendingArrivals).toEqual([]);
   });
 
   it("never runs treasury for a world with no treasuries, even on a full cycle start", async () => {

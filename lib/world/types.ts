@@ -472,6 +472,36 @@ export interface WorldLane {
   idleCycles: number;
 }
 
+/**
+ * One scheduled-freight ledger row (docs/planned/logistics-lanes.md §3) — written at dispatch by
+ * directed-logistics (a future pass; nothing dispatches onto this ledger yet), drained by the
+ * unconditional per-tick goods-arrivals stage. `routeEdges` is the ordered `laneKey` (`lib/engine/
+ * lanes.ts`) list the haul crosses — the interdiction query's substrate.
+ *
+ * `leg: "outbound"` is a donor→destination haul in flight; the destination's band cap
+ * (`marketBandForRow(...).maxStock`) applies at arrival, and any uncredited remainder is returned
+ * to the donor as a fresh `leg: "return"` row over the reversed `routeEdges`, arriving after the
+ * SAME delay (`arrivalTick − dispatchTick`) the outbound leg took. A return leg credits its target
+ * (the original donor) in full, uncapped — the cancelled-colony precedent (staged materials return
+ * uncapped, docs/active/gameplay/player-seat.md Cancel) — and is deliberately excluded from
+ * `scheduledInbound` (`lib/engine/freight.ts`): it is goods heading back to a donor, not inbound
+ * supply a destination should stop ordering against.
+ */
+export interface WorldPendingArrival {
+  id: string;
+  /** The hauling faction, or null for the independent (null-faction) group — matches
+   *  `SystemLogisticsRow.factionId`. */
+  factionId: string | null;
+  fromSystemId: string;
+  toSystemId: string;
+  goodId: string;
+  quantity: number;
+  dispatchTick: number;
+  arrivalTick: number;
+  routeEdges: string[];
+  leg: "outbound" | "return";
+}
+
 // ── Markets ─────────────────────────────────────────────────────
 
 /** One (system, good) market row. Good catalog data (basePrice, floor/ceiling) lives in code constants, not here. */
@@ -829,6 +859,10 @@ export interface World {
   connections: WorldConnection[];
   /** One persistent row per undirected system pair carrying a connection — see `WorldLane`. */
   lanes: WorldLane[];
+  /** The scheduled-freight ledger — see `WorldPendingArrival`. Drained every tick by the
+   *  unconditional goods-arrivals stage; nothing writes to it yet (directed-logistics dispatch is a
+   *  future pass), so this reads empty until then. */
+  pendingArrivals: WorldPendingArrival[];
   markets: WorldMarket[];
   factions: WorldFaction[];
   relations: WorldFactionRelation[];

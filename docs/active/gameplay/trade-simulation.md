@@ -29,7 +29,7 @@ Crossing lanes (a corridor's single long-haul link between two regions, priced a
 
 ## The Flow-Event Log
 
-Every directed-logistics haul is appended to a rolling in-memory list on the world (`world.flowEvents`, row type `WorldFlowEvent` in `lib/world/types.ts`), capturing the tick, the directional edge (source and destination), the good, the quantity, and `flowType: "logistics"`. The tick body prunes the log to `FLOW_HISTORY_TICKS` after each run, so its size stays bounded.
+Every *delivered* directed-logistics haul is appended to a rolling in-memory list on the world (`world.flowEvents`, row type `WorldFlowEvent` in `lib/world/types.ts`), capturing the tick, the directional edge (source and destination), the good, the quantity, and `flowType: "logistics"`. The write happens at arrival, not dispatch: the goods-arrivals stage appends the row once a haul's scheduled transit lands and credits its destination, so the log records what actually reached a market, not what left one. The tick body prunes the log to `FLOW_HISTORY_TICKS` after each run, so its size stays bounded.
 
 A "trade route" is a connected chain of edges moving the same good in the same direction over the window. Routes are not stored — they are computed on demand by walking the flow events, dropping edges below the route-inference floor, and stitching survivors into chains. The event log is the truth; routes are a presentation layer.
 
