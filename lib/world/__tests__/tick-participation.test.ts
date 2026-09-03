@@ -49,10 +49,10 @@ function migrationFixture(options: { sameFaction: boolean }) {
     }),
     connections: [
       ...base.connections,
-      { fromId: crowded.id, toId: roomy.id, fuelCost: 1 },
-      { fromId: roomy.id, toId: crowded.id, fuelCost: 1 },
-      { fromId: crowded.id, toId: borderland.id, fuelCost: 1 },
-      { fromId: borderland.id, toId: crowded.id, fuelCost: 1 },
+      { fromId: crowded.id, toId: roomy.id, fuelCost: 1, isCrossing: false },
+      { fromId: roomy.id, toId: crowded.id, fuelCost: 1, isCrossing: false },
+      { fromId: crowded.id, toId: borderland.id, fuelCost: 1, isCrossing: false },
+      { fromId: borderland.id, toId: crowded.id, fuelCost: 1, isCrossing: false },
     ],
   };
   return { world, crowdedId: crowded.id, roomyId: roomy.id, borderlandId: borderland.id };

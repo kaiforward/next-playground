@@ -1,6 +1,5 @@
 "use client";
 
-import { DetailPanel } from "@/components/ui/detail-panel";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,11 +9,21 @@ import { StatList, StatRow } from "@/components/ui/stat-row";
 import { TabList, Tab } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InlineAlert } from "@/components/ui/inline-alert";
+import { NumberInput } from "@/components/form/number-input";
+import { RangeInput } from "@/components/form/range-input";
+import { SegmentedControl } from "@/components/form/segmented-control";
+import { GalaxyPreview } from "@/components/start/galaxy-preview";
+import { defaultGalaxyShapeKnobs, type GalaxyShapeKnobs } from "@/lib/engine/density-field";
+import {
+  CORRIDOR_STYLE_PRESETS,
+  CORRIDOR_STYLE_OPTIONS,
+  type CorridorStylePreset,
+} from "@/components/start/corridor-style-presets";
 import { useState } from "react";
 
-/** Moved from `app/(game)/@panel/styleguide/page.tsx` — this was DetailPanel's one caller outside a
- *  system/faction panel, and the reason DetailPanel had to become router-agnostic before this task
- *  could even compile it. */
+/** The `/styleguide` route's whole content — a full-width dev reference page, not a docked panel,
+ *  so component demos and the galaxy preview get real horizontal room. World-free: it reads
+ *  nothing from the game store (see `routeWorldNeed`). */
 
 function StyleSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -323,6 +332,159 @@ function StatsSection() {
   );
 }
 
+// ── Galaxy Preview ───────────────────────────────────────────────
+
+const GALAXY_PREVIEW_DEFAULT_SYSTEM_COUNT = 600;
+
+function GalaxyPreviewSection() {
+  const [systemCount, setSystemCount] = useState(GALAXY_PREVIEW_DEFAULT_SYSTEM_COUNT);
+  const [seed, setSeed] = useState(42);
+  const [knobs, setKnobs] = useState<GalaxyShapeKnobs>(() =>
+    defaultGalaxyShapeKnobs(GALAXY_PREVIEW_DEFAULT_SYSTEM_COUNT),
+  );
+  const [corridorStylePreset, setCorridorStylePreset] = useState<CorridorStylePreset>("mixed");
+  // Placement levers, dev-exploration only (unclamped on purpose — Gate A picks the shipped
+  // values, then New Game gets the limited ranges): overall density (min-distance scale, smaller
+  // = denser) and core-vs-band spacing contrast (density-radius exponent).
+  const [minDistanceScale, setMinDistanceScale] = useState(1.0);
+  const [densityRadiusExponent, setDensityRadiusExponent] = useState(0.05);
+  // Map-size lever, dev-exploration only: scales `config.MAP_SIZE` before everything else reads it
+  // (shape authoring, padding, placement) — same unclamped-for-exploration posture as the two
+  // levers above.
+  const [mapSizeScale, setMapSizeScale] = useState(1.0);
+
+  function setKnob<K extends keyof GalaxyShapeKnobs>(key: K, value: GalaxyShapeKnobs[K]) {
+    setKnobs((prev) => ({ ...prev, [key]: value }));
+  }
+
+  return (
+    <StyleSection title="Galaxy Preview — New Game structure knobs (spec §5)">
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
+          <NumberInput
+            id="galaxy-preview-cluster-count"
+            label="Cluster count"
+            value={knobs.clusterCount}
+            min={1}
+            onChange={(e) => setKnob("clusterCount", Number(e.target.value))}
+          />
+          <RangeInput
+            id="galaxy-preview-size-skew"
+            label="Size skew"
+            valueLabel={knobs.sizeSkew.toFixed(2)}
+            min={0}
+            max={1}
+            step={0.05}
+            value={knobs.sizeSkew}
+            onChange={(e) => setKnob("sizeSkew", Number(e.target.value))}
+          />
+          <RangeInput
+            id="galaxy-preview-cluster-spacing"
+            label="Cluster spacing"
+            valueLabel={String(knobs.clusterSpacing)}
+            min={100}
+            max={2000}
+            step={50}
+            value={knobs.clusterSpacing}
+            onChange={(e) => setKnob("clusterSpacing", Number(e.target.value))}
+          />
+          <RangeInput
+            id="galaxy-preview-void-floor"
+            label="Void floor"
+            valueLabel={knobs.voidFloor.toFixed(2)}
+            min={0}
+            max={1}
+            step={0.02}
+            value={knobs.voidFloor}
+            onChange={(e) => setKnob("voidFloor", Number(e.target.value))}
+          />
+          <RangeInput
+            id="galaxy-preview-corridors-per-cluster"
+            label="Corridors per cluster"
+            valueLabel={knobs.corridorsPerCluster.toFixed(2)}
+            min={0}
+            max={2}
+            step={0.1}
+            value={knobs.corridorsPerCluster}
+            onChange={(e) => setKnob("corridorsPerCluster", Number(e.target.value))}
+          />
+          <RangeInput
+            id="galaxy-preview-cluster-turbulence"
+            label="Cluster turbulence"
+            valueLabel={knobs.clusterTurbulence.toFixed(2)}
+            min={0}
+            max={1}
+            step={0.05}
+            value={knobs.clusterTurbulence}
+            onChange={(e) => setKnob("clusterTurbulence", Number(e.target.value))}
+          />
+          <SegmentedControl
+            name="galaxy-preview-corridor-style"
+            label="Corridor style"
+            value={corridorStylePreset}
+            onChange={(preset) => {
+              setCorridorStylePreset(preset);
+              setKnob("corridorStyle", CORRIDOR_STYLE_PRESETS[preset]);
+            }}
+            options={CORRIDOR_STYLE_OPTIONS}
+          />
+          <NumberInput
+            id="galaxy-preview-seed"
+            label="Seed"
+            value={seed}
+            onChange={(e) => setSeed(Number(e.target.value))}
+          />
+          <NumberInput
+            id="galaxy-preview-system-count"
+            label="System count"
+            value={systemCount}
+            min={50}
+            max={20000}
+            step={50}
+            onChange={(e) => setSystemCount(Number(e.target.value))}
+          />
+          <RangeInput
+            id="galaxy-preview-min-distance-scale"
+            label="Star spacing"
+            valueLabel={`×${minDistanceScale.toFixed(2)}`}
+            min={0.2}
+            max={1.5}
+            step={0.05}
+            value={minDistanceScale}
+            onChange={(e) => setMinDistanceScale(Number(e.target.value))}
+          />
+          <RangeInput
+            id="galaxy-preview-density-radius-exponent"
+            label="Cluster tightness"
+            valueLabel={densityRadiusExponent.toFixed(2)}
+            min={0}
+            max={1}
+            step={0.05}
+            value={densityRadiusExponent}
+            onChange={(e) => setDensityRadiusExponent(Number(e.target.value))}
+          />
+          <RangeInput
+            id="galaxy-preview-map-size-scale"
+            label="Map size"
+            valueLabel={`×${mapSizeScale.toFixed(1)}`}
+            min={0.5}
+            max={2.0}
+            step={0.1}
+            value={mapSizeScale}
+            onChange={(e) => setMapSizeScale(Number(e.target.value))}
+          />
+        </div>
+        <GalaxyPreview
+          knobs={knobs}
+          seed={seed}
+          systemCount={systemCount}
+          overrides={{ minDistanceScale, densityRadiusExponent, mapSizeScale }}
+        />
+      </div>
+    </StyleSection>
+  );
+}
+
 // ── Feedback ─────────────────────────────────────────────────────
 
 function FeedbackSection() {
@@ -338,10 +500,15 @@ function FeedbackSection() {
 
 // ── Page ─────────────────────────────────────────────────────────
 
-export function StyleguidePanel() {
+export function StyleguidePage() {
   return (
-    <DetailPanel title="Foundry Style Guide">
-      <div className="space-y-10">
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="max-w-6xl mx-auto px-8 py-10 space-y-10">
+        <header className="border-b border-border-strong pb-4">
+          <h1 className="font-display font-bold uppercase tracking-widest text-2xl text-text-accent">
+            Foundry Style Guide
+          </h1>
+        </header>
         <ColorsSection />
         <TypographySection />
         <CardsSection />
@@ -351,8 +518,9 @@ export function StyleguidePanel() {
         <TabsSection />
         <SectionHeadersSection />
         <StatsSection />
+        <GalaxyPreviewSection />
         <FeedbackSection />
       </div>
-    </DetailPanel>
+    </div>
   );
 }

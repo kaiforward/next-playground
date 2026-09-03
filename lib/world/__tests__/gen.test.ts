@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { generateWorld } from "../gen";
+import { generateWorld, buildGenParams } from "../gen";
+import { generateUniverse } from "@/lib/engine/universe-gen";
+import { genConfigForSystemCount, REGION_NAMES } from "@/lib/constants/universe-gen";
 import { GOODS } from "@/lib/constants/goods";
 import { DEFAULT_TAX_LEVEL } from "@/lib/constants/treasury";
 import { civilianDemandRateForGood, getInitialStock } from "@/lib/constants/market-economy";
@@ -29,8 +31,10 @@ describe("generateWorld", () => {
   const world = generateWorld({ systemCount: 120, seed: 42 });
   const goodIds = Object.keys(GOODS);
 
-  it("generates a system count within generateUniverse's own under-fill tolerance (90%-100% of requested)", () => {
-    expect(world.systems.length).toBeGreaterThanOrEqual(120 * 0.9);
+  it("generates a system count within generateUniverse's own under-fill tolerance, never over the requested count", () => {
+    // Density-shaped placement (spec §5) deliberately leaves void unfilled, so the floor is far
+    // looser than the old near-uniform guarantee — the ceiling still holds exactly.
+    expect(world.systems.length).toBeGreaterThanOrEqual(120 * 0.2);
     expect(world.systems.length).toBeLessThanOrEqual(120);
   });
 
@@ -207,6 +211,48 @@ describe("generateWorld", () => {
   });
 });
 
+// New Game's optional `shape` knobs (galaxy structure + placement levers) thread through
+// `buildGenParams`/`generateUniverse` (`lib/engine/universe-gen.ts`) — the back-compat pin every
+// one of those levers depends on: a `newGame` (or `generateWorld`) call with `shape` omitted
+// entirely must produce a world BYTE-IDENTICAL to one from before the levers existed, since the
+// levers' defaults (mapSizeScale 1, starSpacing→minDistanceScale 1, clusterTightness→
+// DENSITY_RADIUS_EXPONENT) must be true no-ops.
+describe("generateWorld — shape knobs back-compat pin", () => {
+  it("with shape omitted, produces the exact same world as a shape explicitly set to Gate-A defaults", () => {
+    const withoutShape = generateWorld({ systemCount: 300, seed: 99 });
+    const withExplicitDefaults = generateWorld({
+      systemCount: 300,
+      seed: 99,
+      shape: { mapSizeScale: 1, starSpacing: 1, clusterTightness: 0.05 },
+    });
+    expect(withExplicitDefaults).toEqual(withoutShape);
+  });
+
+  it("a non-default shape knob actually perturbs the generated world (the pin isn't vacuously always-equal)", () => {
+    const base = generateWorld({ systemCount: 300, seed: 99 });
+    const perturbed = generateWorld({ systemCount: 300, seed: 99, shape: { starSpacing: 0.5 } });
+    expect(perturbed).not.toEqual(base);
+  });
+
+  // meta.mapSize is the divisor client tile bounds and the Voronoi cache use — a system placed
+  // past it gets no tile and no cell, invisible and unclickable, baked into every save.
+  it("records the EFFECTIVE map extent in meta.mapSize, so every system coordinate falls inside it at a non-default mapSizeScale", () => {
+    const scale = 1.5;
+    const config = genConfigForSystemCount(400);
+    const world = generateWorld({ systemCount: 400, seed: 7, shape: { mapSizeScale: scale } });
+
+    expect(world.meta.mapSize).toBe(config.MAP_SIZE * scale);
+    expect(world.meta.mapSize).toBeGreaterThan(config.MAP_SIZE); // non-vacuous: the scale really moved it
+    expect(world.systems.length).toBeGreaterThan(0);
+    for (const s of world.systems) {
+      expect(s.x).toBeGreaterThanOrEqual(0);
+      expect(s.x).toBeLessThan(world.meta.mapSize);
+      expect(s.y).toBeGreaterThanOrEqual(0);
+      expect(s.y).toBeLessThan(world.meta.mapSize);
+    }
+  });
+});
+
 describe("generateWorld: market seeding", () => {
   it("seeds owned markets from the shared civilian basket and unowned tick rows as frontier", () => {
     const { world, home } = marshalateWorld();
@@ -324,6 +370,38 @@ describe("generateWorld — player faction", () => {
   it("seats the player with no pinned systems", () => {
     const world = generateWorld({ ...base, playerFaction: authored });
     expect(world.player?.pinnedSystemIds).toEqual([]);
+  });
+});
+
+describe("generateWorld: connections carry the engine's isCrossing flag", () => {
+  it("world connection rows match generateUniverse's own isCrossing exactly, lane for lane", () => {
+    const systemCount = 600;
+    const seed = 1;
+
+    // Reproduces exactly the params generateWorld builds internally (buildGenParams is the same
+    // exported helper gen.ts itself calls), so this compares against the SAME generated universe
+    // generateWorld would have folded into World — not a second, differently-configured run.
+    const config = genConfigForSystemCount(systemCount);
+    const params = buildGenParams(seed, config);
+    const universe = generateUniverse(params, REGION_NAMES);
+    const world = generateWorld({ systemCount, seed });
+
+    // Non-vacuity: the fixture must actually mix crossing and non-crossing lanes, or this test
+    // could pass by coincidence (e.g. every lane false).
+    const crossingCount = universe.connections.filter((c) => c.isCrossing).length;
+    const nonCrossingCount = universe.connections.length - crossingCount;
+    expect(crossingCount, "fixture must contain at least one crossing-class lane").toBeGreaterThan(0);
+    expect(nonCrossingCount, "fixture must contain at least one non-crossing lane").toBeGreaterThan(0);
+
+    // `gen.ts` mints one system id per generated system in array order (`systemIds = universe.
+    // systems.map(() => mintId(...))`), so `world.systems[i].id` names `universe.systems[i]`.
+    const idAtIndex = world.systems.map((s) => s.id);
+    const worldIsCrossingByPair = new Map(world.connections.map((c) => [`${c.fromId}|${c.toId}`, c.isCrossing]));
+
+    for (const conn of universe.connections) {
+      const key = `${idAtIndex[conn.fromSystemIndex]}|${idAtIndex[conn.toSystemIndex]}`;
+      expect(worldIsCrossingByPair.get(key)).toBe(conn.isCrossing);
+    }
   });
 });
 

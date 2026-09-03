@@ -294,7 +294,7 @@ describe("restoreFromDevReloadMarkerIfPending", () => {
     // restore) — must NOT end the replacement early or let the route gate redirect to `/start`.
     store.applyStateFrame({ frameSeq: 1, worldVersion: 0, slices: {} });
     expect(selectIsReplacing(store.getSnapshot())).toBe(true);
-    expect(shouldRedirectToStart(store.getSnapshot().worldVersion, false, selectIsReplacing(store.getSnapshot()))).toBe(false);
+    expect(shouldRedirectToStart(store.getSnapshot().worldVersion, "world", selectIsReplacing(store.getSnapshot()))).toBe(false);
 
     // The loaded world's own frame (version >= 1) is what actually clears it.
     store.applyStateFrame({ frameSeq: 1, worldVersion: 1, slices: {} });

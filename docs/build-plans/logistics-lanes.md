@@ -123,6 +123,41 @@ fuel spread ≥ 2 on both cohorts; the re-derived concentration line is document
 met; `distanceDecay` recalibrated against the generated distribution (or kept, with the receipt
 quoted); no conservation identity fails; the booking "re-derive the ≥0.40 line" closes here.
 
+### Gate A — results (recorded 2026-09-01, shipped defaults, seed 42, 600 systems, both horizons)
+
+Owner-driven candidate exploration replaced a formal arm sweep: the preview gained live levers
+(star spacing, cluster tightness, map size, cluster turbulence) plus geometry-driven corridor
+style (void-fraction measured on the base grid; fan suppression at 20°), and the owner picked
+the shipped defaults by eye — BASE_CONFIG knobs with POISSON_MIN_DISTANCE 117 (request fully
+placed at 600 and 5000; the ×1.0 / 180 default filled ~48%).
+
+Instrument reads (equilibrium 10,000t unless noted; founding 1000t structurally empty of flow
+as measured at premise 1):
+
+- **Re-derived concentration line: aggregate top-decile share ≥ 0.35 on the corrected
+  instrument.** Reads 0.383 (vs 0.282 for the flat map on the same instrument — geography
+  concentrates flow by +36%); per-faction rows over the 20-edge gate: 0.393 / 0.612 / 0.504.
+  Line met.
+- **Fuel p90/p10: 1.81 both cohorts — the committed ≥ 2 line is NOT met** (flat map read
+  1.99/1.93). **Owner decision (2026-09-01): accepted; the ≥ 2 line is retired as a gate.**
+  Rationale: premise 4 already established raw fuel cost cannot differentiate lanes alone;
+  invested lane infrastructure (the next sub-project) is the intended differentiator, and
+  tuning the map's look against that unfinished system would invert the priority. The owner
+  notes the maps do not read as uniform to the eye — the structural variety (clusters, voids,
+  corridors) also makes locations findable, value beyond lane variance. Revisit fuel spread
+  when lane mechanics ship.
+- Migration across geography healthy at current `distanceDecay` 0.1: beyond-crossing cohort
+  (n=39) mean migrant inflow 56 vs interior (n=123) 69, population trend 0.50% vs 0.41% —
+  far colonies grow at least as fast; **`distanceDecay` kept at 0.1, receipt: this cohort
+  read.**
+- Cross-faction lanes 182 (89 on the flat map — denser borders); border_conflict events over
+  the run 116, none on board at end. Relations scores pin at ±100 extremes at equilibrium
+  (median −100) — pre-existing clamp behaviour, unchanged shape from the flat map; watch item
+  for the relations pass, not a geography regression.
+- Unreachable haul share 4.5% (old-instrument noise band was 3.6–8.6%).
+- All conservation identities PASS at both horizons; no collapsed systems; 162 developed
+  colonies + 20 homeworlds at 10K.
+
 ### Task 5 — Galaxy-preview prototype (styleguide section)
 
 Files: `components/start/galaxy-preview.tsx` (new), `components/panels/styleguide-panel.tsx`
@@ -204,6 +239,23 @@ One item: **`GalaxyPreview`** (canvas + ImageData density field + star dots — 
 2D-canvas component; knobs compose existing form controls). Prototype-first: it lands as a
 styleguide section (Task 5) and is the owner-approved prototype before the New Game wiring
 (Task 6) starts.
+
+### Carried into the lane-mechanics sub-project
+
+Items the gitignored session ledger (`temp/sdd/map-gen-geography/progress.md`) holds that must
+survive this branch, since a ledger row not booked here dies with the branch:
+
+- **Test blind spot**: no test catches a band waypoint cross-wired into the wrong pair's chain when
+  two band corridors run geometrically close — the lane still reads `isCrossing: false` and the
+  repair-lane count stays 0, invisible to today's provenance assertions.
+- **Parked lane-length observation (Kai)**: intra-cluster lanes occasionally run longer than
+  crossing lanes — intra p95/max 242/626 at default knobs vs crossing min/median 164-673/693-780;
+  at 100 clusters intra max reaches 963 while zero crossing pairs realise at all.
+- **Foreign-transit share** reads 0.178 of placed haul volume at 10K equilibrium (the shipped
+  router is ownership-blind and routes through foreign-held systems) — a future routing rule
+  (transit through friendly factions allowed, hostile closed) is an owner decision, not yet made.
+- **`lanePruneFraction` ships at its connectivity-tested default of 0** — becomes player-facing
+  only alongside a lane-mechanics design decision.
 
 ## Spec
 
@@ -348,6 +400,69 @@ chosen mechanics.
   premise on its own.
 
 ## Evidence
+
+### Unreachable-haul share rise under the neighbourhood-graph rework (claim + falsifier committed 2026-09-02, pre-measurement)
+
+Question: post-rework the geography instrument reads unreachable-haul volume share 12.3% at 10K
+(pre-rework 4.5%). Real degradation, or an artefact of how the projection models routing?
+
+Code read (pre-measurement): the shipped router is ownership-blind — `computeBoundedHopDistances`
+(lib/engine/pathfinding, called at lib/world/tick.ts:1608) BFSes over ALL connections with only a
+hop cap; the projection (lib/tick-harness/geography-analysis.ts:115-142) restricts adjacency to
+the hauling faction's own + unclaimed systems, read off FINAL-tick ownership. So a haul is counted
+"unreachable" when its endpoints have no own+unclaimed lane path at end-state, even though the
+shipped matcher actually placed it through foreign-held systems.
+
+Claim: the 12.3% is entirely foreign-space blocking under the projection's own+unclaimed
+adjacency (plus any unclaimed-donor hauls) — every "unreachable" haul has a lane path under full
+ownership-blind adjacency, so no haul volume is genuinely lane-disconnected; the rise vs 4.5%
+reflects the sparser RNG lane graph offering fewer redundant own-space detours, not lost cargo.
+
+Falsifier: if, at either horizon, more than 1% of TOTAL haul volume is unroutable even under full
+(ownership-blind, hop-unbounded) adjacency, the claim is false — the rework genuinely
+disconnected hauls and the reading is real degradation, back to design.
+
+Measured 2026-09-02 (instrument: temporary classification inside computeGeographyProjection —
+each unreachable haul retried under full unfiltered adjacency; identity check classes-sum ==
+unreachable counter; reverted same session, grep clean):
+
+```
+Meaning:  No cargo is lost or lane-disconnected. Every "unreachable" haul was placed by the
+          shipped ownership-blind router through foreign-held systems; the metric counts the gap
+          between the instrument's foreign-space-closed model and the router the game actually
+          runs, and the sparser lane graph widens that gap by removing redundant own-space detours.
+Claim:    The 12.3% unreachable-haul share is entirely foreign-space blocking under the
+          projection's own+unclaimed adjacency; nothing is unroutable under full adjacency.
+Number:   10K, seed defaults: flows=43493, unreachable=5137 hauls / 697,707.7 volume (12.3%
+          share); classification: foreignBlocked=5137/697707.7, trulyUnreachable=0/0.0,
+          donorUnclaimed=0/0.0; identity OK (classes sum == counter). Falsifier line (>1%
+          truly-unroutable) reads 0.0%.
+Horizon:  1000t: zero flow events (pre-founding — projection early-returns empty; report reads
+          unreachable 0 / share 0.000). 10,000t: the reading above. Both quoted.
+Cohort:   All directed-logistics flow events in the trailing FLOW_HISTORY_TICKS window at run
+          end, classified per haul; ownership read off final-tick systems (same as the metric).
+Licenses: Supports: the 4.5%→12.3% rise is not degradation — no haul volume became unroutable;
+          goods moved. Supports: the shipped router routes ~12% of haul volume through foreign
+          space at equilibrium — a real divergence between spec §2's "foreign space is closed"
+          and the ownership-blind hop-BFS, amplified by the sparser RNG graph; that is lane-
+          sub-project material (interdiction surface), not a map-gen defect. Does NOT support:
+          any claim about pre-rework composition (4.5% was not re-classified); any claim that
+          12.3% is stable across seeds (one seed measured).
+
+Raw (report + diag, verbatim):
+  1000t block:  Unreachable hauls 0 · Unreachable haul volume 0 · Unreachable volume share 0.000
+  10K block:    Unreachable hauls 5137 · Unreachable haul volume 697.7K · share 0.123
+  DIAG-UNREACH flows=43493 unreachN=5137 classSumN=5137 identity=OK donorUnclaimed=0/0.0
+  foreignBlocked=5137/697707.7 trulyUnreachable=0/0.0
+```
+
+Follow-up (owner-directed, same day): the instrument was aligned to the shipped router so the
+divergence cannot recur — reachability is now ownership-blind with the router's own MAX_HOPS cut,
+and foreign transit is its own metric. Post-alignment simulate (defaults, 10K): unreachable 0/0
+both horizons, foreign-transit share 0.178 of placed volume, top-decile concentration 0.365
+(above the ≥0.35 acceptance line; the pre-alignment 0.339 was an artefact of foreign-space-closed
+placement). The numbers above stay as measured under the OLD projection — they are the record of
+the divergence, not current readings.
 
 ### Premise 1 — flow concentration (measured 2026-08-31)
 

@@ -8,6 +8,15 @@ export function clamp(value: number, min: number, max: number): number {
 }
 
 /**
+ * `value` when it is a real number, `fallback` otherwise. Stricter than `??`: a cleared numeric
+ * input read through `valueAsNumber` yields NaN, not null or undefined, so a nullish guard passes
+ * it straight through into whatever reads it next.
+ */
+export function finiteOr(value: number | undefined | null, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+/**
  * Ticks to in-world hours, via the calendar anchor (`HOURS_PER_TICK`,
  * `lib/constants/tick-cadence.ts`) — 4 ticks/day. The one place a tick count becomes an
  * in-world duration; display code (`lib/utils/calendar.ts`) converts from here, never from a

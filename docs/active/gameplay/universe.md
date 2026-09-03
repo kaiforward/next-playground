@@ -7,16 +7,16 @@ The game world — star systems, regions, connections, and how the map is explor
 ## Universe Structure
 
 ### Scale
-- Universe size is chosen per game on the **New-game** screen: a system count (Zod-validated 50–20,000, default 600). The goal is to scale as high as possible.
-  - **600 systems** ≈ 24 regions / ~7,000×7,000 map (default, quick to generate)
-  - **~10,000 systems** ≈ 60 regions / ~25,000×25,000 map (target production scale)
-- Generation parameters (region count, map size, Poisson distances) are derived continuously from the system count (`genConfigForSystemCount`) — there is no `UNIVERSE_SCALE` env var; map extent lives in generated world state (`meta.mapSize`).
-- Procedurally generated from a seed (deterministic — same seed + count always produces the same universe)
+- Universe size is chosen per game on the **New-game** screen: a system count (Zod-validated 50–20,000, default 600), a pre-filled editable seed, and up to ten optional galaxy-shape knobs — cluster count, size skew, cluster spacing, void floor, corridors per cluster, corridor style, cluster turbulence, star spacing, cluster tightness, and a map-size multiplier. Every knob defaults to a value derived from the system count (`genConfigForSystemCount`); an all-default New Game reproduces today's world byte-for-byte.
+  - **600 systems** ≈ 24 clusters / ~7,000×7,000 map (default, quick to generate)
+  - **~10,000 systems** ≈ 60 clusters / ~25,000×25,000 map (target production scale)
+- Map size and star spacing are independent multiplier levers on top of the system-count derivation, so a player can generate a denser/sparser or larger/smaller galaxy without changing the system count. There is no `UNIVERSE_SCALE` env var; map extent lives in generated world state (`meta.mapSize`).
+- Procedurally generated from a seed (deterministic — same seed, count and knobs always produce the same universe)
 - Generated once, in-process, by `generateWorld` on New game (no database seed), then immutable for that world's life
 
 ### Regions
 
-Regions placed via Poisson-disc sampling (count scales with preset). Each region is a geographic cluster with a neutral identity — names come from a flat pool of 28 generic space names (Arcturus, Meridian, Vanguard, etc.), not themed by economy type. At >28 regions, names are recycled with a `-N` suffix.
+A region **is** a cluster. The galaxy's shape is authored by a coarse 0–1 density grid built from placed cluster seeds: an elliptical influence footprint per seed (size skewed toward a few large clusters and many small ones, stretch and orientation rolled per seed) falling off to exactly 0 at its edge, a large-scale warp-noise layer that roughens edges and occasionally merges neighbouring clusters, a small-scale texture-noise layer, and a void floor below which a cell reads as true emptiness rather than merely sparse. A per-cluster turbulence knob can dampen some clusters' peak density toward diffuse while others stay full. Each region's center is its cluster seed's position, and every system is assigned to its nearest seed. Names come from a flat pool of 28 generic space names (Arcturus, Meridian, Vanguard, etc.), not themed by economy type. At >28 regions, names are recycled with a `-N` suffix.
 
 Each region has:
 - **Name**: From a pool of 28 generic space names, picked sequentially. Suffix `-N` when pool is exhausted
@@ -50,16 +50,17 @@ Each system has:
 - **Name**: Region-based naming (e.g., "Nexus-1-7")
 - **Economy type**: One of 6 types (agricultural, extraction, refinery, industrial, tech, core), derived from the system's aggregate body resources + population
 - **Bodies**: a sun + 1–N bodies, each with a resource vector (the economic substrate)
-- **Coordinates**: Fixed position via Poisson-disc sampling, assigned to nearest region
+- **Coordinates**: Density-aware Poisson-disc placement — tight spacing in cluster cores, sparse spacing along corridor bands, no placement in true void; assigned to its nearest cluster (region)
 - **Market**: one market per system carrying all 26 goods (there is no separate station entity — the market is keyed by system)
-- **Gateway flag**: 1-2 systems per region pair serve as inter-region connection points
+- **Gateway flag**: set on the two anchor systems of each realised corridor — in each cluster, whichever placed system sits furthest toward the other cluster's seed
 
 ### Connections
-- **Intra-region**: Minimum spanning tree ensures all systems in a region are connected, plus ~50% extra edges for route variety
-- **Inter-region**: MST on region centers plus bonus edges, connecting via gateway systems
+- **Intra-cluster**: A relative-neighbourhood graph over each cluster's own systems — planar by construction (no two of its own lanes cross) and provably contains the Euclidean minimum spanning tree, so every cluster with ≥2 systems stays connected. An optional prune knob (default 0 — measured lane density already lands in the target band) can trim surplus cycle edges afterward without ever breaking connectivity.
+- **Cross-cluster**: Lanes exist only along the galaxy's planned corridors — a minimum spanning tree over cluster seeds, plus a configurable number of extra pairs per cluster (an extra is dropped when it would fan near-parallel to an already-accepted corridor at the same cluster). Each corridor realises as one of two styles: **band** — a chain of waypoint lanes through a thin strip of raised density between the two clusters — or **crossing** — a single long lane directly between the two anchor systems. A crossing pair demotes to band-style realisation when its anchor-to-anchor line no longer reads as genuinely empty space (nearby placed systems, or populated grid beyond tolerance).
+- **Repair pass**: any component a corridor failed to reach (a cluster that rolled zero placed systems) gets a direct repair lane to the nearest system outside its component — a rare safety net, not the routine connectivity mechanism.
 - **All bidirectional**: Every connection works in both directions
-- Connection count scales with system count (~1,778 at 600 systems)
-- **Fuel cost**: Distance-scaled. Intra-region ~1-10 fuel per hop. Inter-region (gateway) 2.5x multiplier (~15-25 fuel)
+- Lanes avoid crossing each other where the graph's own connectivity requirements permit
+- **Fuel cost**: Distance-scaled. Intra-cluster and band-corridor lanes ~1-10 fuel per hop. Crossing-style lanes carry a 2.5x multiplier over the intra-cluster baseline (~15-25 fuel) — the only lane class priced above baseline
 
 ---
 
@@ -78,7 +79,7 @@ The map uses a WebGL canvas (Pixi.js) with two rendering tiers that crossfade ba
 - Tile-based viewport loading — only systems in visible tiles are fetched from the API
 - Full SystemObject rendering — layered glyph with economy core, overlay halo, rings, and corner pills (see [System Glyph Anatomy](#system-glyph-anatomy))
 - System names and economy badges
-- Connection lines between systems (dashed for intra-region, solid for gateway) with fuel cost labels
+- Connection lines between systems — dashed for ordinary lanes, a glowing amber line for crossing-class lanes (styled from the engine's own `isCrossing` flag end-to-end, not a region-boundary heuristic) — with fuel cost labels
 
 **Crossfade (0.3–0.4)**: Smooth alpha transition between tiers using cubic smoothstep. SystemObject creation begins slightly before the crossfade (zoom 0.28) so objects are ready when they fade in.
 
@@ -94,8 +95,9 @@ Each system renders as a layered glyph with a fixed radial budget so indicators 
 
 - **Core (r ≤ 12)** — solid economy colour; the system's intrinsic identity, with a small highlight dot.
 - **Halo (r ≈ 20) — the overlay lens.** A translucent disc carrying the *active overlay*: a faint economy tint by default, recoloured to the price ramp when the Price overlay is on. Overlap-forgiving; the halo channel is designed to host future per-system lenses (danger, stability).
-- **Gateway ring (r ≈ 28)** — bright magenta (`#e879f9`, a hue reserved for gateways) stroke on inter-region gateway systems.
 - **Navigation ring (r ≈ 34, outermost, dashed)** — drawn only during routing, on the origin/destination, plus a subtle dashed focus ring on the selected system. `reachable` nodes keep a thin solid ring; `unreachable` dim to ~0.3 alpha.
+
+There is no per-glyph gateway ring — gateway status now reads through the amber crossing-lane colour it shares (a corridor-endpoint system is where a crossing lane, or a band chain, actually terminates), a larger dot in the universe-zoom point cloud, and an amber "Gateway" badge in the system side panel.
 
 **Corner pills.** Four fixed corners, all sharing one height and radial offset, each pinned to a channel so the map reads without a legend:
 
@@ -123,7 +125,7 @@ The **Logistics** overlay renders the one inter-system goods flow the economy re
 
 When the Price overlay is on, a separate **Price panel** (`map-price-panel.tsx`) — the good-picker, a **buy/sell sub-toggle** that flips the deal-quality tint perspective, plus a jump to cross-system comparison — floats above the main panel, kept independent so picking a good never reflows the main panel. The price overlay (a per-system halo) is orthogonal to the Mode tint, so it can ride on top of the stability choropleth. The dock is the single owner of panel layout; further context panels slot in as siblings.
 
-Overlays govern *ambient* clutter, not data access: with Events off, a system's event pill is hidden ambiently but still **reveals on hover or selection**. The always-on skeleton — economy core, halo, gateway ring, jump lanes — is never gated by a toggle. Overlay state persists per session.
+Overlays govern *ambient* clutter, not data access: with Events off, a system's event pill is hidden ambiently but still **reveals on hover or selection**. The always-on skeleton — economy core, halo, jump lanes — is never gated by a toggle. Overlay state persists per session.
 
 ### Fog of War / Visibility (planned)
 

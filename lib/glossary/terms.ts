@@ -99,6 +99,7 @@ export type TermId =
   | "alliance"
   | "region"
   | "jumpLane"
+  | "crossingLane"
   | "fuelCost"
   | "gateway"
   // The player's layer
@@ -1091,8 +1092,23 @@ export const TERMS: Readonly<Record<TermId, TermDefinition>> = {
     term: "Jump lane",
     body: [
       text(
-        "A connection between two systems. Goods, people and ships all move along lanes and nowhere else.",
+        "A connection between two systems. Goods, people and ships all move along lanes and nowhere else. Most lanes sit inside one ",
       ),
+      ref("region", "region"),
+      text("; a lane crossing between two regions exists only where the galaxy's generated corridors put one."),
+    ],
+  },
+  crossingLane: {
+    id: "crossingLane",
+    term: "Crossing lane",
+    body: [
+      text("A "),
+      ref("jumpLane", "jump lane"),
+      text(" the galaxy generator marks as a corridor's single long-haul link directly between two "),
+      ref("region", "regions"),
+      text("' anchor systems. Styled distinctly on the map (a glowing amber line, against the ordinary dashed line every other lane draws) and priced at a "),
+      ref("fuelCost", "fuel-cost"),
+      text(" multiplier above every other lane."),
     ],
   },
   fuelCost: {
@@ -1106,17 +1122,17 @@ export const TERMS: Readonly<Record<TermId, TermDefinition>> = {
       text(" and "),
       ref("migration", "migration"),
       text(" reach, and "),
-      ref("gateway", "gateway"),
-      text(" lanes cost the most."),
+      ref("crossingLane", "crossing lanes"),
+      text(" cost the most."),
     ],
   },
   gateway: {
     id: "gateway",
     term: "Gateway",
     body: [
-      text("A system holding the lanes between two "),
+      text("A system anchoring one end of a corridor between two "),
       ref("region", "regions"),
-      text(", and the chokepoint anything crossing that border must pass."),
+      text(" — the chokepoint anything travelling between those regions is funnelled through."),
     ],
   },
 

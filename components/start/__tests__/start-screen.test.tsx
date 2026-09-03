@@ -11,22 +11,6 @@ import {
 import { AUTOSAVE_NAME } from "@/lib/world/save";
 import { gameStore } from "@/lib/store/use-game-store";
 
-// jsdom doesn't implement <dialog>'s imperative methods — `Dialog` (components/ui/dialog.tsx)
-// calls `.show()`/`.showModal()`/`.close()` in an effect, which throws without this polyfill. No
-// existing test exercises `Dialog` yet (grep, 2026-08-20), so this is scoped to this file rather
-// than the shared component setup.
-if (typeof HTMLDialogElement !== "undefined") {
-  HTMLDialogElement.prototype.show ??= function (this: HTMLDialogElement) {
-    this.open = true;
-  };
-  HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
-    this.open = true;
-  };
-  HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
-    this.open = false;
-  };
-}
-
 // Proves 1's client half: listSaves/loadGame/newGame are all
 // worker commands valid world-less, and a successful load/new-game navigates to the map root.
 
@@ -254,13 +238,29 @@ describe("StartScreen — export/import", () => {
   });
 });
 
-describe("StartScreen — new game dialog", () => {
-  it("opens the create-faction form on New Game", async () => {
+describe("StartScreen — new game view", () => {
+  it("swaps to the full-screen create-faction form on New Game", async () => {
     renderStartScreen();
     await screen.findByText("No saved games yet.");
 
     await userEvent.click(screen.getByRole("button", { name: "New Game" }));
 
     expect(await screen.findByLabelText("Faction name")).toBeInTheDocument();
+    // The save list is gone — this is a view swap, not an overlay stacked on top of it.
+    expect(screen.queryByText("No saved games yet.")).not.toBeInTheDocument();
+  });
+
+  it("returns to the save list when Back is pressed, without submitting", async () => {
+    renderStartScreen();
+    await screen.findByText("No saved games yet.");
+
+    await userEvent.click(screen.getByRole("button", { name: "New Game" }));
+    await screen.findByLabelText("Faction name");
+
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+
+    expect(await screen.findByText("No saved games yet.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Faction name")).not.toBeInTheDocument();
+    expect(posted.every((e) => e.type !== "newGame")).toBe(true);
   });
 });

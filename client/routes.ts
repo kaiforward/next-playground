@@ -90,14 +90,31 @@ export type RouteGateDecision =
   /** Render the matched route's normal content (map root, a panel, the styleguide). */
   | "route";
 
+/** What a route needs from the world before it can render — the gate's one route-shaped input. */
+export type RouteWorldNeed =
+  /** `/start` — renders its own screen; only the boot window gates it. */
+  | "start"
+  /** Reads nothing from the world (the styleguide) — "no world exists" must not gate or
+   *  redirect it; only the boot window (no frame yet) does. */
+  | "world-free"
+  /** Everything else — needs a live world to have anything defined to read. */
+  | "world";
+
+export function routeWorldNeed(name: Route["name"]): RouteWorldNeed {
+  if (name === "start") return "start";
+  if (name === "styleguide") return "world-free";
+  return "world";
+}
+
 export function resolveRouteGate(
   worldVersion: number | null,
-  routeIsStart: boolean,
+  need: RouteWorldNeed,
   isReplacing: boolean,
 ): RouteGateDecision {
-  if (routeIsStart) return worldVersion === null ? "boot-loading" : "start";
-  if (isReplacing) return "boot-loading";
-  if (worldVersion === null || worldVersion === 0) return "boot-loading";
+  if (worldVersion === null) return "boot-loading";
+  if (need === "start") return "start";
+  if (need === "world-free") return "route";
+  if (isReplacing || worldVersion === 0) return "boot-loading";
   return "route";
 }
 
@@ -110,8 +127,8 @@ export function resolveRouteGate(
  */
 export function shouldRedirectToStart(
   worldVersion: number | null,
-  routeIsStart: boolean,
+  need: RouteWorldNeed,
   isReplacing: boolean,
 ): boolean {
-  return worldVersion === 0 && !isReplacing && !routeIsStart;
+  return worldVersion === 0 && !isReplacing && need === "world";
 }

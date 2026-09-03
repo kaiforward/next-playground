@@ -194,8 +194,8 @@ describe("runWorldTick", () => {
       systems: base.systems.map((s) => (s.id === b ? { ...s, factionId } : s)),
       connections: [
         ...base.connections,
-        { fromId: a, toId: b, fuelCost: 1 },
-        { fromId: b, toId: a, fuelCost: 1 },
+        { fromId: a, toId: b, fuelCost: 1, isCrossing: false },
+        { fromId: b, toId: a, fuelCost: 1, isCrossing: false },
       ],
     };
     for (let i = 0; i < 120; i++) {
@@ -341,8 +341,8 @@ describe("runWorldTick", () => {
       systems: base.systems.map((s) => (s.id === b ? { ...s, factionId } : s)),
       connections: [
         ...base.connections,
-        { fromId: a, toId: b, fuelCost: 1 },
-        { fromId: b, toId: a, fuelCost: 1 },
+        { fromId: a, toId: b, fuelCost: 1, isCrossing: false },
+        { fromId: b, toId: a, fuelCost: 1, isCrossing: false },
       ],
     };
     const after = await runTicks(world, 120);
@@ -381,14 +381,16 @@ describe("runWorldTick", () => {
       systems: base.systems.map((s) => (s.id === b ? { ...s, factionId } : s)),
       connections: [
         ...base.connections,
-        { fromId: a, toId: b, fuelCost: 1 },
-        { fromId: b, toId: a, fuelCost: 1 },
+        { fromId: a, toId: b, fuelCost: 1, isCrossing: false },
+        { fromId: b, toId: a, fuelCost: 1, isCrossing: false },
       ],
     };
     // 120 ticks was enough while random spawning also minted "event-" ids; with only relations
-    // creating events, this seed's first faction pair crosses into border conflict at tick 278 —
-    // run well past it.
-    const after = await runTicks(world, 320);
+    // creating events, this seed's first faction pair crosses into border conflict at tick 380 —
+    // border friction is driven by the cross-faction connection COUNT (`getBorderLengthsBetween`,
+    // spec `docs/planned/logistics-lanes.md` §5), which this seed's generated lane graph puts on
+    // this timeline; run well past it.
+    const after = await runTicks(world, 450);
 
     const eventIds = after.events.map((e) => e.id);
     const projectIds = after.constructionProjects.map((p) => p.id);
@@ -579,8 +581,8 @@ describe("runWorldTick — per-stage wiring", () => {
       }),
       connections: [
         ...base.connections,
-        { fromId: a, toId: b, fuelCost: 1 },
-        { fromId: b, toId: a, fuelCost: 1 },
+        { fromId: a, toId: b, fuelCost: 1, isCrossing: false },
+        { fromId: b, toId: a, fuelCost: 1, isCrossing: false },
       ],
     };
     const after = await runTicks(world, 50);
@@ -612,8 +614,8 @@ describe("runWorldTick — per-stage wiring", () => {
       }),
       connections: [
         ...base.connections,
-        { fromId: a, toId: b, fuelCost: 1 },
-        { fromId: b, toId: a, fuelCost: 1 },
+        { fromId: a, toId: b, fuelCost: 1, isCrossing: false },
+        { fromId: b, toId: a, fuelCost: 1, isCrossing: false },
       ],
       treasuries: base.treasuries.map((treasury) =>
         treasury.factionId === factionId
@@ -778,8 +780,8 @@ function twoSystemWaterGradient(prepareRecipientWater: (market: WorldMarket) => 
     }),
     connections: [
       ...base.connections,
-      { fromId: a, toId: b, fuelCost: 1 },
-      { fromId: b, toId: a, fuelCost: 1 },
+      { fromId: a, toId: b, fuelCost: 1, isCrossing: false },
+      { fromId: b, toId: a, fuelCost: 1, isCrossing: false },
     ],
   };
   return { a, b, factionId, world };
@@ -1425,8 +1427,8 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
       ),
       connections: [
         ...isolatedWorld.connections,
-        { fromId: source, toId: destination, fuelCost: 1 },
-        { fromId: destination, toId: source, fuelCost: 1 },
+        { fromId: source, toId: destination, fuelCost: 1, isCrossing: false },
+        { fromId: destination, toId: source, fuelCost: 1, isCrossing: false },
       ],
     };
     const connectedAfter = await runTicks(connectedWorld, CYCLE_LENGTH, POPULATION_CADENCE);
@@ -2313,8 +2315,8 @@ describe("runWorldTick — the unserved shortfall level end to end", () => {
       ),
       connections: [
         ...unservable.connections,
-        { fromId: a, toId: b, fuelCost: 1 },
-        { fromId: b, toId: a, fuelCost: 1 },
+        { fromId: a, toId: b, fuelCost: 1, isCrossing: false },
+        { fromId: b, toId: a, fuelCost: 1, isCrossing: false },
       ],
     };
     const cleared = (await runWorldTick(recovered, { cadence })).world;

@@ -8,7 +8,7 @@
  */
 
 import { generateWorld } from "@/lib/world/gen";
-import { runWorldTick, toTickSystems } from "@/lib/world/tick";
+import { runWorldTick, toTickSystems, toTickConnections } from "@/lib/world/tick";
 import {
   takeMarketSnapshot, computeMarketHealth, computeKneeBinding, SNAPSHOT_INTERVAL,
   newDemandHuntingAccumulator, sampleDemandHunting, summariseDemandHunting,
@@ -20,6 +20,7 @@ import {
 } from "./event-analysis";
 import { summariseLogistics, fundingBoundCensus, LOGISTICS_WARMUP_TICKS } from "./logistics-analysis";
 import type { LogisticsBudgetTotals } from "./logistics-analysis";
+import { summariseGeography, type OwnershipSnapshot } from "./geography-analysis";
 import {
   summariseBuildBursts, trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample,
   summariseFoundingStock, recordFoundingManifest, newFoundingStallTotals, recordFoundingStall,
@@ -52,7 +53,7 @@ import type { EpisodeCostTotals } from "./population-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
 import type { GovernmentType } from "@/lib/types/game";
-import type { WorldFlowEvent, WorldMarket } from "@/lib/world/types";
+import type { WorldFlowEvent, WorldMarket, WorldRegion } from "@/lib/world/types";
 import type {
   HarnessConfig,
   HarnessResults,
@@ -89,6 +90,40 @@ export function foldFoundingTick(
   trackFoundedColonies(systems, tick, developedAtStart, tracker, staging);
 }
 
+/**
+ * Region overview: each region's system count and modal government type, ties broken
+ * alphabetically, an empty region (no systems at all) keeping the "federation" default rather
+ * than ranking nothing. Exported (and pure — no `generateWorld` dependency) so the empty-region,
+ * tie-break and tie-direction branches can be proven on a hand-built input: `generateWorld` itself
+ * cannot produce a genuinely empty region at any system count large enough to also place its
+ * required faction homeworlds (spec §5's per-cluster placement guarantee means a system count
+ * that large already covers every cluster), so the branch would otherwise have no live fixture at
+ * all. `runTickHarness` is its only production caller.
+ */
+export function computeRegionOverview(
+  regions: ReadonlyArray<Pick<WorldRegion, "id" | "name">>,
+  systemsByRegion: ReadonlyMap<string, GovernmentType[]>,
+): RegionOverviewEntry[] {
+  return regions.map((r) => {
+    const govs = systemsByRegion.get(r.id) ?? [];
+    const counts = new Map<GovernmentType, number>();
+    for (const g of govs) counts.set(g, (counts.get(g) ?? 0) + 1);
+    let dominant: GovernmentType = "federation";
+    let bestCount = 0;
+    for (const [g, count] of counts) {
+      if (count > bestCount || (count === bestCount && g < dominant)) {
+        dominant = g;
+        bestCount = count;
+      }
+    }
+    return {
+      name: r.name,
+      dominantGovernmentType: dominant,
+      systemCount: govs.length,
+    };
+  });
+}
+
 /** Mirrors event-analysis.ts's (unexported) ActiveEventRecord shape. */
 interface ActiveEventRecord {
   type: TickEvent["type"];
@@ -114,24 +149,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     list.push(s.governmentType);
     systemsByRegion.set(s.regionId, list);
   }
-  const regionOverview: RegionOverviewEntry[] = world.regions.map((r) => {
-    const govs = systemsByRegion.get(r.id) ?? [];
-    const counts = new Map<GovernmentType, number>();
-    for (const g of govs) counts.set(g, (counts.get(g) ?? 0) + 1);
-    let dominant: GovernmentType = "federation";
-    let bestCount = 0;
-    for (const [g, count] of counts) {
-      if (count > bestCount || (count === bestCount && g < dominant)) {
-        dominant = g;
-        bestCount = count;
-      }
-    }
-    return {
-      name: r.name,
-      dominantGovernmentType: dominant,
-      systemCount: govs.length,
-    };
-  });
+  const regionOverview = computeRegionOverview(world.regions, systemsByRegion);
 
   const marketSnapshots: { tick: number; markets: MarketSnapshot[] }[] = [];
   const populationSnapshots: Array<Map<string, number>> = [];
@@ -159,6 +177,14 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   // numerator, folded by world cohort at the end via computeWorldCohorts. Transient instrumentation
   // (`runWorldTick().instrumentation`), so like migrationMoved it is accumulated per tick.
   const colonistDeliveryTotals = new Map<string, number>();
+  // Ownership as it stood at each cycle boundary — the basis geography classifies each haul
+  // against. Ownership only ever changes on a cycle boundary (colonisation lands and abandonment
+  // reverts there), so a snapshot per boundary is exact for every tick until the next one, and the
+  // end-of-run world alone would credit a system settled late with hauls that crossed it while it
+  // was still empty.
+  const ownershipSnapshots: OwnershipSnapshot[] = [
+    { fromTick: 0, systemFactionById: new Map(world.systems.map((s) => [s.id, s.factionId])) },
+  ];
   // Whole-run abandonment counts by cause (famine-collapse vs decline-to-empty), folded from
   // `abandonedSystemsByCause` each cycle. Not cohorted: an abandoned system reverts to unclaimed
   // this same cycle (`applyAbandonments`), so it never appears in a settled-only cohort read again.
@@ -277,6 +303,13 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       migrationCycleCount++;
       migrationColonistsTotal += result.instrumentation.migrationMoved.colonists;
       migrationDiffusionTotal += result.instrumentation.migrationMoved.diffusion;
+    }
+
+    if (world.meta.currentTick % cycleLength === 0) {
+      ownershipSnapshots.push({
+        fromTick: world.meta.currentTick,
+        systemFactionById: new Map(world.systems.map((s) => [s.id, s.factionId])),
+      });
     }
 
     if (result.instrumentation.colonistDeliveryBySystem) {
@@ -454,6 +487,11 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     ratePerEligible: strikeEligibleTotal > 0 ? strikeSuppressedTotal / strikeEligibleTotal : 0,
   };
 
+  const geography = summariseGeography(
+    finalTickSystems, toTickConnections(world), world.factions, logisticsFlows, colonistDeliveryTotals,
+    ownershipSnapshots,
+  );
+
   const episodeCosts = summariseEpisodeCostsByCohort(episodeCostTotals, finalTickSystems, homeworldIds);
   const foundingTrajectory = summariseFoundingTrajectory(foundingTrajectoryTotals);
   const provisionVarianceBySystem = computeTrailingProvisionVariance(provisionSnapshots, RATCHET_TRAILING_WINDOW);
@@ -507,5 +545,6 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     foundingTrajectory,
     provisionRatchet,
     tierZeroIdle: summariseTierZeroIdle(finalTickSystems, homeworldIds),
+    geography,
   };
 }
