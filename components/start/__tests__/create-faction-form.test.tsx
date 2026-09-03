@@ -75,6 +75,23 @@ describe("CreateFactionForm — success", () => {
   });
 });
 
+describe("CreateFactionForm — full-screen chrome", () => {
+  it("calls onCancel from both the top-bar Back control and the floating Cancel button, without submitting", async () => {
+    const onCancel = vi.fn();
+    render(
+      <NavigateProvider navigate={vi.fn()}>
+        <CreateFactionForm onCancel={onCancel} />
+      </NavigateProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(onCancel).toHaveBeenCalledTimes(2);
+    expect(posted).toHaveLength(0);
+  });
+});
+
 describe("CreateFactionForm — galaxy shape knobs", () => {
   it("renders every shape knob with an accessible name, plus the embedded preview", () => {
     renderForm();
@@ -166,6 +183,26 @@ describe("CreateFactionForm — galaxy shape knobs", () => {
     const payload = newGamePayload(posted[0]);
     expect(payload.shape?.clusterCount).toBe(12);
     expect(payload.shape?.clusterSpacing).toBe(defaultGalaxyShapeKnobs(10_000).clusterSpacing);
+  });
+
+  it("rerolls the seed via the seed chip's reroll button and submits the rerolled value", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    const seedInput = screen.getByRole<HTMLInputElement>("textbox", { name: "Seed" });
+    const initial = Number(seedInput.value);
+    await user.type(screen.getByLabelText("Faction name"), "Aurelian League");
+    await user.click(screen.getByRole("button", { name: "Reroll" }));
+    const rerolled = Number(seedInput.value);
+
+    // Non-vacuous: the reroll must actually change the displayed value (astronomically unlikely
+    // to collide — 1 in 1,000,000 — so a real change is what this asserts, not a lucky repeat).
+    expect(rerolled).not.toBe(initial);
+
+    await user.click(screen.getByRole("button", { name: "Launch New Galaxy" }));
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(newGamePayload(posted[0]).seed).toBe(rerolled);
   });
 
   it("opens with a concrete seed pre-filled and submits exactly that seed untouched — the previewed galaxy is the played one", async () => {

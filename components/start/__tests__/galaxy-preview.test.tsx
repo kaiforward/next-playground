@@ -121,3 +121,39 @@ describe("GalaxyPreview", () => {
     expect(vi.mocked(buildGalaxyImpression).mock.calls[1][2]).toBe(2000);
   });
 });
+
+describe("GalaxyPreview — full-screen New Game props", () => {
+  it("suppresses the built-in caption when hideCaption is set, while the canvas still renders", async () => {
+    render(<GalaxyPreview knobs={knobs()} seed={1} systemCount={300} fill hideCaption />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(screen.getByRole("img", { name: "Galaxy generation preview" })).toBeInTheDocument();
+    expect(screen.queryByText(/systems placed/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Generating…")).not.toBeInTheDocument();
+  });
+
+  it("reports the impression through onImpressionChange as it regenerates, starting from null", async () => {
+    const onImpressionChange = vi.fn();
+    render(
+      <GalaxyPreview
+        knobs={knobs()}
+        seed={1}
+        systemCount={300}
+        onImpressionChange={onImpressionChange}
+      />,
+    );
+
+    expect(onImpressionChange).toHaveBeenCalledWith(null);
+    expect(onImpressionChange).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(onImpressionChange).toHaveBeenCalledTimes(2);
+    const reported = onImpressionChange.mock.calls[1][0];
+    expect(reported.points.length).toBeGreaterThan(0);
+  });
+});

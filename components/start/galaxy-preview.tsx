@@ -38,6 +38,18 @@ export interface GalaxyPreviewProps {
   /** Dev-exploration overrides (styleguide only for now): map-size scale plus placement levers;
    *  omitted = the engine's values. */
   overrides?: ImpressionOverrides;
+  /** Renders the canvas as the largest square that fits its parent box instead of the fixed
+   *  900px-wide column layout — the New Game full-screen view's full-bleed background canvas
+   *  (`components/start/create-faction-form.tsx`), whose parent has both a bounded width AND
+   *  height. The styleguide keeps the default column layout, whose parent only bounds width. */
+  fill?: boolean;
+  /** Suppresses the built-in "N systems placed · seed · map units" caption — the New Game view
+   *  renders the same text itself, anchored in its seed chip rather than under the canvas
+   *  (`onImpressionChange` below is how it gets the numbers to render). */
+  hideCaption?: boolean;
+  /** Fires whenever the debounced impression regenerates (including the initial `null`), so a
+   *  caller that hides the built-in caption can still render its own copy of the same numbers. */
+  onImpressionChange?: (impression: GalaxyImpression | null) => void;
 }
 
 /**
@@ -51,7 +63,15 @@ export interface GalaxyPreviewProps {
  * reasoning. Under jsdom (component tests) `getContext("2d")` returns null; painting is skipped and
  * the canvas element still renders, so a test can assert structure/text without a real canvas.
  */
-export function GalaxyPreview({ knobs, seed, systemCount, overrides }: GalaxyPreviewProps) {
+export function GalaxyPreview({
+  knobs,
+  seed,
+  systemCount,
+  overrides,
+  fill,
+  hideCaption,
+  onImpressionChange,
+}: GalaxyPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [impression, setImpression] = useState<GalaxyImpression | null>(null);
 
@@ -62,6 +82,16 @@ export function GalaxyPreview({ knobs, seed, systemCount, overrides }: GalaxyPre
   const inputKey = JSON.stringify({ knobs, seed, systemCount, overrides });
   const input = useRef<GalaxyPreviewProps>({ knobs, seed, systemCount, overrides });
   input.current = { knobs, seed, systemCount, overrides };
+
+  // `onImpressionChange` is rebuilt every render like every other object prop here — read the
+  // latest one through a ref rather than naming it a dependency below, the same reasoning `input`
+  // above already documents.
+  const onImpressionChangeRef = useRef(onImpressionChange);
+  onImpressionChangeRef.current = onImpressionChange;
+
+  useEffect(() => {
+    onImpressionChangeRef.current?.(impression);
+  }, [impression]);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -105,20 +135,32 @@ export function GalaxyPreview({ knobs, seed, systemCount, overrides }: GalaxyPre
   }, [impression]);
 
   return (
-    <div className="space-y-1 w-full max-w-[900px] min-w-0">
+    <div
+      className={
+        fill
+          ? "flex flex-col items-center justify-center gap-1 w-full h-full min-w-0 min-h-0"
+          : "space-y-1 w-full max-w-[900px] min-w-0"
+      }
+    >
       <canvas
         ref={canvasRef}
         width={CANVAS_SIZE}
         height={CANVAS_SIZE}
         role="img"
         aria-label="Galaxy generation preview"
-        className="border border-border bg-background max-w-full h-auto"
+        className={
+          fill
+            ? "border border-border bg-background max-w-full max-h-full w-auto h-auto shrink"
+            : "border border-border bg-background max-w-full h-auto"
+        }
       />
-      <p className="text-xs font-mono text-text-secondary">
-        {impression
-          ? `${impression.points.length.toLocaleString()} systems placed · seed ${seed} · ${impression.mapSize.toLocaleString()} × ${impression.mapSize.toLocaleString()} units`
-          : "Generating…"}
-      </p>
+      {!hideCaption && (
+        <p className="text-xs font-mono text-text-secondary shrink-0">
+          {impression
+            ? `${impression.points.length.toLocaleString()} systems placed · seed ${seed} · ${impression.mapSize.toLocaleString()} × ${impression.mapSize.toLocaleString()} units`
+            : "Generating…"}
+        </p>
+      )}
     </div>
   );
 }

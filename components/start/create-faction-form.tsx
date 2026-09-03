@@ -11,6 +11,7 @@ import { TextInput } from "@/components/form/text-input";
 import { SelectInput } from "@/components/form/select-input";
 import { FormError } from "@/components/form/form-error";
 import { GalaxyPreview } from "@/components/start/galaxy-preview";
+import type { GalaxyImpression } from "@/lib/engine/galaxy-impression";
 import { useNewGameMutation } from "@/lib/hooks/use-game-lifecycle";
 import { useNavigate } from "@/components/ui/link-provider";
 import { mapHref } from "@/lib/utils/route-hrefs";
@@ -84,16 +85,46 @@ function rollSeed(): number {
 
 interface CreateFactionFormProps {
   /** Called after a successful `newGame` command, before navigating to the map root — the start
-   *  screen's dialog (`components/start/start-screen.tsx`) closes itself here. Optional. */
+   *  screen (`components/start/start-screen.tsx`) returns itself to the save list here. Optional. */
   onSuccess?: () => void;
+  /** Called from the Back control and the Cancel button — the start screen returns to the save
+   *  list without submitting. Optional so a bare `<CreateFactionForm />` still renders. */
+  onCancel?: () => void;
+}
+
+/** Small floating surface over the galaxy preview — the two settings panels and nothing else, so
+ *  the shared chrome (semi-opaque surface, square corners, bordered header, internal scroll for a
+ *  panel taller than the viewport leaves room for) lives in one place. */
+function FloatingPanel({
+  title,
+  className,
+  children,
+}: {
+  title: string;
+  className: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`absolute bg-surface/95 border border-border-strong max-h-[calc(100%-2.5rem)] overflow-y-auto ${className}`}>
+      <div className="px-3 py-2 border-b border-border">
+        <h2 className="text-xs font-display font-semibold uppercase tracking-wider text-text-accent">
+          {title}
+        </h2>
+      </div>
+      <div className="p-3 space-y-3">{children}</div>
+    </div>
+  );
 }
 
 /** Author the faction that generates a fresh galaxy (`newGame` command, world-less-valid,
  *  client-runtime spec §9) and land on the map root on success. The galaxy-shape knob section
  *  (spec `docs/planned/logistics-lanes.md` §5) and its embedded `GalaxyPreview` share this form's
  *  own state (`shape.*` fields) — the values the preview renders are exactly what `newGame`
- *  receives on submit, never a second copy that could drift from it. */
-export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
+ *  receives on submit, never a second copy that could drift from it. Renders full-screen (the
+ *  preview-first layout: a full-bleed `GalaxyPreview` with the settings floating over it in two
+ *  panels) rather than as a form-sized card — the galaxy the player is about to play is the thing
+ *  worth the most screen space here, not a footnote beside the inputs that shape it. */
+export function CreateFactionForm({ onSuccess, onCancel }: CreateFactionFormProps) {
   const navigate = useNavigate();
   const newGame = useNewGameMutation();
   // One roll per mount: the seed field opens pre-filled, and a cleared field still submits this
@@ -148,6 +179,15 @@ export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
   const starSpacing = finiteOr(shape.starSpacing, shapeDefaults.starSpacing);
   const clusterTightness = finiteOr(shape.clusterTightness, shapeDefaults.clusterTightness);
 
+  // The preview's own "N systems placed · seed · map units" caption, mirrored here so the seed
+  // chip can show it without a second copy of the placement maths — `GalaxyPreview` hides its
+  // built-in caption (`hideCaption`) and reports the same impression back through this callback.
+  const [impression, setImpression] = useState<GalaxyImpression | null>(null);
+
+  function handleReroll() {
+    setValue("seed", rollSeed(), { shouldDirty: true });
+  }
+
   const onSubmit = handleSubmit(async (values) => {
     try {
       await newGame.mutateAsync({ ...values, seed: values.seed ?? initialSeed });
@@ -163,65 +203,96 @@ export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
   const pending = isSubmitting || newGame.isPending;
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col lg:flex-row gap-6" noValidate>
-      <div className="flex flex-col gap-4 lg:w-[380px] shrink-0">
-        <TextInput
-          id="faction-name"
-          label="Faction name"
-          placeholder="e.g. Aurelian League"
-          error={errors.name?.message}
-          {...register("name")}
-        />
-        <Controller
-          name="governmentType"
-          control={control}
-          render={({ field }) => (
-            <SelectInput
-              label="Government"
-              options={GOV_OPTIONS}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.governmentType?.message}
-            />
-          )}
-        />
-        <Controller
-          name="doctrine"
-          control={control}
-          render={({ field }) => (
-            <SelectInput
-              label="Doctrine"
-              options={DOC_OPTIONS}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.doctrine?.message}
-            />
-          )}
-        />
-        <NumberInput
-          id="new-game-system-count"
-          label="Systems"
-          min={50}
-          max={20000}
-          step={50}
-          hint="50 – 20,000. Bigger galaxies take longer to generate."
-          error={errors.systemCount?.message}
-          {...register("systemCount", { valueAsNumber: true })}
-        />
-        <TextInput
-          id="new-game-seed"
-          label="Seed"
-          inputMode="numeric"
-          error={errors.seed?.message}
-          {...register("seed", {
-            setValueAs: (value) => (value === "" ? undefined : Number(value)),
-          })}
-        />
+    <div className="fixed inset-0 z-40 flex flex-col bg-background">
+      <div className="flex items-center gap-4 px-5 py-3 border-b border-border bg-surface shrink-0">
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          Back
+        </Button>
+        <h1 className="font-display font-semibold uppercase tracking-widest text-sm text-text-accent">
+          New Game
+        </h1>
+      </div>
 
-        <div className="border-t border-border pt-4 space-y-3">
-          <h3 className="text-xs font-display font-bold text-text-accent uppercase tracking-wider">
-            Galaxy shape
-          </h3>
+      <form onSubmit={onSubmit} className="relative flex-1 min-h-0" noValidate>
+        <div className="absolute inset-0 flex items-center justify-center p-6">
+          <GalaxyPreview
+            knobs={previewKnobs}
+            seed={seed ?? initialSeed}
+            systemCount={systemCount}
+            overrides={{ mapSizeScale, minDistanceScale: starSpacing, densityRadiusExponent: clusterTightness }}
+            fill
+            hideCaption
+            onImpressionChange={setImpression}
+          />
+        </div>
+
+        <FloatingPanel title="Faction & galaxy" className="top-5 left-5 w-[360px]">
+          <TextInput
+            id="faction-name"
+            label="Faction name"
+            placeholder="e.g. Aurelian League"
+            error={errors.name?.message}
+            {...register("name")}
+          />
+          <Controller
+            name="governmentType"
+            control={control}
+            render={({ field }) => (
+              <SelectInput
+                label="Government"
+                options={GOV_OPTIONS}
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.governmentType?.message}
+              />
+            )}
+          />
+          <Controller
+            name="doctrine"
+            control={control}
+            render={({ field }) => (
+              <SelectInput
+                label="Doctrine"
+                options={DOC_OPTIONS}
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.doctrine?.message}
+              />
+            )}
+          />
+          <NumberInput
+            id="new-game-system-count"
+            label="Systems"
+            min={50}
+            max={20000}
+            step={50}
+            hint="50 – 20,000. Bigger galaxies take longer to generate."
+            error={errors.systemCount?.message}
+            {...register("systemCount", { valueAsNumber: true })}
+          />
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+            <RangeInput
+              id="shape-map-size-scale"
+              label="Map size"
+              valueLabel={`×${mapSizeScale.toFixed(1)}`}
+              min={0.5}
+              max={2}
+              step={0.1}
+              {...register("shape.mapSizeScale", { valueAsNumber: true })}
+            />
+            <RangeInput
+              id="shape-star-spacing"
+              label="Star spacing"
+              valueLabel={`×${starSpacing.toFixed(2)}`}
+              min={0.2}
+              max={1.5}
+              step={0.05}
+              {...register("shape.starSpacing", { valueAsNumber: true })}
+            />
+          </div>
+        </FloatingPanel>
+
+        <FloatingPanel title="Cluster shape" className="top-5 right-5 w-[380px]">
           <div className="grid grid-cols-2 gap-x-4 gap-y-3">
             <NumberInput
               id="shape-cluster-count"
@@ -250,6 +321,15 @@ export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
               {...register("shape.clusterSpacing", { valueAsNumber: true })}
             />
             <RangeInput
+              id="shape-cluster-tightness"
+              label="Cluster tightness"
+              valueLabel={clusterTightness.toFixed(2)}
+              min={0}
+              max={1}
+              step={0.05}
+              {...register("shape.clusterTightness", { valueAsNumber: true })}
+            />
+            <RangeInput
               id="shape-void-floor"
               label="Void floor"
               valueLabel={previewKnobs.voidFloor.toFixed(2)}
@@ -257,15 +337,6 @@ export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
               max={0.9}
               step={0.02}
               {...register("shape.voidFloor", { valueAsNumber: true })}
-            />
-            <RangeInput
-              id="shape-corridors-per-cluster"
-              label="Corridors per cluster"
-              valueLabel={previewKnobs.corridorsPerCluster.toFixed(2)}
-              min={0}
-              max={2}
-              step={0.1}
-              {...register("shape.corridorsPerCluster", { valueAsNumber: true })}
             />
             <RangeInput
               id="shape-cluster-turbulence"
@@ -290,49 +361,50 @@ export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
               )}
             />
             <RangeInput
-              id="shape-star-spacing"
-              label="Star spacing"
-              valueLabel={`×${starSpacing.toFixed(2)}`}
-              min={0.2}
-              max={1.5}
-              step={0.05}
-              {...register("shape.starSpacing", { valueAsNumber: true })}
-            />
-            <RangeInput
-              id="shape-cluster-tightness"
-              label="Cluster tightness"
-              valueLabel={clusterTightness.toFixed(2)}
+              id="shape-corridors-per-cluster"
+              label="Corridors per cluster"
+              valueLabel={previewKnobs.corridorsPerCluster.toFixed(2)}
               min={0}
-              max={1}
-              step={0.05}
-              {...register("shape.clusterTightness", { valueAsNumber: true })}
-            />
-            <RangeInput
-              id="shape-map-size-scale"
-              label="Map size"
-              valueLabel={`×${mapSizeScale.toFixed(1)}`}
-              min={0.5}
               max={2}
               step={0.1}
-              {...register("shape.mapSizeScale", { valueAsNumber: true })}
+              {...register("shape.corridorsPerCluster", { valueAsNumber: true })}
             />
           </div>
+        </FloatingPanel>
+
+        <div className="absolute bottom-5 left-5 flex items-end gap-2 bg-surface/95 border border-border-strong px-3 py-2">
+          <TextInput
+            id="new-game-seed"
+            label="Seed"
+            inputMode="numeric"
+            className="w-28"
+            error={errors.seed?.message}
+            {...register("seed", {
+              setValueAs: (value) => (value === "" ? undefined : Number(value)),
+            })}
+          />
+          <Button type="button" variant="ghost" size="xs" onClick={handleReroll}>
+            Reroll
+          </Button>
+          <span className="self-center text-xs font-mono text-text-secondary">
+            {impression
+              ? `${impression.points.length.toLocaleString()} systems placed · ${impression.mapSize.toLocaleString()} × ${impression.mapSize.toLocaleString()} units`
+              : "Generating…"}
+          </span>
         </div>
 
-        <FormError message={errors.root?.message} />
-        <Button type="submit" fullWidth disabled={pending}>
-          {pending ? "Generating…" : "Launch New Galaxy"}
-        </Button>
-      </div>
-
-      <div className="flex-1 flex items-center justify-center min-w-0">
-        <GalaxyPreview
-          knobs={previewKnobs}
-          seed={seed ?? initialSeed}
-          systemCount={systemCount}
-          overrides={{ mapSizeScale, minDistanceScale: starSpacing, densityRadiusExponent: clusterTightness }}
-        />
-      </div>
-    </form>
+        <div className="absolute bottom-5 right-5 flex flex-col items-end gap-2">
+          <FormError message={errors.root?.message} />
+          <div className="flex gap-3">
+            <Button type="button" variant="outline" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={pending}>
+              {pending ? "Generating…" : "Launch New Galaxy"}
+            </Button>
+          </div>
+        </div>
+      </form>
+    </div>
   );
 }
