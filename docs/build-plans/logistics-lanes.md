@@ -386,13 +386,14 @@ only); `flowsCrossingEdge(ledger, laneKey, fromTick, toTick): WorldPendingArriva
 `GoodsArrivalsWorld { getDueArrivals(tick); getMarketCaps(keys): Map<key, { stock; maxStock }>;
 creditMarkets(updates: { id; stock }[]); settleArrivals(applied: { id; credited; returned:
 WorldPendingArrival | null }[]); appendFlows(flows: LogisticsFlowInsert[]) }`. Processor result:
-`{ credited: number; returned: number; overshootVolume: number }` (instrumentation only). Rules the
+`{ credited: number; returned: number; returnedRows: number; overshootVolume: number }` (instrumentation only). Rules the
 stage applies, verbatim from the spec: credit up to the band cap; remainder becomes a `return` leg
 toward the donor over the reversed edges at the same delay; flow row written for the credited
-quantity of an outbound leg. Two assumptions the spec leaves open, carried here for the owner: a
-`return` leg credits the donor **uncapped** (the cancelled-colony precedent — staged materials return
-"uncapped", `docs/active/gameplay/player-seat.md` Cancel), and return legs write **no flow row** (the
-log stays a record of delivered goods).
+quantity of an outbound leg. Two rules the spec leaves open, decided by the owner 2026-09-03 ("travelling back is
+fine, we'll just have to see how it performs"): a `return` leg travels back over the reversed edges at
+the same delay and credits the donor **uncapped** (the cancelled-colony precedent — staged materials
+return "uncapped", `docs/active/gameplay/player-seat.md` Cancel), and return legs write **no flow
+row** (the log stays a record of delivered goods). Gate B reads the return-leg volume.
 Proves: a row due this tick is credited and gone from the ledger, a row due next tick is untouched;
 credit stops at the band cap and the excess reappears as one return row toward the donor with the
 edges reversed; a return leg landing on the donor credits in full; the flow row carries the credited
@@ -593,7 +594,8 @@ gates); spell median / single-run share / p90 and overshoot volume, latency arm 
 (the oscillation gate); "Survival stock falling" count before/after Task 10; logistics share of tick
 against the spec's baseline (9.0–13.3 ms / 7.2–8.6% at 600; 17.6 ms / 2.2% at 10,000) — a rise past
 ~3× the share blocks; conservation identities; coarse health bar; contention shortfall per faction
-(first-mover read); queued-vs-realised (overshoot-then-decay).
+(first-mover read); queued-vs-realised (overshoot-then-decay); return-leg volume and count against
+delivered volume (the owner's "see how it performs" on returned overflow).
 Merge condition: no identity fails; funding-bound census and skipped-deficit count not materially up
 (else `GENERATION_PER_POP` is retuned here, not the mechanic); oscillation gate holds or the owner
 chooses the zero-latency setting (one constant); the wall-clock line holds; the owner picks the
@@ -730,8 +732,8 @@ deleted there.
   system's own surface pass.
 - **`lanePruneFraction`** — stays internal (decided at #278); revisited only if Gate B shows lane
   density changing play.
-- **Independents' match order** (`null` group last) and **return-leg rules** (uncapped credit, no
-  flow row) — assumptions stated in Tasks 3 and 5; overturnable by the owner before Task 5 starts.
+- **Independents' match order** (`null` group last) — an assumption stated in Task 5; overturnable by
+  the owner before Task 5 starts. Return-leg rules are decided (Task 3).
 - **`REACH_JUMPS`** kept at 1 rather than deleted — the constant keeps its reader; the spec's
   "untouched" applies to the hop-cap cleanup, not to claiming's reach.
 
