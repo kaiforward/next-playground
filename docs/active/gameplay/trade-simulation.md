@@ -25,7 +25,7 @@ The open-edge list (`buildOpenEdges`, `lib/tick/world/trade-flow-topology.ts`) i
 
 Both movers are gated to **developed** systems: migration's open edges are filtered so an edge carries population only when *both* endpoints are developed, and directed logistics only routes between developed participants. Unclaimed and controlled systems are economically inert — no goods, no migration (see [economy-autonomic-agency.md](./economy-autonomic-agency.md)).
 
-Gateways (high fuel-cost connections between faction territory clumps) throttle migration under the attenuation formula — strategic significance without special-case gateway logic.
+Crossing lanes (a corridor's single long-haul link between two regions, priced at a fuel-cost multiplier above every other lane) throttle migration under the attenuation formula — strategic significance without special-case logic. A gateway is the system anchoring one end of such a corridor.
 
 ## The Flow-Event Log
 

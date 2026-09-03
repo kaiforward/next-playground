@@ -153,6 +153,9 @@ export interface SystemConnectionInfo {
   fromSystemId: string;
   toSystemId: string;
   fuelCost: number;
+  /** The engine's crossing-class flag (`WorldConnection.isCrossing`) — true only for a corridor's
+   *  single priced crossing lane, never merely because its endpoints sit in different regions. */
+  isCrossing: boolean;
 }
 
 export interface StationInfo {

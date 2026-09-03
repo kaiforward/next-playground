@@ -8,6 +8,38 @@ import { createSystemMarkets } from "@/lib/world/markets";
 import { unitResourceVector } from "@/lib/engine/resources";
 
 /**
+ * A homeworld connection whose far end is an unclaimed system — the anchor every rig below needs.
+ * Which faction(s) happen to have one is a fact about this generated galaxy's corridor topology,
+ * not a guarantee the generator makes, so callers pick a faction via `factionsWithUnclaimedNeighbour`
+ * rather than assuming any particular `world.factions[n]` has one.
+ */
+function unclaimedNeighbourConnection(world: World, home: string) {
+  return world.connections.find((c) => {
+    if (c.fromId !== home && c.toId !== home) return false;
+    const otherId = c.fromId === home ? c.toId : c.fromId;
+    return world.systems.find((s) => s.id === otherId)!.factionId === null;
+  });
+}
+
+/**
+ * The first `count` factions (generation order) whose homeworld has an unclaimed neighbour —
+ * throws with a clear message rather than a bare `undefined!` crash if the seeded galaxy doesn't
+ * offer enough of them, since this is a fact about corridor topology that can shift with the
+ * generator, not a property the tests below can assume holds for any specific faction index.
+ */
+function factionsWithUnclaimedNeighbour(world: World, count: number): string[] {
+  const ids = world.factions
+    .filter((f) => unclaimedNeighbourConnection(world, f.homeworldId) !== undefined)
+    .map((f) => f.id);
+  if (ids.length < count) {
+    throw new Error(
+      `seeded galaxy has only ${ids.length} faction(s) with an unclaimed homeworld neighbour, need ${count}`,
+    );
+  }
+  return ids.slice(0, count);
+}
+
+/**
  * Rig a faction with a guaranteed intra-faction haul: promote an unclaimed
  * neighbour of its homeworld to a developed member with a deep food deficit,
  * and pile surplus food at the homeworld. A fresh galaxy has one developed
@@ -16,11 +48,7 @@ import { unitResourceVector } from "@/lib/engine/resources";
  */
 function rigLogisticsPair(world: World, factionId: string): World {
   const home = world.factions.find((f) => f.id === factionId)!.homeworldId;
-  const conn = world.connections.find((c) => {
-    if (c.fromId !== home && c.toId !== home) return false;
-    const otherId = c.fromId === home ? c.toId : c.fromId;
-    return world.systems.find((s) => s.id === otherId)!.factionId === null;
-  })!;
+  const conn = unclaimedNeighbourConnection(world, home)!;
   const neighbourId = conn.fromId === home ? conn.toId : conn.fromId;
   // Settling the neighbour by hand has to include its markets — an unsettled system has none, and the
   // live develop path creates them the same way (`addMarketsForSettledSystems`). It has no buildings,
@@ -138,13 +166,9 @@ describe("treasury over the live tick", () => {
     // a controlled neighbour it can commit a colony to and the money to pay the charter.
     const cadence = { cycle: 48, construction: 24, logistics: 48 };
     let world = generateWorld({ systemCount: 40, seed: 11 });
-    const settlerId = world.factions[0].id;
-    const home = world.factions[0].homeworldId;
-    const conn = world.connections.find((c) => {
-      if (c.fromId !== home && c.toId !== home) return false;
-      const otherId = c.fromId === home ? c.toId : c.fromId;
-      return world.systems.find((s) => s.id === otherId)!.factionId === null;
-    })!;
+    const [settlerId] = factionsWithUnclaimedNeighbour(world, 1);
+    const home = world.factions.find((f) => f.id === settlerId)!.homeworldId;
+    const conn = unclaimedNeighbourConnection(world, home)!;
     const neighbourId = conn.fromId === home ? conn.toId : conn.fromId;
     world = {
       ...world,
@@ -176,8 +200,7 @@ describe("treasury over the live tick", () => {
     // lands in pendingWork (observable before settlement clears it).
     const cadence = { cycle: 48, construction: 24, logistics: 24 };
     let world = generateWorld({ systemCount: 40, seed: 11 });
-    const starvedId = world.factions[0].id;
-    const fundedId = world.factions[1].id;
+    const [starvedId, fundedId] = factionsWithUnclaimedNeighbour(world, 2);
     world = rigLogisticsPair(world, starvedId);
     world = rigLogisticsPair(world, fundedId);
     world = {

@@ -54,8 +54,8 @@ function corridorWorld(hops: number): { world: World; donorId: string; sinkId: s
     connections: [
       ...base.connections.filter((c) => !onChain.has(c.fromId) && !onChain.has(c.toId)),
       ...chain.slice(0, -1).flatMap((from, i) => [
-        { fromId: from, toId: chain[i + 1], fuelCost: 1 },
-        { fromId: chain[i + 1], toId: from, fuelCost: 1 },
+        { fromId: from, toId: chain[i + 1], fuelCost: 1, isCrossing: false },
+        { fromId: chain[i + 1], toId: from, fuelCost: 1, isCrossing: false },
       ]),
     ],
   };

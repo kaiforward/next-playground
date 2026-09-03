@@ -3,7 +3,6 @@
 import { useRef, useState } from "react";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Dialog, useDialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CreateFactionForm } from "@/components/start/create-faction-form";
 import {
@@ -26,15 +25,16 @@ function formatSavedAt(iso: string): string {
  * The entry screen (client-runtime spec §9, build plan Task 11) — listing saves, loading and
  * starting a new game are all worker commands valid before a world exists
  * (`lib/hooks/use-game-lifecycle.ts`'s `useSavesList`/`useLoadGameMutation`/`useNewGameMutation`,
- * the last reached through `CreateFactionForm` inside the dialog below). On success each navigates
- * to the map root itself (`mapHref()`) — never a hard `window.location.href` reload: the worker
- * already replaced the world in one store commit (`GameStore.beginWorldReplacement` +
- * `applyStateFrame`, spec §8), so there is nothing a fresh document would buy here that a client
- * route change doesn't already give for free.
+ * the last reached through `CreateFactionForm` below). On success each navigates to the map root
+ * itself (`mapHref()`) — never a hard `window.location.href` reload: the worker already replaced
+ * the world in one store commit (`GameStore.beginWorldReplacement` + `applyStateFrame`, spec §8),
+ * so there is nothing a fresh document would buy here that a client route change doesn't already
+ * give for free.
  *
- * New Game moves into a `Dialog` rather than its own route: the route table
- * (`client/routes.ts`) has no `/start/new` entry, and reusing `Dialog`/`useDialog` here is this
- * task's named reuse target rather than growing the route table for one form.
+ * New Game swaps a local `view` between the save list and `CreateFactionForm`'s own full-screen
+ * layout, rather than a dedicated route: the route table (`client/routes.ts`) has no `/start/new`
+ * entry, and the galaxy preview the form leads with wants the whole viewport, which a route change
+ * buys nothing over a local state swap already gives for free.
  */
 export function StartScreen() {
   const navigate = useNavigate();
@@ -42,7 +42,7 @@ export function StartScreen() {
   const loadGame = useLoadGameMutation();
   const exportSave = useExportSaveMutation();
   const importSave = useImportSaveMutation();
-  const newGameDialog = useDialog();
+  const [view, setView] = useState<"menu" | "new">("menu");
   const importInputRef = useRef<HTMLInputElement>(null);
   const [loadingName, setLoadingName] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -90,6 +90,10 @@ export function StartScreen() {
   const autosave = saves?.find((s) => s.name === AUTOSAVE_NAME);
   const manualSaves = saves?.filter((s) => s.name !== AUTOSAVE_NAME) ?? [];
 
+  if (view === "new") {
+    return <CreateFactionForm onSuccess={() => setView("menu")} onCancel={() => setView("menu")} />;
+  }
+
   return (
     <div className="w-full max-w-md flex flex-col gap-4">
       {autosave && (
@@ -125,7 +129,7 @@ export function StartScreen() {
 
       <Card>
         <CardHeader title="New Game" subtitle="Author a faction and drop into a fresh galaxy." />
-        <Button fullWidth onClick={newGameDialog.onOpen}>
+        <Button fullWidth onClick={() => setView("new")}>
           New Game
         </Button>
       </Card>
@@ -194,11 +198,6 @@ export function StartScreen() {
         {exportError && <EmptyState message={exportError} className="mt-2" />}
         {importError && <EmptyState message={importError} className="mt-2" />}
       </Card>
-
-      <Dialog open={newGameDialog.open} onClose={newGameDialog.onClose} modal size="sm">
-        <CardHeader title="New Game" subtitle="Author the faction you'll rule." />
-        <CreateFactionForm onSuccess={newGameDialog.onClose} />
-      </Dialog>
     </div>
   );
 }

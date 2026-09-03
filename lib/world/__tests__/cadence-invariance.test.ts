@@ -86,10 +86,18 @@ const TREASURY_TOL = 6e-2; // cycle12 arm only — honest baseline 2.0e-3–3.4e
  * (doubling FOUNDING_TICKS to 11,520): the base run's founding expense grows only ~0.4-0.5% past
  * 5,760 (the era genuinely is over by then, confirming the header's premise), while the honest
  * build12 diff drifts up to 3.96e-2 and the broken one to 9.72e-2 — the gap does not open with more
- * ticks, so widening the window buys nothing. The tolerance moves instead: 6e-2 sits between,
- * ~1.7x headroom over the honest baseline, ~1.6x under the break.
+ * ticks, so widening the window buys nothing.
+ *
+ * The map-generation rework (spec `docs/planned/logistics-lanes.md` §5: authored density grid +
+ * neighbourhood-graph lane selection replacing uniform placement) moves this fixture's honest
+ * reading again — colony founding timing rides the new lane/cluster topology, exactly the
+ * "colony timing" AGENTS names as expected to move with that rework. Re-measured on this fixture:
+ * build12 now reads 7.682e-2 (up from 3.56e-2). The break line was re-verified directly against
+ * the mis-scaled `spent = plan.cost × share × catchUp` mutation (directed-build.ts:737) rather than
+ * extrapolated: it now measures 1.357e-1. The tolerance sits between: 1.1e-1 clears the honest
+ * baseline with ~1.43x headroom, and the break sits ~1.23x above the tolerance — still caught.
  */
-const FOUNDING_TOL = 6e-2;
+const FOUNDING_TOL = 1.1e-1;
 // Adaptive-expectation guard: the memory update sub-steps at catchUpFactor(cadence.cycle) rather
 // than rate-scaling (lib/engine/expectation.ts), specifically BECAUSE it is nonlinear
 // (branch-switching) and therefore NOT invariant under the relaxation-rate's own scaling trick.

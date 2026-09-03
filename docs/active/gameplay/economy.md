@@ -366,7 +366,7 @@ POPULATION   run fourth - reads per-system satisfaction from ctx.results;
 MIGRATION    run fifth  - relocates population (conserved) along the
                           intra-faction open-edge topology (developed-both edges);
                           population flows down-unrest / up-headroom,
-                          distance-attenuated (gateways throttle it)
+                          distance-attenuated (crossing lanes throttle it)
 
 (goods move between systems separately, via directed logistics — see
  economy-autonomic-agency.md)

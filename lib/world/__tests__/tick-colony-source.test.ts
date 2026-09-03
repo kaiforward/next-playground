@@ -53,7 +53,9 @@ async function advanceToFirstEstablish(world: World, maxTicks: number): Promise<
 
 describe("runWorldTick — the seed source an establish project is founded from", () => {
   it("names a DEVELOPED system of the founding faction, never a neighbour's and never nothing", async () => {
-    const world = await advanceToFirstEstablish(generateWorld({ systemCount: 90, seed: 11 }), 60);
+    // This seed's galaxy funds its first colony-establish project at tick 71 — 100 ticks clears
+    // it with margin.
+    const world = await advanceToFirstEstablish(generateWorld({ systemCount: 90, seed: 11 }), 100);
     const establishes = world.constructionProjects.filter((p) => p.kind === "colony_establish");
     // Premise: the galaxy actually got as far as funding a colony, or there is nothing to check.
     expect(establishes.length).toBeGreaterThan(0);

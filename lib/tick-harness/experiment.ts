@@ -100,6 +100,9 @@ export interface ExperimentResult {
   /** The four pass/fail conservation identities. Saved rather than left in the console the run threw
    *  away: an arm's identities are part of what makes its calibration reads admissible at all. */
   conservation: HarnessResults["conservation"];
+  /** The map-generation acceptance instruments — corrected flow concentration, fuel-cost spread,
+   *  cross-faction lane count, beyond-crossing cohort. A candidate-generation comparison field. */
+  geography: HarnessResults["geography"];
   elapsedMs: number;
 }
 
@@ -129,6 +132,7 @@ export function buildExperimentResult(results: HarnessResults): ExperimentResult
     buildBurstSummary: results.buildBurstSummary,
     migrationThroughput: results.migrationThroughput,
     conservation: results.conservation,
+    geography: results.geography,
     elapsedMs: results.elapsedMs,
   };
 }

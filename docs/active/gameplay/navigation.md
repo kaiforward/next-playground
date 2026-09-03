@@ -22,7 +22,7 @@ Players start with one Shuttle. Fleets are fixed — there is no ship purchase (
 
 ### Fuel
 - Each connection has a fixed fuel cost (varies by distance)
-- Inter-region gateway jumps cost ~2.5x more fuel than intra-region jumps
+- Crossing-class lanes (a corridor's single long-haul link between two regions) cost ~2.5x more fuel than ordinary lanes — a gateway system's other lanes (a corridor's waypoint-band chain, or its own region's local lanes) price at the ordinary rate
 - Total fuel for a route = sum of all hop costs
 - Fuel is deducted entirely at departure (not during transit)
 - Refueling costs 2 CR per fuel unit at any station

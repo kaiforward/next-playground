@@ -1,21 +1,44 @@
 /** Shape of tuneable universe generation parameters. */
 interface UniverseGenConfig {
   SEED: number;
-  REGION_COUNT: number;
   TOTAL_SYSTEMS: number;
   MAP_SIZE: number;
   MAP_PADDING: number;
   POISSON_MIN_DISTANCE: number;
   POISSON_K_CANDIDATES: number;
-  REGION_MIN_DISTANCE: number;
-  INTRA_REGION_EXTRA_EDGES: number;
-  GATEWAY_FUEL_MULTIPLIER: number;
-  GATEWAYS_PER_BORDER: number;
+  /** Fraction (0–1) of the local-lane neighbourhood graph's cycle edges to prune, longest-first
+   *  (spec §5A). Formerly `INTRA_REGION_EXTRA_EDGES`, which ADDED random extra edges on top of an
+   *  MST — repurposed rather than retired now that the neighbourhood-graph criterion already
+   *  supplies the base lane graph, so this only trims surplus density. 0 (the shipped default):
+   *  measured relative-neighbourhood-graph density already lands in the ~1.3–1.6 lanes/system
+   *  target band without pruning (`lib/engine/universe-gen.ts`'s `GenParams.lanePruneFraction`
+   *  docstring carries the measurement). */
+  LANE_PRUNE_FRACTION: number;
+  CROSSING_FUEL_MULTIPLIER: number;
   INTRA_REGION_BASE_FUEL: number;
-  /** Max rejection sampling attempts before falling back to grid-jitter. */
-  MAX_PLACEMENT_ATTEMPTS: number;
   /** Minor factions seeded alongside the 8 majors. */
   MINOR_FACTION_COUNT: number;
+  /** Galaxy-shape cluster seed count — a region IS a cluster (spec §5), so this is also the
+   *  region count; there is no separate region knob. */
+  CLUSTER_COUNT: number;
+  /** Cluster size-roll skew: 0 = uniform draw, higher = a few large clusters and many small ones. */
+  CLUSTER_SIZE_SKEW: number;
+  /** Minimum distance enforced between two cluster seed centers. */
+  CLUSTER_SPACING: number;
+  /** Density-grid cells below this value read as true void (exactly 0), not merely sparse. */
+  VOID_FLOOR: number;
+  /** Extra corridor pairs beyond the connectivity-guaranteeing MST, per cluster seed. */
+  CORRIDORS_PER_CLUSTER: number;
+  /** Bias, 0–1, on the void-fraction threshold that decides whether a corridor pair's measured
+   *  seed-to-seed line reads as a crossing (mostly true void) or a band (mostly populated) — not a
+   *  probability. 0 pins every pair to band, 1 pins every pair to crossing; between the extremes it
+   *  biases which way a borderline line tips (`corridorStyleFor`, `lib/engine/density-field.ts`). */
+  CORRIDOR_STYLE_MIX: number;
+  /** Per-cluster peak-density swing: 0 = every cluster's peak density reads the same; higher values
+   *  dampen some clusters toward diffuse while others stay full. Never a placement/corridor knob —
+   *  it rolls from a stream derived from each seed's own position, never the main draw sequence
+   *  (`lib/engine/density-field.ts`). */
+  CLUSTER_TURBULENCE: number;
 }
 
 // ── Anchor configs ──────────────────────────────────────────────
@@ -23,19 +46,26 @@ interface UniverseGenConfig {
 /** Default universe: 600 systems in a 7000×7000 map. */
 const BASE_CONFIG: UniverseGenConfig = {
   SEED: 42,
-  REGION_COUNT: 24,
   TOTAL_SYSTEMS: 600,
   MAP_SIZE: 7000,
   MAP_PADDING: 0.10,
-  POISSON_MIN_DISTANCE: 180,
+  // Densest-core Poisson radius, sized so the authored geography holds the full requested system
+  // count: at 180 default knobs placed only ~48% of the request; 117 reaches ~99-100% at 600 and
+  // 5000 (seeds 42-44) without capping placement so early that draw order biases which clusters
+  // fill (owner-accepted 2026-09-01).
+  POISSON_MIN_DISTANCE: 117,
   POISSON_K_CANDIDATES: 30,
-  REGION_MIN_DISTANCE: 800,
-  INTRA_REGION_EXTRA_EDGES: 0.5,
-  GATEWAY_FUEL_MULTIPLIER: 2.5,
-  GATEWAYS_PER_BORDER: 3,
+  LANE_PRUNE_FRACTION: 0,
+  CROSSING_FUEL_MULTIPLIER: 2.5,
   INTRA_REGION_BASE_FUEL: 8,
-  MAX_PLACEMENT_ATTEMPTS: 500,
   MINOR_FACTION_COUNT: 12,
+  CLUSTER_COUNT: 24,
+  CLUSTER_SIZE_SKEW: 0.6,
+  CLUSTER_SPACING: 800,
+  VOID_FLOOR: 0.08,
+  CORRIDORS_PER_CLUSTER: 0.3,
+  CORRIDOR_STYLE_MIX: 0.5,
+  CLUSTER_TURBULENCE: 0,
 };
 
 /**
@@ -46,9 +76,9 @@ const BASE_CONFIG: UniverseGenConfig = {
 const TEN_K_OVERRIDES = {
   TOTAL_SYSTEMS: 10_000,
   MAP_SIZE: 25_000,
-  REGION_COUNT: 60,
-  REGION_MIN_DISTANCE: 2_500,
   MINOR_FACTION_COUNT: 18,
+  CLUSTER_COUNT: 60,
+  CLUSTER_SPACING: 2_500,
 } as const;
 
 /**
@@ -89,19 +119,6 @@ export function genConfigForSystemCount(systemCount: number): UniverseGenConfig 
     MAP_SIZE: Math.round(
       interpolateBySqrtN(systemCount, BASE_CONFIG.MAP_SIZE, TEN_K_OVERRIDES.MAP_SIZE)
     ),
-    REGION_COUNT: Math.max(
-      1,
-      Math.round(
-        interpolateBySqrtN(systemCount, BASE_CONFIG.REGION_COUNT, TEN_K_OVERRIDES.REGION_COUNT)
-      )
-    ),
-    REGION_MIN_DISTANCE: Math.round(
-      interpolateBySqrtN(
-        systemCount,
-        BASE_CONFIG.REGION_MIN_DISTANCE,
-        TEN_K_OVERRIDES.REGION_MIN_DISTANCE
-      )
-    ),
     MINOR_FACTION_COUNT: Math.max(
       1,
       Math.round(
@@ -111,6 +128,15 @@ export function genConfigForSystemCount(systemCount: number): UniverseGenConfig 
           TEN_K_OVERRIDES.MINOR_FACTION_COUNT
         )
       )
+    ),
+    CLUSTER_COUNT: Math.max(
+      1,
+      Math.round(
+        interpolateBySqrtN(systemCount, BASE_CONFIG.CLUSTER_COUNT, TEN_K_OVERRIDES.CLUSTER_COUNT)
+      )
+    ),
+    CLUSTER_SPACING: Math.round(
+      interpolateBySqrtN(systemCount, BASE_CONFIG.CLUSTER_SPACING, TEN_K_OVERRIDES.CLUSTER_SPACING)
     ),
   };
 }

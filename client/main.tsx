@@ -21,14 +21,14 @@ import { AxeAccessibility } from "@/components/dev-tools/axe-accessibility";
 import { StarMap } from "@/components/map/star-map";
 import { SystemPanel } from "@/components/panels/system-panel";
 import { FactionPanel } from "@/components/panels/faction-panel";
-import { StyleguidePanel } from "@/components/panels/styleguide-panel";
+import { StyleguidePage } from "@/components/styleguide/styleguide-page";
 import { StartScreen } from "@/components/start/start-screen";
 import { renderErrorFallback } from "@/components/ui/error-fallback";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useNavigate } from "@/components/ui/link-provider";
 import { AUTOSAVE_NAME } from "@/lib/world/save";
 import { WouterRuntimeProvider } from "./wouter-link";
-import { useRoute, resolveRouteGate, shouldRedirectToStart } from "./routes";
+import { useRoute, resolveRouteGate, shouldRedirectToStart, routeWorldNeed } from "./routes";
 import { startHref } from "@/lib/utils/route-hrefs";
 import type { InboundMessage } from "./worker/game-worker";
 
@@ -187,15 +187,15 @@ function RouteBody() {
   // `client/routes.ts`'s own docstring (Gate C smoke finding: without this distinction, New Game
   // navigated to the map route and was immediately redirected straight back to `/start`).
   const isReplacing = useGameSlice(selectIsReplacing);
-  const routeIsStart = route.name === "start";
+  const need = routeWorldNeed(route.name);
 
   useEffect(() => {
-    if (shouldRedirectToStart(worldVersion, routeIsStart, isReplacing)) {
+    if (shouldRedirectToStart(worldVersion, need, isReplacing)) {
       navigate(startHref(), { replace: true });
     }
-  }, [worldVersion, routeIsStart, isReplacing, navigate]);
+  }, [worldVersion, need, isReplacing, navigate]);
 
-  const gate = resolveRouteGate(worldVersion, routeIsStart, isReplacing);
+  const gate = resolveRouteGate(worldVersion, need, isReplacing);
 
   if (gate === "boot-loading") return <BootLoading />;
   if (gate === "start") {
@@ -233,12 +233,10 @@ function RouteBody() {
           <MapRoot />
         </GameShell>
       );
+    // Full page on purpose — no GameShell: the styleguide is a world-free dev reference and the
+    // docked-panel frame was too narrow for component demos and the galaxy preview.
     case "styleguide":
-      return (
-        <GameShell>
-          <StyleguidePanel />
-        </GameShell>
-      );
+      return <StyleguidePage />;
   }
 }
 

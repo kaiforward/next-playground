@@ -73,6 +73,17 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   (`docs/planned/logistics-lanes.md`; evidence + build plan in
   `docs/build-plans/logistics-lanes.md`). Map-generation sub-project first (its build plan is
   written), lane mechanics after, on `shared/logistics-lanes`.
+- **[S] Map label culling/priority — system names hide when they don't fit.** At very low star
+  spacing and high cluster tightness (far from defaults, but a deliberately interesting map type)
+  system labels overlap into illegibility. Fix in rendering, not generation: EU5/Vic3-style —
+  a label draws only when it has room, with priority (homeworlds, developed, selected always keep
+  theirs) and zoom revealing more. First customer of the label management the map needs anyway
+  once wars/battles/ship units widen what it shows at full zoom-out. Its own sub-PR into
+  `shared/logistics-lanes`, after the map-gen sub-project.
+  *Next step:* interaction design pass on the priority/culling rule, then implement on the Pixi
+  label layer.
+  *Don't:* enforce a larger generation-time min distance to protect labels — a UI legibility
+  concern must not constrain galaxy geometry, and the dense-packed maps are a feature.
 - **[M] Map drawing tool — player paints where stars generate.** Second author of the map-gen
   density grid (`docs/planned/logistics-lanes.md` §5): a New Game canvas writes the same 0–1 grid
   the procedural clusters produce, so galaxy shape becomes paintable with no second generation

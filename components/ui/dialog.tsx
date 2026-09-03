@@ -30,7 +30,8 @@ const dialogStyles = tv({
     size: {
       sm: "",
       md: "",
-      lg: ""
+      lg: "",
+      xl: ""
     }
   },
   defaultVariants: {
@@ -40,6 +41,9 @@ const dialogStyles = tv({
     { modal: true, size: 'sm', className: "w-[480px]" },
     { modal: true, size: 'md', className: "w-[780px]" },
     { modal: true, size: 'lg', className: "w-[960px]" },
+    // Near-viewport: for content that wants real screen real estate (the New Game galaxy preview)
+    // rather than a form-sized card.
+    { modal: true, size: 'xl', className: "w-[95vw] max-w-[1400px] max-h-[90vh] overflow-y-auto" },
   ]
 })
 

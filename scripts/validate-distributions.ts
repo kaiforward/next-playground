@@ -139,7 +139,7 @@ function run() {
   // ── Region coherence ─────────────────────────────────────────
   const totalCoherenceViolations = results.reduce((s, r) => s + r.coherenceViolations, 0);
   const totalMonotonous = results.reduce((s, r) => s + r.monotonousRegions, 0);
-  const totalRegions = results.length * DEFAULT_PARAMS.regionCount;
+  const totalRegions = results.length * DEFAULT_PARAMS.shapeKnobs.clusterCount;
 
   console.log("── Region Economy Spread ──");
   console.log(`Total regions checked: ${totalRegions}`);

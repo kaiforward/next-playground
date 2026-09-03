@@ -527,6 +527,80 @@ export interface FoundingStockSummary {
   cadenceMarkTick: number | null;
 }
 
+// ── Geography acceptance instruments ─────────────────────────────
+
+/** One faction's top-decile flow concentration over its own trafficked edges — see
+ *  `GeographySummary.topDecileShareByFaction` for the gate this row is admitted under. */
+export interface FactionTopDecileShareEntry {
+  factionId: string;
+  /** Trafficked (nonzero-volume) edges this faction's own hauls crossed — the gate's own numerator,
+   *  exposed so a reader can check a row actually cleared `GEOGRAPHY_MIN_TRAFFICKED_EDGES`. */
+  trafficked: number;
+  topDecileShare: number;
+}
+
+/** One side of the beyond-crossing cohort: colonies whose cluster matches their faction's
+ *  homeworld cluster ("interior") vs colonies whose cluster differs ("beyond-crossing"). */
+export interface BeyondCrossingCohortEntry {
+  cohort: "interior" | "beyond-crossing";
+  /** Developed colonies in this cohort — the row's own denominator. */
+  n: number;
+  /** Mean accumulated colonist-delivery inflow over the cohort. 0 when n is 0 or inflow was never
+   *  supplied (unmeasured and "no inflow" read identically for a cohort mean). */
+  meanMigrantInflow: number;
+  /** Mean `populationTrend` (the founding-excluded growth-rate reading) over cohort systems that
+   *  carry one. 0 when none do. */
+  meanPopulationTrend: number;
+}
+
+/**
+ * The map-generation acceptance instruments (spec §5): whether the generated galaxy's geography
+ * actually concentrates flow, differentiates lane cost, and makes settling beyond a crossing
+ * measurably costlier — reachability mirrors the shipped, ownership-blind router exactly (hop-BFS
+ * over the full connection graph, `DIRECTED_LOGISTICS.MAX_HOPS`-capped); the specific lane path a
+ * haul is placed onto is this module's own fuel-weighted shortest-path model over that same full
+ * adjacency, since the real matcher never records a chosen path.
+ */
+export interface GeographySummary {
+  /** Share of edge-crossing haul volume the top decile of trafficked edges carries, aggregate
+   *  across every faction's own projection. 0 when no edge carries any projected flow. */
+  topDecileShare: number;
+  /** Same measure per faction, omitted (not zero-filled) below `GEOGRAPHY_MIN_TRAFFICKED_EDGES`
+   *  trafficked edges — too few edges to read a decile from. */
+  topDecileShareByFaction: FactionTopDecileShareEntry[];
+  /** p90/p10 of intra-faction lane fuelCost — the premise-4 cohort: undirected same-faction edges,
+   *  every control state. 0 when the cohort is empty. */
+  fuelP90P10All: number;
+  /** Same ratio restricted to the sub-cohort carrying nonzero projected flow — the one routing
+   *  decisions actually read; the all-edges aggregate is gameable by untrafficked fringe edges. */
+  fuelP90P10Trafficked: number;
+  /** Lanes (undirected, deduplicated) whose two endpoint systems are controlled by different
+   *  factions. */
+  crossFactionLaneCount: number;
+  /** Colony-cluster-vs-homeworld-cluster cohort: `["interior", "beyond-crossing"]`, always both
+   *  rows present even at 0 colonies (an empty cohort reads 0/0/0, never a missing row). */
+  beyondCrossingCohort: BeyondCrossingCohortEntry[];
+  /** Hauls the shipped router itself could not have routed: no path at all over the full,
+   *  ownership-blind connection graph, or hop-minimal distance over `DIRECTED_LOGISTICS.MAX_HOPS`.
+   *  A projection that silently drops most hauls must be visible here, not read as low traffic. */
+  unreachableHaulCount: number;
+  unreachableHaulVolume: number;
+  /** unreachableHaulVolume / (total haul volume across every flow event, placed or not). 0 when
+   *  no hauls were recorded at all (never NaN) — the share reads directly against total volume
+   *  rather than needing `unreachableHaulVolume` compared against a number computed elsewhere. */
+  unreachableHaulVolumeShare: number;
+  /** Placed hauls whose modelled lane path transits at least one intermediate system owned by a
+   *  faction that is neither the hauling faction nor null — the spec-divergence metric: the shipped
+   *  router is ownership-blind and routes through foreign-held space freely; this counts how much
+   *  of the traffic actually does. */
+  foreignTransitHaulCount: number;
+  foreignTransitHaulVolume: number;
+  /** foreignTransitHaulVolume / (total PLACED haul volume, not edge-multiplied). 0 when nothing was
+   *  placed (never NaN). Denominator is placed volume, not total recorded volume — an unreachable
+   *  haul has no path to transit anything with. */
+  foreignTransitHaulVolumeShare: number;
+}
+
 // ── Region overview ─────────────────────────────────────────────
 
 export interface RegionOverviewEntry {
@@ -624,4 +698,7 @@ export interface HarnessResults {
    *  assumed-1.0 sizing can over-serve a deficit once the worked-prefix fold lifts realised yield
    *  above 1, and this catches the marginal level left idle. */
   tierZeroIdle: TierZeroIdleSummary;
+  /** The map-generation acceptance instruments (spec §5): corrected flow concentration, fuel-cost
+   *  spread over both cohorts, cross-faction lane count, the beyond-crossing migration cohort. */
+  geography: GeographySummary;
 }

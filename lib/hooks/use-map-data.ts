@@ -34,7 +34,10 @@ export interface ConnectionData {
   fromId: string;
   toId: string;
   fuelCost: number;
-  isGateway: boolean;
+  /** The engine's crossing-class flag, read straight from `universe.connections` — never derived
+   *  from comparing endpoint regions (region = cluster now; an ordinary band-chain link can cross a
+   *  cluster boundary without being a crossing-class lane). */
+  isCrossing: boolean;
 }
 
 export interface MapData {
@@ -132,12 +135,12 @@ export function useMapData({
         fromId: conn.fromSystemId,
         toId: conn.toSystemId,
         fuelCost: conn.fuelCost,
-        isGateway: systemRegionMap.get(conn.fromSystemId) !== systemRegionMap.get(conn.toSystemId),
+        isCrossing: conn.isCrossing,
       });
     }
 
     return result;
-  }, [universe.connections, systemRegionMap]);
+  }, [universe.connections]);
 
   // ── Gateway target regions ────────────────────────────────────
   const selectedGatewayTargets = useMemo(() => {

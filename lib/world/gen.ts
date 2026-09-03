@@ -6,7 +6,8 @@
  */
 
 import { createSystemMarkets } from "@/lib/world/markets";
-import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
+import { generateUniverse, type GenParams, type GenShapeOverrides } from "@/lib/engine/universe-gen";
+import { DENSITY_RADIUS_EXPONENT } from "@/lib/engine/system-placement";
 import { deriveDominantEconomy, type PlayerFactionInput } from "@/lib/engine/faction-gen";
 import { countColumns, qualColumns, yieldColumns, effColumns } from "@/lib/engine/resources";
 import { genConfigForSystemCount, REGION_NAMES } from "@/lib/constants/universe-gen";
@@ -30,6 +31,10 @@ export interface GenerateWorldOptions {
   systemCount: number;
   seed: number;
   playerFaction?: PlayerFactionInput;
+  /** New Game's optional structure/placement knobs (`lib/schemas/game-setup.ts`'s
+   *  `galaxyShapeSchema`) — omitted fields keep `buildGenParams`'s engine default, which is what
+   *  keeps a knob-free `newGame` byte-identical to today's world. */
+  shape?: GenShapeOverrides;
 }
 
 /**
@@ -55,22 +60,33 @@ function mintId(minter: IdMinter, prefix: string): string {
 export function buildGenParams(
   seed: number,
   config: ReturnType<typeof genConfigForSystemCount>,
+  shape?: GenShapeOverrides,
 ): GenParams {
   return {
     seed,
-    regionCount: config.REGION_COUNT,
     totalSystems: config.TOTAL_SYSTEMS,
     mapSize: config.MAP_SIZE,
     mapPadding: config.MAP_PADDING,
     poissonMinDistance: config.POISSON_MIN_DISTANCE,
     poissonKCandidates: config.POISSON_K_CANDIDATES,
-    regionMinDistance: config.REGION_MIN_DISTANCE,
-    extraEdgeFraction: config.INTRA_REGION_EXTRA_EDGES,
-    gatewayFuelMultiplier: config.GATEWAY_FUEL_MULTIPLIER,
-    gatewaysPerBorder: config.GATEWAYS_PER_BORDER,
+    lanePruneFraction: config.LANE_PRUNE_FRACTION,
+    crossingFuelMultiplier: config.CROSSING_FUEL_MULTIPLIER,
     intraRegionBaseFuel: config.INTRA_REGION_BASE_FUEL,
-    maxPlacementAttempts: config.MAX_PLACEMENT_ATTEMPTS,
     minorFactionCount: config.MINOR_FACTION_COUNT,
+    shapeKnobs: {
+      clusterCount: shape?.clusterCount ?? config.CLUSTER_COUNT,
+      sizeSkew: shape?.sizeSkew ?? config.CLUSTER_SIZE_SKEW,
+      clusterSpacing: shape?.clusterSpacing ?? config.CLUSTER_SPACING,
+      voidFloor: shape?.voidFloor ?? config.VOID_FLOOR,
+      corridorsPerCluster: shape?.corridorsPerCluster ?? config.CORRIDORS_PER_CLUSTER,
+      corridorStyle: shape?.corridorStyle ?? config.CORRIDOR_STYLE_MIX,
+      clusterTurbulence: shape?.clusterTurbulence ?? config.CLUSTER_TURBULENCE,
+    },
+    // Gate-A defaults (1 / 1 / DENSITY_RADIUS_EXPONENT) reproduce today's world exactly — the
+    // back-compat pin (`lib/world/__tests__/gen.test.ts`).
+    mapSizeScale: shape?.mapSizeScale ?? 1,
+    minDistanceScale: shape?.starSpacing ?? 1,
+    densityRadiusExponent: shape?.clusterTightness ?? DENSITY_RADIUS_EXPONENT,
   };
 }
 
@@ -84,7 +100,7 @@ export function buildGenParams(
 export function generateWorld(options: GenerateWorldOptions): World {
   const { systemCount, seed } = options;
   const config = genConfigForSystemCount(systemCount);
-  const params = buildGenParams(seed, config);
+  const params = buildGenParams(seed, config, options.shape);
   const universe = generateUniverse(params, REGION_NAMES, options.playerFaction);
 
   const minter: IdMinter = { next: 0 };
@@ -174,6 +190,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
     fromId: systemIds[c.fromSystemIndex],
     toId: systemIds[c.toSystemIndex],
     fuelCost: c.fuelCost,
+    isCrossing: c.isCrossing,
   }));
 
   // ── Markets (developed systems only) ──
@@ -234,7 +251,10 @@ export function generateWorld(options: GenerateWorldOptions): World {
     meta: {
       seed,
       systemCount: config.TOTAL_SYSTEMS,
-      mapSize: config.MAP_SIZE,
+      // The EFFECTIVE extent placement actually used (`mapSizeScale` already applied), never the
+      // raw config value — client tile bounds and the Voronoi cache divide coordinates by this, so
+      // recording the unscaled size would leave every system past it with no tile and no cell.
+      mapSize: universe.mapSize,
       currentTick: 0,
     },
     player,

@@ -24,17 +24,17 @@ export class ConnectionObject extends Container {
   ) {
     // Style fingerprint: skip redraw when only style-relevant flags are unchanged
     // Positions are immutable (static tile data), so only style flags matter
-    const fingerprint = `${data.isGateway}`;
+    const fingerprint = `${data.isCrossing}`;
     if (this.connectionId === data.id && fingerprint === this.styleFingerprint) return;
     this.connectionId = data.id;
     this.styleFingerprint = fingerprint;
 
     this.line.clear();
 
-    if (data.isGateway) {
-      // Gateway trunk route — amber "lit pathway": a wide soft glow underlay
+    if (data.isCrossing) {
+      // Crossing-class lane — amber "lit pathway": a wide soft glow underlay
       // with a crisp core line stroked over it.
-      for (const s of [EDGE.gatewayGlow, EDGE.gateway]) {
+      for (const s of [EDGE.crossingGlow, EDGE.crossing]) {
         this.line.moveTo(fromX, fromY);
         this.line.lineTo(toX, toY);
         this.line.stroke({ color: s.color, width: s.width, alpha: s.alpha });

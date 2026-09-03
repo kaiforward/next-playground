@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
-import { useRoute, resolveRouteGate, shouldRedirectToStart } from "../routes";
+import { useRoute, resolveRouteGate, shouldRedirectToStart, routeWorldNeed } from "../routes";
 import { createGameStore, selectIsReplacing } from "@/lib/store/game-store";
 
 function RouteProbe() {
@@ -109,21 +109,21 @@ describe("useRoute", () => {
 // found on real-browser Gate C smoke) have fast, no-Worker regression tests.
 describe("resolveRouteGate", () => {
   it("shows boot-loading before the very first frame lands, regardless of route", () => {
-    expect(resolveRouteGate(null, true, false)).toBe("boot-loading");
-    expect(resolveRouteGate(null, false, false)).toBe("boot-loading");
+    expect(resolveRouteGate(null, "start", false)).toBe("boot-loading");
+    expect(resolveRouteGate(null, "world", false)).toBe("boot-loading");
   });
 
-  it("shows boot-loading for a non-start route while no world exists (briefly, before the redirect effect fires)", () => {
-    expect(resolveRouteGate(0, false, false)).toBe("boot-loading");
+  it("shows boot-loading for a world-needing route while no world exists (briefly, before the redirect effect fires)", () => {
+    expect(resolveRouteGate(0, "world", false)).toBe("boot-loading");
   });
 
   it("renders the start route normally once the first frame has landed, world or no world", () => {
-    expect(resolveRouteGate(0, true, false)).toBe("start");
-    expect(resolveRouteGate(42, true, false)).toBe("start");
+    expect(resolveRouteGate(0, "start", false)).toBe("start");
+    expect(resolveRouteGate(42, "start", false)).toBe("start");
   });
 
   it("renders the matched route normally once a world exists", () => {
-    expect(resolveRouteGate(42, false, false)).toBe("route");
+    expect(resolveRouteGate(42, "world", false)).toBe("route");
   });
 
   it("does not fall back to boot-loading on a mid-game world-replacement reset (worldVersion 0, still on /start)", () => {
@@ -131,29 +131,49 @@ describe("resolveRouteGate", () => {
     // already mounted (routeIsStart=true) and dispatches newGame/loadGame, which resets
     // worldVersion to 0 — this must render "start", never "boot-loading", or the dialog showing
     // the pending "Generating…" button would be torn down mid-submit.
-    expect(resolveRouteGate(0, true, false)).toBe("start");
+    expect(resolveRouteGate(0, "start", false)).toBe("start");
   });
 
-  it("shows boot-loading (not start) on a non-start route while a replacement is in flight", () => {
-    expect(resolveRouteGate(0, false, true)).toBe("boot-loading");
+  it("shows boot-loading (not start) on a world-needing route while a replacement is in flight", () => {
+    expect(resolveRouteGate(0, "world", true)).toBe("boot-loading");
+  });
+
+  it("renders a world-free route (the styleguide) with no world at all — only the boot window gates it", () => {
+    expect(resolveRouteGate(0, "world-free", false)).toBe("route");
+    expect(resolveRouteGate(42, "world-free", false)).toBe("route");
+    expect(resolveRouteGate(null, "world-free", false)).toBe("boot-loading");
+  });
+});
+
+describe("routeWorldNeed", () => {
+  it("maps each route name to what it needs from the world", () => {
+    expect(routeWorldNeed("start")).toBe("start");
+    expect(routeWorldNeed("styleguide")).toBe("world-free");
+    expect(routeWorldNeed("map")).toBe("world");
+    expect(routeWorldNeed("system")).toBe("world");
+    expect(routeWorldNeed("faction")).toBe("world");
   });
 });
 
 describe("shouldRedirectToStart", () => {
   it("redirects on a genuine no-world boot", () => {
-    expect(shouldRedirectToStart(0, false, false)).toBe(true);
+    expect(shouldRedirectToStart(0, "world", false)).toBe(true);
   });
 
   it("never redirects while a route replacement is in flight", () => {
-    expect(shouldRedirectToStart(0, false, true)).toBe(false);
+    expect(shouldRedirectToStart(0, "world", true)).toBe(false);
   });
 
   it("never redirects while already on /start", () => {
-    expect(shouldRedirectToStart(0, true, false)).toBe(false);
+    expect(shouldRedirectToStart(0, "start", false)).toBe(false);
   });
 
   it("never redirects once a world exists", () => {
-    expect(shouldRedirectToStart(42, false, false)).toBe(false);
+    expect(shouldRedirectToStart(42, "world", false)).toBe(false);
+  });
+
+  it("never redirects a world-free route (the styleguide), even with no world", () => {
+    expect(shouldRedirectToStart(0, "world-free", false)).toBe(false);
   });
 });
 
@@ -179,11 +199,10 @@ describe("the New Game swap-window redirect (Gate C smoke finding A)", () => {
     // state frame has NOT arrived yet: this is the exact window the real bug lives in.
     let snapshot = store.getSnapshot();
     const isReplacing = selectIsReplacing(snapshot);
-    const routeIsStart = false;
 
     expect(isReplacing).toBe(true);
-    expect(shouldRedirectToStart(snapshot.worldVersion, routeIsStart, isReplacing)).toBe(false);
-    expect(resolveRouteGate(snapshot.worldVersion, routeIsStart, isReplacing)).toBe("boot-loading");
+    expect(shouldRedirectToStart(snapshot.worldVersion, "world", isReplacing)).toBe(false);
+    expect(resolveRouteGate(snapshot.worldVersion, "world", isReplacing)).toBe("boot-loading");
 
     // The new world's own frame lands (worldVersion climbs past the replacement floor).
     store.applyStateFrame({ frameSeq: 1, worldVersion: 6, slices: {} });
@@ -191,7 +210,7 @@ describe("the New Game swap-window redirect (Gate C smoke finding A)", () => {
     const isReplacingAfter = selectIsReplacing(snapshot);
 
     expect(isReplacingAfter).toBe(false);
-    expect(resolveRouteGate(snapshot.worldVersion, routeIsStart, isReplacingAfter)).toBe("route");
+    expect(resolveRouteGate(snapshot.worldVersion, "world", isReplacingAfter)).toBe("route");
   });
 
   it("still redirects to /start on a genuine fresh-boot no-world frame (no replacement in flight)", () => {
@@ -204,7 +223,7 @@ describe("the New Game swap-window redirect (Gate C smoke finding A)", () => {
     const isReplacing = selectIsReplacing(snapshot);
 
     expect(isReplacing).toBe(false);
-    expect(shouldRedirectToStart(snapshot.worldVersion, false, isReplacing)).toBe(true);
-    expect(resolveRouteGate(snapshot.worldVersion, false, isReplacing)).toBe("boot-loading");
+    expect(shouldRedirectToStart(snapshot.worldVersion, "world", isReplacing)).toBe(true);
+    expect(resolveRouteGate(snapshot.worldVersion, "world", isReplacing)).toBe("boot-loading");
   });
 });

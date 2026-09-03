@@ -9,6 +9,11 @@
  * legitimately omit does NOT need a bump: the field simply stays `undefined` on
  * load, which is correct.
  *
+ * A new REQUIRED field does not need a bump where the load boundary itself supplies the only value
+ * an old save could ever have carried: `WorldConnection.isCrossing` postdates every save through
+ * v17 and `normalizeConnectionCrossing` (below) defaults it to `false`, which is exactly what a
+ * pre-crossing world's every lane was — so an old save loads correct rather than merely loadable.
+ *
  * A REMOVED field needs a bump only where losing its value misreads the world.
  * Removing purely transient state does not: `WorldBuilding.collapseDebt` moved to
  * `WorldSystem.collapseDebt` unbumped because the decay channel's debt is a regime
@@ -95,7 +100,24 @@ export function deserialiseWorld(json: string): DeserialiseResult {
     return { ok: false, error: "Save file's world is missing required meta fields" };
   }
 
-  return { ok: true, world: rebuildWorkedYieldColumns(parsed.world) };
+  return { ok: true, world: rebuildWorkedYieldColumns(normalizeConnectionCrossing(parsed.world)) };
+}
+
+/**
+ * `WorldConnection.isCrossing` postdates every save through v17 — an old save's connection rows
+ * simply lack the key despite the guard above asserting the parsed value already matches `World`.
+ * Defaulting it to `false` (not crossing) is the safe reading: it's the same value an intra-cluster
+ * or band-chain lane already carries, so a pre-migration save just shows no crossing-class lanes
+ * until the world regenerates them, rather than mis-highlighting ordinary lanes orange.
+ */
+function normalizeConnectionCrossing(world: World): World {
+  return {
+    ...world,
+    connections: world.connections.map((c) => ({
+      ...c,
+      isCrossing: typeof c.isCrossing === "boolean" ? c.isCrossing : false,
+    })),
+  };
 }
 
 /**
@@ -138,10 +160,10 @@ export function rebuildWorkedYieldColumns(world: World): World {
 /**
  * Spot-check every save's world must pass: an object with a `meta` object
  * whose `currentTick`/`seed`/`mapSize`/`systemCount` are numeric, plus
- * `systems`/`bodies`/`buildings` each present as an array. The three arrays are
- * checked because `rebuildWorkedYieldColumns` (below, in this same `ok` arm)
- * dereferences `world.bodies`/`world.buildings`/`world.systems` unconditionally —
- * without this guard a save missing one of them would throw out of
+ * `systems`/`bodies`/`buildings`/`connections` each present as an array. The four arrays are
+ * checked because `rebuildWorkedYieldColumns` and `normalizeConnectionCrossing` (below, in this
+ * same `ok` arm) dereference `world.bodies`/`world.buildings`/`world.systems`/`world.connections`
+ * unconditionally — without this guard a save missing one of them would throw out of
  * `deserialiseWorld` instead of failing cleanly with `{ ok: false }`. `mapSize`
  * and `systemCount` are checked because the client tile geometry divides by
  * `mapSize` — a save missing it would silently produce NaN tile bounds
@@ -173,6 +195,7 @@ function isWorldShaped(value: unknown): value is World {
   return (
     "systems" in value && Array.isArray(value.systems) &&
     "bodies" in value && Array.isArray(value.bodies) &&
-    "buildings" in value && Array.isArray(value.buildings)
+    "buildings" in value && Array.isArray(value.buildings) &&
+    "connections" in value && Array.isArray(value.connections)
   );
 }
