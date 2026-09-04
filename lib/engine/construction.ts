@@ -347,7 +347,7 @@ function isSurvivalBuild(p: Proposal): boolean {
  * `fundQueue`'s input the value-order model prescribes (docs/active/gameplay/colonisation.md):
  *   1. housing — the proactive population substrate leads (no served-demand ROI of its own);
  *   2. survival-serving industry (water, food) by descending ROI;
- *   3. everything else (industry, colonies, centres) by descending ROI.
+ *   3. everything else (industry, colonies, centres, lane upgrades) by descending ROI.
  * Ties break by systemId then first-item type, a total order independent of input order (determinism).
  * A proposal is atomic — its gate-first `items` are never split, so a bundled academy stays ahead of
  * the production it gates. The caller expands each proposal into its item rows and prepends the
@@ -363,6 +363,8 @@ export function orderProposals(proposals: Proposal[]): Proposal[] {
         return `${p.systemId}|${p.items[0]?.buildingType ?? ""}`;
       case "colony_establish":
         return `${p.systemId}|colony`;
+      case "lane_upgrade":
+        return `${p.laneKey}|lane`;
       default: {
         const _exhaustive: never = p;
         return _exhaustive;

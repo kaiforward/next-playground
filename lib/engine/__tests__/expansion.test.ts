@@ -77,12 +77,14 @@ describe("scoreClaimCandidate", () => {
     expect(scoreClaimCandidate(extreme, w, PEOPLE_LAND_MAX)).toBeCloseTo(w.habitable + w.diversity, 9);
   });
 
-  // ── Prove 2: SCORE_FLOOR still excludes exactly the zero-substrate candidates on the new scale ──
+  // ── Prove 2: SCORE_FLOOR (0) no longer excludes a zero-substrate candidate — it clears the floor
+  // like anything else and simply ranks last, on the new adjacency-only reach ──
   describe("EXPANSION.SCORE_FLOOR on the normalised scale", () => {
-    it("excludes an exactly-zero-substrate candidate", () => {
+    it("clears the floor for an exactly-zero-substrate candidate — barren is claimable, just last in line", () => {
       const zero = cand({ systemId: "dead" });
-      expect(scoreClaimCandidate(zero, EXPANSION.SCORE_WEIGHTS, PEOPLE_LAND_MAX))
-        .toBeLessThan(EXPANSION.SCORE_FLOOR);
+      const score = scoreClaimCandidate(zero, EXPANSION.SCORE_WEIGHTS, PEOPLE_LAND_MAX);
+      expect(score).toBe(0);
+      expect(score).toBeGreaterThanOrEqual(EXPANSION.SCORE_FLOOR);
     });
     it("clears the floor for the smallest realistic single-resource-type candidate, even at max reach", () => {
       // One present resource type, no habitable land, at the worst (furthest) in-reach hop count.
@@ -158,6 +160,22 @@ describe("proposeFactionClaims", () => {
     const out = proposeFactionClaims("f1", [dead], PARAMS);
     expect(out).toHaveLength(1);
     expect(out[0].systemId).toBe("dead-but-claimable");
+  });
+  it("claims a fully zero-substrate candidate under the real EXPANSION floor — barren is claimable, last in line", () => {
+    // EXPANSION.SCORE_FLOOR is 0 (not this file's own stricter PARAMS.scoreFloor), so a candidate with
+    // no habitable land AND no resource deposit — score exactly 0 — still clears it and gets proposed
+    // when it is the faction's only in-reach option, exactly as the develop-tier floor never gated it.
+    const barren = cand({ systemId: "barren" });
+    const out = proposeFactionClaims("f1", [barren], { ...PARAMS, scoreFloor: EXPANSION.SCORE_FLOOR });
+    expect(out).toEqual([{ factionId: "f1", systemId: "barren", score: 0 }]);
+  });
+  it("ranks a barren adjacent system after a substantive one in the same call", () => {
+    const barren = cand({ systemId: "a-barren" });
+    const rich = cand({ systemId: "z-rich", peopleLand: 100, resourceDiversity: 3 });
+    const out = proposeFactionClaims("f1", [barren, rich], {
+      ...PARAMS, scoreFloor: EXPANSION.SCORE_FLOOR, maxClaimsPerCycle: 2,
+    });
+    expect(out.map((p) => p.systemId)).toEqual(["z-rich", "a-barren"]);
   });
   it("is deterministic and ranks by (score, systemId) — independent of input order", () => {
     const a = cand({ systemId: "a", peopleLand: 100 });

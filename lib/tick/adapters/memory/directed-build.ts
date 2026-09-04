@@ -10,7 +10,7 @@ import type {
   BuildOpportunityUpdate,
   ColonyOpportunityUpdate,
 } from "@/lib/tick/world/directed-build-world";
-import type { WorldConstructionProject } from "@/lib/world/types";
+import type { WorldConstructionProject, WorldLane } from "@/lib/world/types";
 import { developmentRefs, type DevelopmentRefs } from "@/lib/engine/development";
 import { sumResourceVector } from "@/lib/engine/resources";
 import type { LaneLevelIncrease } from "@/lib/engine/lanes";
@@ -51,6 +51,7 @@ export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
   constructor(
     private readonly systems: SystemBuildRow[],
     constructionProjects: WorldConstructionProject[] = [],
+    private readonly lanes: WorldLane[] = [],
   ) {
     this.constructionProjects = constructionProjects;
   }
@@ -79,6 +80,10 @@ export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
   async getConstructionProjects(factionKeys: Array<string | null>): Promise<WorldConstructionProject[]> {
     const set = new Set(factionKeys);
     return this.constructionProjects.filter((p) => set.has(p.factionId));
+  }
+
+  async getLanes(): Promise<WorldLane[]> {
+    return this.lanes;
   }
 
   async applyBuildingIncreases(updates: BuildBuildingUpdate[]): Promise<void> {

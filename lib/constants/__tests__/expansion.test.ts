@@ -11,9 +11,9 @@ describe("EXPANSION constants", () => {
     expect(EXPANSION.REACH_JUMPS).toBeLessThanOrEqual(DIRECTED_BUILD.MAX_HOPS);
   });
 
-  it("keeps claims gradual (small per-cycle cap, permissive positive floor)", () => {
+  it("keeps claims gradual on a per-cycle cap; the score floor no longer excludes zero-substrate systems", () => {
     expect(EXPANSION.MAX_CLAIMS_PER_CYCLE).toBeGreaterThanOrEqual(1);
-    expect(EXPANSION.SCORE_FLOOR).toBeGreaterThan(0);
+    expect(EXPANSION.SCORE_FLOOR).toBe(0);
   });
 
   it("carries the substrate + proximity score weights and a positive colony seed", () => {

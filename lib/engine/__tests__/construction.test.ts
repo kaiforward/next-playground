@@ -419,6 +419,13 @@ function proposal(
   return { kind: "build", factionId: "f1", systemId, role, items, value, work, producedGood };
 }
 
+/** `Proposal.systemId` narrowed across the union — a lane-upgrade proposal carries `laneKey`
+ *  instead, since it isn't scoped to one system. None of the fixtures below build one, but
+ *  `orderProposals` returns the full `Proposal` union so the accessor must cover it to compile. */
+function systemIdOf(p: Proposal): string {
+  return p.kind === "lane_upgrade" ? p.laneKey : p.systemId;
+}
+
 describe("proposalRoi", () => {
   it("is value ÷ whole-bundle work", () => {
     expect(proposalRoi(proposal("s", [{ buildingType: "food", levels: 1 }], 20, 8))).toBeCloseTo(2.5, 6);
@@ -443,7 +450,7 @@ describe("orderProposals", () => {
     const lo = proposal("s1", [{ buildingType: "food", levels: 1 }], 10, 20);   // ROI 0.5
     const hi = proposal("s2", [{ buildingType: "ore", levels: 1 }], 30, 20);    // ROI 1.5
     const mid = proposal("s3", [{ buildingType: "gas", levels: 1 }], 20, 20);   // ROI 1.0
-    expect(orderProposals([lo, hi, mid]).map((p) => p.systemId)).toEqual(["s2", "s3", "s1"]);
+    expect(orderProposals([lo, hi, mid]).map(systemIdOf)).toEqual(["s2", "s3", "s1"]);
   });
 
   it("keeps a bundled academy ahead of its production after ordering (gate-first preserved)", () => {
@@ -462,8 +469,8 @@ describe("orderProposals", () => {
     const a = proposal("s-a", [{ buildingType: "food", levels: 1 }], 20, 20); // ROI 1.0
     const b = proposal("s-b", [{ buildingType: "ore", levels: 1 }], 20, 20);  // ROI 1.0 (tie)
     const c = proposal("s-c", [{ buildingType: "gas", levels: 1 }], 40, 20);  // ROI 2.0
-    const order1 = orderProposals([a, b, c]).map((p) => p.systemId);
-    const order2 = orderProposals([c, b, a]).map((p) => p.systemId);
+    const order1 = orderProposals([a, b, c]).map(systemIdOf);
+    const order2 = orderProposals([c, b, a]).map(systemIdOf);
     expect(order1).toEqual(order2);
     expect(order1[0]).toBe("s-c"); // highest ROI first; a/b tie broken by systemId
   });
@@ -473,9 +480,9 @@ describe("orderProposals", () => {
       proposal("s1", [{ buildingType: "food", levels: 1 }], 10, 20),
       proposal("s2", [{ buildingType: "ore", levels: 1 }], 30, 20),
     ];
-    const snapshot = input.map((p) => p.systemId);
+    const snapshot = input.map(systemIdOf);
     orderProposals(input);
-    expect(input.map((p) => p.systemId)).toEqual(snapshot);
+    expect(input.map(systemIdOf)).toEqual(snapshot);
   });
 });
 
@@ -499,7 +506,7 @@ describe("orderProposals — survival band (necessity weighting)", () => {
   it("orders two survival-serving proposals by descending ROI within their own band", () => {
     const lo = proposal("s1", [{ buildingType: "water", levels: 1 }], 10, 20, "industry", "water"); // ROI 0.5
     const hi = proposal("s2", [{ buildingType: "food", levels: 1 }], 30, 20, "industry", "food");    // ROI 1.5
-    expect(orderProposals([lo, hi]).map((p) => p.systemId)).toEqual(["s2", "s1"]);
+    expect(orderProposals([lo, hi]).map(systemIdOf)).toEqual(["s2", "s1"]);
   });
 
   it("funds a colony proposal in the third band — behind a survival-serving proposal even at a lower ROI", () => {
@@ -514,7 +521,7 @@ describe("orderProposals — survival band (necessity weighting)", () => {
     const hi = proposal("s1", [{ buildingType: "ore", levels: 1 }], 40, 20);   // ROI 2.0, no producedGood
     const col = colony("c1", 30, 20);                                          // ROI 1.5
     const lo = proposal("s2", [{ buildingType: "gas", levels: 1 }], 10, 20);   // ROI 0.5, no producedGood
-    expect(orderProposals([lo, col, hi]).map((p) => p.systemId)).toEqual(["s1", "c1", "s2"]);
+    expect(orderProposals([lo, col, hi]).map(systemIdOf)).toEqual(["s1", "c1", "s2"]);
   });
 
   it("the vacuity check — bands by producedGood, never by items[0] (a survival good gated behind an unrelated first item)", () => {
@@ -537,9 +544,9 @@ describe("orderProposals — survival band (necessity weighting)", () => {
     const other = proposal("s3", [{ buildingType: "ore", levels: 1 }], 40, 20);
     const col = colony("c1", 30, 20);
     const input = [housing, survivalA, survivalB, other, col];
-    const order1 = orderProposals(input).map((p) => p.systemId);
-    const order2 = orderProposals([...input].reverse()).map((p) => p.systemId);
-    const order3 = orderProposals([col, other, survivalB, housing, survivalA]).map((p) => p.systemId);
+    const order1 = orderProposals(input).map(systemIdOf);
+    const order2 = orderProposals([...input].reverse()).map(systemIdOf);
+    const order3 = orderProposals([col, other, survivalB, housing, survivalA]).map(systemIdOf);
     expect(order1).toEqual(order2);
     expect(order1).toEqual(order3);
     expect(order1).toEqual(["s0", "s2", "s1", "s3", "c1"]);
@@ -556,7 +563,7 @@ describe("orderProposals — colony interleaving", () => {
     const hi = proposal("s1", [{ buildingType: "food", levels: 1 }], 40, 20);   // ROI 2.0
     const col = colony("c1", 30, 20);                                            // ROI 1.5
     const lo = proposal("s2", [{ buildingType: "ore", levels: 1 }], 10, 20);     // ROI 0.5
-    expect(orderProposals([lo, col, hi]).map((p) => p.systemId)).toEqual(["s1", "c1", "s2"]);
+    expect(orderProposals([lo, col, hi]).map(systemIdOf)).toEqual(["s1", "c1", "s2"]);
   });
 
   it("keeps housing ahead of a higher-ROI colony (proactive substrate still leads)", () => {
@@ -570,8 +577,38 @@ describe("orderProposals — colony interleaving", () => {
   it("is deterministic with a colony present (union-safe tiebreak, no items on a colony)", () => {
     const a = colony("c-a", 20, 20); // ROI 1.0
     const b = proposal("s-b", [{ buildingType: "ore", levels: 1 }], 20, 20); // ROI 1.0 (tie)
-    const order1 = orderProposals([a, b]).map((p) => p.systemId);
-    const order2 = orderProposals([b, a]).map((p) => p.systemId);
+    const order1 = orderProposals([a, b]).map(systemIdOf);
+    const order2 = orderProposals([b, a]).map(systemIdOf);
+    expect(order1).toEqual(order2);
+  });
+});
+
+/** Build a lane-upgrade proposal with explicit value/work. */
+function laneUpgrade(laneKey: string, value: number, work: number): Proposal {
+  return { kind: "lane_upgrade", factionId: "f1", laneKey, levels: 1, value, work };
+}
+
+describe("orderProposals — lane-upgrade interleaving", () => {
+  it("interleaves a lane upgrade among build bundles by descending ROI", () => {
+    const hi = proposal("s1", [{ buildingType: "food", levels: 1 }], 40, 20);   // ROI 2.0
+    const lane = laneUpgrade("a|b", 30, 20);                                    // ROI 1.5
+    const lo = proposal("s2", [{ buildingType: "ore", levels: 1 }], 10, 20);    // ROI 0.5
+    expect(orderProposals([lo, lane, hi]).map(systemIdOf)).toEqual(["s1", "a|b", "s2"]);
+  });
+
+  it("keeps housing ahead of a higher-ROI lane upgrade (proactive substrate still leads)", () => {
+    const housing = proposal("s1", [{ buildingType: "housing", levels: 1 }], 0, 8, "housing");
+    const lane = laneUpgrade("a|b", 1000, 4); // enormous ROI, still funded after housing
+    const ordered = orderProposals([lane, housing]);
+    expect(ordered[0]).toBe(housing);
+    expect(ordered[1]).toBe(lane);
+  });
+
+  it("is deterministic with a lane upgrade present (union-safe tiebreak, no systemId on a lane)", () => {
+    const a = laneUpgrade("a|b", 20, 20); // ROI 1.0
+    const b = proposal("s-b", [{ buildingType: "ore", levels: 1 }], 20, 20); // ROI 1.0 (tie)
+    const order1 = orderProposals([a, b]).map(systemIdOf);
+    const order2 = orderProposals([b, a]).map(systemIdOf);
     expect(order1).toEqual(order2);
   });
 });

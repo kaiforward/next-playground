@@ -9,6 +9,7 @@ import type {
   SystemControl,
   WorldConstructionProject,
   WorldFoundingStockLine,
+  WorldLane,
 } from "@/lib/world/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import type { DevelopmentRefs } from "@/lib/engine/development";
@@ -132,6 +133,10 @@ export interface DirectedBuildWorld {
   getDevelopmentRefs(): Promise<DevelopmentRefs>;
   /** Open (in-flight) construction projects owned by the given faction keys. */
   getConstructionProjects(factionKeys: Array<string | null>): Promise<WorldConstructionProject[]>;
+  /** Every lane in the world — the substrate the lane-upgrade opportunity scores and
+   *  `applyLaneLevelIncreases` writes back onto. Not faction-scoped: a lane's investor is derived
+   *  from its endpoints' ownership, not stored on the row. */
+  getLanes(): Promise<WorldLane[]>;
   /** Bulk absolute building-count writes (landed whole levels: production goods + "housing"). */
   applyBuildingIncreases(updates: BuildBuildingUpdate[]): Promise<void>;
   /** Replace the given factions' open construction projects with the funded/created set (landed removed). */
