@@ -259,7 +259,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
     universe.playerFactionIndex !== null
       ? {
           controlledFactionId: factionIds[universe.playerFactionIndex],
-          automation: { build: true, colonisation: true },
+          automation: { build: true, colonisation: true, lanes: true },
           pinnedSystemIds: [],
           alertCategories: { ...DEFAULT_ALERT_CATEGORIES },
           trackerSections: { ...DEFAULT_TRACKER_SECTIONS },

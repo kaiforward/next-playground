@@ -46,7 +46,14 @@ export interface WorldPlayer {
   controlledFactionId: string;
   /** Per-domain autonomic switches. Off = the planner stops PROPOSING in that domain for the player's
    *  faction; committed funding and manual orders always continue. AI factions never read this. */
-  automation: { build: boolean; colonisation: boolean };
+  automation: { build: boolean; colonisation: boolean; lanes: boolean };
+  /**
+   * Tick of the player's last successful `claimSystem` order (docs/planned/logistics-lanes.md §1) —
+   * absent means never claimed, not tick 0. `claimSystem` refuses a new claim until `currentTick −
+   * lastClaimTick ≥ PLAYER_CLAIM_COOLDOWN × CYCLE_LENGTH` (`lib/constants/lanes.ts`,
+   * `lib/constants/tick-cadence.ts`). Nothing inside the tick reads this.
+   */
+  lastClaimTick?: number;
   /**
    * Player-curated bookmark list for the Tracker panel (docs/active/gameplay/tracker.md), insertion-
    * ordered and deduplicated at the write boundary — never re-sorted, never capped. Pinning is a

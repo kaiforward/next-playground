@@ -365,7 +365,7 @@ export interface FactionConstructionData {
   poolBase: number;
   poolCentres: number;
   /** The player's switches; null on AI factions (no switches rendered). */
-  automation: { build: boolean; colonisation: boolean } | null;
+  automation: { build: boolean; colonisation: boolean; lanes: boolean } | null;
   /** Systems with open build projects — count desc, then name asc. */
   buildSystems: Array<{ systemId: string; systemName: string; count: number }>;
   /** Forming colonies — progress desc, then name asc. */

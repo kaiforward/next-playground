@@ -347,7 +347,7 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
     const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, { control: "developed", foodCycles: 1 }));
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
-      player: { factionId: "f1", automation: { build: false, colonisation: true } },
+      player: { factionId: "f1", automation: { build: false, colonisation: true, lanes: true } },
     });
     expect(w.constructionProjects).toHaveLength(0);       // emission gated off
     expect(w.proposalCycleUpdates.get("A|food")).toBe(2); // …but the clock still advanced
@@ -359,7 +359,7 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
     const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, { control: "developed", foodCycles: 1 }));
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
-      player: { factionId: "f1", automation: { build: true, colonisation: false } },
+      player: { factionId: "f1", automation: { build: true, colonisation: false, lanes: true } },
     });
     expect(w.proposalCycleUpdates.get("A|food")).toBe(2);
     expect(w.constructionProjects.some((p) => p.kind === "build" && p.systemId === "B" && p.buildingType === "food")).toBe(true);
@@ -385,12 +385,12 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
     const on = new MemoryDirectedBuildWorld(rows());
     await runDirectedBuildProcessor(on, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
-      player: { factionId: "f1", automation: { build: true, colonisation: true } },
+      player: { factionId: "f1", automation: { build: true, colonisation: true, lanes: true } },
     });
     const off = new MemoryDirectedBuildWorld(rows());
     await runDirectedBuildProcessor(off, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
-      player: { factionId: "f1", automation: { build: false, colonisation: true } },
+      player: { factionId: "f1", automation: { build: false, colonisation: true, lanes: true } },
     });
 
     // Proposal EMISSION differs, as the existing tests above already pin…
@@ -411,12 +411,12 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
     const on = new MemoryDirectedBuildWorld(scenario(0, 0, 20, { control: "developed", foodCycles: 1 }));
     await runDirectedBuildProcessor(on, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
-      player: { factionId: "f1", automation: { build: true, colonisation: true } },
+      player: { factionId: "f1", automation: { build: true, colonisation: true, lanes: true } },
     });
     const off = new MemoryDirectedBuildWorld(scenario(0, 0, 20, { control: "developed", foodCycles: 1 }));
     await runDirectedBuildProcessor(off, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
-      player: { factionId: "f1", automation: { build: false, colonisation: true } },
+      player: { factionId: "f1", automation: { build: false, colonisation: true, lanes: true } },
     });
 
     // Proposal EMISSION differs, as the existing tests above already pin…
@@ -665,7 +665,7 @@ describe("runDirectedBuildProcessor: colony-establish phase", () => {
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
       develop: { candidateProvider: (f) => (f === "f1" ? candidates : []), params: COLONY_PARAMS },
-      player: { factionId: "f1", automation: { build: false, colonisation: true } },
+      player: { factionId: "f1", automation: { build: false, colonisation: true, lanes: true } },
     });
     const openColonies = w.constructionProjects.filter((p) => p.kind === "colony_establish");
     // Front-first funding gives one colony a cap's worth; the other four get zero and are dropped.
@@ -689,13 +689,13 @@ describe("runDirectedBuildProcessor: colony-establish phase", () => {
     await runDirectedBuildProcessor(on, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
       develop: { candidateProvider: (f) => (f === "f1" ? [colonyCand("c1")] : []), params: COLONY_PARAMS },
-      player: { factionId: "f1", automation: { build: true, colonisation: true } },
+      player: { factionId: "f1", automation: { build: true, colonisation: true, lanes: true } },
     });
     const off = new MemoryDirectedBuildWorld([saturatedHome(1000)]);
     await runDirectedBuildProcessor(off, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
       develop: { candidateProvider: (f) => (f === "f1" ? [colonyCand("c1")] : []), params: COLONY_PARAMS },
-      player: { factionId: "f1", automation: { build: true, colonisation: false } },
+      player: { factionId: "f1", automation: { build: true, colonisation: false, lanes: true } },
     });
 
     // Proposal EMISSION differs…
@@ -1089,7 +1089,7 @@ describe("runDirectedBuildProcessor: player automation gating (proposal generati
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable,
       construction: mkConstruction(4),
-      player: { factionId: "f1", automation: { build: false, colonisation: true } },
+      player: { factionId: "f1", automation: { build: false, colonisation: true, lanes: true } },
     });
     expect(w.constructionProjects.every((p) => p.id === "b-committed")).toBe(true);
     expect(w.constructionProjects[0]?.workDone).toBeGreaterThan(5);
@@ -1105,7 +1105,7 @@ describe("runDirectedBuildProcessor: player automation gating (proposal generati
       interval: INTERVAL, routeCost: reachable,
       construction: mkConstruction(6, 0.004),
       develop: { candidateProvider: (f) => (f === "f1" ? [colonyOf("c1", 1_000_000)] : []), params: COLONY_PARAMS },
-      player: { factionId: "f1", automation: { build: true, colonisation: false } },
+      player: { factionId: "f1", automation: { build: true, colonisation: false, lanes: true } },
     });
     expect(w.constructionProjects.some((p) => p.kind === "colony_establish")).toBe(false);
     expect(w.constructionProjects.some((p) => p.kind === "build")).toBe(true);
@@ -1116,7 +1116,7 @@ describe("runDirectedBuildProcessor: player automation gating (proposal generati
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable,
       construction: mkConstruction(4),
-      player: { factionId: "someone-else", automation: { build: false, colonisation: false } },
+      player: { factionId: "someone-else", automation: { build: false, colonisation: false, lanes: true } },
     });
     expect(w.constructionProjects.length).toBeGreaterThan(0); // f1 planned as usual
   });
@@ -2391,7 +2391,7 @@ describe("runDirectedBuildProcessor — what the colony planner is shown", () =>
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(2, 0.005),
       develop: { candidateProvider: () => [colonyOf("c1", 1_000_000)], params: COLONY_PARAMS },
-      player: { factionId: "f1", automation: { build: false, colonisation: true } },
+      player: { factionId: "f1", automation: { build: false, colonisation: true, lanes: true } },
     });
     expect(w.constructionProjects.some((p) => p.kind === "colony_establish")).toBe(true); // sanity
     expect(w.constructionProjects.some(

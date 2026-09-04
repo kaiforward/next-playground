@@ -362,9 +362,9 @@ describe("generateWorld — player faction", () => {
     expect(world.player).toBeNull();
   });
 
-  it("seats the player with both automation switches on", () => {
+  it("seats the player with all automation switches on", () => {
     const world = generateWorld({ ...base, playerFaction: authored });
-    expect(world.player?.automation).toEqual({ build: true, colonisation: true });
+    expect(world.player?.automation).toEqual({ build: true, colonisation: true, lanes: true });
   });
 
   it("seats the player with no pinned systems", () => {
