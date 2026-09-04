@@ -57,8 +57,8 @@ describe("AlertSettings — critical categories render no control at all", () =>
 
   it("renders a checkbox for every hideable category — the absence above is category-specific, not global", async () => {
     await renderPanel();
-    // 13 categories total, 3 critical (no control) → 10 checkboxes.
-    expect(screen.getAllByRole("checkbox")).toHaveLength(10);
+    // 14 categories total, 3 critical (no control) → 11 checkboxes.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(11);
   });
 });
 
@@ -75,6 +75,7 @@ describe("AlertSettings — every category has a row, in each tier's own authore
         "Unrest rising",
         "Survival stock falling",
         "Demand unservable",
+        "Lane congested",
         "Overcrowded",
         "No housing headroom",
         "Build blocked",

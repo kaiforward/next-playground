@@ -8,7 +8,7 @@ import type { SystemTabSegment } from "@/lib/constants/system-tabs";
 export type AlertTier = "critical" | "important" | "info";
 
 /**
- * The thirteen standing alert categories — system warnings and opportunities, per the alert bar's
+ * The fourteen standing alert categories — system warnings and opportunities, per the alert bar's
  * authored tier list. This array, not a separately hand-written union, is the
  * single enumeration: `AlertCategoryId` is derived from it below, so every surface that has to walk
  * every category (the settings panel's checkbox list, the write schema in
@@ -30,6 +30,7 @@ export const ALERT_CATEGORY_IDS = [
   "unrest_rising",
   "survival_stock_falling",
   "demand_unservable",
+  "lane_congested",
   "overcrowded",
   "no_housing_headroom",
   "build_blocked",
@@ -38,7 +39,7 @@ export const ALERT_CATEGORY_IDS = [
   "colony_opportunity",
 ] as const;
 
-/** One of the thirteen standing alert categories — see `ALERT_CATEGORY_IDS` above, which this is
+/** One of the fourteen standing alert categories — see `ALERT_CATEGORY_IDS` above, which this is
  *  derived from. */
 export type AlertCategoryId = (typeof ALERT_CATEGORY_IDS)[number];
 
@@ -61,10 +62,13 @@ export type AlertDestinationTab = (typeof ALERT_DESTINATION_TABS)[number];
 
 /** Where a row click sends the player. `system` reuses the Tracker's fly-to-system-and-open-tab
  *  flow; `faction` opens the faction panel (Maintenance unfunded, which is faction-level, not
- *  per-system). */
+ *  per-system); `lane` opens the lane card and recentres the map on the lane's midpoint (Lane
+ *  congested, whose instances name a lane — two endpoints, not one system — so neither existing
+ *  kind fits). */
 export type AlertDestination =
   | { kind: "system"; tab: AlertDestinationTab }
-  | { kind: "faction" };
+  | { kind: "faction" }
+  | { kind: "lane" };
 
 /** One category's authored entry in the alert bar's tier list — tier, destination and order in one
  *  place so they cannot drift apart across the surfaces that read them. The default on/off state is

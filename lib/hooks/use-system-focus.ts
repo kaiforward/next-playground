@@ -3,6 +3,8 @@
 import { useMemo } from "react";
 import { useNavigate } from "@/components/ui/link-provider";
 import { useAtlas } from "@/lib/hooks/use-atlas";
+import { laneEndpoints } from "@/lib/engine/lanes";
+import { laneHref } from "@/lib/utils/route-hrefs";
 import type { SystemTabSegment } from "@/lib/constants/system-tabs";
 
 /**
@@ -52,5 +54,43 @@ export function useSystemFocus() {
     locSeq += 1;
     const path = segment ? `/system/${systemId}/${segment}` : `/system/${systemId}`;
     navigate(`${path}?focus=${coords.x},${coords.y}&loc=${locSeq}`);
+  };
+}
+
+/**
+ * Fly-to-lane-and-open-card navigation — the Lane congested alert's own row activation
+ * (`components/alerts/alert-run.tsx`'s `ActiveAlertFlyout`), built the same way `LanePanel`'s own
+ * "Show on Map" button computes its target (`components/panels/lane-panel.tsx`): the lane's two
+ * endpoints' midpoint, on the identical `?focus=<x>,<y>&loc=<n>` channel `star-map.tsx` reads, so a
+ * lane row recentres the map exactly the way the lane card's own button does. Shares `locSeq` with
+ * `useSystemFocus` above (see that counter's own docstring) rather than keeping a second one — there
+ * is still exactly one URL for the two hooks' callers to disagree about.
+ *
+ * A stale or malformed lane key (shouldn't happen — every reader filters to live lanes) is a silent
+ * no-op, the same posture `focusSystem` takes for a stale system id.
+ */
+export function useLaneFocus() {
+  const { atlas } = useAtlas();
+  const navigate = useNavigate();
+
+  const coordsById = useMemo(
+    () => new Map(atlas.systems.map((s) => [s.id, { x: s.x, y: s.y }] as const)),
+    [atlas.systems],
+  );
+
+  return function focusLane(laneKey: string) {
+    let aId: string, bId: string;
+    try {
+      [aId, bId] = laneEndpoints(laneKey);
+    } catch {
+      return; // malformed key — shouldn't happen, see this function's own docstring
+    }
+    const a = coordsById.get(aId);
+    const b = coordsById.get(bId);
+    if (!a || !b) return; // stale endpoint (shouldn't happen — the service filters abandoned lanes)
+    locSeq += 1;
+    const x = (a.x + b.x) / 2;
+    const y = (a.y + b.y) / 2;
+    navigate(`${laneHref(laneKey)}?focus=${x},${y}&loc=${locSeq}`);
   };
 }

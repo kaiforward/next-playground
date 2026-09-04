@@ -13,6 +13,8 @@ import type {
   AlertInstance,
   ControlledSystemsAlertCategory,
   FactionAlertCategory,
+  LaneAlertInstance,
+  LaneScopedAlertCategory,
   SystemScopedAlertCategory,
 } from "@/lib/types/api";
 
@@ -58,6 +60,18 @@ const maintenanceUnfunded: FactionAlertCategory = {
   instances: [instance("The Terran Compact", "$1.2M short", null)],
 };
 
+function laneInstance(name: string, measure: string, laneKey: string, sortKey = 0): LaneAlertInstance {
+  return { laneKey, name, measure, sortKey };
+}
+
+const laneCongested: LaneScopedAlertCategory = {
+  id: "lane_congested",
+  unit: "lanes",
+  count: 1,
+  denominator: 9,
+  instances: [laneInstance("Sunnyvale — Rigel", "12.0 blocked", "sys-a|sys-b")],
+};
+
 function manyInstances(n: number): AlertInstance[] {
   return Array.from({ length: n }, (_, i) => instance(`System ${i}`, `Provision ${i}%`, `sys-${i}`, i));
 }
@@ -98,6 +112,12 @@ describe("resolveAlertTarget — the row's destination, resolved off the categor
     });
   });
 
+  it("Lane congested resolves to the instance's own laneKey, not a system", () => {
+    expect(resolveAlertTarget(laneCongested, laneCongested.instances[0])).toEqual({
+      kind: "lane",
+      laneKey: "sys-a|sys-b",
+    });
+  });
 });
 
 describe("alertFooterText — states the denominator for a system-scoped category, the unit otherwise, nothing for faction", () => {
@@ -111,6 +131,10 @@ describe("alertFooterText — states the denominator for a system-scoped categor
 
   it("faction returns null — a count that's always 1 by construction carries no information to state", () => {
     expect(alertFooterText(maintenanceUnfunded)).toBeNull();
+  });
+
+  it("lanes states its own denominator, not the developed-systems one", () => {
+    expect(alertFooterText(laneCongested)).toBe("1 of 9 lanes");
   });
 });
 
@@ -172,5 +196,15 @@ describe("AlertFlyout — row activation", () => {
     expect(screen.getByRole("button", { name: /Rigel/ })).toBeInTheDocument();
     // The trigger, plus Sunnyvale and Rigel's own rows.
     expect(screen.getAllByRole("button")).toHaveLength(3);
+  });
+
+  it("clicking a Lane congested row navigates with the instance's own laneKey", async () => {
+    const onNavigate = vi.fn();
+    const { user } = await renderOpenFlyout(laneCongested, onNavigate);
+
+    await user.click(screen.getByRole("button", { name: /Sunnyvale — Rigel/ }));
+
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+    expect(onNavigate).toHaveBeenCalledWith({ kind: "lane", laneKey: "sys-a|sys-b" });
   });
 });

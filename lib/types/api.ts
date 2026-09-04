@@ -681,6 +681,22 @@ export interface AlertInstance {
   sortKey: number;
 }
 
+/**
+ * One `lane_congested` instance — the flyout row for a single congested lane. Carries a `laneKey`
+ * rather than an `AlertInstance.systemId`: a lane names two endpoints, not one system, so reusing
+ * `systemId` (picking one endpoint, or smuggling the key into it) would either be an arbitrary choice
+ * or overload that field with two different meanings for one reader to disambiguate. A sibling type
+ * instead, used only by `LaneScopedAlertCategory` below, so the destination the row resolves to
+ * (`{ kind: "lane" }`, `lib/types/alerts.ts`) always has the key it needs and nothing has to guess
+ * which shape an `AlertInstance` is carrying.
+ */
+export interface LaneAlertInstance {
+  laneKey: string;
+  name: string;
+  measure: string;
+  sortKey: number;
+}
+
 interface AlertCategoryBase {
   id: AlertCategoryId;
   /** Raw instance count — extensive, not a rate; grows with the empire. */
@@ -724,15 +740,35 @@ export interface FactionAlertCategory extends AlertCategoryBase {
   unit: "faction";
 }
 
+/**
+ * Lane congested — the one category counting LANES, not systems, so it cannot extend
+ * `AlertCategoryBase` (whose `instances: AlertInstance[]` a `LaneAlertInstance[]` is not assignable
+ * to; TypeScript refuses an extending interface that narrows a property to an incompatible type).
+ * `denominator` is the player faction's own OWNABLE lane count — every lane it either invests in or
+ * touches through a held endpoint — the same "this category's own population" shape
+ * `ControlledSystemsAlertCategory` uses for colony opportunity's disjoint population, and for the
+ * identical reason: a lane the player cannot act on is never a candidate for this category in the
+ * first place, so counting it in the denominator would render a share of lanes that were never in
+ * play for this row.
+ */
+export interface LaneScopedAlertCategory {
+  id: AlertCategoryId;
+  unit: "lanes";
+  count: number;
+  denominator: number;
+  instances: LaneAlertInstance[];
+}
+
 /** One alert category's standing read: the chip's count, what that count counts (and, for the
  *  system-scoped categories, its denominator — which population it is a share OF depends on `unit`),
  *  and the instance rows in the category's own sort order. */
 export type AlertCategory =
   | SystemScopedAlertCategory
   | ControlledSystemsAlertCategory
-  | FactionAlertCategory;
+  | FactionAlertCategory
+  | LaneScopedAlertCategory;
 
-/** The alert bar's whole read — all thirteen categories, one endpoint rather than one per category.
+/** The alert bar's whole read — all fourteen categories, one endpoint rather than one per category.
  *  With a player seat, `getAlertData()` (lib/services/alerts.ts) always emits every category id,
  *  tier-then-order sorted; a category with nothing to say still appears, with `count: 0` and an empty
  *  `instances` array — the chip run is what decides whether an empty category renders anything. A

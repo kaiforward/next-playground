@@ -30,6 +30,15 @@ describe("setAlertCategory", () => {
     expect(getWorld().player?.alertCategories.overcrowded).toBe(false);
   });
 
+  it("accepts a write for Lane congested, a hideable, default-on category", () => {
+    expect(DEFAULT_ALERT_CATEGORIES.lane_congested).toBe(true);
+    const result = setAlertCategory({ categoryId: "lane_congested", on: false });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.lane_congested).toBe(false);
+    expect(getWorld().player?.alertCategories.lane_congested).toBe(false);
+  });
+
   it("turns a default-off category on", () => {
     expect(DEFAULT_ALERT_CATEGORIES.unrest_rising).toBe(false);
     const result = setAlertCategory({ categoryId: "unrest_rising", on: true });

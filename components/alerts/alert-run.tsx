@@ -13,7 +13,7 @@ import { AlertSettings } from "@/components/alerts/alert-settings";
 import { useAlerts } from "@/lib/hooks/use-alerts";
 import { useAtlas } from "@/lib/hooks/use-atlas";
 import { useSetAlertCategory } from "@/lib/hooks/use-player-settings";
-import { useSystemFocus } from "@/lib/hooks/use-system-focus";
+import { useSystemFocus, useLaneFocus } from "@/lib/hooks/use-system-focus";
 import { ALERT_CATEGORIES } from "@/lib/constants/alerts";
 import { DRAWER_WIDTH, TRACKER_BASE_WIDTH, TRACKER_SETTINGS_SPAN, RAIL_INSET } from "@/lib/constants/layout";
 import { layoutRun, RUN_HEIGHT } from "@/lib/utils/alert-packing";
@@ -315,10 +315,12 @@ function AlertRunChips({
  *
  * Resolves an `AlertFlyout` row's already-decided target (`resolveAlertTarget`,
  * `components/alerts/alert-flyout.tsx`) into the actual navigation: `focusSystem` for a system
- * destination, a `router.push` onto the player faction's panel for a faction destination (the
- * player id comes off the same already-resolved atlas read `useSystemFocus` relies on; a world
- * with no player seat never emits a faction-destination alert, so the null branch is a no-op,
- * not a route), nothing for the one combination the destination table never produces.
+ * destination, `focusLane` for a lane destination (Lane congested — recentres on the lane's own
+ * midpoint and opens its card, the same channel `LanePanel`'s own "Show on Map" button uses), a
+ * `router.push` onto the player faction's panel for a faction destination (the player id comes off
+ * the same already-resolved atlas read `useSystemFocus` relies on; a world with no player seat never
+ * emits a faction-destination alert, so the null branch is a no-op, not a route), nothing for the one
+ * combination the destination table never produces.
  */
 function ActiveAlertFlyout({
   category,
@@ -329,10 +331,12 @@ function ActiveAlertFlyout({
 }) {
   const navigate = useNavigate();
   const focusSystem = useSystemFocus();
+  const focusLane = useLaneFocus();
   const { atlas } = useAtlas();
 
   function handleNavigate(target: AlertNavigateTarget) {
     if (target.kind === "system") focusSystem(target.systemId, target.tab);
+    else if (target.kind === "lane") focusLane(target.laneKey);
     else if (target.kind === "faction") {
       // `target.tab` is always "" now that Maintenance unfunded is the only faction-kind
       // destination — no alert category routes to a faction panel tab any more.

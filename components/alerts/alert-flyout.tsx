@@ -2,13 +2,14 @@
 
 import type { RefObject } from "react";
 import { PopoverContent } from "@/components/ui/popover";
+import { TermLabel } from "@/components/ui/term-label";
 import { ALERT_CATEGORIES } from "@/lib/constants/alerts";
 import { AlertRow } from "@/components/alerts/alert-row";
 import { TIER_COLOR } from "@/components/alerts/alert-chip";
 import { CHIP_HEIGHT, RAIL_INSET } from "@/lib/constants/layout";
 import type { AlertDestinationTab } from "@/lib/types/alerts";
 import type { FactionTabSegment } from "@/lib/constants/faction-tabs";
-import type { AlertCategory, AlertInstance } from "@/lib/types/api";
+import type { AlertCategory, AlertInstance, LaneAlertInstance } from "@/lib/types/api";
 
 /** The flyout's own 5px clearance below its chip — passed to `PopoverContent` as `sideOffset`
  *  (overriding its own 8px default) and reused below so the `maxHeight` derivation reads as three
@@ -35,6 +36,8 @@ export function alertFooterText(category: AlertCategory): string | null {
       return `${category.count} of ${category.denominator} developed systems`;
     case "controlled_systems":
       return `${category.count} of ${category.denominator} controlled systems`;
+    case "lanes":
+      return `${category.count} of ${category.denominator} lanes`;
     case "faction":
       return null;
   }
@@ -42,38 +45,44 @@ export function alertFooterText(category: AlertCategory): string | null {
 
 /**
  * Where a row's activation resolves to — either a fly-to-system-and-open-tab (deferred to
- * `useSystemFocus()`, which needs live atlas coordinates this pure function has no access to) or the
+ * `useSystemFocus()`, which needs live atlas coordinates this pure function has no access to), the
  * PLAYER faction's Overview tab (the caller resolves the faction id — again atlas data this pure
- * function has no access to). `tab` on the system kind carries `AlertDestinationTab`, the
- * four-tab subset `lib/types/alerts.ts` pins with `satisfies` — never the full `SystemTabSegment`,
- * which would re-widen here exactly what the destination table narrowed. `none` covers the one
- * combination the destination table never actually produces (a `system`-kind category whose instance
- * carries no `systemId`) — `AlertInstance.systemId` is typed nullable across the whole union, so this
- * function still has to return something for it rather than assume the impossible away.
+ * function has no access to), or a lane's card plus its midpoint (deferred to `useLaneFocus()`, same
+ * reason). `tab` on the system kind carries `AlertDestinationTab`, the four-tab subset
+ * `lib/types/alerts.ts` pins with `satisfies` — never the full `SystemTabSegment`, which would
+ * re-widen here exactly what the destination table narrowed. `none` covers the one combination the
+ * destination table never actually produces (a `system`-kind category whose instance carries no
+ * `systemId`) — `AlertInstance.systemId` is typed nullable across the whole union, so this function
+ * still has to return something for it rather than assume the impossible away.
  */
 export type AlertNavigateTarget =
   | { kind: "system"; systemId: string; tab: AlertDestinationTab }
   | { kind: "faction"; tab: Extract<FactionTabSegment, ""> }
+  | { kind: "lane"; laneKey: string }
   | { kind: "none" };
 
 /**
  * Resolves a row's destination off `ALERT_CATEGORIES[category.id].destination` and the specific
- * instance's own `systemId` — the per-instance decision the destination table
+ * instance's own subject — a `systemId` for the per-instance decision the destination table
  * (docs/active/gameplay/alert-bar.md → "What a row click does") reserves, degenerately, for
- * Maintenance unfunded (always the faction panel, whatever `systemId` says).
+ * Maintenance unfunded (always the faction panel, whatever `systemId` says); a `laneKey` for Lane
+ * congested, the one category whose instances are `LaneAlertInstance` rather than `AlertInstance`
+ * (see that type's own docstring for why a lane can't reuse `systemId`).
  *
  * Pure and exported so the branching itself is directly testable without a router or an atlas
  * fetch in the loop. `components/alerts/alert-run.tsx`'s `ActiveAlertFlyout` is the one place that
  * turns a resolved target into an actual navigation, and only once a flyout is open — seeing this
  * file's own docstring on `AlertFlyout` for why the hook calls that need cannot live any higher.
  */
-export function resolveAlertTarget(category: AlertCategory, instance: AlertInstance): AlertNavigateTarget {
+export function resolveAlertTarget(
+  category: AlertCategory, instance: AlertInstance | LaneAlertInstance,
+): AlertNavigateTarget {
   const destination = ALERT_CATEGORIES[category.id].destination;
   switch (destination.kind) {
     case "system":
       // Every system-scoped category's instances carry a systemId by construction; the null branch
       // is unreachable in practice, not a real case to route somewhere plausible-looking.
-      return instance.systemId
+      return "systemId" in instance && instance.systemId
         ? { kind: "system", systemId: instance.systemId, tab: destination.tab }
         : { kind: "none" };
     case "faction":
@@ -81,6 +90,11 @@ export function resolveAlertTarget(category: AlertCategory, instance: AlertInsta
       // whatever the instance's own systemId says (it is always null for this category: the row is
       // faction-level, not per-system).
       return { kind: "faction", tab: "" };
+    case "lane":
+      // Lane congested's own instances always carry a laneKey by construction (LaneAlertInstance has
+      // no other shape); the "not a lane instance" branch is unreachable in practice, same posture
+      // as the system case's own null branch above.
+      return "laneKey" in instance ? { kind: "lane", laneKey: instance.laneKey } : { kind: "none" };
   }
 }
 
@@ -142,7 +156,7 @@ export function AlertFlyout({ category, onNavigate, runRef }: AlertFlyoutProps) 
   const Icon = def.icon;
   const tier = TIER_COLOR[def.tier];
 
-  function activate(instance: AlertInstance) {
+  function activate(instance: AlertInstance | LaneAlertInstance) {
     onNavigate(resolveAlertTarget(category, instance));
   }
 
@@ -167,21 +181,30 @@ export function AlertFlyout({ category, onNavigate, runRef }: AlertFlyoutProps) 
       <header className="flex shrink-0 items-center gap-1.5 border-b border-border px-2.5 py-2">
         <Icon aria-hidden className="h-5 w-5 shrink-0" style={{ color: tier.light }} />
         <h3 className="font-display text-xs uppercase tracking-wider" style={{ color: tier.light }}>
-          {def.label}
+          {/* Lane congested is the one category whose name links its own glossary term — the same
+              existing definition (`congested`, `lib/glossary/terms.ts`) the lane card itself links
+              (`LanePanel`, `components/panels/lane-panel.tsx`), never a second definition of it. No
+              other category's name currently has a term of its own to link. */}
+          {category.id === "lane_congested" ? <TermLabel id="congested">{def.label}</TermLabel> : def.label}
         </h3>
       </header>
       <p className="shrink-0 border-b border-border px-2.5 py-1.5 text-xs text-text-tertiary">
         {def.conditionLine}
       </p>
       <ul className="min-h-0 flex-1 overflow-y-auto">
-        {category.instances.map((instance, index) => (
-          <AlertRow
-            key={`${instance.systemId ?? "none"}-${instance.name}-${index}`}
-            name={instance.name}
-            measure={instance.measure}
-            onActivate={() => activate(instance)}
-          />
-        ))}
+        {category.instances.map((instance, index) => {
+          // A lane instance's own key (a lane names two endpoints, no single systemId to key off);
+          // every other category keys off systemId (or "none" for the one faction-level category).
+          const rowKey = "laneKey" in instance ? instance.laneKey : (instance.systemId ?? "none");
+          return (
+            <AlertRow
+              key={`${rowKey}-${instance.name}-${index}`}
+              name={instance.name}
+              measure={instance.measure}
+              onActivate={() => activate(instance)}
+            />
+          );
+        })}
       </ul>
       {footerText != null && (
         <footer className="shrink-0 border-t border-border px-2.5 py-1.5 text-xs text-text-tertiary">
