@@ -669,6 +669,13 @@ Reads: owner review by eye.
 Merge condition: prototype approved (AGENTS UI rule) before Task 12 starts. The lane-card surface is
 decided (owner, 2026-09-03): a route-docked panel; the prototype shows that shape.
 
+### Gate C — result (recorded 2026-09-04)
+
+Prototype `temp/prototypes/lane-surfaces.html` approved by the owner. Lane-card body: vitals grid (Option A).
+Fixed by the prototype: load colour grey → amber → red, red only when blocked volume > 0 this run; width by
+level; particles by in-transit volume, dropped at the zoomed-out tier; lane route `/lane/:key`; a system cell
+wins within the star hover radius; the faction construction card gains a `Lanes` link list.
+
 ### Task 12 — Map: lane state slice, lane layer restyle, lane selection, chord overlay retired
 
 Files: `lib/services/lanes.ts` (new — `getLaneStates`), `lib/runtime/snapshot.ts` (`lanes` slice),
