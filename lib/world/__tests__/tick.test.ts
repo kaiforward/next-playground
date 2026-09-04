@@ -35,14 +35,20 @@ import type {
 } from "../types";
 import { laneKey } from "@/lib/engine/lanes";
 
-async function runTicks(world: World, count: number, cadence?: TickCadence) {
+async function runTicks(world: World, count: number, cadence?: TickCadence, freightSpeed?: number) {
   let w = world;
   for (let i = 0; i < count; i++) {
-    const result = await runWorldTick(w, cadence ? { cadence } : undefined);
+    const result = await runWorldTick(w, cadence ? { cadence, freightSpeed } : undefined);
     w = result.world;
   }
   return w;
 }
+
+/** The zero-latency freight arm: a haul dispatched on tick N is on the ledger with arrival N, so the
+ *  unconditional goods-arrivals stage drains it at the start of tick N+1. Tests that pin STAGE ORDERING
+ *  (dispatch this tick, credit next tick) run on it; transit length at the shipped `FREIGHT_SPEED` is
+ *  pinned by `tick-logistics-reach.test.ts` and the goods-arrivals tests, not here. */
+const NEXT_TICK_FREIGHT = 1e6;
 
 /** Runs `count` ticks and returns the LAST tick's full result (world + instrumentation) — unlike
  *  `runTicks` above, which only carries the world forward. Shared by every "poisoning the input
@@ -853,7 +859,7 @@ describe("runWorldTick — logistics/assessment ordering", () => {
     // Directed-logistics dispatches onto the scheduled-freight ledger rather than crediting the
     // destination same-tick (docs/active/gameplay/logistics-lanes.md §3) — the unconditional goods-arrivals
     // stage that drains it runs at the START of a tick, before that tick's own dispatch, so a haul
-    // dispatched on tick N is never visible before tick N+1.
+    // dispatched on tick N is never visible before tick N+1 (zero-latency arm: ordering, not transit).
     const { b, world } = twoSystemWaterGradient((market) => market);
     const bWater = (w: World) => w.markets.find((m) => m.systemId === b && m.goodId === "water")!;
     const bSystem = (w: World) => w.systems.find((s) => s.id === b)!;
@@ -861,7 +867,7 @@ describe("runWorldTick — logistics/assessment ordering", () => {
     // Coincident cycle start: economy (on CYCLE_LENGTH) AND logistics both resolve every tick.
     // Construction stays off so directed-build contributes no noise.
     const cadence = { cycle: 1, logistics: 1, construction: 999 };
-    const afterDispatch = (await runWorldTick(world, { cadence })).world;
+    const afterDispatch = (await runWorldTick(world, { cadence, freightSpeed: NEXT_TICK_FREIGHT })).world;
 
     // Tick 1: dispatched, not yet delivered — no flow event, no stock change, and the economy's
     // assessment reflects the still-empty market: satisfaction measured zero delivery, the squeeze
@@ -875,7 +881,7 @@ describe("runWorldTick — logistics/assessment ordering", () => {
     // Tick 2: goods-arrivals drains the ledger (flow event + credited stock) BEFORE this tick's own
     // economy stage runs, so the recovery is visible in the very same tick the import lands —
     // there is no long-since-superseded third "next cycle" tick needed to observe it.
-    const afterImport = (await runWorldTick(afterDispatch, { cadence })).world;
+    const afterImport = (await runWorldTick(afterDispatch, { cadence, freightSpeed: NEXT_TICK_FREIGHT })).world;
     expect(afterImport.flowEvents.some((f) => f.toSystemId === b && f.goodId === "water")).toBe(true);
     expect(bWater(afterImport).stock).toBeGreaterThan(0);
     const dispatchSatisfaction = bWater(afterDispatch).satisfaction ?? 1;
@@ -898,14 +904,14 @@ describe("runWorldTick — logistics/assessment ordering", () => {
 
     // Logistics resolves every tick; economy and construction never do.
     const cadence = { cycle: 999, logistics: 1, construction: 999 };
-    const afterDispatch = (await runWorldTick(world, { cadence })).world;
+    const afterDispatch = (await runWorldTick(world, { cadence, freightSpeed: NEXT_TICK_FREIGHT })).world;
     // Tick 1: dispatched only — the ledger row hasn't been drained yet.
     expect(afterDispatch.flowEvents.some((f) => f.toSystemId === b && f.goodId === "water")).toBe(false);
     expect(bWater(afterDispatch).stock).toBe(0);
 
     // Tick 2: goods-arrivals is unconditional (never gated by any cadence), so the import lands
     // even though economy's own cadence (999) never resolves.
-    const afterLogistics = (await runWorldTick(afterDispatch, { cadence })).world;
+    const afterLogistics = (await runWorldTick(afterDispatch, { cadence, freightSpeed: NEXT_TICK_FREIGHT })).world;
     expect(afterLogistics.flowEvents.some((f) => f.toSystemId === b && f.goodId === "water")).toBe(true);
     expect(bWater(afterLogistics).stock).toBeGreaterThan(0);
 
@@ -2126,11 +2132,11 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
 
     // Directed-logistics dispatches onto the scheduled-freight ledger rather than crediting the
     // destination same-tick (docs/active/gameplay/logistics-lanes.md §3), so the import is only visible in
-    // the SECOND tick's window — the one goods-arrivals actually drains it on, still well before
+    // the SECOND tick's window on the zero-latency arm — the one goods-arrivals drains it on, still well before
     // that tick's own economy write. Two ticks of each cadence keeps the tick count, and so the
     // boundary-reset window width, identical between the two branches.
     const localOnlyAfter = await runTicks(seeded, 2, NO_LOGISTICS_CADENCE);
-    const withHaulAfter = await runTicks(seeded, 2, STOCK_CADENCE);
+    const withHaulAfter = await runTicks(seeded, 2, STOCK_CADENCE, NEXT_TICK_FREIGHT);
 
     const localOnly = requireStockChange(localOnlyAfter, b, "water");
     const withHaul = requireStockChange(withHaulAfter, b, "water");

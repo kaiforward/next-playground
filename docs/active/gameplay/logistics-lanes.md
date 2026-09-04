@@ -123,7 +123,11 @@ Transit is scheduled, never positionally simulated — nothing per-tick moves a 
   `arrival = now + max(0, round(Σ path fuelCost / FREIGHT_SPEED))` (`freightArrivalTick`,
   `lib/engine/freight.ts`) — a whole-path formula with no per-hop floor, so a high enough
   `FREIGHT_SPEED` collapses every arrival to the dispatch tick (instant delivery, with routing,
-  capacity billing and blocking fully retained). Donor stock is debited at dispatch; the haul is
+  capacity billing and blocking fully retained). The shipped pace is set by the fiction, not the
+  logistics interval: a bulk convoy moves a little slower than the roster's large freighter, so an
+  ordinary lane takes about four days, a corridor crossing roughly ten, and a three-lane supply run
+  about two economic cycles — long enough that goods are visibly in flight and a shortfall genuinely
+  waits on them. Donor stock is debited at dispatch; the haul is
   written onto the scheduled-freight ledger (`WorldPendingArrival`, `world.pendingArrivals`),
   carrying its ordered `routeEdges` (lane keys) and which leg it is.
 - **The goods-arrivals stage** (`runGoodsArrivalsProcessor`, `lib/tick/processors/goods-arrivals.ts`)

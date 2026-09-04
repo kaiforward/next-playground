@@ -69,6 +69,12 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   closes the remaining half. The concrete place it lands is the **good-allocation cliff** row above,
   which owns the allocation policy; this line exists so the pillar pass does not design that policy
   necessity-blind.
+  **Lane congested alert-bar category** (Kai, 2026-09-04, after the first smoke on the lane surfaces):
+  a shortfall caused by a lane that turned volume away is today only visible as a red lane on the
+  map, and it reads the same as Demand unservable on the alert bar, so the player cannot tell "no
+  supplier exists" from "the supply is stuck behind a full lane". Add an important-tier category
+  keyed off `WorldLane.blockedVolume` (largest first), each instance linking to the lane card.
+  Small: one category in `lib/services/alerts.ts`, its glossary term and settings row.
   **War interdiction is ready to call** — the interdiction query (`flowsCrossingEdge`,
   `lib/engine/freight.ts`) ships with no caller; it answers "which scheduled flows cross edge E in
   [t₁,t₂]" straight off the freight ledger, so war's own pass calls it rather than building a new

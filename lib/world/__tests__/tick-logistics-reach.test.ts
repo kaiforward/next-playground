@@ -3,6 +3,7 @@ import { generateWorld } from "../gen";
 import { runWorldTick } from "../tick";
 import type { World } from "../types";
 import { laneKey } from "@/lib/engine/lanes";
+import { LANES } from "@/lib/constants/lanes";
 import type { TickCadence } from "@/lib/constants/tick-cadence";
 
 /**
@@ -98,9 +99,9 @@ async function haulCredited(world: World, donorId: string, sinkId: string, ticks
 }
 
 // Generous upper bound on the dispatch-to-credit delay for the corridor lengths below (fuel cost 1
-// per hop, FREIGHT_SPEED default — see `lib/constants/lanes.ts`), plus one tick for the dispatch
-// itself to land on a cycle boundary.
-const AMPLE_TICKS = 10;
+// per hop at the shipped `FREIGHT_SPEED`), plus slack for the dispatch itself to land on a cycle
+// boundary and the arrivals stage to drain it the tick after.
+const AMPLE_TICKS = Math.ceil((OLD_MAX_HOPS + 3) / LANES.FREIGHT_SPEED) + 3;
 
 describe("runWorldTick — the reach of a directed-logistics haul", () => {
   it("serves a same-faction partner well beyond the retired hop-cap radius, over an unbroken lane path", async () => {

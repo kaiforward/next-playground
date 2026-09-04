@@ -166,7 +166,7 @@ function CargoInFlightCard({ detail, currentTick }: { detail: LaneDetailData; cu
                       {row.toSystemName}
                     </LinkComponent>
                   </td>
-                  <td className="px-1 py-1 text-right font-mono text-text-primary">{row.quantity}</td>
+                  <td className="px-1 py-1 text-right font-mono text-text-primary">{row.quantity.toFixed(1)}</td>
                   <td className="px-1 py-1 text-right font-mono text-text-secondary">
                     {formatDuration(Math.max(0, row.arrivalTick - currentTick))}
                   </td>
