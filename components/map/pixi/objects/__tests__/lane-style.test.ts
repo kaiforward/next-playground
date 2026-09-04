@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { laneStyle } from "../lane-style";
+import { laneStyle, laneTier } from "../lane-style";
 import { LANE_LOAD_COLOR } from "../../theme";
 
 function style(overrides: Partial<Parameters<typeof laneStyle>[0]> = {}) {
@@ -21,6 +21,12 @@ describe("laneStyle — fuel tier", () => {
 
   it("classes a lane at the major threshold as major", () => {
     expect(style({ fuelCost: 20 }).tier).toBe("major");
+  });
+
+  it("agrees with laneStyle's tier at the three tier thresholds", () => {
+    for (const fuelCost of [8, 12, 20]) {
+      expect(laneTier(fuelCost)).toBe(style({ fuelCost }).tier);
+    }
   });
 
   it("widens and brightens strictly across the three tiers (level/load held fixed)", () => {

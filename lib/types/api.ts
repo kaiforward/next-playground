@@ -2,6 +2,7 @@ import type { StarSystemInfo, SunClass, GoodTier, BodyArchetypeId, ResourceVecto
 import type { SubstrateGoodRate, ConsumptionBreakdown } from "@/lib/engine/physical-economy";
 import type { SupplyRegime } from "@/lib/engine/population";
 import type { FillOrderRow, PotentialYieldRowView } from "@/lib/utils/substrate";
+import type { ConstructionProjectLaneRow } from "@/lib/engine/construction-readout";
 
 /**
  * One directed hop of in-flight freight over a single lane — the map overlay's edge unit. Unlike
@@ -44,6 +45,49 @@ export interface LaneStateRow {
   investorFactionId: string | null;
   openUpgradeLevels: number;
 }
+/** One endpoint's ownership as the lane card's invest verb needs it — enough to name who blocks
+ *  investing, and in what state. Faction names are resolved client-side from the universe slice,
+ *  not carried here. */
+export interface LaneEndpointDetail {
+  systemId: string;
+  systemName: string;
+  factionId: string | null;
+  /** Below `controlled` (i.e. unclaimed). */
+  unclaimed: boolean;
+}
+/** One good in flight on a lane right now, read straight off the scheduled-freight ledger
+ *  (`WorldPendingArrival`) rather than a window sum — the lane card's "cargo in flight" table. */
+export interface LaneCargoRow {
+  goodId: string;
+  goodName: string;
+  quantity: number;
+  fromSystemId: string;
+  fromSystemName: string;
+  toSystemId: string;
+  toSystemName: string;
+  arrivalTick: number;
+}
+/**
+ * One lane's full detail — the lane card's substrate beyond the coarse `LaneStateRow` (map layer):
+ * endpoint ownership for the invest verb's states, everything in flight, and the open
+ * `lane_upgrade` projects targeting it. Interest-keyed (`useInterest("lane", key)`), computed only
+ * for the open lane card rather than pushed for every lane every frame.
+ */
+export interface LaneDetailData {
+  key: string;
+  fuelCost: number;
+  a: LaneEndpointDetail;
+  b: LaneEndpointDetail;
+  level: number;
+  capacity: number;
+  bookedLoad: number;
+  blockedVolume: number;
+  inFlight: number;
+  idleCycles: number;
+  investorFactionId: string | null;
+  cargo: LaneCargoRow[];
+  openProjects: ConstructionProjectLaneRow[];
+}
 /** Aggregate trading partner for a single good (top-N source or destination). */
 export interface TradeFlowPartner {
   systemId: string;
@@ -55,6 +99,18 @@ export interface TradeFlowVolumeBucket {
   tick: number;
   importVolume: number;
   exportVolume: number;
+}
+/** One good travelling to or from this system right now, read off the scheduled-freight ledger
+ *  (`WorldPendingArrival`) — present only while `arrivalTick > currentTick` (the row disappears the
+ *  tick the goods-arrivals stage credits it). `otherSystemId`/`otherSystemName` name the far end:
+ *  the origin for an inbound row, the destination for an outbound one. */
+export interface TransitRow {
+  goodId: string;
+  goodName: string;
+  quantity: number;
+  otherSystemId: string;
+  otherSystemName: string;
+  arrivalTick: number;
 }
 // ── System logistics (production/consumption + imports/exports dashboard) ─────
 /**
@@ -102,6 +158,8 @@ export type SystemLogisticsData =
       /** Goods with any cross-border flow. */
       tradedGoodCount: number;
       volumeHistory: TradeFlowVolumeBucket[];
+      /** Freight in flight on the ledger right now, split by direction. */
+      transit: { inbound: TransitRow[]; outbound: TransitRow[] };
     }
   | { visibility: "unknown" };
 
@@ -401,6 +459,9 @@ export interface FactionConstructionData {
     systemName: string;
     progress: number;
   }>;
+  /** Open lane-upgrade projects — progress desc, then label asc. A lane carries no single
+   *  `systemId`, so it gets its own list rather than folding into `buildSystems`. */
+  lanes: Array<{ laneKey: string; label: string; progress: number }>;
   /** Player-originated open projects across the faction. */
   orderedCount: number;
 }
@@ -505,9 +566,19 @@ export interface ColonyPreviewData {
    *  is accepted; only the charter is actually spent at the click. */
   commitment: number;
 }
+/** One system adjacent to the claim target that the player already holds — the claim quote names
+ *  it, and the lane(s) claiming would bring under control run between it and the target. */
+export interface ClaimAdjacentSystem {
+  systemId: string;
+  systemName: string;
+}
+/** The claim verb's feasibility for an unclaimed system adjacent to the player's territory. */
+export type ClaimOptionData =
+  | { state: "eligible"; adjacentOwned: ClaimAdjacentSystem[] }
+  | { state: "cooldown"; adjacentOwned: ClaimAdjacentSystem[]; remainingTicks: number };
 /** Per-system verb surface: which construction verb applies here and its feasibility. */
 export type SystemBuildOptionsData =
-  | { mode: "none" } // not the player's system (or no seat)
+  | { mode: "none" } // not the player's system, not adjacent-unclaimed, or no seat
   | {
       mode: "colony";
       colony:
@@ -521,7 +592,10 @@ export type SystemBuildOptionsData =
             preview: ColonyPreviewData | null;
           };
     }
-  | { mode: "build"; options: BuildOptionData[] };
+  | { mode: "build"; options: BuildOptionData[] }
+  /** An unclaimed system bordering territory the player controls — the claim verb's home. Never
+   *  set for a system with no player-owned neighbour (nothing to act on, same as a foreign system). */
+  | { mode: "claim"; claim: ClaimOptionData };
 
 // ── Faction vitals (Overview aggregate tiles: territory / population / stability / development) ──
 /**

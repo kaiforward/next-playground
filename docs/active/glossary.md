@@ -155,7 +155,8 @@ band, funded fraction, charter fee, manifest.
 
 **Territory and politics** — unclaimed / controlled / developed, claim, colonise, colony, faction,
 government, doctrine, faction status, relation score and its five tiers, alliance, region,
-gateway, jump lane, crossing lane, fuel cost.
+gateway, jump lane, crossing lane, fuel cost, lane level, lane capacity, in transit, congested,
+blocked volume.
 
 **The player's layer** — automation switch, pin, tracker section, alert category and its three
 tiers, funded front, ghost row.
@@ -413,17 +414,33 @@ high relation score and dissolved when the score falls back.
 **Region** — A named division of the map that a system belongs to. It orients the player and
 carries a dominant-economy label; it does not bound anyone's territory.
 
-**Jump lane** — A connection between two systems. Goods, people and ships all move along lanes and
-nowhere else. Most lanes sit inside one region; a lane crossing between two regions exists only
-where the galaxy's generated corridors put one.
+**Jump lane** — A connection between two systems, carrying its own invested lane level and
+capacity. Goods, people and ships all move along lanes and nowhere else. Most lanes sit inside one
+region; a lane crossing between two regions exists only where the galaxy's generated corridors put
+one.
 
-**Crossing lane** — A jump lane the galaxy generator marks as a corridor's single long-haul link
-directly between two regions' anchor systems. Styled distinctly on the map (a glowing amber line,
-against the ordinary dashed line every other lane draws) and priced at a fuel-cost multiplier
-above every other lane.
+**Crossing lane** — A jump lane priced at a fuel-cost multiplier for crossing directly between two
+regions' anchor systems, drawn on the map by its fuel-cost tier like any other lane.
 
 **Fuel cost** — What crossing one jump lane costs. It sets how far hauls and migration reach, and
 crossing lanes cost the most.
+
+**Lane level** — A jump lane's invested tier, raised one step at a time by an upgrade project and
+eroded gradually if the lane sits unused for a long stretch. A lane with no investment sits at
+level 0.
+
+**Lane capacity** — How much volume a jump lane can carry per cycle before it turns any further
+hauls away. Rises with lane level.
+
+**In transit** — Goods already dispatched and travelling a lane, counted at neither system until
+they arrive.
+
+**Congested** — A jump lane that turned volume away this run because it was already at capacity —
+see blocked volume. Investing in the lane raises the ceiling; the state fades on its own once
+demand does.
+
+**Blocked volume** — How much a jump lane turned away this run because it was already at capacity
+— the measure congested names.
 
 **Gateway** — A system anchoring one end of a corridor between two regions — the chokepoint
 anything travelling between those regions is funnelled through.

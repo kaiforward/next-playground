@@ -10,6 +10,7 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { CheckboxInput } from "@/components/form/checkbox-input";
 import { formatMagnitude, fractionPct } from "@/lib/utils/format";
 import { bandShortfall } from "@/lib/engine/treasury";
+import { laneHref } from "@/lib/utils/route-hrefs";
 
 /**
  * The faction's construction command summary: the automation switch pair (player faction only),
@@ -27,7 +28,7 @@ export function FactionConstructionCard({ factionId }: { factionId: string }) {
   // no re-settle. See `bandShortfall`.
   const shorted = bandShortfall(treasury.lastSettlement, "construction") !== null;
   const setAutomation = useSetAutomation();
-  const empty = data.buildSystems.length === 0 && data.colonies.length === 0;
+  const empty = data.buildSystems.length === 0 && data.colonies.length === 0 && data.lanes.length === 0;
 
   return (
     <Card variant="bordered" padding="md" className="mb-6">
@@ -72,12 +73,23 @@ export function FactionConstructionCard({ factionId }: { factionId: string }) {
                 })
               }
             />
+            <CheckboxInput
+              label="Autonomic lanes"
+              checked={data.automation.lanes}
+              onChange={(lanes) =>
+                setAutomation.mutate({
+                  build: data.automation?.build ?? true,
+                  colonisation: data.automation?.colonisation ?? true,
+                  lanes,
+                })
+              }
+            />
           </div>
         )}
         {empty ? (
           <EmptyState message="No active construction or expansion." />
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <SectionHeader as="h4" className="mb-2">
                 Building — {data.buildSystems.reduce((s, x) => s + x.count, 0)} across {data.buildSystems.length} systems
@@ -100,6 +112,18 @@ export function FactionConstructionCard({ factionId }: { factionId: string }) {
                   <li key={c.systemId} className="py-0.5 text-sm">
                     <LinkComponent href={`/system/${c.systemId}/industry`} className="text-text-accent transition-colors hover:text-text-accent-hover">
                       {c.systemName}
+                    </LinkComponent>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <SectionHeader as="h4" className="mb-2">Lanes — {data.lanes.length}</SectionHeader>
+              <ul>
+                {data.lanes.map((l) => (
+                  <li key={l.laneKey} className="py-0.5 text-sm">
+                    <LinkComponent href={laneHref(l.laneKey)} className="text-text-accent transition-colors hover:text-text-accent-hover">
+                      {l.label}
                     </LinkComponent>
                   </li>
                 ))}

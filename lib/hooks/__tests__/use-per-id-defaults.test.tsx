@@ -103,7 +103,7 @@ describe("useFactionConstruction — absent factionId reads as an empty construc
     const { result } = renderHook(() => useFactionConstruction("f-none"));
     expect(result.current).toEqual({
       factionId: "", pool: 0, poolBase: 0, poolCentres: 0, automation: null,
-      buildSystems: [], colonies: [], orderedCount: 0,
+      buildSystems: [], colonies: [], lanes: [], orderedCount: 0,
     });
   });
 });

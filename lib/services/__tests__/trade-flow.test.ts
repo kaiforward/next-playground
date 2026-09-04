@@ -175,6 +175,66 @@ describe("getSystemLogistics", () => {
   });
 });
 
+describe("getSystemLogistics — transit rows", () => {
+  it("carries an inbound row while its arrival tick is still ahead, and drops it once the tick passes", () => {
+    const withArrival: World = {
+      ...world,
+      meta: { ...world.meta, currentTick: 100 },
+      pendingArrivals: [
+        {
+          id: "arrival-transit-1", factionId: null, fromSystemId: partnerA.id, toSystemId: system.id,
+          goodId: "water", quantity: 18, dispatchTick: 94, arrivalTick: 105,
+          routeEdges: [laneKey(system.id, partnerA.id)], leg: "outbound",
+        },
+      ],
+    };
+    setWorld(withArrival);
+
+    const before = getSystemLogistics(system.id);
+    if (before.visibility !== "visible") throw new Error("expected visible");
+    expect(before.transit.inbound).toHaveLength(1);
+    expect(before.transit.inbound[0]).toEqual({
+      goodId: "water", goodName: "Water", quantity: 18,
+      otherSystemId: partnerA.id, otherSystemName: partnerA.name, arrivalTick: 105,
+    });
+    expect(before.transit.outbound).toHaveLength(0);
+
+    // Advance the world's own tick past the arrival — the SAME ledger row is still there; the row
+    // is read fresh from it each call, so only `currentTick` changes, never the fixture itself.
+    setWorld({ ...withArrival, meta: { ...withArrival.meta, currentTick: 105 } });
+    const after = getSystemLogistics(system.id);
+    if (after.visibility !== "visible") throw new Error("expected visible");
+    expect(after.transit.inbound).toHaveLength(0);
+  });
+
+  it("classifies a row leaving the focal system as outbound, naming the far end", () => {
+    setWorld({
+      ...world,
+      meta: { ...world.meta, currentTick: 100 },
+      pendingArrivals: [
+        {
+          id: "arrival-transit-2", factionId: null, fromSystemId: system.id, toSystemId: partnerB.id,
+          goodId: "food", quantity: 8, dispatchTick: 96, arrivalTick: 110,
+          routeEdges: [laneKey(system.id, partnerB.id)], leg: "outbound",
+        },
+      ],
+    });
+    const data = getSystemLogistics(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    expect(data.transit.outbound).toHaveLength(1);
+    expect(data.transit.outbound[0].otherSystemId).toBe(partnerB.id);
+    expect(data.transit.outbound[0].otherSystemName).toBe(partnerB.name);
+    expect(data.transit.inbound).toHaveLength(0);
+  });
+
+  it("reads empty transit when the ledger has nothing touching this system", () => {
+    setWorld({ ...world, pendingArrivals: [] });
+    const data = getSystemLogistics(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    expect(data.transit).toEqual({ inbound: [], outbound: [] });
+  });
+});
+
 describe("getTradeFlowEdges", () => {
   it("reads zero edges when the arrivals ledger is empty", () => {
     setWorld({ ...world, pendingArrivals: [] });

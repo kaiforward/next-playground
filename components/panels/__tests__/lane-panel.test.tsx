@@ -1,16 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
-import { LanePanel } from "@/components/panels/lane-panel";
+import { LanePanel, laneInvestState } from "@/components/panels/lane-panel";
 import { gameStore } from "@/lib/store/use-game-store";
 import { WouterRuntimeProvider } from "@/client/wouter-link";
-import type { UniverseData } from "@/lib/types/game";
+import type { UniverseData, AtlasData } from "@/lib/types/game";
+import type { LaneDetailData } from "@/lib/types/api";
 
 const UNIVERSE: UniverseData = {
   regions: [],
   systems: [
     {
       id: "sys-a", name: "Sunnyvale", economyType: "agricultural", x: 0, y: 0,
-      description: "", regionId: "", factionId: null, isGateway: false, developed: true, sunClass: "yellow",
+      description: "", regionId: "", factionId: "f-player", isGateway: false, developed: true, sunClass: "yellow",
     },
     {
       id: "sys-b", name: "Marrow", economyType: "extraction", x: 10, y: 10,
@@ -18,12 +19,47 @@ const UNIVERSE: UniverseData = {
     },
   ],
   connections: [],
-  factions: [],
+  factions: [
+    { id: "f-player", name: "Meridian Combine", color: "#fff", governmentType: null },
+    { id: "f-rival", name: "Verdant Compact", color: "#000", governmentType: null },
+  ],
 };
 
-function seed() {
+const ATLAS: AtlasData = {
+  meta: { mapSize: 100, systemCount: 2, seed: 1 },
+  regions: [],
+  systems: [],
+  connections: [],
+  factions: [],
+  player: { controlledFactionId: "f-player", homeworldSystemId: "sys-a" },
+};
+
+function laneDetailFixture(overrides: Partial<LaneDetailData> = {}): LaneDetailData {
+  return {
+    key: "sys-a|sys-b",
+    fuelCost: 8.6,
+    a: { systemId: "sys-a", systemName: "Sunnyvale", factionId: "f-player", unclaimed: false },
+    b: { systemId: "sys-b", systemName: "Marrow", factionId: null, unclaimed: true },
+    level: 2,
+    capacity: 30,
+    bookedLoad: 24,
+    blockedVolume: 0,
+    inFlight: 0,
+    idleCycles: 0,
+    investorFactionId: null,
+    cargo: [],
+    openProjects: [],
+    ...overrides,
+  };
+}
+
+function seed(options: { atlas?: AtlasData; laneDetail?: Record<string, LaneDetailData> } = {}) {
   act(() => {
-    gameStore.applyStateFrame({ frameSeq: Date.now(), worldVersion: Date.now(), slices: { universe: UNIVERSE } });
+    gameStore.applyStateFrame({
+      frameSeq: Date.now(),
+      worldVersion: Date.now(),
+      slices: { universe: UNIVERSE, atlas: options.atlas ?? ATLAS, laneDetail: options.laneDetail ?? {} },
+    });
   });
 }
 
@@ -64,5 +100,128 @@ describe("LanePanel", () => {
       </WouterRuntimeProvider>,
     );
     expect(screen.getByText("This lane no longer exists in the current galaxy.")).toBeInTheDocument();
+  });
+
+  it("renders the vitals grid and disables the invest verb, naming the unclaimed endpoint, when the player does not control both ends", () => {
+    seed({ laneDetail: { "sys-a|sys-b": laneDetailFixture() } });
+    render(
+      <WouterRuntimeProvider>
+        <LanePanel laneKey="sys-a|sys-b" />
+      </WouterRuntimeProvider>,
+    );
+
+    expect(screen.getByText("2")).toBeInTheDocument(); // the Level tile's value
+    const invest = screen.getByRole("button", { name: /Invest/ });
+    expect(invest).toBeDisabled();
+    expect(
+      screen.getByText((_, el) => el?.tagName === "P" && (el.textContent ?? "").includes("Marrow is unclaimed")),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "claim Marrow" })).toHaveAttribute("href", "/system/sys-b");
+  });
+
+  it("names the foreign faction, not unclaimed, when both ends are claimed but split between two factions", () => {
+    seed({
+      laneDetail: {
+        "sys-a|sys-b": laneDetailFixture({
+          b: { systemId: "sys-b", systemName: "Marrow", factionId: "f-rival", unclaimed: false },
+        }),
+      },
+    });
+    render(
+      <WouterRuntimeProvider>
+        <LanePanel laneKey="sys-a|sys-b" />
+      </WouterRuntimeProvider>,
+    );
+
+    const invest = screen.getByRole("button", { name: /Invest/ });
+    expect(invest).toBeDisabled();
+    expect(
+      screen.getByText(
+        (_, el) =>
+          el?.tagName === "P" &&
+          (el.textContent ?? "") === "Marrow belongs to Verdant Compact. Only the faction holding both ends can invest in a lane.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("enables the invest verb when the player controls both ends", () => {
+    seed({
+      laneDetail: {
+        "sys-a|sys-b": laneDetailFixture({
+          b: { systemId: "sys-b", systemName: "Marrow", factionId: "f-player", unclaimed: false },
+          investorFactionId: "f-player",
+        }),
+      },
+    });
+    render(
+      <WouterRuntimeProvider>
+        <LanePanel laneKey="sys-a|sys-b" />
+      </WouterRuntimeProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: /Invest/ })).toBeEnabled();
+  });
+
+  it("names congestion in the Turned away hint only once volume is actually blocked", () => {
+    seed({ laneDetail: { "sys-a|sys-b": laneDetailFixture({ blockedVolume: 6 }) } });
+    render(
+      <WouterRuntimeProvider>
+        <LanePanel laneKey="sys-a|sys-b" />
+      </WouterRuntimeProvider>,
+    );
+    expect(screen.getByText("congested")).toBeInTheDocument();
+  });
+
+  it("does not name congestion when nothing was blocked this run", () => {
+    seed({ laneDetail: { "sys-a|sys-b": laneDetailFixture({ blockedVolume: 0 }) } });
+    render(
+      <WouterRuntimeProvider>
+        <LanePanel laneKey="sys-a|sys-b" />
+      </WouterRuntimeProvider>,
+    );
+    expect(screen.queryByText("congested")).not.toBeInTheDocument();
+  });
+
+  it("renders an empty-state cargo card when nothing is in flight, and a row per ledger entry otherwise", () => {
+    seed({
+      laneDetail: {
+        "sys-a|sys-b": laneDetailFixture({
+          cargo: [{
+            goodId: "water", goodName: "Water", quantity: 18,
+            fromSystemId: "sys-a", fromSystemName: "Sunnyvale", toSystemId: "sys-b", toSystemName: "Marrow",
+            arrivalTick: 30,
+          }],
+        }),
+      },
+    });
+    render(
+      <WouterRuntimeProvider>
+        <LanePanel laneKey="sys-a|sys-b" />
+      </WouterRuntimeProvider>,
+    );
+
+    expect(screen.getByText("Cargo in flight")).toBeInTheDocument();
+    expect(screen.getByText("Water")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Sunnyvale" }).length).toBeGreaterThan(0);
+  });
+});
+
+describe("laneInvestState", () => {
+  it("is hidden with no player seat", () => {
+    expect(laneInvestState(laneDetailFixture(), null, () => "")).toEqual({ kind: "hidden" });
+  });
+
+  it("is hidden when a single other faction already qualifies as investor", () => {
+    const state = laneInvestState(
+      laneDetailFixture({ investorFactionId: "f-rival" }),
+      "f-player",
+      () => "Verdant Compact",
+    );
+    expect(state).toEqual({ kind: "hidden" });
+  });
+
+  it("is ready when the viewer's own faction is the investor", () => {
+    const state = laneInvestState(laneDetailFixture({ investorFactionId: "f-player" }), "f-player", () => "");
+    expect(state).toEqual({ kind: "ready" });
   });
 });

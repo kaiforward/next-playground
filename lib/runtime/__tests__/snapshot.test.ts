@@ -21,7 +21,7 @@ const EXPECTED_SLICE_KEYS: (keyof SnapshotSlices)[] = [
   "stability", "population", "development", "migration", "provision", "factions", "factionDetail",
   "relations", "systemVitals", "systemPopulation", "systemIndustry", "systemLogistics",
   "systemConstruction", "systemBuildOptions", "systemSubstrate", "market", "marketComparison",
-  "tradeFlow", "lanes", "factionVitals", "factionConstruction", "factionTreasury", "constructionStalls",
+  "tradeFlow", "lanes", "laneDetail", "factionVitals", "factionConstruction", "factionTreasury", "constructionStalls",
 ];
 
 /** The coarse slices — always complete, regardless of interest (frame-architecture spec, "Frame
@@ -36,7 +36,7 @@ const COARSE_KEYS: (keyof SnapshotSlices)[] = [
 /** The interest-keyed detail slices — present only for the current interest set's ids. */
 const DETAIL_KEYS: (keyof SnapshotSlices)[] = [
   "systemVitals", "systemPopulation", "systemIndustry", "systemLogistics", "systemConstruction",
-  "systemBuildOptions", "systemSubstrate", "market", "marketComparison",
+  "systemBuildOptions", "systemSubstrate", "market", "marketComparison", "laneDetail",
 ];
 
 let world: World;
@@ -61,6 +61,7 @@ function fullInterest(w: World): InterestSet {
     systems: w.systems.map((s) => s.id),
     factions: w.factions.map((f) => f.id),
     goods: Object.keys(GOODS),
+    lanes: w.lanes.map((l) => l.key),
   };
 }
 
@@ -98,7 +99,7 @@ describe("buildStateFrame — Proves 1: empty interest", () => {
 
 describe("buildStateFrame — Proves 2: stale interest ids", () => {
   it("skips a system id and a good id absent from the world — no throw, key omitted", () => {
-    const interest: InterestSet = { systems: ["does-not-exist"], factions: [], goods: ["does-not-exist-good"] };
+    const interest: InterestSet = { systems: ["does-not-exist"], factions: [], goods: ["does-not-exist-good"], lanes: [] };
 
     expect(() => buildStateFrame(world, interest)).not.toThrow();
 
@@ -126,7 +127,7 @@ describe("buildStateFrame — Proves 3: atomic per-system bundle", () => {
     controlled.factionId = factionId;
     setWorld(world);
 
-    const interest: InterestSet = { systems: [controlled.id], factions: [], goods: [] };
+    const interest: InterestSet = { systems: [controlled.id], factions: [], goods: [], lanes: [] };
     const frame = buildStateFrame(world, interest);
 
     for (const key of [
@@ -143,7 +144,7 @@ describe("buildStateFrame — Proves 4: goods interest", () => {
     const goodIds = Object.keys(GOODS);
     if (goodIds.length < 2) throw new Error("fixture: expected at least two catalog goods");
     const [firstGood, secondGood] = goodIds;
-    const interest: InterestSet = { systems: [], factions: [], goods: [firstGood] };
+    const interest: InterestSet = { systems: [], factions: [], goods: [firstGood], lanes: [] };
 
     const frame = buildStateFrame(world, interest);
 

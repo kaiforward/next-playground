@@ -53,7 +53,7 @@ import { getSystemVitals } from "@/lib/services/system-vitals";
 import { getSystemPopulation } from "@/lib/services/system-population";
 import { getSystemIndustry, getSystemSubstrate } from "@/lib/services/universe";
 import { getSystemLogistics, getTradeFlowEdges } from "@/lib/services/trade-flow";
-import { getLaneStates } from "@/lib/services/lanes";
+import { getLaneStates, getLaneDetail } from "@/lib/services/lanes";
 import { getSystemConstruction, getFactionConstruction, readoutForFaction } from "@/lib/services/construction";
 import { getSystemBuildOptions } from "@/lib/services/build-options";
 import { getFactionVitals } from "@/lib/services/faction-vitals";
@@ -70,6 +70,7 @@ import type {
   AlertData, TrackerData, SystemVitalsData, SystemPopulationData, SystemIndustryData,
   SystemLogisticsData, SystemConstructionData, SystemBuildOptionsData, FactionVitalsData,
   FactionConstructionData, FactionTreasuryData, SystemSubstrateData, TradeFlowEdges, LaneStateRow,
+  LaneDetailData,
 } from "@/lib/types/api";
 
 /** `getMarket`'s return shape, reused verbatim rather than re-declared, per the "reuse the existing
@@ -149,6 +150,9 @@ export interface SnapshotSlices {
   marketComparison: Record<string, MarketComparisonSlice>;
   tradeFlow: TradeFlowEdges;
   lanes: LaneStateRow[];
+  /** Interest-keyed (`useInterest("lane", key)`) — one open lane card's full detail, computed only
+   *  for lanes named in the current interest set, never every lane in the galaxy. */
+  laneDetail: Record<string, LaneDetailData>;
   factionVitals: Record<string, FactionVitalsData>;
   factionConstruction: Record<string, FactionConstructionData>;
   factionTreasury: Record<string, FactionTreasuryData>;
@@ -249,6 +253,15 @@ export function buildStateFrame(world: World, interest: InterestSet): StateFrame
     marketComparison[goodId] = getMarketComparison(goodId);
   }
 
+  const laneDetail: Record<string, LaneDetailData> = {};
+  const existingLaneKeys =
+    interest.lanes.length > 0 ? new Set(world.lanes.map((l) => l.key)) : new Set<string>();
+  for (const key of interest.lanes) {
+    if (!existingLaneKeys.has(key)) continue; // stale/unknown interest id — skip, never throw
+    const detail = getLaneDetail(key);
+    if (detail) laneDetail[key] = detail;
+  }
+
   const factionVitals: Record<string, FactionVitalsData> = {};
   const factionConstruction: Record<string, FactionConstructionData> = {};
   const factionTreasury: Record<string, FactionTreasuryData> = {};
@@ -290,6 +303,7 @@ export function buildStateFrame(world: World, interest: InterestSet): StateFrame
     marketComparison,
     tradeFlow: getTradeFlowEdges(),
     lanes: getLaneStates(),
+    laneDetail,
     factionVitals,
     factionConstruction,
     factionTreasury,

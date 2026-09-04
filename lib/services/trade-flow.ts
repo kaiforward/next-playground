@@ -5,10 +5,13 @@ import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { bucketVolumeHistory } from "@/lib/engine/system-trade-flow";
 import { buildLaneFlowEdges } from "@/lib/engine/trade-flow-edges";
 import { isEconomicallyActive } from "@/lib/engine/control";
+import { GOODS } from "@/lib/constants/goods";
 import type {
   TradeFlowEdges,
   SystemLogisticsData,
+  TransitRow,
 } from "@/lib/types/api";
+import type { World } from "@/lib/world/types";
 import { yieldsOf, effOf } from "@/lib/engine/resources";
 import { capacityGoodRates } from "@/lib/engine/industry";
 import { useRatesByGood } from "@/lib/engine/honest-demand";
@@ -27,6 +30,45 @@ export function getTradeFlowEdges(): TradeFlowEdges {
   const world = getWorld();
   const logisticsEdges = buildLaneFlowEdges(world.pendingArrivals, TRADE_SIMULATION.LOGISTICS_ROUTE_FLOOR);
   return { logisticsEdges };
+}
+
+/**
+ * Freight in flight to/from `systemId` right now, split by direction — present only while
+ * `arrivalTick > currentTick` (docs/planned/logistics-lanes.md §7): a row disappears the tick the
+ * goods-arrivals stage credits it, never filtered by this function's caller. Read straight off the
+ * scheduled-freight ledger (`WorldPendingArrival`), not a window sum.
+ */
+function buildTransitRows(
+  world: World,
+  systemId: string,
+  currentTick: number,
+  resolveName: (id: string) => string,
+): { inbound: TransitRow[]; outbound: TransitRow[] } {
+  const inbound: TransitRow[] = [];
+  const outbound: TransitRow[] = [];
+  for (const arrival of world.pendingArrivals) {
+    if (arrival.arrivalTick <= currentTick) continue;
+    if (arrival.toSystemId === systemId) {
+      inbound.push({
+        goodId: arrival.goodId,
+        goodName: GOODS[arrival.goodId]?.name ?? arrival.goodId,
+        quantity: arrival.quantity,
+        otherSystemId: arrival.fromSystemId,
+        otherSystemName: resolveName(arrival.fromSystemId),
+        arrivalTick: arrival.arrivalTick,
+      });
+    } else if (arrival.fromSystemId === systemId) {
+      outbound.push({
+        goodId: arrival.goodId,
+        goodName: GOODS[arrival.goodId]?.name ?? arrival.goodId,
+        quantity: arrival.quantity,
+        otherSystemId: arrival.toSystemId,
+        otherSystemName: resolveName(arrival.toSystemId),
+        arrivalTick: arrival.arrivalTick,
+      });
+    }
+  }
+  return { inbound, outbound };
 }
 
 /**
@@ -89,5 +131,6 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
     activeGoodCount: model.activeGoodCount,
     tradedGoodCount: model.tradedGoodCount,
     volumeHistory: bucketVolumeHistory(flows, systemId, currentTick),
+    transit: buildTransitRows(world, systemId, currentTick, resolveName),
   };
 }

@@ -18,8 +18,40 @@ import { foundingReadoutInputs } from "@/lib/services/construction";
 import { sizeColonyEstablish, queuedBuildLevelsAt } from "@/lib/engine/directed-build";
 import { buildingsBySystem } from "@/lib/services/world-index";
 import { CONSTRUCTION } from "@/lib/constants/construction";
-import type { SystemBuildOptionsData, BuildOptionData } from "@/lib/types/api";
-import type { WorldConstructionProject } from "@/lib/world/types";
+import { LANES } from "@/lib/constants/lanes";
+import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
+import type { SystemBuildOptionsData, BuildOptionData, ClaimAdjacentSystem } from "@/lib/types/api";
+import type { World, WorldConstructionProject, WorldPlayer, WorldSystem } from "@/lib/world/types";
+
+/**
+ * The claim verb's feasibility for an unclaimed `system` — eligible only when it borders at least
+ * one system the player already controls (§1's "adjacent, free" rule); `{ mode: "none" }` (nothing
+ * to act on) when it doesn't, same as a non-adjacent foreign system today.
+ */
+function claimOptions(world: World, player: WorldPlayer, system: WorldSystem): SystemBuildOptionsData {
+  const adjacentOwned: ClaimAdjacentSystem[] = [];
+  for (const c of world.connections) {
+    let otherId: string | null = null;
+    if (c.fromId === system.id) otherId = c.toId;
+    else if (c.toId === system.id) otherId = c.fromId;
+    if (otherId === null) continue;
+    const other = world.systems.find((s) => s.id === otherId);
+    if (other && other.factionId === player.controlledFactionId) {
+      adjacentOwned.push({ systemId: other.id, systemName: other.name });
+    }
+  }
+  if (adjacentOwned.length === 0) return { mode: "none" };
+
+  const cooldownTicks = LANES.PLAYER_CLAIM_COOLDOWN * CYCLE_LENGTH;
+  const lastClaimTick = player.lastClaimTick;
+  if (lastClaimTick !== undefined) {
+    const remaining = cooldownTicks - (world.meta.currentTick - lastClaimTick);
+    if (remaining > 0) {
+      return { mode: "claim", claim: { state: "cooldown", adjacentOwned, remainingTicks: remaining } };
+    }
+  }
+  return { mode: "claim", claim: { state: "eligible", adjacentOwned } };
+}
 
 export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData {
   if (!hasWorld()) throw new ServiceError("No world loaded", "no_world");
@@ -28,7 +60,9 @@ export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData 
   if (!system) throw new ServiceError(`System ${systemId} not found.`, "not_found");
 
   const player = world.player;
-  if (!player || system.factionId !== player.controlledFactionId) return { mode: "none" };
+  if (!player) return { mode: "none" };
+  if (system.factionId === null) return claimOptions(world, player, system);
+  if (system.factionId !== player.controlledFactionId) return { mode: "none" };
 
   if (system.control === "controlled") {
     const check = colonyEligibility(world, player.controlledFactionId, system);

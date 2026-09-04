@@ -48,6 +48,12 @@ function tierFor(fuelCost: number): { tier: LaneTier; baseWidth: number; alpha: 
   return { tier: "ordinary", baseWidth: LANE_WIDTH.ordinary, alpha: 0.4 };
 }
 
+/** The fuel-only half of `laneStyle` — a lane's tier from its fuel cost alone, for callers (the
+ *  lane card's subtitle) that need the tier label without a level/load/blocked reading. */
+export function laneTier(fuelCost: number): LaneTier {
+  return tierFor(fuelCost).tier;
+}
+
 /** Linear-interpolate two 0xRRGGBB colours by `t` ∈ [0, 1]. */
 function lerpColor(from: number, to: number, t: number): number {
   const fr = (from >> 16) & 0xff, fg = (from >> 8) & 0xff, fb = from & 0xff;
@@ -59,7 +65,8 @@ function lerpColor(from: number, to: number, t: number): number {
 }
 
 export function laneStyle({ fuelCost, level, load, blocked }: LaneStyleInput): LaneStyle {
-  const { tier, baseWidth, alpha } = tierFor(fuelCost);
+  const { baseWidth, alpha } = tierFor(fuelCost);
+  const tier = laneTier(fuelCost);
   const width = baseWidth + Math.max(0, level) * LANE_WIDTH.perLevel;
   const t = Math.max(0, Math.min(1, load));
   const color = blocked ? LANE_LOAD_COLOR.blocked : lerpColor(LANE_LOAD_COLOR.idle, LANE_LOAD_COLOR.loaded, t);

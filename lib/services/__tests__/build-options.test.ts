@@ -9,7 +9,27 @@ import { ServiceError } from "@/lib/services/errors";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { foundingCommitmentCost } from "@/lib/engine/founding-cost";
+import { playerHome } from "./seat-world";
+import { LANES } from "@/lib/constants/lanes";
+import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import type { WorldConstructionProject } from "@/lib/world/types";
+
+const COOLDOWN_TICKS = LANES.PLAYER_CLAIM_COOLDOWN * CYCLE_LENGTH;
+
+/** An unclaimed system directly connected to the homeworld — same fixture pattern as claims.test.ts. */
+function unclaimedNeighbour() {
+  const w = getWorld();
+  const home = playerHome();
+  for (const c of w.connections) {
+    let otherId: string | null = null;
+    if (c.fromId === home.id) otherId = c.toId;
+    else if (c.toId === home.id) otherId = c.fromId;
+    if (otherId === null) continue;
+    const other = w.systems.find((s) => s.id === otherId)!;
+    if (other.factionId === null) return other;
+  }
+  throw new Error("seeded galaxy has no unclaimed neighbour of the homeworld");
+}
 
 /** Comfortably above the habitable floor — every colony case below wants an unconstrained site. */
 const AMPLE_HABITABLE = 100;
@@ -358,5 +378,61 @@ describe("getSystemBuildOptions", () => {
     if (data.colony.state !== "ineligible") return;
     expect(data.colony.reason).toBe("no_seed_source");
     expect(data.colony.preview).toBeNull();
+  });
+});
+
+describe("getSystemBuildOptions — claim mode", () => {
+  beforeEach(() => { clearWorld(); setWorld(seatWorld()); });
+
+  it("offers claim mode, naming the owned neighbour, for an unclaimed system adjacent to the player's territory", () => {
+    const target = unclaimedNeighbour();
+    const home = playerHome();
+    const data = getSystemBuildOptions(target.id);
+    expect(data.mode).toBe("claim");
+    if (data.mode !== "claim") return;
+    expect(data.claim.state).toBe("eligible");
+    if (data.claim.state !== "eligible") return;
+    expect(data.claim.adjacentOwned.some((a) => a.systemId === home.id)).toBe(true);
+  });
+
+  it("returns none for an unclaimed system with no player-owned neighbour", () => {
+    const w = getWorld();
+    const pid = w.player!.controlledFactionId;
+    const ownedIds = new Set(w.systems.filter((s) => s.factionId === pid).map((s) => s.id));
+    const farUnclaimed = w.systems.find((s) => {
+      if (s.factionId !== null) return false;
+      return !w.connections.some((c) => {
+        const otherId = c.fromId === s.id ? c.toId : c.toId === s.id ? c.fromId : null;
+        return otherId !== null && ownedIds.has(otherId);
+      });
+    });
+    if (!farUnclaimed) return; // seeded galaxy has no such system — nothing to assert
+    expect(getSystemBuildOptions(farUnclaimed.id)).toEqual({ mode: "none" });
+  });
+
+  it("reports cooldown state with the remaining ticks once the player has claimed recently", () => {
+    const w = getWorld();
+    const currentTick = w.meta.currentTick;
+    setWorld({ ...w, player: { ...w.player!, lastClaimTick: currentTick - 1 } });
+
+    const target = unclaimedNeighbour();
+    const data = getSystemBuildOptions(target.id);
+    expect(data.mode).toBe("claim");
+    if (data.mode !== "claim") return;
+    expect(data.claim.state).toBe("cooldown");
+    if (data.claim.state !== "cooldown") return;
+    expect(data.claim.remainingTicks).toBe(COOLDOWN_TICKS - 1);
+  });
+
+  it("reports eligible again once the cooldown has fully elapsed", () => {
+    const w = getWorld();
+    const currentTick = w.meta.currentTick;
+    setWorld({ ...w, player: { ...w.player!, lastClaimTick: currentTick - COOLDOWN_TICKS } });
+
+    const target = unclaimedNeighbour();
+    const data = getSystemBuildOptions(target.id);
+    expect(data.mode).toBe("claim");
+    if (data.mode !== "claim") return;
+    expect(data.claim.state).toBe("eligible");
   });
 });

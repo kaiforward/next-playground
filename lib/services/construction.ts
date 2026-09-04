@@ -145,6 +145,7 @@ export function getFactionConstruction(factionId: string): FactionConstructionDa
 
   const bySystem = new Map<string, { systemName: string; count: number }>();
   const colonies: FactionConstructionData["colonies"] = [];
+  const lanes: FactionConstructionData["lanes"] = [];
   let orderedCount = 0;
   for (const row of readout.all) {
     if (row.origin === "player") orderedCount += 1;
@@ -160,14 +161,16 @@ export function getFactionConstruction(factionId: string): FactionConstructionDa
       const entry = bySystem.get(row.systemId) ?? { systemName: row.systemName, count: 0 };
       entry.count += 1;
       bySystem.set(row.systemId, entry);
+    } else {
+      // Lane rows carry no single system to bucket into `buildSystems`/`colonies` — their own list.
+      lanes.push({ laneKey: row.laneKey, label: row.laneLabel, progress: row.progress });
     }
-    // Lane rows carry no single system to bucket into `buildSystems`/`colonies` — they still counted
-    // toward `orderedCount` above, and the faction's pool/queue math already includes their work.
   }
   const buildSystems = [...bySystem]
     .map(([systemId, v]) => ({ systemId, systemName: v.systemName, count: v.count }))
     .sort((a, b) => b.count - a.count || a.systemName.localeCompare(b.systemName));
   colonies.sort((a, b) => b.progress - a.progress || a.systemName.localeCompare(b.systemName));
+  lanes.sort((a, b) => b.progress - a.progress || a.label.localeCompare(b.label));
 
   const automation =
     world.player?.controlledFactionId === factionId ? { ...world.player.automation } : null;
@@ -175,7 +178,7 @@ export function getFactionConstruction(factionId: string): FactionConstructionDa
   return {
     factionId,
     pool: readout.pool, poolBase: readout.poolBase, poolCentres: readout.poolCentres,
-    automation, buildSystems, colonies, orderedCount,
+    automation, buildSystems, colonies, lanes, orderedCount,
   };
 }
 
