@@ -118,7 +118,7 @@ function FloatingPanel({
 
 /** Author the faction that generates a fresh galaxy (`newGame` command, world-less-valid,
  *  client-runtime spec §9) and land on the map root on success. The galaxy-shape knob section
- *  (spec `docs/planned/logistics-lanes.md` §5) and its embedded `GalaxyPreview` share this form's
+ *  (spec `docs/active/gameplay/universe.md`) and its embedded `GalaxyPreview` share this form's
  *  own state (`shape.*` fields) — the values the preview renders are exactly what `newGame`
  *  receives on submit, never a second copy that could drift from it. Renders full-screen (the
  *  preview-first layout: a full-bleed `GalaxyPreview` with the settings floating over it in two

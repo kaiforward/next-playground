@@ -34,7 +34,7 @@ export function getTradeFlowEdges(): TradeFlowEdges {
 
 /**
  * Freight in flight to/from `systemId` right now, split by direction — present only while
- * `arrivalTick > currentTick` (docs/planned/logistics-lanes.md §7): a row disappears the tick the
+ * `arrivalTick > currentTick` (docs/active/gameplay/logistics-lanes.md §7): a row disappears the tick the
  * goods-arrivals stage credits it, never filtered by this function's caller. Read straight off the
  * scheduled-freight ledger (`WorldPendingArrival`), not a window sum.
  */

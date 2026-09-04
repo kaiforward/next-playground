@@ -9,7 +9,7 @@ import type { TickCadence } from "@/lib/constants/tick-cadence";
  * How far a directed-logistics haul may reach.
  *
  * Directed-logistics dropped its own hop cap when it moved onto lane-network routing
- * (docs/planned/logistics-lanes.md §2): there is no longer a MAX_HOPS to test a haul against.
+ * (docs/active/gameplay/logistics-lanes.md §2): there is no longer a MAX_HOPS to test a haul against.
  * Reach is now whatever the lane graph and `laneOpenFor` traversability carry a placement over —
  * arbitrarily far, so long as every edge on some path carries an open lane row. `OLD_MAX_HOPS`
  * below is the retired directed-logistics hop cap's value, kept only as a distance comfortably
@@ -80,7 +80,7 @@ function corridorWorld(hops: number, dropLaneAt?: number): { world: World; donor
 }
 
 /** Runs `n` sequential ticks — dispatch and credit are two different stages a tick apart
- *  (docs/planned/logistics-lanes.md §3: a dispatched haul is drained by the NEXT tick's
+ *  (docs/active/gameplay/logistics-lanes.md §3: a dispatched haul is drained by the NEXT tick's
  *  unconditional goods-arrivals stage at the earliest, never the tick that dispatched it). */
 async function runTicks(world: World, n: number): Promise<World> {
   let w = world;

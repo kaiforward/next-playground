@@ -1,6 +1,6 @@
 /**
  * Pure lane engine — the shared substrate routing and investment mechanics build on
- * (docs/planned/logistics-lanes.md §1). Zero I/O, no world reads: callers pass in exactly the rows
+ * (docs/active/gameplay/logistics-lanes.md §1). Zero I/O, no world reads: callers pass in exactly the rows
  * this module needs.
  */
 
@@ -101,7 +101,7 @@ export function laneInvestor(
 
 /**
  * Construction work owed per investing faction this settlement — Σ `level × UPGRADE_WORK_PER_LEVEL`
- * over every lane the faction is the investor of (docs/planned/logistics-lanes.md §1: "build and
+ * over every lane the faction is the investor of (docs/active/gameplay/logistics-lanes.md §1: "build and
  * upkeep ride the existing purse"). A lane with no investor (either endpoint unclaimed, split
  * between factions, or below `controlled`) contributes to nobody's bill — it still decays (see
  * `decayLanes`), it just costs nothing to leave alone. Level-0 lanes are skipped outright: they carry
@@ -139,7 +139,7 @@ export interface LaneDecayResult {
  * reference-cycles while a whole level's worth of capacity goes unused, resets the moment a run uses
  * it, and at the buffer sheds exactly one level (never below 0) and restarts the countdown.
  *
- * "Attempted load" is this run's `bookedLoad + blockedVolume` (docs/planned/logistics-lanes.md §1: a
+ * "Attempted load" is this run's `bookedLoad + blockedVolume` (docs/active/gameplay/logistics-lanes.md §1: a
  * congested run that turned volume away still counts as use). Both figures are booked by the
  * logistics processor already scaled by that run's `catchUp`, so the capacity this compares against
  * must be scaled the same way: `laneCapacity(level) × catchUp` for the compare, and `BASE_LANE_CAPACITY

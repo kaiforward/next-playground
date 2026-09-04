@@ -5,7 +5,7 @@ import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 describe("EXPANSION constants", () => {
   it("bounds reach within the hop-BFS radius the tick computes", () => {
     // Directed-logistics dropped out of this bound when it moved onto lane-network routing
-    // (docs/planned/logistics-lanes.md §2) — directed-build's own planning radius is now the
+    // (docs/active/gameplay/logistics-lanes.md §2) — directed-build's own planning radius is now the
     // only other hop-counted reach the tick's shared BFS is sized against.
     expect(EXPANSION.REACH_JUMPS).toBeGreaterThanOrEqual(1);
     expect(EXPANSION.REACH_JUMPS).toBeLessThanOrEqual(DIRECTED_BUILD.MAX_HOPS);

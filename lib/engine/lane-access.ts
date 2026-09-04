@@ -1,7 +1,7 @@
 /**
  * Lane traversability — the per-hauler predicate a `RouteBooker` view (`lane-routing.ts`
  * `forHauler`) closes over as its `openEdge`. Pure, zero I/O: callers pass in exactly the
- * ownership/relation lookups this needs (docs/planned/logistics-lanes.md §2, "goods route over
+ * ownership/relation lookups this needs (docs/active/gameplay/logistics-lanes.md §2, "goods route over
  * own+unclaimed+friendly-or-allied").
  */
 import type { RelationTier } from "@/lib/constants/relations";

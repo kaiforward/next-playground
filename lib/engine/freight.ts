@@ -1,7 +1,7 @@
 /**
  * Pure freight-scheduling engine — the arrival-time formula and read-only ledger queries the
  * goods-arrivals stage and its future clients (the interdiction query, war's severed-lane verb)
- * share (docs/planned/logistics-lanes.md §3). Zero I/O: callers pass in exactly the rows this
+ * share (docs/active/gameplay/logistics-lanes.md §3). Zero I/O: callers pass in exactly the rows this
  * module needs.
  */
 

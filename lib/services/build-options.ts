@@ -25,7 +25,7 @@ import type { World, WorldConstructionProject, WorldPlayer, WorldSystem } from "
 
 /**
  * The claim verb's feasibility for an unclaimed `system` — eligible only when it borders at least
- * one system the player already controls (§1's "adjacent, free" rule); `{ mode: "none" }` (nothing
+ * one system the player already controls (the "adjacent, free" rule, docs/active/gameplay/logistics-lanes.md §1); `{ mode: "none" }` (nothing
  * to act on) when it doesn't, same as a non-adjacent foreign system today.
  */
 function claimOptions(world: World, player: WorldPlayer, system: WorldSystem): SystemBuildOptionsData {

@@ -69,10 +69,23 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   closes the remaining half. The concrete place it lands is the **good-allocation cliff** row above,
   which owns the allocation policy; this line exists so the pillar pass does not design that policy
   necessity-blind.
-  *Next step:* the pass is in flight — spec approved and spec-reviewed
-  (`docs/planned/logistics-lanes.md`; evidence + build plan in
-  `docs/build-plans/logistics-lanes.md`). Map-generation sub-project first (its build plan is
-  written), lane mechanics after, on `shared/logistics-lanes`.
+  **War interdiction is ready to call** — the interdiction query (`flowsCrossingEdge`,
+  `lib/engine/freight.ts`) ships with no caller; it answers "which scheduled flows cross edge E in
+  [t₁,t₂]" straight off the freight ledger, so war's own pass calls it rather than building a new
+  read.
+  **Deep-space crossing lane class (tech-gated)** — a void span carries no lane at all today; a
+  future tech could add a slow, expensive lane class across one (the lane-class fuel multiplier
+  already exists, `laneFuelCost`). Not built this pass.
+  **Multi-cycle survival-alert window (watch item)** — the shipped one-cycle `stockChange` baseline
+  already captures scheduled arrivals at the shipped `FREIGHT_SPEED` (0 systems tripped the census
+  on any calibration arm); revisit only if trans-void hauls lengthen under a slower freight speed.
+  **Route dictionary / per-source path cache** — not needed at 600 systems (the wall-clock share
+  held under the ~3× line); the 10,000-system read was never run (projected ~2h). Book this only if
+  that larger read fails the line.
+  *Next step:* lane mechanics and their map/panel surfaces have shipped on `shared/logistics-lanes`
+  (`docs/active/gameplay/logistics-lanes.md`) — real routing, capacity, scheduled transit,
+  investment and claiming, the lane layer and card, in-transit rows. What remains is the unbuilt
+  leanings above.
 - **[S] Map label culling/priority — system names hide when they don't fit.** At very low star
   spacing and high cluster tightness (far from defaults, but a deliberately interesting map type)
   system labels overlap into illegibility. Fix in rendering, not generation: EU5/Vic3-style —
@@ -85,15 +98,18 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   *Don't:* enforce a larger generation-time min distance to protect labels — a UI legibility
   concern must not constrain galaxy geometry, and the dense-packed maps are a feature.
 - **[M] Map drawing tool — player paints where stars generate.** Second author of the map-gen
-  density grid (`docs/planned/logistics-lanes.md` §5): a New Game canvas writes the same 0–1 grid
+  density grid (`docs/active/gameplay/universe.md`): a New Game canvas writes the same 0–1 grid
   the procedural clusters produce, so galaxy shape becomes paintable with no second generation
   path. *Next step:* after the logistics-lanes feature ships — prototype the paint surface on the
-  Task-5 preview canvas.
+  New Game preview canvas (`GalaxyPreview`, `components/start/galaxy-preview.tsx`).
 - **[M] Faction gameplay direction — design pass only, before pop scope is committed.** Decide
   what gameplay styles factions offer and how a faction manages its pops, so the pop expansion
   below is cut to fit a chosen direction rather than guessed. Inputs: the government layer
   revisit row (Unqueued — doctrine-driven discretionary spend, the control/integration design
   space) and the reference-game reads already carried on the strata row below.
+  **Negotiated transit rights** (treaties, tolls, per-lane grants) need the relations input this
+  design pass produces — today lane transit through foreign space is open at friendly/allied
+  relation tiers only (`docs/active/gameplay/logistics-lanes.md` §2, §6).
   *Next step:* `/brainstorm`, producing a direction doc in `docs/planned/`. No implementation.
 - **[XL] Pop wealth and buying power** — pops hold wealth and must afford their basket, so demand becomes
   partly monetary. Provision survives as a ratio and stays distinct (a world can hold the wealth and still

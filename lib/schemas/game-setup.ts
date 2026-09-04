@@ -3,7 +3,7 @@ import { sanitiseSaveName, AUTOSAVE_NAME } from "@/lib/world/save";
 import { ALL_GOVERNMENT_TYPES, ALL_DOCTRINES } from "@/lib/types/guards";
 
 /**
- * The galaxy-shape structure knobs (spec `docs/planned/logistics-lanes.md` §5) plus the placement
+ * The galaxy-shape structure knobs (spec `docs/active/gameplay/universe.md`) plus the placement
  * levers the styleguide's preview surface explored, exposed to New Game at clamped ranges — the
  * unclamped dev-exploration ranges live only in `components/styleguide/styleguide-page.tsx`. All
  * optional: an omitted field keeps `buildGenParams`'s (`lib/world/gen.ts`) engine default, which is

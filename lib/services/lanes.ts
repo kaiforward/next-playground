@@ -7,7 +7,7 @@ import type { LaneStateRow, LaneDetailData, LaneCargoRow, LaneEndpointDetail } f
 import type { World } from "@/lib/world/types";
 
 /**
- * Every persisted lane's live state (docs/planned/logistics-lanes.md §1) — the map layer's lane
+ * Every persisted lane's live state (docs/active/gameplay/logistics-lanes.md §1) — the map layer's lane
  * slice and the lane card's substrate. `capacity` and `investorFactionId` are derived exactly as the
  * tick body derives them (`laneCapacity`, `laneInvestor`, `lib/engine/lanes.ts`); `inFlight` sums the
  * scheduled-freight ledger's `routeEdges` (both legs — a haul in flight either direction still
@@ -60,7 +60,7 @@ function endpointDetail(system: World["systems"][number] | undefined, systemId: 
 }
 
 /**
- * One lane's full detail for the lane card (docs/planned/logistics-lanes.md §7) — everything
+ * One lane's full detail for the lane card (docs/active/gameplay/logistics-lanes.md §7) — everything
  * `LaneStateRow` doesn't carry: endpoint ownership for the invest verb's states, cargo in flight
  * (one row per ledger entry crossing this lane, not a window sum), and the open `lane_upgrade`
  * projects targeting it, enriched through the same faction readout the construction surfaces use.

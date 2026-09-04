@@ -17,7 +17,7 @@
 export const EXPANSION = {
   /** Unclaimed systems exactly this many jumps from a faction's territory (any owned tier) are claim
    * candidates — adjacency only, no leapfrogging past a nearer unclaimed system to a richer one
-   * further out (docs/planned/logistics-lanes.md §1: claiming grows a faction's border outward one
+   * further out (docs/active/gameplay/logistics-lanes.md §1: claiming grows a faction's border outward one
    * ring at a time). Must be ≤ the tick's hop-BFS radius. */
   REACH_JUMPS: 1,
   /** Systems a faction claims per cycle start — small, so the map fills gradually. */

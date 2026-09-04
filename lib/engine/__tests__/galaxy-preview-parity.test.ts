@@ -1,6 +1,6 @@
 /**
  * The determinism-seam parity proof the galaxy preview promises (spec
- * `docs/planned/logistics-lanes.md` §5): "the dots match a world generated from
+ * `docs/active/gameplay/universe.md`): "the dots match a world generated from
  * the same inputs." `lib/engine/__tests__/galaxy-impression.test.ts` only checks
  * `buildGalaxyImpression` against a hand-reconstruction of its OWN steps (same module, hard-coded
  * to agree with itself) — that catches a regression WITHIN the preview module but says nothing

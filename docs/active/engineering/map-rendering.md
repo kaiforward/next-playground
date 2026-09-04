@@ -176,7 +176,7 @@ marks are zoomed-in only — the point cloud stays status-blind.
 
 ## Lane layer
 
-Every generated jump lane (`WorldLane`, docs/planned/logistics-lanes.md §1) draws as a segment
+Every generated jump lane (`WorldLane`, [logistics-lanes.md](../gameplay/logistics-lanes.md) §1) draws as a segment
 between its two systems, styled by `laneStyle` (`components/map/pixi/objects/lane-style.ts`) from
 four inputs — no separate chord overlay:
 

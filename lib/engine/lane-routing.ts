@@ -1,6 +1,6 @@
 /**
  * Route engine — edge-keyed cheapest path with congestion pricing and capacity booking
- * (docs/planned/logistics-lanes.md §2). Pure, zero I/O: callers pass in the connection/lane rows
+ * (docs/active/gameplay/logistics-lanes.md §2). Pure, zero I/O: callers pass in the connection/lane rows
  * and the policy hooks (`openEdge`, `catchUp`) this module needs; it never reads world state.
  *
  * Grows from `lib/engine/pathfinding.ts`'s Dijkstra via its `edgeCost` hook rather than
@@ -113,7 +113,7 @@ export interface LaneLoad {
  * The matcher's (and any other caller's) view of a `RouteBooker` for ONE hauler — a structural
  * subset any real booker satisfies and a test can hand-roll without constructing a lane network.
  * `priceFrom` freezes one sink's prices to every donor for that deficit's whole fan-out
- * (`docs/planned/logistics-lanes.md` §2: "prices are frozen at the moment the severity queue
+ * (`docs/active/gameplay/logistics-lanes.md` §2: "prices are frozen at the moment the severity queue
  * reaches that deficit"); `routeAndBook` is consulted inside the fill loop with the quantity being
  * drawn, and places it onto the shared network, so a later deficit's `priceFrom` reflects prior
  * bookings.
@@ -127,7 +127,7 @@ export interface RouteBookerFor {
    * currently priced out of `priceFrom` (a saturated path returns `null` there) still reads
    * reachable here: reachability is a structural question (does a path exist at all), congestion is
    * a this-run contention question, and `unservable`'s own structural test needs the former without
-   * the latter (`docs/planned/logistics-lanes.md` §2, "a blocked haul is not an unservable one").
+   * the latter (`docs/active/gameplay/logistics-lanes.md` §2, "a blocked haul is not an unservable one").
    */
   reachableFrom(sinkId: string): (donorId: string) => boolean;
   routeAndBook(from: string, to: string, quantity: number): RouteBooking | null;

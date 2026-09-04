@@ -112,7 +112,7 @@ describe("runTickHarness: the region overview", () => {
 
   it("exercises the empty region, the tie-break and its direction, on the production folding function directly", () => {
     // `generateWorld` cannot supply this fixture any more: the per-cluster placement guarantee
-    // (spec `docs/planned/logistics-lanes.md` §5) means a system count large enough to place the
+    // (spec `docs/active/gameplay/universe.md`) means a system count large enough to place the
     // required faction homeworlds is already large enough that every cluster gets a system, so a
     // genuinely empty region no longer occurs at any system count the game can actually generate.
     // `computeRegionOverview` is exported and pure exactly so this branch stays provable — a

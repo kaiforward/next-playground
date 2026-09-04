@@ -1,7 +1,7 @@
 import { scaleValue } from "@/lib/constants/economy-scale";
 
 /**
- * Persistent-lane tuning (docs/planned/logistics-lanes.md §1-2). First-draft, simulator-calibrated
+ * Persistent-lane tuning (docs/active/gameplay/logistics-lanes.md §1-2). First-draft, simulator-calibrated
  * — nothing here has been measured against a real haul yet; every value is a proposal carrying its
  * own rationale, only the relative shape matters until it is calibrated against actual lane traffic.
  */

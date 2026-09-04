@@ -410,7 +410,7 @@ describe("runWorldTick", () => {
     // 120 ticks was enough while random spawning also minted "event-" ids; with only relations
     // creating events, this seed's first faction pair crosses into border conflict at tick 380 —
     // border friction is driven by the cross-faction connection COUNT (`getBorderLengthsBetween`,
-    // spec `docs/planned/logistics-lanes.md` §5), which this seed's generated lane graph puts on
+    // spec `docs/active/gameplay/universe.md`), which this seed's generated lane graph puts on
     // this timeline; run well past it.
     const after = await runTicks(world, 450);
 
@@ -607,7 +607,7 @@ describe("runWorldTick — per-stage wiring", () => {
         { fromId: b, toId: a, fuelCost: 1 },
       ],
       // The connection above needs a matching lane row — directed-logistics routes over the lane
-      // network, not the raw connection graph (docs/planned/logistics-lanes.md §2).
+      // network, not the raw connection graph (docs/active/gameplay/logistics-lanes.md §2).
       lanes: [
         ...base.lanes,
         {
@@ -651,7 +651,7 @@ describe("runWorldTick — per-stage wiring", () => {
         { fromId: b, toId: a, fuelCost: 1 },
       ],
       // The connection above needs a matching lane row — directed-logistics routes over the lane
-      // network, not the raw connection graph (docs/planned/logistics-lanes.md §2).
+      // network, not the raw connection graph (docs/active/gameplay/logistics-lanes.md §2).
       lanes: [
         ...base.lanes,
         {
@@ -828,7 +828,7 @@ function twoSystemWaterGradient(prepareRecipientWater: (market: WorldMarket) => 
       { fromId: b, toId: a, fuelCost: 1 },
     ],
     // The connection above needs a matching lane row — directed-logistics routes over the lane
-    // network, not the raw connection graph (docs/planned/logistics-lanes.md §2), and a connection
+    // network, not the raw connection graph (docs/active/gameplay/logistics-lanes.md §2), and a connection
     // with no lane row carries no capacity or key at all (`buildLaneNetwork`). Level is set high
     // (ample capacity) rather than the generated default of 0: this fixture's callers assert
     // dispatch/delivery TIMING, not congestion, and a level-0 lane's tiny per-tick capacity
@@ -851,7 +851,7 @@ function twoSystemWaterGradient(prepareRecipientWater: (market: WorldMarket) => 
 describe("runWorldTick — logistics/assessment ordering", () => {
   it("dispatches on the cycle start, then delivers and recovers on the following tick", async () => {
     // Directed-logistics dispatches onto the scheduled-freight ledger rather than crediting the
-    // destination same-tick (docs/planned/logistics-lanes.md §3) — the unconditional goods-arrivals
+    // destination same-tick (docs/active/gameplay/logistics-lanes.md §3) — the unconditional goods-arrivals
     // stage that drains it runs at the START of a tick, before that tick's own dispatch, so a haul
     // dispatched on tick N is never visible before tick N+1.
     const { b, world } = twoSystemWaterGradient((market) => market);
@@ -2125,7 +2125,7 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
     const seeded = await seedStockBaseline(world, NO_LOGISTICS_CADENCE);
 
     // Directed-logistics dispatches onto the scheduled-freight ledger rather than crediting the
-    // destination same-tick (docs/planned/logistics-lanes.md §3), so the import is only visible in
+    // destination same-tick (docs/active/gameplay/logistics-lanes.md §3), so the import is only visible in
     // the SECOND tick's window — the one goods-arrivals actually drains it on, still well before
     // that tick's own economy write. Two ticks of each cadence keeps the tick count, and so the
     // boundary-reset window width, identical between the two branches.
@@ -2664,7 +2664,7 @@ describe("runWorldTick — the unserved shortfall level end to end", () => {
         { fromId: b, toId: a, fuelCost: 1 },
       ],
       // The connection above needs a matching lane row — directed-logistics routes over the lane
-      // network, not the raw connection graph (docs/planned/logistics-lanes.md §2). Ample level so
+      // network, not the raw connection graph (docs/active/gameplay/logistics-lanes.md §2). Ample level so
       // the whole shortfall clears in this one tick, matching the test's "cleared" premise.
       lanes: [
         ...unservable.lanes,

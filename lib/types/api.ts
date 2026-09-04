@@ -27,7 +27,7 @@ export interface TradeFlowEdges {
   logisticsEdges: TradeFlowEdgeInfo[];
 }
 /**
- * One lane's live state for the map layer and the lane card (docs/planned/logistics-lanes.md §1) —
+ * One lane's live state for the map layer and the lane card (docs/active/gameplay/logistics-lanes.md §1) —
  * `getLaneStates` (`lib/services/lanes.ts`) joins the persisted `WorldLane` row with its derived
  * reads: `capacity` from `laneCapacity(level)`, `inFlight` summed from the arrivals ledger's
  * `routeEdges`, `investorFactionId` from `laneInvestor`, and `openUpgradeLevels` from open

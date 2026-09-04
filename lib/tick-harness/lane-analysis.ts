@@ -4,7 +4,7 @@
  * census. Sampled per logistics-boundary tick from `world.lanes` and the freshly-dispatched
  * pendingArrival ledger rows, folded here rather than read off the final world — `lane.bookedLoad`
  * and `.blockedVolume` are OVERWRITTEN every logistics cycle (an attempted-load snapshot, not a
- * running total: docs/planned/logistics-lanes.md §1), so a whole-run reading has to be accumulated
+ * running total: docs/active/gameplay/logistics-lanes.md §1), so a whole-run reading has to be accumulated
  * as each cycle happens, the same reason `logistics-analysis.ts` accumulates the flow log per tick
  * rather than reading `world.flowEvents` at the end.
  *
