@@ -103,6 +103,17 @@ export interface TickProcessorResult {
    *  ledgered, matching `workPerformedByFaction`. Calibration instrumentation — surfaced via
    *  `runWorldTick().instrumentation`, never broadcast or persisted. */
   logisticsBudget?: Map<string, LogisticsBudgetLedger>;
+  /** Calibration instrumentation only: Σ quantity actually debited from a donor this cycle across
+   *  every hauling faction and independents — the fifth conservation identity's LEFT side, folded
+   *  by the harness from the processor's own dispatch record (never a matcher-planned figure a
+   *  later clamp may still shave). Surfaced via `runWorldTick().instrumentation`, never broadcast
+   *  or persisted. */
+  logisticsDispatched?: number;
+  /** Calibration instrumentation only: every `RouteBlocked` entry this cycle's fan-out produced,
+   *  tagged with the hauling faction key (`null` = independents) — the harness's
+   *  `contentionShortfallByFaction` reading. Surfaced via `runWorldTick().instrumentation`, never
+   *  broadcast or persisted. */
+  logisticsBlocked?: Array<{ factionKey: string | null; laneKey: string; quantity: number; foreignShare: number }>;
   /** Directed-build proposals `strikeExplains` suppressed this cycle (directed-build), resolved per
    *  (system, good) pair and summed across every due faction: `eligible` is every pair with capacity
    *  in the good — the pairs a strike can silence at all — and `suppressed` is the subset where it
@@ -151,7 +162,20 @@ export interface TickProcessorResult {
    * (spec §8) reads `overshootVolume`; nothing else this pass reads any of these fields as a
    * decision input. Surfaced via `runWorldTick().instrumentation`, never broadcast or persisted.
    */
-  goodsArrivals?: { credited: number; returned: number; returnedRows: number; overshootVolume: number };
+  goodsArrivals?: {
+    credited: number;
+    returned: number;
+    returnedRows: number;
+    overshootVolume: number;
+    /** Calibration instrumentation only: Σ (stock after − stock before) actually written by the
+     *  in-memory adapter's `creditMarkets` this tick, over BOTH outbound and return-leg credits —
+     *  the fifth conservation identity's RIGHT-side credit term, read from the adapter's own writes
+     *  rather than this processor's `credited` tally so a credit the adapter silently drops (a
+     *  destination market row missing) shows up as a residual instead of vanishing into an
+     *  optimistic count. Not set when the harness's tick.ts caller does not thread it back — see
+     *  `lib/world/tick.ts`'s goods-arrivals stage. */
+    appliedCreditTotal?: number;
+  };
   /** Per-system whole building levels torn down this cycle — both infrastructure-decay channels
    *  (sustained-idle contraction and the unrest-collapse catastrophe) combined, since both remove
    *  capacity a population must live without either way. A system absent from the map lost no levels
@@ -255,7 +279,20 @@ export type TickInstrumentation = Pick<
   | "growthBySystem"
   | "teardownLevelsBySystem"
   | "abandonedSystemsByCause"
->;
+  | "logisticsDispatched"
+  | "logisticsBlocked"
+> & {
+  /**
+   * Calibration-only wall-clock, ms — never in a frame (`buildStateFrame` takes `World` alone, not
+   * a tick's return value, so this can never reach `StateFrameBody`). Present only when the caller
+   * opts in via `runWorldTick`'s `recordStageMs` (the harness does; the live game never sets it) —
+   * absent otherwise, so two identical `runWorldTick` calls return identical `instrumentation`.
+   * `tick` is the whole `runWorldTick` call; the two stage figures are read around the
+   * goods-arrivals stage and the directed-logistics block specifically — the two stages spec §8's
+   * wall-clock gate names.
+   */
+  stageMs?: { tick: number; directedLogistics: number; goodsArrivals: number };
+};
 
 /** The full payload one tick's run hands to the broadcast layer. */
 export interface TickBroadcastRaw {

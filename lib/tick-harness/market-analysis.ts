@@ -14,6 +14,7 @@ import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { GOODS } from "@/lib/constants/goods";
 import { GOOD_RECIPE_CONSUMERS } from "@/lib/constants/recipes";
+import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { median, quantile } from "@/lib/utils/math";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import { marketRowsBySystem } from "@/lib/world/tick";
@@ -390,6 +391,82 @@ export function summariseDemandHunting(
   return {
     flipRate: comparable > 0 ? acc.reversals / comparable : 0,
     haulChurnRatio: delivered > 0 ? churned / delivered : 0,
+  };
+}
+
+// ── Survival-good deficit spell distribution ─────────────────────
+
+/**
+ * How long a developed system's water/food deficit spell runs before it clears — promoted from
+ * `temp/lane-premise-diag.ts`'s `spellStats` (the premises-2/3/4/5 diagnostic's own instrument),
+ * generalised off that script's LaneRunRow census onto the harness's own per-cycle market
+ * classification (the same `classifyMarketState(stock, target)` call `sampleDemandHunting` above
+ * makes, restricted here to `SURVIVAL_GOODS` instead of industrial inputs). A "spell" is a market
+ * key's run of CONSECUTIVE sampled cycles reading `"deficit"`; only spells that CLOSE (the key reads
+ * non-deficit again) before the run ends count — a spell still open at the last sample is censored,
+ * not completed, and is dropped rather than guessed at.
+ */
+export interface SpellDistributionSummary {
+  /** Completed spells this run recorded — the distribution's own denominator. 0 reads every figure
+   *  below as 0, never NaN. */
+  n: number;
+  median: number;
+  p90: number;
+  /** Share of completed spells exactly 1 cycle long — cleared on the very next sample. */
+  singleRunShare: number;
+}
+
+/** Cross-sample state — one entry per (system, survival good) currently mid-spell. */
+export interface SpellAccumulator {
+  activeByKey: Map<string, { startTick: number; length: number }>;
+  completedLengths: number[];
+}
+
+export function newSpellAccumulator(): SpellAccumulator {
+  return { activeByKey: new Map(), completedLengths: [] };
+}
+
+/**
+ * Fold one sampled cycle's market rows into the spell tracker. `eqStartTick` gates which spells
+ * COUNT once they close: a spell's whole run must start at or after the equilibrium horizon for its
+ * length to be recorded, matching `spellStats`'s own `startTick >= eqStartTick` filter — a spell
+ * that began during founding but happens to close after the horizon would otherwise credit the
+ * equilibrium reading with founding-era churn.
+ */
+export function sampleSurvivalSpells(
+  acc: SpellAccumulator,
+  markets: ReadonlyArray<WorldMarket>,
+  tick: number,
+  eqStartTick: number,
+): void {
+  for (const m of markets) {
+    if (!SURVIVAL_GOODS.includes(m.goodId)) continue;
+    const useRate = m.honestUseRate;
+    if (typeof useRate !== "number" || !Number.isFinite(useRate) || useRate <= 0) continue;
+
+    const target = DIRECTED_LOGISTICS.WAREHOUSE_COVER * useRate * m.anchorMult;
+    const { kind } = classifyMarketState(m.stock, target);
+    const key = `${m.systemId}|${m.goodId}`;
+    const active = acc.activeByKey.get(key);
+    if (kind === "deficit") {
+      if (active) active.length++;
+      else acc.activeByKey.set(key, { startTick: tick, length: 1 });
+    } else if (active) {
+      acc.activeByKey.delete(key);
+      if (active.startTick >= eqStartTick) acc.completedLengths.push(active.length);
+    }
+  }
+}
+
+/** Fold the tracker into the reported distribution. Spells still open at the last sample (censored)
+ *  are excluded — see the module docstring. */
+export function summariseSpellDistribution(acc: SpellAccumulator): SpellDistributionSummary {
+  const lens = acc.completedLengths;
+  return {
+    n: lens.length,
+    median: median(lens),
+    p90: quantile(lens, 0.9),
+    singleRunShare: lens.length > 0 ? lens.filter((l) => l === 1).length / lens.length : 0,
   };
 }
 

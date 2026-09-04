@@ -32,6 +32,11 @@ export const ExperimentConfigSchema = z.object({
   /** Third-arm pin: "anchor" pins the DRAW FIGURE's brake ceiling to the retired anchor
    *  geometry while the tick's own brake stays live. Omit for the game's real behaviour. */
   drawBrakeCeiling: z.enum(DRAW_BRAKE_CEILINGS).optional(),
+  /** Lane-mechanics arm: overrides `LANES.FREIGHT_SPEED`. Omit for the live constant. */
+  freightSpeed: z.number().positive().optional(),
+  /** Lane-mechanics arm: `"factionBlind"` opens every lane to every hauler regardless of
+   *  ownership/relation. Omit (or "tier") for the live game's own rule. */
+  laneTraversal: z.enum(["tier", "factionBlind"]).optional(),
 });
 
 export type ExperimentConfig = z.infer<typeof ExperimentConfigSchema>;
@@ -50,6 +55,8 @@ export function experimentToHarnessConfig(exp: ExperimentConfig): {
       tickCount: exp.ticks,
       cadence: exp.cadence,
       drawBrakeCeiling: exp.drawBrakeCeiling,
+      freightSpeed: exp.freightSpeed,
+      laneTraversal: exp.laneTraversal,
     },
     label: exp.label,
   };
@@ -103,6 +110,14 @@ export interface ExperimentResult {
   /** The map-generation acceptance instruments — corrected flow concentration, fuel-cost spread,
    *  cross-faction lane count, beyond-crossing cohort. A candidate-generation comparison field. */
   geography: HarnessResults["geography"];
+  /** Whole-run lane-mechanics instruments (spec §8) — utilisation, congestion, blocked volume,
+   *  foreign-transit share, per-faction contention, survival-stock census. An arm-comparable field:
+   *  `freightSpeed`/`laneTraversal` arms are read against this. */
+  laneMetrics: HarnessResults["laneMetrics"];
+  /** Survival-good deficit spell distribution — the physical-stock companion to `demandHunting`. */
+  survivalSpellDistribution: HarnessResults["survivalSpellDistribution"];
+  /** Whole-run wall-clock, calibration-only — never in a saved run's live counterpart. */
+  stageTiming: HarnessResults["stageTiming"];
   elapsedMs: number;
 }
 
@@ -133,6 +148,9 @@ export function buildExperimentResult(results: HarnessResults): ExperimentResult
     migrationThroughput: results.migrationThroughput,
     conservation: results.conservation,
     geography: results.geography,
+    laneMetrics: results.laneMetrics,
+    survivalSpellDistribution: results.survivalSpellDistribution,
+    stageTiming: results.stageTiming,
     elapsedMs: results.elapsedMs,
   };
 }

@@ -5,7 +5,7 @@
  * See docs/active/gameplay/economy-autonomic-agency.md.
  */
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
-import type { RouteBooking } from "./lane-routing";
+import type { RouteBlocked, RouteBooking } from "./lane-routing";
 
 export type MarketKind = "deficit" | "surplus" | "balanced";
 
@@ -248,6 +248,11 @@ export interface TransferMatchResult {
    *  whose draw the budget stopped. Independent of `fundingBound`, which additionally requires the
    *  residual left standing to be material (`FUNDING_BOUND_RESIDUAL_FRACTION`). */
   budgetSkipped: number;
+  /** Every `RouteBooker.routeAndBook` blocked entry this faction's fan-out produced this cycle —
+   *  the congestion the booker itself recorded on a lane, surfaced here (rather than discarded, as
+   *  before) purely as calibration instrumentation for the harness's `contentionShortfallByFaction`
+   *  reading. Not consumed by any decision in this function. */
+  blocked: RouteBlocked[];
 }
 
 /**
@@ -338,6 +343,7 @@ export function matchFactionTransfers(
   const transfers: PlannedTransfer[] = [];
   const fundingBound: FundingBoundMatch[] = [];
   const unservable: UnservableDeficit[] = [];
+  const blocked: RouteBlocked[] = [];
   let budgetSkipped = 0;
   for (const d of deficits) {
     const sources = surplusesByGood.get(d.goodId);
@@ -402,6 +408,7 @@ export function matchFactionTransfers(
         const booking = booker.routeAndBook(source.systemId, d.systemId, quantity);
         let placedTotal = 0;
         if (booking) {
+          blocked.push(...booking.blocked);
           for (const placement of booking.placements) {
             const cost = placement.quantity * placement.perUnit;
             transfers.push({
@@ -467,5 +474,5 @@ export function matchFactionTransfers(
     }
   }
 
-  return { transfers, fundingBound, unservable, budgetSkipped };
+  return { transfers, fundingBound, unservable, budgetSkipped, blocked };
 }

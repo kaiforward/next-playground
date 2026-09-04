@@ -152,6 +152,27 @@ describe("runWorldTick", () => {
     expect(afterA).toEqual(afterB);
   });
 
+  it("returns identical instrumentation (including stageMs) for two identical runs — stage timing is opt-in, off by default", async () => {
+    const worldA = generateWorld({ systemCount: 100, seed: 42 });
+    const worldB = generateWorld({ systemCount: 100, seed: 42 });
+
+    const resultA = await runWorldTick(worldA);
+    const resultB = await runWorldTick(worldB);
+
+    expect(resultA.instrumentation.stageMs).toBeUndefined();
+    expect(resultA.instrumentation).toEqual(resultB.instrumentation);
+  });
+
+  it("takes stageMs wall-clock timings only when recordStageMs is set", async () => {
+    const world = generateWorld({ systemCount: 100, seed: 42 });
+    const { instrumentation } = await runWorldTick(world, { recordStageMs: true });
+
+    expect(instrumentation.stageMs).toBeDefined();
+    expect(Number.isFinite(instrumentation.stageMs?.tick)).toBe(true);
+    expect(Number.isFinite(instrumentation.stageMs?.directedLogistics)).toBe(true);
+    expect(Number.isFinite(instrumentation.stageMs?.goodsArrivals)).toBe(true);
+  });
+
   it("gates the relations processor by RELATIONS_FREQUENCY — history entries reflect floor(ticks/frequency), not every tick", async () => {
     const world = generateWorld({ systemCount: 100, seed: 42 });
     const after = await runTicks(world, 50);

@@ -47,12 +47,11 @@ describe("runTickHarness: the cycle-gated samplers", () => {
     // that a per-tick sampler cannot land in the band asserted below, not the rate's own magnitude.
     //
     // Read at a fixed 20,000 ticks — BUSY's own horizon plus 10,000 — and pin the measured band as
-    // a proportional spread around the settled rate. The rate settles near 0.0011 now that the
-    // matcher's sink test counts goods already in flight (a system whose order is en route does not
-    // re-order, so it no longer flips glutted the cycle after it read starved — the reading the
-    // pre-lane band of 0.003–0.0075 was derived on). Above 0.0004: a per-tick sampler diluted by
-    // CYCLE_LENGTH would read ~0.00004 and can never clear it — the sampling-cadence discrimination
-    // this test exists for. Below 0.003: comfortably above the settled rate; drifting past it means
+    // a spread around the settled rate. Under lane-routed, scheduled hauls the rate has read 0.0011
+    // (inbound-aware ordering alone) and 0.0047 (with lane upkeep, decay and adjacency claiming),
+    // so the band spans both regimes. Above 0.0004: a per-tick sampler diluted by CYCLE_LENGTH
+    // would read ~0.00004 and can never clear it — the sampling-cadence discrimination this test
+    // exists for. Below 0.0075: comfortably above the settled rate; drifting past it means
     // demand-hunting pressure has shifted regime again and the band needs re-deriving.
     const results = await runTickHarness({
       systemCount: BUSY.systemCount,
@@ -60,7 +59,7 @@ describe("runTickHarness: the cycle-gated samplers", () => {
       tickCount: BUSY.tickCount + 10_000,
     });
     expect(results.demandHunting.flipRate).toBeGreaterThan(0.0004);
-    expect(results.demandHunting.flipRate).toBeLessThan(0.003);
+    expect(results.demandHunting.flipRate).toBeLessThan(0.0075);
   }, 180_000);
 });
 

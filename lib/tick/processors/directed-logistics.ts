@@ -44,6 +44,9 @@ export interface DirectedLogisticsProcessorParams {
   /** Harness-only third-arm pin for the draw figure's brake (see `DrawBrakeCeiling`);
    *  absent ⇒ "live", the only value the live game ever passes. */
   drawBrakeCeiling?: DrawBrakeCeiling;
+  /** Harness-only arm: overrides `LANES.FREIGHT_SPEED` for this cycle's `freightArrivalTick`
+   *  calls; absent ⇒ the live constant, the only value the live game ever passes. */
+  freightSpeed?: number;
   /** Mints a fresh, globally-unique id for a dispatched haul — the same `world.nextId` counter
    *  every other tick-minted id draws from (mirrors `GoodsArrivalsProcessorParams.mintId`). */
   mintId: () => string;
@@ -163,6 +166,9 @@ export async function runDirectedLogisticsProcessor(
   // classification — the engine only records an entry where that residue is strictly positive — so
   // there is no separate bit to keep in step with it.
   const unservedShortfallByMarketId = new Map<string, number>();
+  // Calibration instrumentation only: every faction's `RouteBlocked` entries this cycle, tagged with
+  // the hauling faction key — the harness's `contentionShortfallByFaction` reading.
+  const logisticsBlocked: Array<{ factionKey: string | null; laneKey: string; quantity: number; foreignShare: number }> = [];
   for (const factionId of orderedFactionKeys(byFaction.keys())) {
     const group = byFaction.get(factionId);
     if (!group) continue; // unreachable: factionId is drawn from byFaction's own keys
@@ -173,6 +179,9 @@ export async function runDirectedLogisticsProcessor(
     const booker = params.bookerFor(factionId);
     const match = matchFactionTransfers(states, booker);
     for (const t of match.transfers) allTransfers.push({ ...t, factionId });
+    for (const b of match.blocked) {
+      logisticsBlocked.push({ factionKey: factionId, laneKey: b.laneKey, quantity: b.quantity, foreignShare: b.foreignShare });
+    }
     for (const bound of match.fundingBound) {
       const from = marketByKey.get(`${bound.fromSystemId}|${bound.goodId}`);
       const to = marketByKey.get(`${bound.toSystemId}|${bound.goodId}`);
@@ -209,6 +218,10 @@ export async function runDirectedLogisticsProcessor(
   const donorStock = new Map<string, number>();
   const dispatchedThisRun = new Map<string, number>();
   const pendingArrivals: WorldPendingArrival[] = [];
+  // Calibration instrumentation only: Σ quantity actually debited from a donor this cycle — the
+  // fifth conservation identity's LEFT side, from this processor's own dispatch record (never the
+  // matcher's planned `quantity`, which the clamp below may still shave).
+  let dispatchedTotal = 0;
 
   for (const t of allTransfers) {
     // Stock is a continuous float balance — do NOT quantize the transfer. Flooring here
@@ -236,6 +249,7 @@ export async function runDirectedLogisticsProcessor(
 
     donorStock.set(from.id, fromCur - moved);
     dispatchedThisRun.set(to.id, dispatchedSoFar + moved);
+    dispatchedTotal += moved;
 
     pendingArrivals.push({
       id: params.mintId(),
@@ -245,7 +259,7 @@ export async function runDirectedLogisticsProcessor(
       goodId: t.goodId,
       quantity: moved,
       dispatchTick: ctx.tick,
-      arrivalTick: freightArrivalTick(ctx.tick, t.fuelTotal, LANES.FREIGHT_SPEED),
+      arrivalTick: freightArrivalTick(ctx.tick, t.fuelTotal, params.freightSpeed ?? LANES.FREIGHT_SPEED),
       routeEdges: t.edges,
       leg: "outbound",
     });
@@ -289,5 +303,7 @@ export async function runDirectedLogisticsProcessor(
   if (fundingUpdates.length > 0) await world.applyFundingBoundUpdates(fundingUpdates);
   if (unservedShortfallUpdates.length > 0) await world.applyUnservedShortfallUpdates(unservedShortfallUpdates);
 
-  return { workPerformedByFaction, logisticsBudget };
+  return {
+    workPerformedByFaction, logisticsBudget, logisticsDispatched: dispatchedTotal, logisticsBlocked,
+  };
 }

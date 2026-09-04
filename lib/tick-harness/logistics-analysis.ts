@@ -13,6 +13,7 @@
  * pruned to `TRADE_SIMULATION.FLOW_HISTORY_TICKS`, so the end-of-run world holds
  * only the tail of a longer run.
  */
+import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import type { SystemControl, WorldFlowEvent } from "@/lib/world/types";
 import type { LogisticsActivitySummary } from "./types";
 
@@ -72,6 +73,11 @@ export function summariseLogistics(
   flows: WorldFlowEvent[],
   budget: LogisticsBudgetTotals,
   flags: FundingBoundFlagCensus,
+  /** Whole-run tick count — `flowRowsPerReferenceCycle`'s denominator. Flow rows can land on any
+   *  tick (goods-arrivals is unconditional, per-tick), so counting them per ACTIVE tick reads low
+   *  once arrivals spread across every tick rather than landing in a lump at the old logistics
+   *  boundary; per REFERENCE cycle over the whole run is the stable denominator. */
+  tickCount: number,
 ): LogisticsActivitySummary {
   const activeTicks = new Set<number>();
   const participants = new Set<string>();
@@ -112,6 +118,7 @@ export function summariseLogistics(
       Number.isFinite(flags.marketCount) && flags.marketCount > 0
         ? flags.flagged / flags.marketCount
         : 0,
-    flowRowsPerCycle: activeTicks.size === 0 ? 0 : flows.length / activeTicks.size,
+    flowRowsPerReferenceCycle:
+      tickCount === 0 ? 0 : flows.length / (tickCount / REFERENCE_INTERVAL),
   };
 }

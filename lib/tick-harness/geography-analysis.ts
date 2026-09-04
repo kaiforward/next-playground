@@ -109,7 +109,7 @@ export function singleOwnershipSnapshot(
 /** The latest snapshot at or before `tick`, by binary search over an ascending-`fromTick` list.
  *  A tick before the first snapshot reads that first snapshot — the run's opening ownership is the
  *  only reading available for it, and it is the correct one. */
-function ownershipAt(
+export function ownershipAt(
   snapshots: ReadonlyArray<OwnershipSnapshot>, tick: number,
 ): ReadonlyMap<string, string | null> {
   let lo = 0;

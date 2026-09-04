@@ -1260,6 +1260,17 @@ export async function runWorldTick(
     /** Harness-only third-arm pin for the draw figure's brake — the second per-run override
      *  channel after `cadence`. The live game never sets it (absent ⇒ "live"). */
     drawBrakeCeiling?: DrawBrakeCeiling;
+    /** Harness-only arm: overrides `LANES.FREIGHT_SPEED` for this run's `freightArrivalTick` calls.
+     *  The live game never sets it (absent ⇒ the live constant). */
+    freightSpeed?: number;
+    /** Harness-only arm: `"factionBlind"` opens every lane in the network to every hauler,
+     *  ignoring ownership/relation traversability entirely (`laneOpenFor`); absent (or `"tier"`)
+     *  is the live game's own rule (own+unclaimed+friendly-or-allied). */
+    laneTraversal?: "tier" | "factionBlind";
+    /** Harness-only arm: take `stageMs` wall-clock timings for this run. The live game never sets
+     *  it (absent/false ⇒ no timing calls, `stageMs` stays undefined) — see
+     *  `TickInstrumentation.stageMs`'s own docstring. */
+    recordStageMs?: boolean;
   },
 ): Promise<{
   world: World;
@@ -1274,6 +1285,14 @@ export async function runWorldTick(
     logistics: LOGISTICS_INTERVAL,
   };
   const tick = world.meta.currentTick + 1;
+  // Calibration-only wall-clock, opt-in via `recordStageMs` (harness only — see
+  // `TickInstrumentation.stageMs`'s own docstring for why this can never reach a broadcast frame).
+  // Absent, `now()` is a no-op so two otherwise-identical runs return identical `instrumentation`.
+  const recordStageMs = opts?.recordStageMs ?? false;
+  const now = () => (recordStageMs ? performance.now() : 0);
+  const tickStart = now();
+  let directedLogisticsMs = 0;
+  let goodsArrivalsMs = 0;
   const rng = tickRng(world.meta.seed, tick);
   const eventsRng = tickRng(world.meta.seed, tick, EVENTS_RNG_STREAM);
 
@@ -1375,6 +1394,7 @@ export async function runWorldTick(
   // structurally cannot run off its own boundary tick — docs/planned/logistics-lanes.md §3).
   let goodsArrivals: TickInstrumentation["goodsArrivals"];
   {
+    const stageStart = now();
     const goodsArrivalsWorld = new InMemoryGoodsArrivalsWorld({ markets, pendingArrivals });
     const result = await runGoodsArrivalsProcessor(goodsArrivalsWorld, { tick }, {
       mintId: () => `goods-arrival-${nextId++}`,
@@ -1382,8 +1402,14 @@ export async function runWorldTick(
     markets = goodsArrivalsWorld.markets;
     pendingArrivals = goodsArrivalsWorld.pendingArrivals;
     flowEvents = [...flowEvents, ...goodsArrivalsWorld.flows];
-    goodsArrivals = result.goodsArrivals;
+    goodsArrivals = {
+      ...result.goodsArrivals,
+      // Adapter-observed, not the processor's own tally — see the field's own docstring
+      // (`TickInstrumentation.goodsArrivals.appliedCreditTotal`).
+      appliedCreditTotal: goodsArrivalsWorld.appliedCreditTotal,
+    };
     processorsRun.push("goods-arrivals");
+    goodsArrivalsMs = now() - stageStart;
   }
 
   // ── events ──
@@ -1595,6 +1621,9 @@ export async function runWorldTick(
   let foundingStalls: TickInstrumentation["foundingStalls"];
   // Calibration-only: directed-logistics' per-faction haul-budget ledger. Same reason.
   let logisticsBudget: TickInstrumentation["logisticsBudget"];
+  // Calibration-only: directed-logistics' Σ dispatched quantity and per-faction blocked entries. Same reason.
+  let logisticsDispatched: TickInstrumentation["logisticsDispatched"];
+  let logisticsBlocked: TickInstrumentation["logisticsBlocked"];
   // Calibration-only: directed-build's per-cycle strikeExplains-suppressed proposal resolution. Same reason.
   let strikeSuppressedProposals: TickInstrumentation["strikeSuppressedProposals"];
   const migrationResolves = isCycleStart(tick, cadence.cycle);
@@ -1659,6 +1688,7 @@ export async function runWorldTick(
 
     // ── directed-logistics ──
     {
+      const dlStageStart = now();
       // The lane graph directed-logistics routes over — rebuilt only when the connection graph or
       // the lane rows themselves change (see laneNetworkCache's own docstring).
       if (laneNetworkCache?.connectionsKey !== world.connections || laneNetworkCache?.lanesKey !== world.lanes) {
@@ -1689,12 +1719,18 @@ export async function runWorldTick(
       const relationScoreByPair = new Map(world.relations.map((r) => [pairKey(r.factionAId, r.factionBId), r.score]));
       const tierBetween = (a: string, b: string): RelationTier =>
         getRelationTier(relationScoreByPair.get(pairKey(a, b)) ?? 0);
+      // Harness-only arm: `factionBlind` opens every lane in the network to every hauler, ignoring
+      // ownership/relation traversability entirely — the fixture-proven contrast for
+      // `contentionShortfallByFaction`'s "the faction-blind arm opens strictly more edges than the
+      // tier arm" Proves entry. Absent (or "tier") is the live game's own rule.
       const bookerFor = (factionKey: string | null): RouteBookerFor =>
         laneBooker.forHauler(
-          (edgeKey) => {
-            const lane = laneByKey.get(edgeKey);
-            return lane !== undefined && laneOpenFor(factionKey, lane, ownerOf, tierBetween);
-          },
+          opts?.laneTraversal === "factionBlind"
+            ? (edgeKey) => laneByKey.has(edgeKey)
+            : (edgeKey) => {
+                const lane = laneByKey.get(edgeKey);
+                return lane !== undefined && laneOpenFor(factionKey, lane, ownerOf, tierBetween);
+              },
           factionKey,
         );
 
@@ -1712,6 +1748,7 @@ export async function runWorldTick(
         fundingByFaction:
           fundedByFaction && new Map([...fundedByFaction].map(([id, f]) => [id, f.logistics])),
         drawBrakeCeiling: opts?.drawBrakeCeiling,
+        freightSpeed: opts?.freightSpeed,
         mintId: () => `haul-${nextId++}`,
       });
       markets = applyLogisticsMarketUpdates(
@@ -1741,7 +1778,10 @@ export async function runWorldTick(
       }
       logisticsWorkByFaction = dlResult.workPerformedByFaction;
       logisticsBudget = dlResult.logisticsBudget;
+      logisticsDispatched = dlResult.logisticsDispatched;
+      logisticsBlocked = dlResult.logisticsBlocked;
       processorsRun.push("directed-logistics");
+      directedLogisticsMs = now() - dlStageStart;
     }
 
     // ── directed-build ──
@@ -1765,7 +1805,10 @@ export async function runWorldTick(
         if (s.peopleLand > galaxyPeopleLandMax) galaxyPeopleLandMax = s.peopleLand;
       }
 
-      // Reach provider: a faction's in-reach UNCLAIMED candidates (reach extends from any owned tier).
+      // Reach provider: a faction's ADJACENT unclaimed candidates (reach extends from any owned
+      // tier). `h === 1` — not `<= EXPANSION.REACH_JUMPS` — is the adjacency bound itself; the
+      // constant (kept at 1) is what `hopsCache`'s BFS radius above sizes against, not a filter this
+      // read still needs to apply as a range.
       const reachProvider = (factionId: string): ClaimCandidate[] => {
         const minHopByCandidate = new Map<string, number>();
         for (const s of systems) {
@@ -1773,7 +1816,7 @@ export async function runWorldTick(
           const neighbours = hops.get(s.id);
           if (!neighbours) continue;
           for (const [destId, h] of neighbours) {
-            if (h <= 0 || h > EXPANSION.REACH_JUMPS) continue;
+            if (h !== 1) continue;
             if (factionBySystem.get(destId) !== null) continue; // only unclaimed
             const prev = minHopByCandidate.get(destId);
             if (prev === undefined || h < prev) minHopByCandidate.set(destId, h);
@@ -1834,7 +1877,7 @@ export async function runWorldTick(
           dlUnservedShortfallUpdates,
         ),
       );
-      const dbWorld = new MemoryDirectedBuildWorld(rows, constructionProjects);
+      const dbWorld = new MemoryDirectedBuildWorld(rows, constructionProjects, lanes);
       const dbResult = await runDirectedBuildProcessor(dbWorld, { tick }, {
         interval: cadence.construction,
         routeCost,
@@ -2213,7 +2256,10 @@ export async function runWorldTick(
     instrumentation: {
       buildCommitmentsByGood, migrationMoved, colonistDeliveryBySystem, foundingManifests, foundingStalls,
       logisticsBudget, goodsArrivals, strikeSuppressedProposals, overshootDeathBySystem, growthBySystem,
-      teardownLevelsBySystem, abandonedSystemsByCause,
+      teardownLevelsBySystem, abandonedSystemsByCause, logisticsDispatched, logisticsBlocked,
+      stageMs: recordStageMs
+        ? { tick: now() - tickStart, directedLogistics: directedLogisticsMs, goodsArrivals: goodsArrivalsMs }
+        : undefined,
     },
   };
 }
