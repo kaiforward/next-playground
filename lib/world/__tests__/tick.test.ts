@@ -916,6 +916,71 @@ describe("runWorldTick — logistics/assessment ordering", () => {
   });
 });
 
+describe("runWorldTick — lane upkeep and decay wiring", () => {
+  it("accrues an unused invested lane's idleCycles by the logistics catch-up factor", async () => {
+    const { a, b, world } = twoSystemWaterGradient((market) => market);
+    // Pick a lane elsewhere in the galaxy, both endpoints unclaimed — outside any faction's
+    // logistics rows (developed systems only) and outside the a-b deficit this fixture drives — so
+    // it carries no load this run, isolating decay's idle-accrual wiring from routing noise.
+    const otherLane = world.lanes.find(
+      (l) =>
+        l.key !== laneKey(a, b) &&
+        world.systems.find((s) => s.id === l.aId)?.factionId === null &&
+        world.systems.find((s) => s.id === l.bId)?.factionId === null,
+    );
+    if (!otherLane) throw new Error("fixture needs an unclaimed-endpoint lane");
+    const seeded: World = {
+      ...world,
+      lanes: world.lanes.map((l) => (l.key === otherLane.key ? { ...l, level: 1 } : l)),
+    };
+    const cadence = { cycle: 1, logistics: 1, construction: 999 };
+    const after = (await runWorldTick(seeded, { cadence })).world;
+    const lane = after.lanes.find((l) => l.key === otherLane.key)!;
+    expect(lane.bookedLoad + lane.blockedVolume).toBe(0); // precondition: nothing routed over it
+    expect(lane.level).toBe(1); // one tick, nowhere near IDLE_BUFFER_CYCLES
+    expect(lane.idleCycles).toBeCloseTo(catchUpFactor(1), 10);
+  });
+
+  it("advances an idle lane's idleCycles only on logistics cycle boundaries when cadences diverge", async () => {
+    // cycle:1 means directed-logistics' surrounding block runs every tick (migrationResolves is
+    // always true), but logistics itself only resolves on tick 4 and tick 8 — decay must track
+    // THAT boundary, not the block's own execution, or it double-accrues the moment the cadences
+    // diverge (today they're all 24 and this bug is inert).
+    const { a, b, world } = twoSystemWaterGradient((market) => market);
+    const otherLane = world.lanes.find(
+      (l) =>
+        l.key !== laneKey(a, b) &&
+        world.systems.find((s) => s.id === l.aId)?.factionId === null &&
+        world.systems.find((s) => s.id === l.bId)?.factionId === null,
+    );
+    if (!otherLane) throw new Error("fixture needs an unclaimed-endpoint lane");
+    const seeded: World = {
+      ...world,
+      lanes: world.lanes.map((l) => (l.key === otherLane.key ? { ...l, level: 1 } : l)),
+    };
+    const cadence = { cycle: 1, logistics: 4, construction: 999 };
+    const after = await runTicks(seeded, 8, cadence);
+    const lane = after.lanes.find((l) => l.key === otherLane.key)!;
+    expect(lane.bookedLoad + lane.blockedVolume).toBe(0); // precondition: nothing routed over it
+    // Exactly two logistics boundaries land in 8 ticks (tick 4 and tick 8): decay must accrue
+    // twice, at catchUpFactor(4) each — not once per tick regardless of whether logistics resolved.
+    expect(lane.idleCycles).toBeCloseTo(2 * catchUpFactor(4), 10);
+  });
+
+  it("folds an investing faction's lane level into its settlement's maintenance bill", async () => {
+    const { factionId, world } = twoSystemWaterGradient((market) => market);
+    // The fixture's own a-b lane is already invested (level 10_000) and owned end-to-end by
+    // `factionId` — settling a cycle should bill it lane upkeep on top of building maintenance.
+    const cadence = { cycle: 1, logistics: 1, construction: 999 };
+    const after = (await runWorldTick(world, { cadence })).world;
+    const treasury = after.treasuries.find((t) => t.factionId === factionId)!;
+    const settlement = treasury.lastSettlement;
+    if (settlement === null) throw new Error("expected a settlement on the cycle start");
+    expect(settlement.laneUpkeepBill).toBeGreaterThan(0);
+    expect(settlement.maintenanceBill).toBeGreaterThanOrEqual(settlement.laneUpkeepBill ?? 0);
+  });
+});
+
 // ── applyBuildingIncreases: popCap's sole rise path ──────────────────
 // popCap is stored and rises ONLY here — Math.max(s.popCap, housingPopCap(buildings)) when housing
 // is among the landed types (mirrors the develop-transition seed). Infrastructure decay is

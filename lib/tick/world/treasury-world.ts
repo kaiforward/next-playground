@@ -29,6 +29,13 @@ export interface TreasuryProcessorParams {
   /** Logistics work-budget consumed per faction this tick (raw, S-scaled). Empty map mid-cycle. */
   logisticsWorkByFaction: ReadonlyMap<string, number>;
   /**
+   * Lane upkeep work owed per investing faction, as of the systems/lanes snapshot this settlement
+   * reads (`laneUpkeepWork`, `lib/engine/lanes.ts`) — priced fresh from current lane levels at every
+   * settlement rather than accrued mid-cycle, exactly as building maintenance is. Empty off a
+   * settlement tick, same as `logisticsWorkByFaction` mid-cycle.
+   */
+  laneUpkeepWorkByFaction: ReadonlyMap<string, number>;
+  /**
    * Founding money committed per faction this tick — charter fees and staged materials, already
    * valued in money (directed-build's export). A settlement input, not instrumentation: it is
    * charged off the top at the next settlement, ahead of the funding ladder.

@@ -58,3 +58,87 @@ export function laneInvestor(
   if (CONTROL_RANK[b.control] < CONTROL_RANK.controlled) return null;
   return a.factionId;
 }
+
+/**
+ * Construction work owed per investing faction this settlement — Σ `level × UPGRADE_WORK_PER_LEVEL`
+ * over every lane the faction is the investor of (docs/planned/logistics-lanes.md §1: "build and
+ * upkeep ride the existing purse"). A lane with no investor (either endpoint unclaimed, split
+ * between factions, or below `controlled`) contributes to nobody's bill — it still decays (see
+ * `decayLanes`), it just costs nothing to leave alone. Level-0 lanes are skipped outright: they carry
+ * no invested capacity, so they owe no upkeep even when both endpoints qualify a faction as investor.
+ */
+export function laneUpkeepWork(
+  lanes: readonly WorldLane[],
+  ownerOf: (systemId: string) => LaneEndpointOwner,
+): ReadonlyMap<string, number> {
+  const work = new Map<string, number>();
+  for (const lane of lanes) {
+    if (lane.level <= 0) continue;
+    const investor = laneInvestor(lane, ownerOf);
+    if (investor === null) continue;
+    work.set(investor, (work.get(investor) ?? 0) + lane.level * LANES.UPGRADE_WORK_PER_LEVEL);
+  }
+  return work;
+}
+
+export interface LaneDecayParams {
+  /** Reference cycles a lane's whole marginal level must sit fully unused before it sheds one level —
+   *  the lane analogue of `DecayParams.idleBufferCycles` (`lib/engine/infrastructure-decay.ts`). */
+  idleBufferCycles: number;
+}
+
+export interface LaneDecayResult {
+  lanes: WorldLane[];
+  /** Lane keys that shed a level this run (empty on a run that sheds nothing). */
+  shed: string[];
+}
+
+/**
+ * Whole-level lane decay — the lane analogue of `computeSystemDecay`'s idle-contraction channel
+ * (`lib/engine/infrastructure-decay.ts`, mirrored literally): a per-lane countdown accrues `catchUp`
+ * reference-cycles while a whole level's worth of capacity goes unused, resets the moment a run uses
+ * it, and at the buffer sheds exactly one level (never below 0) and restarts the countdown.
+ *
+ * "Attempted load" is this run's `bookedLoad + blockedVolume` (docs/planned/logistics-lanes.md §1: a
+ * congested run that turned volume away still counts as use). Both figures are booked by the
+ * logistics processor already scaled by that run's `catchUp`, so the capacity this compares against
+ * must be scaled the same way: `laneCapacity(level) × catchUp` for the compare, and `BASE_LANE_CAPACITY
+ * × catchUp` (one level's worth) for "a whole level unused" — comparing a catchUp-scaled attempt
+ * against unscaled capacity would over- or under-count idleness whenever the logistics cadence
+ * differs from the reference cycle.
+ *
+ * A lane at level 0 has no marginal level to measure idleness against, so it never accrues and never
+ * decays further. Investment plays no part in whether a lane decays: an investor-less lane above
+ * level 0 (nobody currently qualifies, or the investor abandoned it) still erodes on the same clock —
+ * nobody pays for it, but nobody needs to for it to decay.
+ */
+export function decayLanes(
+  lanes: readonly WorldLane[],
+  catchUp: number,
+  params: LaneDecayParams,
+): LaneDecayResult {
+  const safeCatchUp = Number.isFinite(catchUp) && catchUp > 0 ? catchUp : 1;
+  const shed: string[] = [];
+  const next = lanes.map((lane) => {
+    if (lane.level <= 0) return lane;
+
+    const attempted = lane.bookedLoad + lane.blockedVolume;
+    const capacity = laneCapacity(lane.level) * safeCatchUp;
+    const marginalLevel = LANES.BASE_LANE_CAPACITY * safeCatchUp;
+    const unused = capacity - attempted;
+
+    // Hysteresis, mirroring computeSystemDecay's idle-contraction block literally: the countdown
+    // accrues elapsed reference-cycles while ≥1 whole level is idle, and resets the moment it refills.
+    let idleCycles = unused >= marginalLevel ? lane.idleCycles + safeCatchUp : 0;
+    let level = lane.level;
+    if (idleCycles >= params.idleBufferCycles) {
+      level = Math.max(0, level - 1); // shed the marginal idle level and restart its countdown
+      idleCycles = 0;
+      shed.push(lane.key);
+    }
+
+    if (level === lane.level && idleCycles === lane.idleCycles) return lane;
+    return { ...lane, level, idleCycles };
+  });
+  return { lanes: next, shed };
+}

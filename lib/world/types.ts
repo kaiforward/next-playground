@@ -750,6 +750,15 @@ export interface WorldTreasurySettlement {
    * fractions, and founding is none of those — it is taken off the top, ahead of the ladder.
    */
   foundingExpense: number;
+  /**
+   * Lane upkeep folded into `maintenanceBill` this cycle (docs/planned/logistics-lanes.md §1: "build
+   * and upkeep ride the existing purse") — `laneUpkeepWork` priced at `maintenanceRatePerWork ×
+   * catchUp`, the same band, same rate, same ladder line as building upkeep; broken out here only so
+   * a reader can see how much of the one maintenance bill came from lanes. Optional so a save written
+   * before this field existed loads without it; absent reads as never-assessed, exactly like
+   * `charged` above.
+   */
+  laneUpkeepBill?: number;
 }
 
 /** One faction's treasury — the only persisted per-faction tick-mutable state. */

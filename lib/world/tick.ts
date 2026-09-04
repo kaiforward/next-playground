@@ -51,7 +51,7 @@ import { CONSTRUCTION } from "@/lib/constants/construction";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { RELATIONS_FREQUENCY, getRelationTier, type RelationTier } from "@/lib/constants/relations";
 import { LANES } from "@/lib/constants/lanes";
-import { laneCapacity } from "@/lib/engine/lanes";
+import { laneCapacity, laneUpkeepWork, decayLanes, type LaneEndpointOwner } from "@/lib/engine/lanes";
 import { buildLaneNetwork, createRouteBooker, type LaneNetwork } from "@/lib/engine/lane-routing";
 import { laneOpenFor } from "@/lib/engine/lane-access";
 import { scheduledInbound as computeScheduledInbound } from "@/lib/engine/freight";
@@ -1715,6 +1715,17 @@ export async function runWorldTick(
         const u = dlWorld.laneUpdates.get(l.key);
         return u ? { ...l, bookedLoad: u.bookedLoad, blockedVolume: u.blockedVolume } : l;
       });
+      // Decay reads this run's just-written attempted load (bookedLoad + blockedVolume), on the
+      // same catchUp scale the booker priced capacity at (docs/planned/logistics-lanes.md §1). Gated
+      // on `logisticsResolves` alone, not the three-way outer gate: this block itself still runs
+      // (and rewrites bookedLoad/blockedVolume) on a tick where only migration or build resolves, and
+      // decaying against that same stale load a second time would double-accrue idleCycles the moment
+      // the three cadences diverge.
+      if (logisticsResolves) {
+        lanes = decayLanes(lanes, catchUpFactor(cadence.logistics), {
+          idleBufferCycles: LANES.IDLE_BUFFER_CYCLES,
+        }).lanes;
+      }
       logisticsWorkByFaction = dlResult.workPerformedByFaction;
       logisticsBudget = dlResult.logisticsBudget;
       processorsRun.push("directed-logistics");
@@ -2042,6 +2053,19 @@ export async function runWorldTick(
     if (treasuries.length > 0 && (treasuryResolves || hasWork)) {
       // The processor reads systems only when settling — a mid-cycle accrual
       // tick (band work without a cycle boundary) skips the O(systems) build.
+      // Lane upkeep is priced fresh from this settlement's lane levels, same as building upkeep
+      // (never accrued mid-cycle), so it is only worth computing on the settling tick. `lanes` here
+      // is already post-decay when logistics and the treasury cycle coincide on this tick (decay ran
+      // earlier, in the directed-logistics block above) — off that coincidence it's just this tick's
+      // carried-forward levels, decay or not.
+      let laneUpkeepWorkByFaction: ReadonlyMap<string, number> = new Map();
+      if (treasuryResolves) {
+        const systemById = new Map(systems.map((s) => [s.id, s]));
+        laneUpkeepWorkByFaction = laneUpkeepWork(lanes, (systemId): LaneEndpointOwner => {
+          const s = systemById.get(systemId);
+          return { factionId: s?.factionId ?? null, control: s?.control ?? "unclaimed" };
+        });
+      }
       const treasuryWorld = new InMemoryTreasuryWorld({
         treasuries,
         systems: treasuryResolves
@@ -2066,6 +2090,7 @@ export async function runWorldTick(
           economyScale: ECONOMY_SCALE,
           constructionWorkByFaction: constructionWorkByFaction ?? new Map(),
           logisticsWorkByFaction: logisticsWorkByFaction ?? new Map(),
+          laneUpkeepWorkByFaction,
           foundingDebitsByFaction: foundingDebitsByFaction ?? new Map(),
           rates: {
             headsTaxPerCycle: TREASURY.HEADS_TAX_PER_CYCLE,
