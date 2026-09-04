@@ -13,6 +13,7 @@ import type {
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import type { DevelopmentRefs } from "@/lib/engine/development";
 import type { BuildDropReason } from "@/lib/engine/directed-build";
+import type { LaneLevelIncrease } from "@/lib/engine/lanes";
 
 /** One system's build-relevant state: markets + buildings + body-derived capacity. */
 export interface SystemBuildRow {
@@ -160,4 +161,8 @@ export interface DirectedBuildWorld {
   applyDevelopments(developments: SystemDevelopment[]): Promise<void>;
   /** This cycle's materials debits at the founding sources (goods leave for a colony's ledger). */
   applyFoundingStagingDraws(draws: FoundingStagingDraw[]): Promise<void>;
+  /** Landed `lane_upgrade` project levels this run, one entry per lane that landed at least one whole
+   *  level (a lane can appear more than once if two projects targeting it both landed the same run —
+   *  the tick body sums by key, mirroring `applyLaneLevelIncreases`, `lib/engine/lanes.ts`). */
+  applyLaneLevelIncreases(updates: LaneLevelIncrease[]): Promise<void>;
 }

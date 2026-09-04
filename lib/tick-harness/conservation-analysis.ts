@@ -18,17 +18,20 @@ import type { FactionCycleRecord } from "./treasury-analysis";
 
 type BuildProject = Extract<WorldConstructionProject, { kind: "build" }>;
 type ColonyEstablish = Extract<WorldConstructionProject, { kind: "colony_establish" }>;
+type LaneUpgrade = Extract<WorldConstructionProject, { kind: "lane_upgrade" }>;
 
-/** The queue fields the charter census reads. A union of the two arms rather than one `Pick`, so
+/** The queue fields the charter census reads. A union of the three arms rather than one `Pick`, so
  *  `kind` still narrows to the arm that carries `charterPaid`. */
 export type CharterProjectRow =
   | Pick<BuildProject, "kind">
-  | Pick<ColonyEstablish, "kind" | "id" | "charterPaid">;
+  | Pick<ColonyEstablish, "kind" | "id" | "charterPaid">
+  | Pick<LaneUpgrade, "kind">;
 
 /** The queue fields the staged-goods identity reads, narrowed the same way. */
 export type StagedProjectRow =
   | Pick<BuildProject, "kind">
-  | Pick<ColonyEstablish, "kind" | "systemId" | "stagedManifest">;
+  | Pick<ColonyEstablish, "kind" | "systemId" | "stagedManifest">
+  | Pick<LaneUpgrade, "kind">;
 
 /**
  * Relative tolerance for float accumulation, matching the 1e-9 the rest of the harness compares

@@ -16,6 +16,16 @@ function project(
   return { kind: "build", id, origin: "auto", factionId: "f1", systemId: "s1", buildingType, levels, workTotal, workDone };
 }
 
+function laneProject(
+  id: string,
+  laneKey: string,
+  levels: number,
+  workDone: number,
+  workTotal: number,
+): WorldConstructionProject {
+  return { kind: "lane_upgrade", id, origin: "auto", factionId: "f1", laneKey, levels, workTotal, workDone };
+}
+
 describe("factionConstructionPool", () => {
   const rates = { throughputPerPop: 0.05, pointsPerLevel: 5 };
 
@@ -251,7 +261,7 @@ describe("fundQueueWithFloor", () => {
     // homeworld drains the remainder.
     const home = projectAt("h", "home", "food", 1, 0, 1000);
     const col = projectAt("c", "colony", "food", 1, 0, 1000);
-    const r = fundQueueWithFloor([home, col], 10, cap, 4, (p) => p.systemId === "colony");
+    const r = fundQueueWithFloor([home, col], 10, cap, 4, (p) => p.kind === "build" && p.systemId === "colony");
     expect(r.projects.find((p) => p.id === "c")!.workDone).toBe(4); // its reserved slice (would be 0 unreserved)
     expect(r.projects.find((p) => p.id === "h")!.workDone).toBe(6); // homeworld drains the rest
   });
@@ -262,7 +272,7 @@ describe("fundQueueWithFloor", () => {
     // must fund the non-eligible homeworld build, not vanish.
     const col = projectAt("c", "colony", "food", 1, 0, 1000);
     const home = projectAt("h", "home", "food", 1, 0, 1000);
-    const r = fundQueueWithFloor([col, home], 30, cap, 100, (p) => p.systemId === "colony");
+    const r = fundQueueWithFloor([col, home], 30, cap, 100, (p) => p.kind === "build" && p.systemId === "colony");
     expect(r.projects.find((p) => p.id === "c")!.workDone).toBe(10); // capped despite the huge reserve
     expect(r.projects.find((p) => p.id === "h")!.workDone).toBe(10); // freed reserve funded the homeworld
   });
@@ -281,7 +291,7 @@ describe("fundQueueWithFloor", () => {
       projectAt("h", "home", "food", 1, 0, 1000),
       projectAt("c", "colony", "food", 1, 0, 1000),
     ];
-    const r = fundQueueWithFloor(ordered, 10, cap, 4, (p) => p.systemId === "colony");
+    const r = fundQueueWithFloor(ordered, 10, cap, 4, (p) => p.kind === "build" && p.systemId === "colony");
     const workDelta =
       [...r.projects, ...r.landed].reduce((acc, p) => acc + p.workDone, 0) -
       ordered.reduce((acc, p) => acc + p.workDone, 0);
@@ -371,8 +381,8 @@ describe("fundQueueWithFloor", () => {
       projectAt("h", "home", "food", 1, 0, 1000),
       projectAt("c", "colony", "food", 1, 0, 1000),
     ];
-    expect(fundQueueWithFloor(ordered, 15, cap, 4, (p) => p.systemId === "colony", () => cap)).toEqual(
-      fundQueueWithFloor(ordered, 15, cap, 4, (p) => p.systemId === "colony"),
+    expect(fundQueueWithFloor(ordered, 15, cap, 4, (p) => p.kind === "build" && p.systemId === "colony", () => cap)).toEqual(
+      fundQueueWithFloor(ordered, 15, cap, 4, (p) => p.kind === "build" && p.systemId === "colony"),
     );
   });
 
@@ -761,5 +771,18 @@ describe("forecastEtaCycles / forecastIndependentEtaCycles — the default give-
     const cap = 1;
     const deep = project("deep", HOUSING_TYPE, 1, 0, LANDING_CYCLE * cap);
     expect(forecastIndependentEtaCycles([], [deep], 0, cap)).toEqual([null]);
+  });
+});
+
+describe("fundQueue — lane_upgrade rows land whole levels exactly like build rows", () => {
+  it("lands a level on a funded lane project and shrinks its own remaining levels", () => {
+    // 2 levels at 20 work each (workTotal 40); a pool of 25 with a generous cap lands the first
+    // level (20 work) and leaves 5 work banked toward the second, open, level.
+    const lane = laneProject("lane-1", "sysA|sysB", 2, 0, 40);
+    const { projects, landed } = fundQueue([lane], 25, 100);
+    expect(landed).toHaveLength(1);
+    expect(landed[0]).toMatchObject({ kind: "lane_upgrade", laneKey: "sysA|sysB", id: "lane-1", levels: 1 });
+    expect(projects).toHaveLength(1);
+    expect(projects[0]).toMatchObject({ kind: "lane_upgrade", laneKey: "sysA|sysB", id: "lane-1", levels: 1, workDone: 5 });
   });
 });

@@ -13,6 +13,7 @@ import type {
 import type { WorldConstructionProject } from "@/lib/world/types";
 import { developmentRefs, type DevelopmentRefs } from "@/lib/engine/development";
 import { sumResourceVector } from "@/lib/engine/resources";
+import type { LaneLevelIncrease } from "@/lib/engine/lanes";
 
 /** The DirectedBuildWorld adapter — the only backend. Captures writes for assertions + write-back. */
 export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
@@ -44,6 +45,8 @@ export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
   readonly colonyOpportunityUpdates: ColonyOpportunityUpdate[] = [];
   /** The live open-project set — updated in place by applyConstructionUpdates; read back by the tick body. */
   constructionProjects: WorldConstructionProject[];
+  /** Landed lane_upgrade levels this run, by laneKey — read back by the tick body and folded into `lanes`. */
+  readonly laneLevelIncreases: LaneLevelIncrease[] = [];
 
   constructor(
     private readonly systems: SystemBuildRow[],
@@ -130,5 +133,9 @@ export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
 
   async applyFoundingStagingDraws(draws: FoundingStagingDraw[]): Promise<void> {
     this.foundingStagingDraws.push(...draws);
+  }
+
+  async applyLaneLevelIncreases(updates: LaneLevelIncrease[]): Promise<void> {
+    this.laneLevelIncreases.push(...updates);
   }
 }

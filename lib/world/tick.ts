@@ -51,7 +51,9 @@ import { CONSTRUCTION } from "@/lib/constants/construction";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { RELATIONS_FREQUENCY, getRelationTier, type RelationTier } from "@/lib/constants/relations";
 import { LANES } from "@/lib/constants/lanes";
-import { laneCapacity, laneUpkeepWork, decayLanes, type LaneEndpointOwner } from "@/lib/engine/lanes";
+import {
+  laneCapacity, laneUpkeepWork, decayLanes, laneEndpoints, applyLaneLevelIncreases, type LaneEndpointOwner,
+} from "@/lib/engine/lanes";
 import { buildLaneNetwork, createRouteBooker, type LaneNetwork } from "@/lib/engine/lane-routing";
 import { laneOpenFor } from "@/lib/engine/lane-access";
 import { scheduledInbound as computeScheduledInbound } from "@/lib/engine/freight";
@@ -1029,16 +1031,27 @@ export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds
  * Abandonment Rule 2's construction-side application: an open `build` project targeting a system
  * that just died would otherwise keep funding invisible construction on a world its former owner
  * lost — the UI hides it the moment `factionId` is null, but the pool would keep absorbing work
- * into it regardless. Scoped to `kind: "build"` only: a `colony_establish` project never targets an
- * already-developed system (its target is still `controlled`, which is never in survival shortfall
- * — the economy only classifies developed systems), so it is out of scope by construction.
+ * into it regardless. Scoped to `kind: "build"` and `kind: "lane_upgrade"` only: a `colony_establish`
+ * project never targets an already-developed system (its target is still `controlled`, which is
+ * never in survival shortfall — the economy only classifies developed systems), so it is out of scope
+ * by construction. A lane project is dropped when EITHER endpoint just abandoned — the lane is no
+ * longer investable at all once either side loses its faction, matching the spec's "dropped when
+ * either endpoint stops satisfying investability" (docs/planned/logistics-lanes.md §4). Refunds
+ * nothing either way, matching an ordinary build's own abandonment (work spent is lost).
  */
 export function dropAbandonedBuildProjects(
   projects: WorldConstructionProject[], abandonedSystemIds: string[],
 ): WorldConstructionProject[] {
   if (abandonedSystemIds.length === 0) return projects;
   const abandoned = new Set(abandonedSystemIds);
-  return projects.filter((p) => !(p.kind === "build" && abandoned.has(p.systemId)));
+  return projects.filter((p) => {
+    if (p.kind === "build") return !abandoned.has(p.systemId);
+    if (p.kind === "lane_upgrade") {
+      const [a, b] = laneEndpoints(p.laneKey);
+      return !abandoned.has(a) && !abandoned.has(b);
+    }
+    return true;
+  });
 }
 
 /**
@@ -1914,6 +1927,8 @@ export async function runWorldTick(
       foundingDebitsBySourceSystem = foundingDebitsBySource(systems, dbWorld.developments);
       systems = applyDevelopments(systems, dbWorld.developments);
       constructionProjects = dbWorld.constructionProjects;
+      // Credit this run's landed lane_upgrade levels onto their lanes.
+      lanes = applyLaneLevelIncreases(lanes, dbWorld.laneLevelIncreases);
       // Persist the construction proposal-pressure counters into the market rows (proposalCycles only —
       // the same-tick economy/logistics writes on these rows are preserved by the spread inside).
       markets = applyBuildMarketUpdates(markets, dbWorld.proposalCycleUpdates);

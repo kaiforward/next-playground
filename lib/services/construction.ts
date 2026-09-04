@@ -155,11 +155,13 @@ export function getFactionConstruction(factionId: string): FactionConstructionDa
         systemName: row.systemName,
         progress: row.progress,
       });
-    } else {
+    } else if (row.kind === "build") {
       const entry = bySystem.get(row.systemId) ?? { systemName: row.systemName, count: 0 };
       entry.count += 1;
       bySystem.set(row.systemId, entry);
     }
+    // Lane rows carry no single system to bucket into `buildSystems`/`colonies` — they still counted
+    // toward `orderedCount` above, and the faction's pool/queue math already includes their work.
   }
   const buildSystems = [...bySystem]
     .map(([systemId, v]) => ({ systemId, systemName: v.systemName, count: v.count }))
@@ -184,7 +186,9 @@ export function getSystemConstruction(systemId: string): SystemConstructionData 
   if (!system.factionId) return { visibility: "hidden" };
 
   const readout = readoutForFaction(system.factionId);
-  const projects = readout.all.filter((r) => r.systemId === systemId);
+  // Lane rows carry no systemId (an undirected pair, not a single system) — excluded from every
+  // per-system view; they are listed at faction level only.
+  const projects = readout.all.filter((r) => r.kind !== "lane_upgrade" && r.systemId === systemId);
   if (projects.length > 0) return { visibility: "visible", factionId: system.factionId, projects };
   // Nothing under way here: a controlled world still shows the section (that's the question you
   // bring to it); a developed world hides it (avoids clutter on the common case).

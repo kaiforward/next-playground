@@ -80,9 +80,10 @@ export interface FundQueueResult {
    * workTotal/workDone shrunk to match) and an open remainder carrying the SAME id with the rest of
    * the work — so a caller keying off id must expect up to one landed row and one open row sharing an
    * id in the same result, and must sum across both to recover a project's total absorbed work this
-   * cycle. `colony_establish` rows never split — they land only whole, on full completion. fundQueue
-   * stays decision-free otherwise: it moves rows between open and landed by work alone, never
-   * interpreting the kind.
+   * cycle. `colony_establish` rows never split — they land only whole, on full completion. A `kind:
+   * "lane_upgrade"` row splits exactly like a `build` row: both carry `levels`, and the split is keyed
+   * on that shape, not on the kind. fundQueue stays decision-free otherwise: it moves rows between
+   * open and landed by work alone, never interpreting the kind.
    */
   landed: WorldConstructionProject[];
   /** Total construction points actually consumed this cycle (Σ per-project take). */
@@ -90,17 +91,18 @@ export interface FundQueueResult {
 }
 
 /**
- * Split a `kind: "build"` row that absorbed work this cycle but did not complete, into a landed part
- * carrying the whole levels its workDone now covers and an open remainder — same id — carrying the
- * rest. `perLevelWork = workTotal ÷ levels` is invariant across repeated splits (both shrink by the
- * same amount each time a level lands), so it can be recomputed from whatever the row currently
- * carries. `k = floor(workDone ÷ perLevelWork)` uses a small tolerance on the ratio so a workDone that
- * lands exactly on a level boundary, up to float error, still counts that level rather than rounding
- * down and stranding it a cycle. `k` is capped at `levels − 1`: this is only ever called on a row
- * already known not to have completed (workDone < workTotal), so a remainder always survives — this
- * also keeps a single-level project from ever splitting (levels − 1 = 0), matching its old
- * lands-whole-or-not-at-all behaviour. Returns null when nothing lands (`colony_establish` rows, or
- * `k <= 0`) — the caller keeps such a row on its own open/landed decision unchanged.
+ * Split a row with `levels` (a `kind: "build"` or `kind: "lane_upgrade"` row) that absorbed work this
+ * cycle but did not complete, into a landed part carrying the whole levels its workDone now covers and
+ * an open remainder — same id — carrying the rest. `perLevelWork = workTotal ÷ levels` is invariant
+ * across repeated splits (both shrink by the same amount each time a level lands), so it can be
+ * recomputed from whatever the row currently carries. `k = floor(workDone ÷ perLevelWork)` uses a
+ * small tolerance on the ratio so a workDone that lands exactly on a level boundary, up to float
+ * error, still counts that level rather than rounding down and stranding it a cycle. `k` is capped at
+ * `levels − 1`: this is only ever called on a row already known not to have completed (workDone <
+ * workTotal), so a remainder always survives — this also keeps a single-level project from ever
+ * splitting (levels − 1 = 0), matching its old lands-whole-or-not-at-all behaviour. Returns null when
+ * nothing lands (`colony_establish` rows, which never split, or `k <= 0`) — the caller keeps such a
+ * row on its own open/landed decision unchanged.
  *
  * The remainder's workDone is floored at 0: when the tolerance rounds a just-short workDone UP to a
  * boundary, the landed part claims a hair more work than was actually paid for, which would otherwise
@@ -109,7 +111,7 @@ export interface FundQueueResult {
 function splitLandedLevels(
   p: WorldConstructionProject,
 ): { landed: WorldConstructionProject; open: WorldConstructionProject } | null {
-  if (p.kind !== "build") return null;
+  if (p.kind === "colony_establish") return null;
   const perLevelWork = p.levels > 0 ? p.workTotal / p.levels : 0;
   if (!(perLevelWork > 0)) return null;
   const ratio = p.workDone / perLevelWork;

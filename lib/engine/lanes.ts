@@ -17,6 +17,40 @@ export function laneKey(a: string, b: string): string {
 }
 
 /**
+ * Recover a lane's two endpoint system ids from its `laneKey` — the inverse of `laneKey` itself,
+ * shared so no caller splits the `"a|b"` convention inline (`dropAbandonedBuildProjects`,
+ * `lib/world/tick.ts`, is the first of several).
+ */
+export function laneEndpoints(key: string): [string, string] {
+  const [a, b] = key.split("|");
+  return [a, b];
+}
+
+/** One lane's whole-level credit from a landed `lane_upgrade` construction project. */
+export interface LaneLevelIncrease {
+  key: string;
+  levels: number;
+}
+
+/**
+ * Fold landed `lane_upgrade` construction levels onto their lanes' `level` — the lane analogue of
+ * `applyBuildingIncreases` (`lib/world/tick.ts`). Pure; returns fresh rows only for lanes an increase
+ * actually touches, an identity copy of `lanes` when there is nothing to fold.
+ */
+export function applyLaneLevelIncreases(
+  lanes: readonly WorldLane[],
+  increases: readonly LaneLevelIncrease[],
+): WorldLane[] {
+  if (increases.length === 0) return [...lanes];
+  const byKey = new Map<string, number>();
+  for (const inc of increases) byKey.set(inc.key, (byKey.get(inc.key) ?? 0) + inc.levels);
+  return lanes.map((lane) => {
+    const add = byKey.get(lane.key);
+    return add ? { ...lane, level: lane.level + add } : lane;
+  });
+}
+
+/**
  * Capacity at `level` — linear first cut, verbatim from the spec (§1): baseline at level 0, rising
  * by one baseline unit of capacity per level.
  */

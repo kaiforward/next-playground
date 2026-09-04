@@ -374,7 +374,6 @@ export interface WorldBuilding {
 interface WorldConstructionProjectBase {
   id: string;
   factionId: string;
-  systemId: string;
   /** Who committed this row: the autonomic planner, or a player order (priority, display, cancel-permission). */
   origin: "auto" | "player";
   /** Total construction work to complete. */
@@ -393,6 +392,7 @@ interface WorldConstructionProjectBase {
  */
 export interface WorldBuildProject extends WorldConstructionProjectBase {
   kind: "build";
+  systemId: string;
   buildingType: string;
   /** Whole levels this project lands on completion (integer ≥ 1). */
   levels: number;
@@ -413,6 +413,7 @@ export interface WorldFoundingStockLine {
  */
 export interface WorldColonyEstablishProject extends WorldConstructionProjectBase {
   kind: "colony_establish";
+  systemId: string;
   /** Nearest developed same-faction system the seed population transfers from (fixed for the project's life). */
   sourceSystemId: string;
   /** Conserved starter population, sized at proposal to the whole-level habitable cap. */
@@ -433,11 +434,29 @@ export interface WorldColonyEstablishProject extends WorldConstructionProjectBas
 }
 
 /**
- * One committed construction project. A discriminated union: ordinary `build` levels, or a
- * `colony_establish` that lands a viable colony. Both are funded from the same per-faction throughput
- * pool by the same `fundQueue`, so build-vs-colonise arbitrates on one budget.
+ * A queued order to raise the undirected lane `laneKey` (`lib/engine/lanes.ts`) by `levels` whole
+ * levels. Unlike `WorldBuildProject`/`WorldColonyEstablishProject`, this row is not scoped to a single
+ * `systemId` — it carries its undirected lane key instead, and is dropped rather than reassigned when
+ * either endpoint stops satisfying investability (`dropAbandonedBuildProjects`, `lib/world/tick.ts`).
+ * Levels land incrementally exactly as a `kind: "build"` row's do: `fundQueueWithFloor` reads only
+ * `levels`/`workTotal`/`workDone`, so the same `workTotal ÷ levels` boundary landing applies here too
+ * (`splitLandedLevels`, `lib/engine/construction.ts`), crediting whole levels onto `WorldLane.level`
+ * via `applyLaneLevelIncreases`.
  */
-export type WorldConstructionProject = WorldBuildProject | WorldColonyEstablishProject;
+export interface WorldLaneUpgradeProject extends WorldConstructionProjectBase {
+  kind: "lane_upgrade";
+  laneKey: string;
+  /** Whole levels this project lands on completion (integer ≥ 1). */
+  levels: number;
+}
+
+/**
+ * One committed construction project. A discriminated union: ordinary `build` levels, a
+ * `colony_establish` that lands a viable colony, or a `lane_upgrade` that raises an undirected lane's
+ * invested level. All three are funded from the same per-faction throughput pool by the same
+ * `fundQueue`, so build-vs-colonise-vs-lane arbitrates on one budget.
+ */
+export type WorldConstructionProject = WorldBuildProject | WorldColonyEstablishProject | WorldLaneUpgradeProject;
 
 export interface WorldConnection {
   fromId: string;

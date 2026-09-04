@@ -17,6 +17,7 @@ import { charterFee, foundingGoodsValue, stagingShareLines } from "@/lib/engine/
 import { foundingWorkingBalance, safeMoney } from "@/lib/engine/treasury";
 import { clamp } from "@/lib/utils/math";
 import type { WorldConstructionProject, WorldColonyEstablishProject, WorldPlayer } from "@/lib/world/types";
+import type { LaneLevelIncrease } from "@/lib/engine/lanes";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import type {
   DirectedBuildWorld,
@@ -394,6 +395,11 @@ export async function runDirectedBuildProcessor(
   // project has been stalled, never why, and never that the queue simply did not reach it.
   const foundingStalls: FoundingStallEvent[] = [];
   const nextOpen: WorldConstructionProject[] = [];
+  // Landed lane_upgrade levels this run, by laneKey — folded into `lanes` by the tick body via
+  // `applyLaneLevelIncreases`. No proposal path emits lane_upgrade projects yet (the lane-upgrade
+  // order verb is a later task), so this stays empty until then; the landing arm exists regardless,
+  // matching how the build/colony arms exist even on a cycle that lands neither.
+  const laneLandings: LaneLevelIncrease[] = [];
   const workPerformedByFaction = new Map<string, number>();
   // Money committed to founding this cycle, per faction — the treasury's settlement input. Directed
   // build never writes `balance`; it commits against `balance − pendingFounding` and the settlement
@@ -769,7 +775,7 @@ export async function runDirectedBuildProcessor(
         const byType = landedBySystem.get(l.systemId) ?? new Map<string, number>();
         byType.set(l.buildingType, (byType.get(l.buildingType) ?? 0) + l.levels);
         landedBySystem.set(l.systemId, byType);
-      } else {
+      } else if (l.kind === "colony_establish") {
         // A completed colony-establish → develop the system: seed transfer + bundled housing + the
         // ledger it staged over the whole establish (all applied in tick.ts). Nothing is drawn from
         // the founder here — every line was debited on the cycle it was staged.
@@ -777,6 +783,9 @@ export async function runDirectedBuildProcessor(
           systemId: l.systemId, sourceSystemId: l.sourceSystemId, seedPop: l.seedPop, housingLevels: l.housingLevels,
           stockManifest: l.stagedManifest,
         });
+      } else {
+        // A completed (or level-boundary-split) lane_upgrade → credit whole levels onto the lane row.
+        laneLandings.push({ key: l.laneKey, levels: l.levels });
       }
     }
   }
@@ -784,6 +793,9 @@ export async function runDirectedBuildProcessor(
   // Debit this cycle's staged materials at their sources — the goods are now in-transit inventory in
   // the projects' ledgers, in no market row until their colony opens.
   if (stagingDraws.length > 0) await world.applyFoundingStagingDraws(stagingDraws);
+
+  // Credit landed lane_upgrade levels onto their lanes.
+  if (laneLandings.length > 0) await world.applyLaneLevelIncreases(laneLandings);
 
   // Apply completed colony establishments (develop + conserved seed + bundled housing).
   if (developments.length > 0) await world.applyDevelopments(developments);

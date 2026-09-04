@@ -101,6 +101,16 @@ describe("charter census", () => {
     recordCharterCensus([{ kind: "build" }, { kind: "build" }], census);
     expect(checkCharterDebits(census)).toMatchObject({ left: 0, right: 0, pass: true });
   });
+
+  it("ignores lane_upgrade projects — a third arm the `kind` narrow still excludes correctly", () => {
+    const census = newCharterCensus();
+    recordCharterCensus(
+      [{ kind: "lane_upgrade" }, establish("p1", true)],
+      census,
+    );
+    const check = checkCharterDebits(census);
+    expect(check).toMatchObject({ left: 1, right: 1, pass: true });
+  });
 });
 
 describe("founding committed vs opening balance", () => {
@@ -264,7 +274,7 @@ describe("staged goods vs founder draws", () => {
 
   it("passes when every open colony's ledger matches what its draws took", () => {
     const check = sample(
-      [staged("c1", [40, 60]), staged("c2", [25]), { kind: "build" }],
+      [staged("c1", [40, 60]), staged("c2", [25]), { kind: "build" }, { kind: "lane_upgrade" }],
       new Map([["c1", totals(100)], ["c2", totals(25)]]),
     );
     expect(check.left).toBeCloseTo(125, 9);

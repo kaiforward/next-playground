@@ -354,6 +354,20 @@ export function queuedBuildLevelsAt(openProjects: WorldConstructionProject[], sy
 }
 
 /**
+ * Open LANE_UPGRADE-kind project levels, summed by `laneKey` — the lane analogue of
+ * `queuedBuildLevelsBySystem`, for a caller (the lane-upgrade order verb, Task 9) that needs to know
+ * how many levels are already in flight for a lane before proposing more.
+ */
+export function queuedLaneLevels(openProjects: WorldConstructionProject[]): ReadonlyMap<string, number> {
+  const queued = new Map<string, number>();
+  for (const project of openProjects) {
+    if (project.kind !== "lane_upgrade") continue;
+    queued.set(project.laneKey, (queued.get(project.laneKey) ?? 0) + project.levels);
+  }
+  return queued;
+}
+
+/**
  * Fold all committed build levels into the planner's effective state. The standing realised rate is
  * preserved; committed capacity can only add its non-negative delta, never rewrite an assessment.
  * Queued consumers also expose their input draw before they land, keeping the supply chain honest.
