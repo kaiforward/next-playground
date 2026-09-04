@@ -20,7 +20,7 @@ describe("summariseLogistics", () => {
     // and moved nothing (the Math.floor bug quantized every transfer to 0). The
     // mean must not divide by zero — JSON.stringify renders NaN as null, which
     // would read as "not measured" rather than "measured, and it is broken".
-    const summary = summariseLogistics([], NO_BUDGET, NO_FLAGS);
+    const summary = summariseLogistics([], NO_BUDGET, NO_FLAGS, 0);
 
     expect(summary.transferCount).toBe(0);
     expect(summary.activeTicks).toBe(0);
@@ -31,7 +31,7 @@ describe("summariseLogistics", () => {
     expect(summary.budgetSpentFrac).toBe(0);
     expect(summary.fundingBoundEvents).toBe(0);
     expect(summary.fundingBoundFlagSetRate).toBe(0);
-    expect(summary.flowRowsPerCycle).toBe(0);
+    expect(summary.flowRowsPerReferenceCycle).toBe(0);
   });
 
   it("totals transfer count, quantity, and mean size across the run", () => {
@@ -39,6 +39,7 @@ describe("summariseLogistics", () => {
       [flow(24, "a", "b", "water", 10), flow(48, "a", "b", "water", 30)],
       NO_BUDGET,
       NO_FLAGS,
+      48,
     );
 
     expect(summary.transferCount).toBe(2);
@@ -57,6 +58,7 @@ describe("summariseLogistics", () => {
       ],
       NO_BUDGET,
       NO_FLAGS,
+      48,
     );
 
     expect(summary.activeTicks).toBe(2);
@@ -68,6 +70,7 @@ describe("summariseLogistics", () => {
       [flow(24, "a", "b", "water", 5), flow(48, "b", "c", "water", 5)],
       NO_BUDGET,
       NO_FLAGS,
+      48,
     );
 
     expect(summary.participatingSystems).toBe(3);
@@ -82,6 +85,7 @@ describe("summariseLogistics", () => {
       ],
       NO_BUDGET,
       NO_FLAGS,
+      48,
     );
 
     expect(summary.byGood).toEqual([
@@ -90,11 +94,12 @@ describe("summariseLogistics", () => {
     ]);
   });
 
-  it("reports budget spend as a whole-run fraction, with flag rate and rows per cycle", () => {
+  it("reports budget spend as a whole-run fraction, with flag rate and rows per reference cycle", () => {
     // The budget ledger is accumulated by the runner across ticks; this only divides.
     // 16 spent of 200 total → 6 ticks of history is irrelevant to the fraction; 5 of
     // 50 developed-system markets flagged funding-bound at run end → 0.1; 3 flow rows
-    // over 2 active ticks → 1.5 rows per resolving cycle (the flow-volume canary).
+    // over a 48-tick run (48 / REFERENCE_INTERVAL(24) = 2 reference cycles) → 1.5 rows
+    // per reference cycle (the flow-volume canary, now independent of which ticks were active).
     const summary = summariseLogistics(
       [
         flow(24, "a", "b", "water", 5),
@@ -103,6 +108,7 @@ describe("summariseLogistics", () => {
       ],
       { total: 200, spent: 16, fundingBoundEvents: 3 },
       { flagged: 5, marketCount: 50 },
+      48,
     );
 
     expect(summary.budgetSpentFrac).toBeCloseTo(0.08, 9);
@@ -110,7 +116,7 @@ describe("summariseLogistics", () => {
     expect(summary.fundingBoundFlaggedMarkets).toBe(5);
     expect(summary.fundingBoundMarketCount).toBe(50);
     expect(summary.fundingBoundFlagSetRate).toBeCloseTo(0.1, 9);
-    expect(summary.flowRowsPerCycle).toBeCloseTo(1.5, 9);
+    expect(summary.flowRowsPerReferenceCycle).toBeCloseTo(1.5, 9);
   });
 });
 

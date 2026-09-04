@@ -36,7 +36,22 @@ import { effColumns, yieldColumns } from "@/lib/engine/resources";
 // stored preference, and an old world.events row naming a stripped type would be silently expired by
 // the events processor's stale-type guard (`lib/tick/processors/events.ts`) rather than surfacing
 // anywhere — the bump makes both fail loudly at load instead of drifting unnoticed.
-export const SAVE_FORMAT_VERSION = 17;
+//
+// v18 adds `world.lanes` (`WorldLane`, `lib/world/types.ts`) — one persistent row per undirected
+// system pair carrying a `WorldConnection`, a new REQUIRED array. A pre-bump save has no such array
+// at all, not merely an old shape of one: loading it as-is would hand every reader of `world.lanes`
+// `undefined` instead of a lane row for every existing connection, and there is no per-lane default
+// to backfill from (a lane's `level`/`bookedLoad`/`blockedVolume`/`idleCycles` are runtime state, not
+// derivable from `world.connections` alone once play has invested in any of them) — so old saves are
+// refused rather than silently loading with zero lanes.
+//
+// The same v18 bump also adds `world.pendingArrivals` (`WorldPendingArrival`, `lib/world/types.ts`)
+// — the scheduled-freight ledger, a new REQUIRED array drained every tick by the unconditional
+// goods-arrivals stage. A pre-bump save has no such array either; unlike lanes there is no
+// pre-existing state to lose (nothing dispatches onto the ledger yet), but an undefined array would
+// still crash the stage's first read rather than reading as "empty" — riding the same bump as lanes
+// rather than earning its own means one refusal covers both new arrays instead of two.
+export const SAVE_FORMAT_VERSION = 18;
 
 /** Reserved save name the tick loop autosaves to; the start screen's "Continue" loads it. */
 export const AUTOSAVE_NAME = "autosave";

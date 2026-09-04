@@ -54,14 +54,22 @@ export function FactionConstructionCard({ factionId }: { factionId: string }) {
               label="Autonomic build"
               checked={data.automation.build}
               onChange={(build) =>
-                setAutomation.mutate({ build, colonisation: data.automation?.colonisation ?? true })
+                setAutomation.mutate({
+                  build,
+                  colonisation: data.automation?.colonisation ?? true,
+                  lanes: data.automation?.lanes ?? true,
+                })
               }
             />
             <CheckboxInput
               label="Autonomic colonisation"
               checked={data.automation.colonisation}
               onChange={(colonisation) =>
-                setAutomation.mutate({ build: data.automation?.build ?? true, colonisation })
+                setAutomation.mutate({
+                  build: data.automation?.build ?? true,
+                  colonisation,
+                  lanes: data.automation?.lanes ?? true,
+                })
               }
             />
           </div>

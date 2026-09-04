@@ -16,9 +16,10 @@ import type { FoundingEraSummary, TreasurySnapshot, TreasurySummary } from "./tr
 import type {
   FounderCohortSummary, FoundingLifecycleSummary, FoundingTrajectorySummary, TierZeroIdleSummary,
 } from "./build-analysis";
-import type { DemandHuntingSummary } from "./market-analysis";
+import type { DemandHuntingSummary, SpellDistributionSummary } from "./market-analysis";
 import type { ConservationSummary } from "./conservation-analysis";
 import type { QuantileLevels } from "./population-analysis";
+import type { LaneMetricsSummary } from "./lane-analysis";
 
 // ── Market role classification ──────────────────────────────────
 
@@ -51,6 +52,13 @@ export interface HarnessConfig {
    * each market is classified live, as always.
    */
   pinnedRoles?: Record<string, MarketRole>;
+  /** Harness-only arm: overrides `LANES.FREIGHT_SPEED` for this run's `freightArrivalTick` calls.
+   *  Absent ⇒ the live constant, the only value the live game ever passes. */
+  freightSpeed?: number;
+  /** Harness-only arm: `"factionBlind"` opens every lane in the network to every hauler, ignoring
+   *  ownership/relation traversability entirely; absent (or `"tier"`) is the live game's own rule
+   *  (own+unclaimed+friendly-or-allied). */
+  laneTraversal?: "tier" | "factionBlind";
 }
 
 // ── Market health ───────────────────────────────────────────────
@@ -385,9 +393,13 @@ export interface LogisticsActivitySummary {
   /** Fraction of developed-system markets carrying the funding-bound flag at run end —
    *  the gameplay blast radius (planner suppression + idle-decay exemption). */
   fundingBoundFlagSetRate: number;
-  /** transferCount / activeTicks — flow-log rows per resolving cycle, the row-volume canary
-   *  for the multi-donor fan-out (one row per donor-draw). 0 when nothing moved. */
-  flowRowsPerCycle: number;
+  /** flow-log rows ÷ (whole-run ticks ÷ REFERENCE_INTERVAL) — flow rows per REFERENCE cycle over
+   *  the whole run, the row-volume canary for the multi-donor fan-out (one row per donor-draw).
+   *  NOT rows per active tick: goods-arrivals is unconditional and per-tick (docs/planned/
+   *  logistics-lanes.md §3), so flow rows land on any tick rather than lumping at the old
+   *  logistics boundary, and an active-tick denominator would read low for that reason alone. 0
+   *  when nothing moved. */
+  flowRowsPerReferenceCycle: number;
 }
 
 // ── Construction burst pacing ───────────────────────────────────
@@ -556,10 +568,11 @@ export interface BeyondCrossingCohortEntry {
 /**
  * The map-generation acceptance instruments (spec §5): whether the generated galaxy's geography
  * actually concentrates flow, differentiates lane cost, and makes settling beyond a crossing
- * measurably costlier — reachability mirrors the shipped, ownership-blind router exactly (hop-BFS
- * over the full connection graph, `DIRECTED_LOGISTICS.MAX_HOPS`-capped); the specific lane path a
- * haul is placed onto is this module's own fuel-weighted shortest-path model over that same full
- * adjacency, since the real matcher never records a chosen path.
+ * measurably costlier — reachability mirrors the shipped router's own rule (a path over the lane
+ * network where every lane crossed is open to the hauling faction: own+unclaimed+friendly-or-allied,
+ * `laneOpenFor`); the specific lane path a haul is placed onto is this module's own fuel-weighted
+ * shortest-path model over the full, ownership-blind connection graph, since the real matcher never
+ * records a chosen path (`geography-analysis.ts`'s module docstring has the full split).
  */
 export interface GeographySummary {
   /** Share of edge-crossing haul volume the top decile of trafficked edges carries, aggregate
@@ -580,9 +593,9 @@ export interface GeographySummary {
   /** Colony-cluster-vs-homeworld-cluster cohort: `["interior", "beyond-crossing"]`, always both
    *  rows present even at 0 colonies (an empty cohort reads 0/0/0, never a missing row). */
   beyondCrossingCohort: BeyondCrossingCohortEntry[];
-  /** Hauls the shipped router itself could not have routed: no path at all over the full,
-   *  ownership-blind connection graph, or hop-minimal distance over `DIRECTED_LOGISTICS.MAX_HOPS`.
-   *  A projection that silently drops most hauls must be visible here, not read as low traffic. */
+  /** Hauls the router's own reachability rule could not have routed: no path over the lane network
+   *  from donor to sink where every lane crossed is open to the hauling faction. A projection that
+   *  silently drops most hauls must be visible here, not read as low traffic. */
   unreachableHaulCount: number;
   unreachableHaulVolume: number;
   /** unreachableHaulVolume / (total haul volume across every flow event, placed or not). 0 when
@@ -701,4 +714,26 @@ export interface HarnessResults {
   /** The map-generation acceptance instruments (spec §5): corrected flow concentration, fuel-cost
    *  spread over both cohorts, cross-faction lane count, the beyond-crossing migration cohort. */
   geography: GeographySummary;
+  /** Whole-run lane-mechanics instruments (spec §8): utilisation, congestion, blocked volume,
+   *  foreign-transit share, per-faction contention, survival-stock census. */
+  laneMetrics: LaneMetricsSummary;
+  /** Distribution of how long a developed system's water/food deficit spell runs before it clears —
+   *  the physical-stock companion to `demandHunting`'s honest-use-figure `flipRate`. */
+  survivalSpellDistribution: SpellDistributionSummary;
+  /** Whole-run wall-clock: the tick as a whole, and the two stages spec §8's gate names
+   *  (directed-logistics, goods-arrivals), each as a median over sampled boundary ticks plus that
+   *  stage's share of Σ tick time. Calibration-only — never derived from a broadcast frame. */
+  stageTiming: StageTimingSummary;
+}
+
+// ── Wall-clock ──────────────────────────────────────────────────
+
+export interface StageTimingSummary {
+  tickMsMedian: number;
+  directedLogisticsMsMedian: number;
+  goodsArrivalsMsMedian: number;
+  /** Σ directedLogistics stage ms / Σ tick ms, over every sampled tick. */
+  directedLogisticsShare: number;
+  /** Σ goodsArrivals stage ms / Σ tick ms, over every sampled tick. */
+  goodsArrivalsShare: number;
 }

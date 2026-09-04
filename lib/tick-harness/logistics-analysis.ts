@@ -13,13 +13,14 @@
  * pruned to `TRADE_SIMULATION.FLOW_HISTORY_TICKS`, so the end-of-run world holds
  * only the tail of a longer run.
  */
+import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import type { SystemControl, WorldFlowEvent } from "@/lib/world/types";
 import type { LogisticsActivitySummary } from "./types";
 
 /**
  * Ticks below which a run's logistics counters read as colonisation warm-up, not economy health.
- * Directed-logistics moves nothing until a faction has two same-faction developed systems within
- * MAX_HOPS, which is colonisation-paced: the first establish completes at tick 4128 and the first
+ * Directed-logistics moves nothing until a faction has two developed systems joined by an open
+ * lane path, which is colonisation-paced: the first establish completes at tick 4128 and the first
  * transfer lands at 4152 — the same two ticks at 20 systems / seed 7 and at 600 / seed 42, because
  * the establish duration is set by the absorption cap (68 work ÷ 0.4 per cycle ≈ 170 cycles), not by
  * galaxy size. A sub-window run therefore reports a pre-logistics galaxy — one of the three economy
@@ -72,6 +73,11 @@ export function summariseLogistics(
   flows: WorldFlowEvent[],
   budget: LogisticsBudgetTotals,
   flags: FundingBoundFlagCensus,
+  /** Whole-run tick count — `flowRowsPerReferenceCycle`'s denominator. Flow rows can land on any
+   *  tick (goods-arrivals is unconditional, per-tick), so counting them per ACTIVE tick reads low
+   *  once arrivals spread across every tick rather than landing in a lump at the old logistics
+   *  boundary; per REFERENCE cycle over the whole run is the stable denominator. */
+  tickCount: number,
 ): LogisticsActivitySummary {
   const activeTicks = new Set<number>();
   const participants = new Set<string>();
@@ -112,6 +118,7 @@ export function summariseLogistics(
       Number.isFinite(flags.marketCount) && flags.marketCount > 0
         ? flags.flagged / flags.marketCount
         : 0,
-    flowRowsPerCycle: activeTicks.size === 0 ? 0 : flows.length / activeTicks.size,
+    flowRowsPerReferenceCycle:
+      tickCount === 0 ? 0 : flows.length / (tickCount / REFERENCE_INTERVAL),
   };
 }

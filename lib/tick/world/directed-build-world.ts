@@ -9,10 +9,12 @@ import type {
   SystemControl,
   WorldConstructionProject,
   WorldFoundingStockLine,
+  WorldLane,
 } from "@/lib/world/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import type { DevelopmentRefs } from "@/lib/engine/development";
 import type { BuildDropReason } from "@/lib/engine/directed-build";
+import type { LaneLevelIncrease } from "@/lib/engine/lanes";
 
 /** One system's build-relevant state: markets + buildings + body-derived capacity. */
 export interface SystemBuildRow {
@@ -131,6 +133,10 @@ export interface DirectedBuildWorld {
   getDevelopmentRefs(): Promise<DevelopmentRefs>;
   /** Open (in-flight) construction projects owned by the given faction keys. */
   getConstructionProjects(factionKeys: Array<string | null>): Promise<WorldConstructionProject[]>;
+  /** Every lane in the world — the substrate the lane-upgrade opportunity scores and
+   *  `applyLaneLevelIncreases` writes back onto. Not faction-scoped: a lane's investor is derived
+   *  from its endpoints' ownership, not stored on the row. */
+  getLanes(): Promise<WorldLane[]>;
   /** Bulk absolute building-count writes (landed whole levels: production goods + "housing"). */
   applyBuildingIncreases(updates: BuildBuildingUpdate[]): Promise<void>;
   /** Replace the given factions' open construction projects with the funded/created set (landed removed). */
@@ -160,4 +166,8 @@ export interface DirectedBuildWorld {
   applyDevelopments(developments: SystemDevelopment[]): Promise<void>;
   /** This cycle's materials debits at the founding sources (goods leave for a colony's ledger). */
   applyFoundingStagingDraws(draws: FoundingStagingDraw[]): Promise<void>;
+  /** Landed `lane_upgrade` project levels this run, one entry per lane that landed at least one whole
+   *  level (a lane can appear more than once if two projects targeting it both landed the same run —
+   *  the tick body sums by key, mirroring `applyLaneLevelIncreases`, `lib/engine/lanes.ts`). */
+  applyLaneLevelIncreases(updates: LaneLevelIncrease[]): Promise<void>;
 }

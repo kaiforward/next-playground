@@ -5,6 +5,7 @@
  * adapter returns whole-faction system groups for the faction shard due this tick.
  */
 import type { ResourceVector } from "@/lib/types/game";
+import type { WorldPendingArrival } from "@/lib/world/types";
 
 /**
  * One market's raw band inputs (mirrors the fields marketBandForRow consumes).
@@ -78,25 +79,33 @@ export interface UnservedShortfallUpdate {
   unservedShortfall: number;
 }
 
-export interface LogisticsFlowInsert {
-  tick: number;
-  fromSystemId: string;
-  toSystemId: string;
-  goodId: string;
-  quantity: number;
+/** One lane's booked/blocked load after this run's matching — `RouteBooker.loads()` written back
+ *  for EVERY lane in the network, zero for one no faction touched this run (the reset: a lane
+ *  loaded last run and left idle this run must read back to 0, not keep a stale figure). */
+export interface LaneLoadUpdate {
+  key: string;
+  bookedLoad: number;
+  blockedVolume: number;
 }
+
+/** One dispatched haul, written to the scheduled-freight ledger at dispatch time — see
+ *  `WorldPendingArrival`. `id` is minted by the caller (`DirectedLogisticsProcessorParams.mintId`). */
+export type PendingArrivalInsert = WorldPendingArrival;
 
 export interface DirectedLogisticsWorld {
   /** Total distinct faction groups (incl. one null/independents group) — drives the shard split. */
   getFactionShardKeys(): Promise<Array<string | null>>;
   /** All systems (with markets) belonging to the given faction keys. */
   getSystemsForFactions(factionKeys: Array<string | null>): Promise<SystemLogisticsRow[]>;
-  /** Bulk absolute stock writes (already clamped). */
+  /** Bulk absolute stock writes (already clamped) — donor debits only; dispatch never credits a
+   *  destination (docs/planned/logistics-lanes.md §3: the arrivals stage credits on delivery). */
   applyMarketUpdates(updates: LogisticsMarketUpdate[]): Promise<void>;
   /** Apply changed wanted-but-unfunded assessments without rewriting stock. */
   applyFundingBoundUpdates(updates: LogisticsFundingBoundUpdate[]): Promise<void>;
   /** Apply changed structural-unservable assessments without rewriting stock. */
   applyUnservedShortfallUpdates(updates: UnservedShortfallUpdate[]): Promise<void>;
-  /** Append directed-logistics flow rows to the world flow log. */
-  appendLogisticsFlows(flows: LogisticsFlowInsert[]): Promise<void>;
+  /** Write this run's booked/blocked load for every lane in the network. */
+  applyLaneLoadUpdates(updates: LaneLoadUpdate[]): Promise<void>;
+  /** Append dispatched hauls to the scheduled-freight ledger. */
+  appendPendingArrivals(arrivals: PendingArrivalInsert[]): Promise<void>;
 }

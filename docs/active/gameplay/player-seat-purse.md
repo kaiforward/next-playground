@@ -12,7 +12,7 @@ distinction never touches mechanics. It fills from two taxes on real economic ac
 **employed heads (grade-weighted)** and **realised production (at fixed reference values)** —
 scaled by a five-step **tax level** whose cost is unrest. It drains through three **budget bands**
 — a *budget band* is a spending category with a 0–100% funding slider (not a tax band):
-**maintenance** (the standing sink, coupled to building decay), **logistics**, and
+**maintenance** (the standing sink, coupled to building decay and lane upkeep), **logistics**, and
 **construction**. Money is *fuel*, not capacity: the physical pools (eligible heads + Construction
 Centres, the logistics work-budget) remain the ceilings, and a band's funding level sets what
 fraction of that physical throughput actually runs. Wealth can never buy past the physical ceiling
@@ -131,9 +131,12 @@ invariance) and are reference-valued; exact rates are harness calibration.
 ## Maintenance (the standing sink)
 
 Every building level carries a reference-valued, type-weighted maintenance cost; the faction-wide
-bill is itemised per building type in the UI. One **global** slider in v1 — Paradox precedent keeps
-maintenance sliders coarse, and per-group triage sliders are a purely additive later split if
-playtesting wants them (the itemised bill is already the structure).
+bill is itemised per building type in the UI (`maintenanceByType`). The bill also folds in **lane
+upkeep** — Σ each invested lane's level × its upgrade work, priced at the same rate as building
+upkeep and never accrued mid-cycle — broken out on its own as `laneUpkeepBill` for readers that want
+just the lane share; one band, one bill, one funding fraction covers both. One **global** slider in
+v1 — Paradox precedent keeps maintenance sliders coarse, and per-group triage sliders are a purely
+additive later split if playtesting wants them (the itemised bill is already the structure).
 
 **Design rule: player choice may only charge flow; only insolvency may touch stock.** Stock
 destruction (lost building levels) compounds into a death spiral; flow costs are recoverable,
@@ -238,7 +241,8 @@ calibration harness, across the full faction roster (majors + minors). Per-facti
   row for the settlement's colony charters and staged materials, then the
   three band-funding rows and the 5-segment tax-level stepper. Ledger expense amounts are money
   actually **paid** last settlement; the maintenance breakdown itemises the **bill's** composition
-  by building type. `net` subtracts founding alongside the three paid bands — it is a real expense that
+  by building type (`maintenanceByType`) — lane upkeep (`laneUpkeepBill`) rides the same band and
+  funding fraction but is not broken out in this per-type list. `net` subtracts founding alongside the three paid bands — it is a real expense that
   never passes through a band, and a `net` that ignored it would be wrong, not merely incomplete. Each band row shows **set vs runs**: the slider thumb is the player's set
   fraction; the copper fill is last settlement's latched paid fraction ("runs"), with an explicit
   "— shorted" tag when the ladder diverges them and a hatched zone marking maintenance's

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { setWorld, clearWorld } from "@/lib/world/store";
 import { generateWorld } from "@/lib/world/gen";
 import { getWorld } from "@/lib/world/store";
-import { orderBuild, orderColony, cancelOrder, setAutomation } from "@/lib/services/construction-orders";
+import { orderBuild, orderColony, orderLaneUpgrade, cancelOrder, setAutomation } from "@/lib/services/construction-orders";
 import { seatWorld, controlledNeighbour, secondControlledSystem, playerHome } from "./seat-world";
 import { colonyEligibility } from "@/lib/services/colony-eligibility";
 import { foundingCommitmentCost } from "@/lib/engine/founding-cost";
@@ -10,8 +10,9 @@ import { runWorldTick } from "@/lib/world/tick";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { COLONY_BLOCK_COPY } from "@/lib/types/colonisation";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
+import { laneKey } from "@/lib/engine/lanes";
 import type {
-  World, WorldBuildProject, WorldColonyEstablishProject, WorldTreasurySettlement,
+  World, WorldBuildProject, WorldColonyEstablishProject, WorldLaneUpgradeProject, WorldTreasurySettlement,
 } from "@/lib/world/types";
 
 /** One system's whole warehouse, by good — the figure a conservation check is taken on. */
@@ -162,7 +163,7 @@ describe("construction order services", () => {
     expect(orderBuild({ systemId: "x", buildingType: HOUSING_TYPE, levels: 1 })).toEqual({ ok: false, error: "No world loaded." });
     expect(orderColony({ systemId: "x" })).toEqual({ ok: false, error: "No world loaded." });
     expect(cancelOrder({ projectId: "x" })).toEqual({ ok: false, error: "No world loaded." });
-    expect(setAutomation({ build: true, colonisation: true })).toEqual({ ok: false, error: "No world loaded." });
+    expect(setAutomation({ build: true, colonisation: true, lanes: true })).toEqual({ ok: false, error: "No world loaded." });
   });
 
   it("every write verb rejects when the world has no player seat", () => {
@@ -171,7 +172,7 @@ describe("construction order services", () => {
     expect(orderBuild({ systemId: "x", buildingType: HOUSING_TYPE, levels: 1 })).toEqual({ ok: false, error: "This world has no player seat." });
     expect(orderColony({ systemId: "x" })).toEqual({ ok: false, error: "This world has no player seat." });
     expect(cancelOrder({ projectId: "x" })).toEqual({ ok: false, error: "This world has no player seat." });
-    expect(setAutomation({ build: true, colonisation: true })).toEqual({ ok: false, error: "This world has no player seat." });
+    expect(setAutomation({ build: true, colonisation: true, lanes: true })).toEqual({ ok: false, error: "This world has no player seat." });
   });
 
   it("orderBuild reports the exact not-found and not-yours messages", () => {
@@ -629,8 +630,93 @@ describe("construction order services", () => {
   });
 
   it("sets and reports automation on the player seat", () => {
-    const r = setAutomation({ build: false, colonisation: true });
+    const r = setAutomation({ build: false, colonisation: true, lanes: false });
     expect(r.ok).toBe(true);
-    expect(getWorld().player?.automation).toEqual({ build: false, colonisation: true });
+    expect(getWorld().player?.automation).toEqual({ build: false, colonisation: true, lanes: false });
+  });
+
+  it("setAutomation preserves an automation field its own input type doesn't know about (the spread fix)", () => {
+    // Every caller today passes all three known switches, so a rebuild-from-scratch write would
+    // pass every OTHER test in this file too — it only differs from a spread the moment world state
+    // carries a domain the input shape hasn't caught up to yet (a future automation field added to
+    // `WorldPlayer` before every setter learns about it). Simulate exactly that: patch an extra
+    // field onto the seeded automation object directly, bypassing `setAutomation` entirely, then
+    // confirm a normal call doesn't wipe it.
+    const w = getWorld();
+    const player = w.player!;
+    const patched: { build: boolean; colonisation: boolean; lanes: boolean; futureDomain: boolean } = {
+      ...player.automation, futureDomain: true,
+    };
+    setWorld({ ...w, player: { ...player, automation: patched } });
+
+    const r = setAutomation({ build: false, colonisation: true, lanes: true });
+    expect(r.ok).toBe(true);
+    expect(getWorld().player?.automation).toMatchObject({ futureDomain: true });
+  });
+
+  it("orders a lane upgrade the player invests in, and refuses one with a foreign or unclaimed endpoint", () => {
+    const w = getWorld();
+    const pid = w.player!.controlledFactionId;
+    const conn = w.connections.find((c) => c.fromId === playerHome().id)!;
+    const key = laneKey(conn.fromId, conn.toId);
+    const lane = w.lanes.find((l) => l.key === key)!;
+
+    // The homeworld's own neighbour starts unclaimed (or foreign) in the seeded galaxy — the lane
+    // has no investor yet, so an order against it is refused naming the reason.
+    const other = w.systems.find((s) => s.id === (lane.aId === playerHome().id ? lane.bId : lane.aId))!;
+    expect(other.factionId).not.toBe(pid);
+    const refused = orderLaneUpgrade({ laneKey: key, levels: 1 });
+    expect(refused.ok).toBe(false);
+    if (refused.ok) return;
+    expect(refused.error).toBe(
+      other.factionId === null ? `${other.name} is unclaimed.` : `${other.name} is not yours.`,
+    );
+    expect(getWorld().constructionProjects.some((p) => p.kind === "lane_upgrade")).toBe(false);
+
+    // Claim both endpoints at `controlled` for the player — now the player is the investor and the
+    // order lands, batching a second order into the same standing row.
+    other.factionId = pid;
+    other.control = "controlled";
+    const nextIdBefore = getWorld().nextId;
+    const placed = orderLaneUpgrade({ laneKey: key, levels: 2 });
+    expect(placed.ok).toBe(true);
+    if (!placed.ok) return;
+    expect(placed.data.projectId).toBe(`construction-${nextIdBefore}`);
+    const row = getWorld().constructionProjects.find(
+      (p): p is WorldLaneUpgradeProject => p.kind === "lane_upgrade" && p.id === placed.data.projectId,
+    )!;
+    expect(row.levels).toBe(2);
+    expect(row.workTotal).toBe(2 * 20); // LANES.UPGRADE_WORK_PER_LEVEL
+
+    const second = orderLaneUpgrade({ laneKey: key, levels: 1 });
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.data.projectId).toBe(placed.data.projectId); // extended, not a second row
+    expect(getWorld().nextId).toBe(nextIdBefore + 1); // no second id minted
+    const grown = getWorld().constructionProjects.find((p) => p.id === placed.data.projectId)!;
+    expect(grown.kind === "lane_upgrade" && grown.levels).toBe(3);
+    expect(grown.kind === "lane_upgrade" && grown.workTotal).toBe(3 * 20);
+  });
+
+  it("rejects an order against an unknown lane key", () => {
+    const r = orderLaneUpgrade({ laneKey: "no-such-lane", levels: 1 });
+    expect(r).toEqual({ ok: false, error: "Unknown lane: no-such-lane" });
+  });
+
+  it("cancels a player lane_upgrade order like any other player row", () => {
+    const w = getWorld();
+    const pid = w.player!.controlledFactionId;
+    const conn = w.connections.find((c) => c.fromId === playerHome().id)!;
+    const key = laneKey(conn.fromId, conn.toId);
+    const lane = w.lanes.find((l) => l.key === key)!;
+    const other = w.systems.find((s) => s.id === (lane.aId === playerHome().id ? lane.bId : lane.aId))!;
+    other.factionId = pid;
+    other.control = "controlled";
+
+    const placed = orderLaneUpgrade({ laneKey: key, levels: 1 });
+    expect(placed.ok).toBe(true);
+    if (!placed.ok) return;
+    expect(cancelOrder({ projectId: placed.data.projectId }).ok).toBe(true);
+    expect(getWorld().constructionProjects.some((p) => p.id === placed.data.projectId)).toBe(false);
   });
 });

@@ -8,11 +8,15 @@
  * The processor maps tick rows into BuildSystemState and applies the returned PlannedBuild[].
  */
 import type { ResourceVector } from "@/lib/types/game";
-import type { SystemControl, WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
+import type {
+  SystemControl, WorldConstructionProject, WorldColonyEstablishProject, WorldLane,
+} from "@/lib/world/types";
+import { laneInvestor, type LaneEndpointOwner } from "@/lib/engine/lanes";
+import { LANES } from "@/lib/constants/lanes";
 import { DIRECTED_BUILD, SPECULATIVE_BASICS } from "@/lib/constants/directed-build";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { systemDevelopment, type DevelopmentRefs } from "@/lib/engine/development";
-import { surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
+import { surplusDrawable } from "@/lib/engine/directed-logistics";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { clamp } from "@/lib/utils/math";
 import { hasSurvivalShortfall } from "@/lib/engine/population";
@@ -34,6 +38,15 @@ import {
   labourDemand, housingPopCap, skill1Demand, skill2Demand, skill1Cap, skill2Cap,
   familyAnchorBuff, familyThroughput, inputDemandFromProduction, labourFulfilment,
 } from "@/lib/engine/industry";
+
+/**
+ * The build planner's own hop-priced route cost — unrelated to lane routing. Null means
+ * unreachable (beyond the planner's own hop budget or otherwise closed); a finite cost is hops ×
+ * weight (`hopRouteCost`). Declared locally rather than imported from `directed-logistics.ts`:
+ * that module's `RouteBookerFor` prices a lane-network path for the goods matcher, a different
+ * mechanism from this planner's hop-count reachability test.
+ */
+export type RouteCost = (fromSystemId: string, toSystemId: string) => number | null;
 
 /**
  * A good the necessity band ranks above every other good (water, food — `SURVIVAL_GOODS`). The ONE
@@ -800,8 +813,66 @@ export interface BuildProposal {
   producedGood?: string;
 }
 
-/** The proposal union the decision layer emits — build bundles and colony-establishments, ranked on one pool. */
-export type Proposal = BuildProposal | ColonyProposal;
+/**
+ * A lane-upgrade proposal — a single-item member of the `Proposal` union carrying the congested
+ * lane's `blockedVolume` as its ROI numerator and a flat `UPGRADE_WORK_PER_LEVEL` as the
+ * denominator (docs/planned/logistics-lanes.md §4, Autonomic planner bullet). It interleaves with
+ * build and colony proposals by ROI in `orderProposals`; the processor expands a funded one into a
+ * `lane_upgrade` project.
+ */
+export interface LaneUpgradeProposal {
+  kind: "lane_upgrade";
+  factionId: string;
+  laneKey: string;
+  /** Always 1 — the opportunity proposes one level at a time, re-scored (and re-proposable) next
+   *  cycle against whatever congestion remains. */
+  levels: 1;
+  /** The lane's `blockedVolume` from the last logistics run — the ROI numerator. */
+  value: number;
+  /** `UPGRADE_WORK_PER_LEVEL` — the ROI denominator. */
+  work: number;
+}
+
+/** The proposal union the decision layer emits — build bundles, colony-establishments and
+ *  lane-upgrades, ranked on one pool. */
+export type Proposal = BuildProposal | ColonyProposal | LaneUpgradeProposal;
+
+/**
+ * The lane-upgrade opportunity: one proposal per lane the faction may invest in
+ * (`laneInvestor(lane) === factionId`) that turned away real load last run (`blockedVolume > 0`),
+ * with no open `lane_upgrade` project already targeting it. The in-flight check is where "effective
+ * level = built + queued" bites — an open project already counts as committed capacity, so no
+ * second proposal races it while one is under construction; the lane is free to be proposed again
+ * once that project lands or is abandoned, scored fresh against whatever congestion remains. A lane
+ * with zero blocked volume, or one the faction cannot invest in (either endpoint unclaimed, split
+ * between factions, or below `controlled`), is never proposed however high its raw traffic.
+ */
+export function planLaneUpgradeProposals(
+  factionId: string,
+  lanes: readonly WorldLane[],
+  openProjects: readonly WorldConstructionProject[],
+  ownerOf: (systemId: string) => LaneEndpointOwner,
+): LaneUpgradeProposal[] {
+  const inFlight = new Set<string>();
+  for (const p of openProjects) {
+    if (p.kind === "lane_upgrade") inFlight.add(p.laneKey);
+  }
+  const proposals: LaneUpgradeProposal[] = [];
+  for (const lane of lanes) {
+    if (!(lane.blockedVolume > 0)) continue;
+    if (inFlight.has(lane.key)) continue;
+    if (laneInvestor(lane, ownerOf) !== factionId) continue;
+    proposals.push({
+      kind: "lane_upgrade",
+      factionId,
+      laneKey: lane.key,
+      levels: 1,
+      value: lane.blockedVolume,
+      work: LANES.UPGRADE_WORK_PER_LEVEL,
+    });
+  }
+  return proposals;
+}
 
 /** A bundle before its faction is attached (the planner works per system; faction is a later join). */
 interface PlannedBundle {

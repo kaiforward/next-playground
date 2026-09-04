@@ -95,6 +95,7 @@ Audited against current code. `file:line` are the definition sites.
 | `POP_CENTRE_STORAGE_DEFAULT` (2) | `lib/constants/industry.ts` | Per pop-centre default storage. |
 | `POP_CENTRE_STORAGE` (**every entry**) | `lib/constants/industry.ts` | Absolute per-good overrides, **not** ratios — each entry scales. |
 | `DIRECTED_LOGISTICS.GENERATION_PER_POP` (5) | `lib/constants/directed-logistics.ts` | Goods-denominated work budget: `affordable = budget / perUnit`. ×S deficits need ×S budget to heal the same fraction. |
+| `LANES.BASE_LANE_CAPACITY` | `lib/constants/lanes.ts` | Goods-volume-per-cycle lane capacity at level 0; `scaleValue`-denominated so lane throughput moves with the goods it carries. |
 
 Seeded stock and industrial input-demand scale automatically (derived from the above) — no edit.
 
@@ -105,7 +106,6 @@ Seeded stock and industrial input-demand scale automatically (derived from the a
 | `CONSTRUCTION.THROUGHPUT_PER_POP` (0.005) | `lib/constants/construction.ts` | **Building-denominated**, not goods. The per-faction throughput pool funds construction work; building counts are space-capped and don't scale. Scaling it would change construction *pace*, not magnitude — a dynamics change. (The planner itself holds no budget — it proposes toward the physical ceilings and this pool alone paces the queue.) |
 | `TARGET_COVER`, `DEFAULT_ELASTICITY` (k), `SEED_COVER_MIN/MAX` | `lib/constants/market-economy.ts` | Pure ratios; ride S correctly. |
 | `classifyMarketState` thresholds (`SURPLUS_MARGIN`, `DEFICIT_FRACTION`), HIGH/LOW price thresholds, self-limiting / output-uptake curves, per-good `priceFloor`/`priceCeiling` | various | Dimensionless ratios. |
-| `HOP_WEIGHT` (1.0), `FUEL_WEIGHT` (0.1) | `lib/constants/directed-logistics.ts` | Goods-agnostic route cost. Scaling them *shrinks* `affordable` — the wrong direction; the logistics budget is the lever, not this. |
 
 ### Not yet scaled — handled by later sub-projects
 

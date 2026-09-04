@@ -1,14 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
-import { buildableUnits, buildableOutput, speculativeFloorExtra, planFactionBuilds, planFactionProposals, planFactionColonyProposals, assessColonyCandidates, factionGoodDeficits, fed, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, sizeColonyEstablish, type BuildSystemState, type BuildGoodState, type PlannedBuild, type Proposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
+import { buildableUnits, buildableOutput, speculativeFloorExtra, planFactionBuilds, planFactionProposals, planFactionColonyProposals, assessColonyCandidates, factionGoodDeficits, fed, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, sizeColonyEstablish, planLaneUpgradeProposals, type BuildSystemState, type BuildGoodState, type PlannedBuild, type Proposal, type ColonyEstablishCandidate, type ColonyEstablishParams, type RouteCost } from "@/lib/engine/directed-build";
 import { systemDevelopment, type DevelopmentRefs } from "@/lib/engine/development";
 import { workCostPerLevel } from "@/lib/constants/construction";
-import type { WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
+import type { WorldConstructionProject, WorldColonyEstablishProject, WorldLane, WorldLaneUpgradeProject } from "@/lib/world/types";
+import type { LaneEndpointOwner } from "@/lib/engine/lanes";
+import { LANES } from "@/lib/constants/lanes";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { emptyResourceVector, unitResourceVector, makeResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import { OUTPUT_PER_UNIT, BUILDING_TYPES, labourTotal, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES, HEAVY_INDUSTRY_COMPLEX, ANCHOR_MIN_THROUGHPUT, effectiveSpaceCost, HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
 import { TARGET_COVER } from "@/lib/constants/market-economy";
 import { labourDemand, housingPopCap } from "@/lib/engine/industry";
-import type { RouteCost } from "@/lib/engine/directed-logistics";
 import type { ResourceVector } from "@/lib/types/game";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { EXPANSION } from "@/lib/constants/expansion";
@@ -3888,5 +3889,73 @@ describe("planFactionBuilds — relief housing and the industry pass draw from d
     const builds = planFactionBuilds([consumer, site], selfAndNeighbourRoute, DEV_REFS);
     expect(countFor(builds, "B", HOUSING_TYPE)).toBeGreaterThan(0);
     expect(countFor(builds, "B", "metals")).toBeGreaterThan(0);
+  });
+});
+
+describe("planLaneUpgradeProposals — the lane-upgrade opportunity", () => {
+  /** A lane between "a" and "b" with the given level and blockedVolume. */
+  function lane(key: string, aId: string, bId: string, blockedVolume: number, level = 0): WorldLane {
+    return { key, aId, bId, level, bookedLoad: 0, blockedVolume, idleCycles: 0 };
+  }
+
+  /** Both endpoints controlled-or-better and owned by "f1" — the ordinary investable case. */
+  const ownedByF1 = (): ((systemId: string) => LaneEndpointOwner) =>
+    () => ({ factionId: "f1", control: "developed" });
+
+  function laneUpgradeProject(laneKey: string): WorldLaneUpgradeProject {
+    return {
+      kind: "lane_upgrade", id: "p1", origin: "auto", factionId: "f1",
+      laneKey, levels: 1, workTotal: LANES.UPGRADE_WORK_PER_LEVEL, workDone: 0,
+    };
+  }
+
+  it("proposes one level for a congested lane the faction may invest in", () => {
+    const proposals = planLaneUpgradeProposals("f1", [lane("a|b", "a", "b", 50)], [], ownedByF1());
+    expect(proposals).toEqual([
+      { kind: "lane_upgrade", factionId: "f1", laneKey: "a|b", levels: 1, value: 50, work: LANES.UPGRADE_WORK_PER_LEVEL },
+    ]);
+  });
+
+  it("never proposes a lane with zero blocked volume, however high its level", () => {
+    const proposals = planLaneUpgradeProposals("f1", [lane("a|b", "a", "b", 0, 3)], [], ownedByF1());
+    expect(proposals).toEqual([]);
+  });
+
+  it("never proposes a lane the faction cannot invest in — split ownership", () => {
+    const ownerOf = (systemId: string): LaneEndpointOwner =>
+      systemId === "a" ? { factionId: "f1", control: "developed" } : { factionId: "f2", control: "developed" };
+    const proposals = planLaneUpgradeProposals("f1", [lane("a|b", "a", "b", 50)], [], ownerOf);
+    expect(proposals).toEqual([]);
+  });
+
+  it("never proposes a lane the faction cannot invest in — an endpoint below controlled", () => {
+    const ownerOf = (systemId: string): LaneEndpointOwner =>
+      systemId === "a" ? { factionId: "f1", control: "developed" } : { factionId: "f1", control: "unclaimed" };
+    const proposals = planLaneUpgradeProposals("f1", [lane("a|b", "a", "b", 50)], [], ownerOf);
+    expect(proposals).toEqual([]);
+  });
+
+  it("proposes nothing for a lane an unrelated faction may invest in", () => {
+    const proposals = planLaneUpgradeProposals("f2", [lane("a|b", "a", "b", 50)], [], ownedByF1());
+    expect(proposals).toEqual([]);
+  });
+
+  it("generates no second proposal while an open lane_upgrade project already targets the lane", () => {
+    const proposals = planLaneUpgradeProposals(
+      "f1", [lane("a|b", "a", "b", 50)], [laneUpgradeProject("a|b")], ownedByF1(),
+    );
+    expect(proposals).toEqual([]);
+  });
+
+  it("still proposes an unrelated lane while one lane has an open project", () => {
+    const proposals = planLaneUpgradeProposals(
+      "f1",
+      [lane("a|b", "a", "b", 50), lane("c|d", "c", "d", 30)],
+      [laneUpgradeProject("a|b")],
+      ownedByF1(),
+    );
+    expect(proposals).toEqual([
+      { kind: "lane_upgrade", factionId: "f1", laneKey: "c|d", levels: 1, value: 30, work: LANES.UPGRADE_WORK_PER_LEVEL },
+    ]);
   });
 });

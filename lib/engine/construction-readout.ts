@@ -11,6 +11,7 @@ import {
   factionConstructionPool, forecastEtaCycles, fundCycle,
   type ConstructionPoolRates, type ProjectCap,
 } from "@/lib/engine/construction";
+import { laneEndpoints } from "@/lib/engine/lanes";
 import {
   foundingStagedFraction, nextStagingShare, type FoundingSourceSupply,
 } from "@/lib/engine/founding-cost";
@@ -33,17 +34,15 @@ export interface ConstructionSystemInfo {
 
 interface ConstructionRowBase {
   id: string;
-  systemId: string;
-  systemName: string;
   /** Who committed this row: the autonomic planner, or a player order (display + cancel-permission). */
   origin: "auto" | "player";
-  /** Exact workDone/workUnit in [0,1] — the level currently being built for a `kind: "build"` row,
-   *  the whole founding for a `colony_establish` row (see `workUnit`). */
+  /** Exact workDone/workUnit in [0,1] — the level currently being built for a `kind: "build"` or
+   *  `kind: "lane_upgrade"` row, the whole founding for a `colony_establish` row (see `workUnit`). */
   progress: number;
   workDone: number;
   workTotal: number;
   /** The denominator `progress` and `nextCycleGain`'s bar-fill share both divide by: one level's
-   *  work (`workTotal / levels`) for a build row, `workTotal` for a colony row. Exposed so a
+   *  work (`workTotal / levels`) for a build or lane row, `workTotal` for a colony row. Exposed so a
    *  consumer drawing its own bar (raw value/max, not the precomputed `progress` fraction) uses the
    *  same unit rather than re-deriving it and risking drift. */
   workUnit: number;
@@ -52,10 +51,15 @@ interface ConstructionRowBase {
   /** Construction points this project will absorb on the next funded cycle (0 = starved/"waiting"). Exact for the
    *  immediate next cycle (fundQueue is deterministic); reused for the projected-fill segment + per-row rate. */
   nextCycleGain: number;
+  /** Tie-break label `byEta` sorts stalled/equal-ETA rows by — the system name for a build or colony
+   *  row, the lane's own endpoint label for a lane row (neither has a single "the" system). */
+  sortLabel: string;
 }
 
 export interface ConstructionProjectBuildRow extends ConstructionRowBase {
   kind: "build";
+  systemId: string;
+  systemName: string;
   /** Raw building-type id — ledger-group classification keys on this, not the label. */
   buildingType: string;
   /** "Housing", "Foundry", "Vocational School", … */
@@ -67,6 +71,8 @@ export interface ConstructionProjectBuildRow extends ConstructionRowBase {
 
 export interface ConstructionProjectColonyRow extends ConstructionRowBase {
   kind: "colony_establish";
+  systemId: string;
+  systemName: string;
   sourceSystemId: string;
   sourceSystemName: string;
   seedPop: number;
@@ -78,6 +84,18 @@ export interface ConstructionProjectColonyRow extends ConstructionRowBase {
   stalledReason: ColonyStallReason | null;
   /** Share of the seed's manifest already staged and paid for, in [0,1] (value-weighted). */
   stagedFraction: number;
+}
+
+/**
+ * A lane-upgrade row — an undirected lane, not a single system, so it carries its `laneKey` and a
+ * display label built from the two endpoints' names rather than a `systemId`/`systemName` pair.
+ */
+export interface ConstructionProjectLaneRow extends ConstructionRowBase {
+  kind: "lane_upgrade";
+  laneKey: string;
+  /** "SystemA ↔ SystemB", from the two endpoint names. */
+  laneLabel: string;
+  levels: number;
 }
 
 /**
@@ -106,27 +124,40 @@ export interface FoundingReadoutInputs {
   economyScale: number;
 }
 
-export type ConstructionProjectRow = ConstructionProjectBuildRow | ConstructionProjectColonyRow;
+export type ConstructionProjectRow =
+  | ConstructionProjectBuildRow
+  | ConstructionProjectColonyRow
+  | ConstructionProjectLaneRow;
 
-/** One row of the funded front — a project whose next-cycle gain is positive, in queue order. */
-export interface FundedFrontRow {
+/** `ConstructionProjectRow` minus the lane arm — the per-system Construction section's own row
+ *  type. A lane row carries no `systemId` (an undirected pair, not a single system), so
+ *  `getSystemConstruction` (`lib/services/construction.ts`) always filters it out before returning;
+ *  this names the narrower type that filter actually produces, rather than leaving the wider union
+ *  on a surface that can never carry the excluded arm. The faction card keeps the full
+ *  `ConstructionProjectRow` — it lists lane rows too. */
+export type SystemConstructionRow = Exclude<ConstructionProjectRow, ConstructionProjectLaneRow>;
+
+interface FundedFrontRowBase {
   projectId: string;
-  systemId: string;
-  systemName: string;
-  /** Discriminates build vs colony_establish — a colony's systemId is never a build's under today's
-   *  invariant (colony_establish only ever targets a controlled system, a build only a developed
-   *  one), but consumers that split by kind should read this rather than lean on that invariant. */
-  kind: "build" | "colony_establish";
-  /** Building type + level count ("Housing ×4"), or "Establish Colony" — mirrors the construction
-   *  row's own title convention (`components/construction/construction-row.tsx`). */
+  /** Building type + level count ("Housing ×4"), "Establish Colony", or "Lane Upgrade ×N" — mirrors
+   *  the construction row's own title convention (`components/construction/construction-row.tsx`). */
   label: string;
   progress: number;
   /** Next funded cycle's gain as a share of the row's work unit, in [0,1] — the same denominator
-   *  `progress` divides by (one level's work for a build row, the whole project's work for a
+   *  `progress` divides by (one level's work for a build/lane row, the whole project's work for a
    *  colony), so a consumer can draw the two adjacently without holding the project's work totals. */
   nextCycleProgress: number;
   etaCycles: number | null;
 }
+
+/** One row of the funded front — a project whose next-cycle gain is positive, in queue order. A
+ *  discriminated union (one arm per `kind`, not `"build" | "colony_establish"` combined) because a
+ *  lane row has no single system to name, and a combined arm's non-literal `kind` field would defeat
+ *  `Array.prototype.filter`'s automatic discriminant narrowing for consumers filtering to one kind. */
+export type FundedFrontRow =
+  | (FundedFrontRowBase & { kind: "build"; systemId: string; systemName: string })
+  | (FundedFrontRowBase & { kind: "colony_establish"; systemId: string; systemName: string })
+  | (FundedFrontRowBase & { kind: "lane_upgrade"; laneKey: string; laneLabel: string });
 
 export interface FactionConstructionReadout {
   /** Total per-cycle funding rate (base + centres) — the value the ETA forecast runs on. */
@@ -173,14 +204,15 @@ export function describeBuildProject(buildingType: string): string {
 }
 
 /**
- * The work unit a project's bar is measured in — one level's work for a `kind: "build"` row (it
- * splits and lands level-by-level, so its bar and ETA both describe the level currently being
- * built, not the whole multi-level order), the whole project's work for `colony_establish` (a
- * founding never splits, so its bar means the whole founding). Falls back to `workTotal` when
- * `levels` is unusable (`<= 0` or non-finite), matching how a zero `workTotal` is already guarded.
+ * The work unit a project's bar is measured in — one level's work for a `kind: "build"` or `kind:
+ * "lane_upgrade"` row (both split and land level-by-level, so the bar and ETA describe the level
+ * currently being worked, not the whole multi-level order), the whole project's work for
+ * `colony_establish` (a founding never splits, so its bar means the whole founding). Falls back to
+ * `workTotal` when `levels` is unusable (`<= 0` or non-finite), matching how a zero `workTotal` is
+ * already guarded.
  */
 function workUnitOf(p: WorldConstructionProject): number {
-  if (p.kind !== "build") return p.workTotal;
+  if (p.kind === "colony_establish") return p.workTotal;
   return p.levels > 0 && Number.isFinite(p.levels) ? p.workTotal / p.levels : p.workTotal;
 }
 
@@ -196,12 +228,12 @@ export function workShareOf(work: number, unit: number): number {
   return unit > 0 ? Math.min(1, Math.max(0, work / unit)) : 0;
 }
 
-/** Soonest-ETA first; stalled (null) last; ties by system name — a total, deterministic order. */
+/** Soonest-ETA first; stalled (null) last; ties by `sortLabel` — a total, deterministic order. */
 function byEta(a: ConstructionRowBase, b: ConstructionRowBase): number {
   const ae = a.etaCycles ?? Number.POSITIVE_INFINITY;
   const be = b.etaCycles ?? Number.POSITIVE_INFINITY;
   if (ae !== be) return ae - be;
-  return a.systemName.localeCompare(b.systemName);
+  return a.sortLabel.localeCompare(b.sortLabel);
 }
 
 /**
@@ -380,11 +412,18 @@ export function computeFactionConstruction(
   const buildOut: ConstructionProjectBuildRow[] = [];
   const fundedFront: FundedFrontRow[] = [];
 
+  // A lane row's display label from its two endpoint names (`laneEndpoints`, `lib/engine/lanes.ts`)
+  // rather than a single system — used both as the row's `sortLabel` (byEta's tie-break) and its
+  // rendered `laneLabel`.
+  const laneLabelFor = (laneKey: string): string => {
+    const [a, b] = laneEndpoints(laneKey);
+    return `${nameById.get(a) ?? a} ↔ ${nameById.get(b) ?? b}`;
+  };
+
   projects.forEach((p, i) => {
+    const sortLabel = p.kind === "lane_upgrade" ? laneLabelFor(p.laneKey) : (nameById.get(p.systemId) ?? p.systemId);
     const base: ConstructionRowBase = {
       id: p.id,
-      systemId: p.systemId,
-      systemName: nameById.get(p.systemId) ?? p.systemId,
       origin: p.origin,
       progress: progressOf(p),
       workDone: p.workDone,
@@ -392,18 +431,32 @@ export function computeFactionConstruction(
       workUnit: workUnitOf(p),
       etaCycles: etas[i],
       nextCycleGain: gains[i],
+      sortLabel,
     };
     if (gains[i] > 0) {
-      fundedFront.push({
+      const frontBase = {
         projectId: p.id,
-        systemId: base.systemId,
-        systemName: base.systemName,
-        kind: p.kind,
-        label: p.kind === "colony_establish" ? "Establish Colony" : `${buildingLabel(p.buildingType)} ×${p.levels}`,
         progress: base.progress,
         nextCycleProgress: workShareOf(gains[i], workUnitOf(p)),
         etaCycles: base.etaCycles,
-      });
+      };
+      if (p.kind === "lane_upgrade") {
+        fundedFront.push({
+          ...frontBase, kind: "lane_upgrade", laneKey: p.laneKey, laneLabel: sortLabel,
+          label: `Lane Upgrade ×${p.levels}`,
+        });
+      } else if (p.kind === "colony_establish") {
+        fundedFront.push({
+          ...frontBase, kind: "colony_establish", systemId: p.systemId,
+          systemName: nameById.get(p.systemId) ?? p.systemId, label: "Establish Colony",
+        });
+      } else {
+        fundedFront.push({
+          ...frontBase, kind: "build", systemId: p.systemId,
+          systemName: nameById.get(p.systemId) ?? p.systemId,
+          label: `${buildingLabel(p.buildingType)} ×${p.levels}`,
+        });
+      }
     }
     if (p.kind === "colony_establish") {
       const stalledReason = colonyStallReason(p, founding, cap);
@@ -416,6 +469,8 @@ export function computeFactionConstruction(
       const row: ConstructionProjectColonyRow = {
         ...base,
         kind: "colony_establish",
+        systemId: p.systemId,
+        systemName: nameById.get(p.systemId) ?? p.systemId,
         sourceSystemId: p.sourceSystemId,
         sourceSystemName: nameById.get(p.sourceSystemId) ?? p.sourceSystemId,
         seedPop: p.seedPop,
@@ -425,10 +480,12 @@ export function computeFactionConstruction(
       };
       all.push(row);
       expansion.push(row);
-    } else {
+    } else if (p.kind === "build") {
       const row: ConstructionProjectBuildRow = {
         ...base,
         kind: "build",
+        systemId: p.systemId,
+        systemName: nameById.get(p.systemId) ?? p.systemId,
         buildingType: p.buildingType,
         buildingLabel: buildingLabel(p.buildingType),
         levels: p.levels,
@@ -436,6 +493,18 @@ export function computeFactionConstruction(
       };
       all.push(row);
       buildOut.push(row);
+    } else {
+      // Lane rows count toward the faction's overall queue (`all`, and the pool/ETA math above, which
+      // is kind-agnostic) but have no per-system or per-colony bucket of their own: a lane belongs to
+      // two systems, so it is listed only at faction level.
+      const row: ConstructionProjectLaneRow = {
+        ...base,
+        kind: "lane_upgrade",
+        laneKey: p.laneKey,
+        laneLabel: sortLabel,
+        levels: p.levels,
+      };
+      all.push(row);
     }
   });
 

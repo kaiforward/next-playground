@@ -2,7 +2,11 @@ import type {
   FoundingStagingEvent, FoundingStallEvent, TickContext, TickProcessorResult,
 } from "../types";
 import { cycleStartShard, catchUpFactor } from "@/lib/tick/shard";
-import { planFactionProposals, planFactionColonyProposals, assessColonyCandidates, type BuildSystemState, type ColonyProposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
+import {
+  planFactionProposals, planFactionColonyProposals, assessColonyCandidates, planLaneUpgradeProposals,
+  type BuildSystemState, type ColonyProposal, type ColonyEstablishCandidate, type ColonyEstablishParams,
+  type LaneUpgradeProposal,
+} from "@/lib/engine/directed-build";
 import { fundQueueWithFloor, developmentFloorShare, factionConstructionPool, orderProposals, orderOpenProjects } from "@/lib/engine/construction";
 import { planCentreProposal } from "@/lib/engine/construction-centre";
 import { CONSTRUCTION_CENTRE_TYPE } from "@/lib/constants/industry";
@@ -10,12 +14,15 @@ import { GOODS } from "@/lib/constants/goods";
 import { systemDevelopment } from "@/lib/engine/development";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { workCostPerLevel } from "@/lib/constants/construction";
-import { surplusDrawable, type GoodMarketState, type RouteCost } from "@/lib/engine/directed-logistics";
+import { surplusDrawable, type GoodMarketState } from "@/lib/engine/directed-logistics";
+import type { RouteCost } from "@/lib/engine/directed-build";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { charterFee, foundingGoodsValue, stagingShareLines } from "@/lib/engine/founding-cost";
 import { foundingWorkingBalance, safeMoney } from "@/lib/engine/treasury";
 import { clamp } from "@/lib/utils/math";
 import type { WorldConstructionProject, WorldColonyEstablishProject, WorldPlayer } from "@/lib/world/types";
+import { LANES } from "@/lib/constants/lanes";
+import type { LaneEndpointOwner, LaneLevelIncrease } from "@/lib/engine/lanes";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import type {
   DirectedBuildWorld,
@@ -339,6 +346,11 @@ export async function runDirectedBuildProcessor(
   const rows = await world.getSystemsForFactions(dueKeys);
   if (rows.length === 0) return {};
   const openProjects = await world.getConstructionProjects(dueKeys);
+  // The lane-upgrade opportunity's substrate — every lane in the world, not just the due factions'.
+  // Ownership (for `laneInvestor`) is resolved below from the due factions' own system rows: a lane a
+  // due faction may invest in has both endpoints in that faction's own group, which `getSystemsForFactions`
+  // already loaded.
+  const lanes = await world.getLanes();
   // Universe-wide development reference (galaxy's biggest natural potential) — the same value the
   // dev-map reads, so the speculative nudge scores each system's development consistently.
   const developmentRefs = await world.getDevelopmentRefs();
@@ -360,6 +372,14 @@ export async function runDirectedBuildProcessor(
   // Full rows by id — current building counts turn a landed whole-level increment into an absolute
   // write, and an in-flight colony reads its SOURCE's markets to size each cycle's staging draw.
   const rowBySystem = new Map(rows.map((r) => [r.systemId, r]));
+  // `laneInvestor`'s ownership read, over this run's due-faction rows: a lane a due faction may
+  // invest in has both endpoints owned by that faction, so both are present here. A system not in
+  // this run's rows (owned by a faction not due this cycle, or unclaimed) reads as unclaimed —
+  // `laneInvestor` returns null for it either way, since it can never match the faction under test.
+  const laneOwnerOf = (systemId: string): LaneEndpointOwner => {
+    const row = rowBySystem.get(systemId);
+    return { factionId: row?.factionId ?? null, control: row?.control ?? "unclaimed" };
+  };
 
   const landedBySystem = new Map<string, Map<string, number>>();
   const developments: SystemDevelopment[] = [];
@@ -393,6 +413,11 @@ export async function runDirectedBuildProcessor(
   // project has been stalled, never why, and never that the queue simply did not reach it.
   const foundingStalls: FoundingStallEvent[] = [];
   const nextOpen: WorldConstructionProject[] = [];
+  // Landed lane_upgrade levels this run, by laneKey — folded into `lanes` by the tick body via
+  // `applyLaneLevelIncreases`. Stays empty on a cycle whose lane-upgrade proposals never fund far
+  // enough to land a whole level, matching how the build/colony arms stay empty on a cycle that
+  // lands neither.
+  const laneLandings: LaneLevelIncrease[] = [];
   const workPerformedByFaction = new Map<string, number>();
   // Money committed to founding this cycle, per faction — the treasury's settlement input. Directed
   // build never writes `balance`; it commits against `balance − pendingFounding` and the settlement
@@ -464,6 +489,7 @@ export async function runDirectedBuildProcessor(
     const automation = params.player?.factionId === factionId ? params.player.automation : null;
     const skipBuild = automation !== null && !automation.build;
     const skipColonise = automation !== null && !automation.colonisation;
+    const skipLanes = automation !== null && !automation.lanes;
 
     // Auto policy proposes new whole-level PROPOSALS toward the ceilings, aware of what is in flight;
     // value-order ranking (housing-leads, then descending bundle-ROI) reorders them before funding.
@@ -521,6 +547,13 @@ export async function runDirectedBuildProcessor(
     }
     const colonyProposals = skipColonise ? [] : allColonyProposals;
 
+    // Lane-upgrade proposals: one per lane this faction invests in that turned away load last run
+    // and has no upgrade already in flight. Independents (null faction) never invest in lanes.
+    const laneProposals: LaneUpgradeProposal[] =
+      factionId !== null && !skipLanes
+        ? planLaneUpgradeProposals(factionId, lanes, existing, laneOwnerOf)
+        : [];
+
     // Development-scaled pool floor (§7.9): reserve a self-weaning minimum slice for each young developed
     // colony, so its valid-but-low-ROI first build isn't monopolised out of the front-first pool by the
     // homeworld's larger builds. Development does the discriminating — the most-developed systems reserve
@@ -536,7 +569,7 @@ export async function runDirectedBuildProcessor(
     let reserved = 0;
     for (const v of floorBySystem.values()) reserved += v;
 
-    let ordered = orderProposals([...buildProposals, ...colonyProposals]);
+    let ordered = orderProposals([...buildProposals, ...colonyProposals, ...laneProposals]);
 
     // At most one centre proposal per cycle, priced off the backlog frontier; it re-enters the
     // ROI ordering as a normal proposal (independent systems — null faction — never build centres).
@@ -575,6 +608,17 @@ export async function runDirectedBuildProcessor(
             );
           }
         }
+      } else if (p.kind === "lane_upgrade") {
+        newProjects.push({
+          kind: "lane_upgrade",
+          id: params.construction.mintId(),
+          origin: "auto",
+          factionId: p.factionId,
+          laneKey: p.laneKey,
+          levels: p.levels,
+          workTotal: p.levels * LANES.UPGRADE_WORK_PER_LEVEL,
+          workDone: 0,
+        });
       } else {
         newProjects.push({
           kind: "colony_establish",
@@ -768,7 +812,7 @@ export async function runDirectedBuildProcessor(
         const byType = landedBySystem.get(l.systemId) ?? new Map<string, number>();
         byType.set(l.buildingType, (byType.get(l.buildingType) ?? 0) + l.levels);
         landedBySystem.set(l.systemId, byType);
-      } else {
+      } else if (l.kind === "colony_establish") {
         // A completed colony-establish → develop the system: seed transfer + bundled housing + the
         // ledger it staged over the whole establish (all applied in tick.ts). Nothing is drawn from
         // the founder here — every line was debited on the cycle it was staged.
@@ -776,6 +820,9 @@ export async function runDirectedBuildProcessor(
           systemId: l.systemId, sourceSystemId: l.sourceSystemId, seedPop: l.seedPop, housingLevels: l.housingLevels,
           stockManifest: l.stagedManifest,
         });
+      } else {
+        // A completed (or level-boundary-split) lane_upgrade → credit whole levels onto the lane row.
+        laneLandings.push({ key: l.laneKey, levels: l.levels });
       }
     }
   }
@@ -783,6 +830,9 @@ export async function runDirectedBuildProcessor(
   // Debit this cycle's staged materials at their sources — the goods are now in-transit inventory in
   // the projects' ledgers, in no market row until their colony opens.
   if (stagingDraws.length > 0) await world.applyFoundingStagingDraws(stagingDraws);
+
+  // Credit landed lane_upgrade levels onto their lanes.
+  if (laneLandings.length > 0) await world.applyLaneLevelIncreases(laneLandings);
 
   // Apply completed colony establishments (develop + conserved seed + bundled housing).
   if (developments.length > 0) await world.applyDevelopments(developments);
