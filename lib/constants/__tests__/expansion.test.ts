@@ -1,14 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
-import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 
 describe("EXPANSION constants", () => {
   it("bounds reach within the hop-BFS radius the tick computes", () => {
+    // Directed-logistics dropped out of this bound when it moved onto lane-network routing
+    // (docs/planned/logistics-lanes.md §2) — directed-build's own planning radius is now the
+    // only other hop-counted reach the tick's shared BFS is sized against.
     expect(EXPANSION.REACH_JUMPS).toBeGreaterThanOrEqual(1);
-    expect(EXPANSION.REACH_JUMPS).toBeLessThanOrEqual(
-      Math.max(DIRECTED_BUILD.MAX_HOPS, DIRECTED_LOGISTICS.MAX_HOPS),
-    );
+    expect(EXPANSION.REACH_JUMPS).toBeLessThanOrEqual(DIRECTED_BUILD.MAX_HOPS);
   });
 
   it("keeps claims gradual (small per-cycle cap, permissive positive floor)", () => {

@@ -14,7 +14,7 @@ import type { TickProcessorResult } from "@/lib/tick/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import type { SystemControl, WorldColonyEstablishProject, WorldConstructionProject } from "@/lib/world/types";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
-import type { RouteCost } from "@/lib/engine/directed-logistics";
+import type { RouteCost } from "@/lib/engine/directed-build";
 import type { ClaimCandidate, ExpansionParams } from "@/lib/engine/expansion";
 import { sizeColonyEstablish } from "@/lib/engine/directed-build";
 import type { ColonyEstablishCandidate, ColonyEstablishParams } from "@/lib/engine/directed-build";

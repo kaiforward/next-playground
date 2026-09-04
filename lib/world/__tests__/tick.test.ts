@@ -33,6 +33,7 @@ import type {
   World, WorldBuildProject, WorldFactionTreasury, WorldMarket, WorldPendingArrival, WorldShip,
   WorldSystem,
 } from "../types";
+import { laneKey } from "@/lib/engine/lanes";
 
 async function runTicks(world: World, count: number, cadence?: TickCadence) {
   let w = world;
@@ -584,6 +585,17 @@ describe("runWorldTick — per-stage wiring", () => {
         { fromId: a, toId: b, fuelCost: 1 },
         { fromId: b, toId: a, fuelCost: 1 },
       ],
+      // The connection above needs a matching lane row — directed-logistics routes over the lane
+      // network, not the raw connection graph (docs/planned/logistics-lanes.md §2).
+      lanes: [
+        ...base.lanes,
+        {
+          key: laneKey(a, b),
+          aId: a < b ? a : b,
+          bId: a < b ? b : a,
+          level: 0, bookedLoad: 0, blockedVolume: 0, idleCycles: 0,
+        },
+      ],
     };
     const after = await runTicks(world, 50);
 
@@ -616,6 +628,17 @@ describe("runWorldTick — per-stage wiring", () => {
         ...base.connections,
         { fromId: a, toId: b, fuelCost: 1 },
         { fromId: b, toId: a, fuelCost: 1 },
+      ],
+      // The connection above needs a matching lane row — directed-logistics routes over the lane
+      // network, not the raw connection graph (docs/planned/logistics-lanes.md §2).
+      lanes: [
+        ...base.lanes,
+        {
+          key: laneKey(a, b),
+          aId: a < b ? a : b,
+          bId: a < b ? b : a,
+          level: 0, bookedLoad: 0, blockedVolume: 0, idleCycles: 0,
+        },
       ],
       treasuries: base.treasuries.map((treasury) =>
         treasury.factionId === factionId
@@ -783,45 +806,64 @@ function twoSystemWaterGradient(prepareRecipientWater: (market: WorldMarket) => 
       { fromId: a, toId: b, fuelCost: 1 },
       { fromId: b, toId: a, fuelCost: 1 },
     ],
+    // The connection above needs a matching lane row — directed-logistics routes over the lane
+    // network, not the raw connection graph (docs/planned/logistics-lanes.md §2), and a connection
+    // with no lane row carries no capacity or key at all (`buildLaneNetwork`). Level is set high
+    // (ample capacity) rather than the generated default of 0: this fixture's callers assert
+    // dispatch/delivery TIMING, not congestion, and a level-0 lane's tiny per-tick capacity
+    // (BASE_LANE_CAPACITY × the logistics interval's own catch-up fraction) would spread even a
+    // modest deficit's fill across many ticks, which is a real and correctly-modelled mechanic but
+    // not what these tests are isolating.
+    lanes: [
+      ...base.lanes,
+      {
+        key: laneKey(a, b),
+        aId: a < b ? a : b,
+        bId: a < b ? b : a,
+        level: 10_000, bookedLoad: 0, blockedVolume: 0, idleCycles: 0,
+      },
+    ],
   };
   return { a, b, factionId, world };
 }
 
 describe("runWorldTick — logistics/assessment ordering", () => {
-  it("assesses the pre-import state on a coincident cycle start, then recovers at the next economy cycle", async () => {
+  it("dispatches on the cycle start, then delivers and recovers on the following tick", async () => {
+    // Directed-logistics dispatches onto the scheduled-freight ledger rather than crediting the
+    // destination same-tick (docs/planned/logistics-lanes.md §3) — the unconditional goods-arrivals
+    // stage that drains it runs at the START of a tick, before that tick's own dispatch, so a haul
+    // dispatched on tick N is never visible before tick N+1.
     const { b, world } = twoSystemWaterGradient((market) => market);
     const bWater = (w: World) => w.markets.find((m) => m.systemId === b && m.goodId === "water")!;
     const bSystem = (w: World) => w.systems.find((s) => s.id === b)!;
 
-    // Coincident cycle start: economy (on CYCLE_LENGTH) AND logistics both resolve this tick. Construction stays off so
-    // directed-build contributes no noise. Economy runs first — it measures B's empty water market — and
-    // logistics moves the import in afterward.
+    // Coincident cycle start: economy (on CYCLE_LENGTH) AND logistics both resolve every tick.
+    // Construction stays off so directed-build contributes no noise.
     const cadence = { cycle: 1, logistics: 1, construction: 999 };
-    const afterImport = (await runWorldTick(world, { cadence })).world;
+    const afterDispatch = (await runWorldTick(world, { cadence })).world;
 
-    // The import happened this same tick: a water flow into B, and its stock rose off the empty floor.
+    // Tick 1: dispatched, not yet delivered — no flow event, no stock change, and the economy's
+    // assessment reflects the still-empty market: satisfaction measured zero delivery, the squeeze
+    // clock advanced by one reference-time from zero, and unrest rose off its clean seed.
+    expect(afterDispatch.flowEvents.some((f) => f.toSystemId === b && f.goodId === "water")).toBe(false);
+    expect(bWater(afterDispatch).stock).toBe(0);
+    expect(bWater(afterDispatch).satisfaction).toBeCloseTo(0, 6);
+    expect(bWater(afterDispatch).squeezeCycles).toBeCloseTo(catchUpFactor(1), 10);
+    expect(bSystem(afterDispatch).unrest).toBeGreaterThan(0);
+
+    // Tick 2: goods-arrivals drains the ledger (flow event + credited stock) BEFORE this tick's own
+    // economy stage runs, so the recovery is visible in the very same tick the import lands —
+    // there is no long-since-superseded third "next cycle" tick needed to observe it.
+    const afterImport = (await runWorldTick(afterDispatch, { cadence })).world;
     expect(afterImport.flowEvents.some((f) => f.toSystemId === b && f.goodId === "water")).toBe(true);
     expect(bWater(afterImport).stock).toBeGreaterThan(0);
-
-    // …but the persisted assessment still describes the PRE-import (empty) state: satisfaction measured
-    // zero delivery, the squeeze clock advanced by one reference-time from zero, and unrest rose off its
-    // clean seed. A same-tick re-measure after the import would instead read satisfaction ≈ 1 and reset
-    // the squeeze clock — this is the assertion that catches that regression.
-    expect(bWater(afterImport).satisfaction).toBeCloseTo(0, 6);
-    expect(bWater(afterImport).squeezeCycles).toBeCloseTo(catchUpFactor(1), 10);
-    expect(bSystem(afterImport).unrest).toBeGreaterThan(0);
-
-    // Next economy cycle: B now holds the imported water, so satisfaction recovers and the squeeze clock
-    // resets. Direction of recovery only — magnitude calibration is out of scope here. (Missing ⇒ 1 is
-    // the documented default; both reads are written by an economy cycle, so neither is actually absent.)
+    const dispatchSatisfaction = bWater(afterDispatch).satisfaction ?? 1;
     const importSatisfaction = bWater(afterImport).satisfaction ?? 1;
-    const afterRecovery = (await runWorldTick(afterImport, { cadence })).world;
-    const recoverySatisfaction = bWater(afterRecovery).satisfaction ?? 1;
-    expect(recoverySatisfaction).toBeGreaterThan(importSatisfaction);
-    expect(bWater(afterRecovery).squeezeCycles).toBe(0);
+    expect(importSatisfaction).toBeGreaterThan(dispatchSatisfaction);
+    expect(bWater(afterImport).squeezeCycles).toBe(0);
   });
 
-  it("retains the persisted assessment across a logistics-only tick until the next economy cycle", async () => {
+  it("retains the persisted assessment across logistics-only ticks until the delivery actually lands", async () => {
     // Seed a distinctive rationed assessment the economy would NOT reproduce for this state (an empty,
     // productionless market would assess satisfaction 0 and realised rate 0), so retention is provable:
     // if any stage re-measured it, these exact values would move.
@@ -833,21 +875,44 @@ describe("runWorldTick — logistics/assessment ordering", () => {
     }));
     const bWater = (w: World) => w.markets.find((m) => m.systemId === b && m.goodId === "water")!;
 
-    // Logistics resolves; economy and construction do not.
-    const afterLogistics = (
-      await runWorldTick(world, { cadence: { cycle: 999, logistics: 1, construction: 999 } })
-    ).world;
+    // Logistics resolves every tick; economy and construction never do.
+    const cadence = { cycle: 999, logistics: 1, construction: 999 };
+    const afterDispatch = (await runWorldTick(world, { cadence })).world;
+    // Tick 1: dispatched only — the ledger row hasn't been drained yet.
+    expect(afterDispatch.flowEvents.some((f) => f.toSystemId === b && f.goodId === "water")).toBe(false);
+    expect(bWater(afterDispatch).stock).toBe(0);
 
-    // The import moved water in — stock changed.
+    // Tick 2: goods-arrivals is unconditional (never gated by any cadence), so the import lands
+    // even though economy's own cadence (999) never resolves.
+    const afterLogistics = (await runWorldTick(afterDispatch, { cadence })).world;
     expect(afterLogistics.flowEvents.some((f) => f.toSystemId === b && f.goodId === "water")).toBe(true);
     expect(bWater(afterLogistics).stock).toBeGreaterThan(0);
 
-    // …but the seeded assessment is carried through untouched: no economy cycle ran to re-measure it, and
-    // logistics never writes these fields. A mid-cycle economy run, or a logistics-side re-measure, would
-    // move at least one of them.
+    // …but the seeded assessment is carried through untouched: no economy cycle ever ran to
+    // re-measure it, and neither logistics nor goods-arrivals writes these fields.
     expect(bWater(afterLogistics).satisfaction).toBe(0.4);
     expect(bWater(afterLogistics).squeezeCycles).toBe(0.5);
     expect(bWater(afterLogistics).realisedProductionRate).toBe(5);
+  });
+
+  it("resets a lane's booked load to zero on a run that books nothing, even though a prior run loaded it", async () => {
+    const { a, b, world } = twoSystemWaterGradient((market) => market);
+    const cadence = { cycle: 1, logistics: 1, construction: 999 };
+    const key = laneKey(a, b);
+
+    // Run 1: the structural deficit dispatches a haul over the a-b lane — it books load.
+    const afterFirstRun = (await runWorldTick(world, { cadence })).world;
+    const loadedLane = afterFirstRun.lanes.find((l) => l.key === key);
+    expect(loadedLane?.bookedLoad ?? 0).toBeGreaterThan(0);
+
+    // Run 2: the delivery landed on this tick's goods-arrivals (see the dispatch/delivery test
+    // above), so the sink test no longer sees a deficit — nothing books the lane this run. Its
+    // booked load must read back to 0, not carry Run 1's figure forward: a fresh `RouteBooker` is
+    // built by tick.ts every cycle boundary, and the processor writes EVERY network lane's load
+    // back (`applyLaneLoadUpdates`), including one nothing touched.
+    const afterSecondRun = (await runWorldTick(afterFirstRun, { cadence })).world;
+    const idleLane = afterSecondRun.lanes.find((l) => l.key === key);
+    expect(idleLane?.bookedLoad).toBe(0);
   });
 });
 
@@ -1973,19 +2038,23 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
     // absence convention.
     const seeded = await seedStockBaseline(world, NO_LOGISTICS_CADENCE);
 
-    // Same seeded world, only whether directed logistics resolves this tick differs.
-    const localOnlyAfter = (await runWorldTick(seeded, { cadence: NO_LOGISTICS_CADENCE })).world;
-    const withHaulAfter = (await runWorldTick(seeded, { cadence: STOCK_CADENCE })).world;
+    // Directed-logistics dispatches onto the scheduled-freight ledger rather than crediting the
+    // destination same-tick (docs/planned/logistics-lanes.md §3), so the import is only visible in
+    // the SECOND tick's window — the one goods-arrivals actually drains it on, still well before
+    // that tick's own economy write. Two ticks of each cadence keeps the tick count, and so the
+    // boundary-reset window width, identical between the two branches.
+    const localOnlyAfter = await runTicks(seeded, 2, NO_LOGISTICS_CADENCE);
+    const withHaulAfter = await runTicks(seeded, 2, STOCK_CADENCE);
 
     const localOnly = requireStockChange(localOnlyAfter, b, "water");
     const withHaul = requireStockChange(withHaulAfter, b, "water");
 
     // B has no water producers: a purely local read (no logistics stage to see) is a real drain.
     expect(localOnly).toBeLessThan(0);
-    // The donor's haul lands before the write on the coincident tick, so the SAME starting deficit
-    // reports a materially smaller drain — the import is inside the figure, not a channel the write
-    // never sees. A write anchored to the economy processor's OWN output alone (before logistics)
-    // would report `localOnly` in both cases.
+    // The donor's haul lands before the write on the tick goods-arrivals drains it, so the SAME
+    // starting deficit reports a materially smaller drain — the import is inside the figure, not a
+    // channel the write never sees. A write anchored to the economy processor's OWN output alone
+    // (before logistics) would report `localOnly` in both cases.
     expect(withHaul).toBeGreaterThan(localOnly);
   });
 
@@ -2478,6 +2547,18 @@ describe("runWorldTick — the unserved shortfall level end to end", () => {
         ...unservable.connections,
         { fromId: a, toId: b, fuelCost: 1 },
         { fromId: b, toId: a, fuelCost: 1 },
+      ],
+      // The connection above needs a matching lane row — directed-logistics routes over the lane
+      // network, not the raw connection graph (docs/planned/logistics-lanes.md §2). Ample level so
+      // the whole shortfall clears in this one tick, matching the test's "cleared" premise.
+      lanes: [
+        ...unservable.lanes,
+        {
+          key: laneKey(a, b),
+          aId: a < b ? a : b,
+          bId: a < b ? b : a,
+          level: 10_000, bookedLoad: 0, blockedVolume: 0, idleCycles: 0,
+        },
       ],
     };
     const cleared = (await runWorldTick(recovered, { cadence })).world;

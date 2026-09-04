@@ -2,9 +2,10 @@ import type {
   DirectedLogisticsWorld,
   SystemLogisticsRow,
   LogisticsMarketUpdate,
-  LogisticsFlowInsert,
   LogisticsFundingBoundUpdate,
   UnservedShortfallUpdate,
+  LaneLoadUpdate,
+  PendingArrivalInsert,
 } from "@/lib/tick/world/directed-logistics-world";
 import { factionShardKeys } from "@/lib/engine/shard-order";
 
@@ -15,7 +16,9 @@ export class MemoryDirectedLogisticsWorld implements DirectedLogisticsWorld {
   /** Market id → this run's structural-shortfall level: positive means unservable, 0 means the row
    *  was assessed servable and the world layer should clear the key. Absent means untouched. */
   readonly unservedShortfallUpdates = new Map<string, number>();
-  readonly flows: LogisticsFlowInsert[] = [];
+  /** laneKey → this run's booked/blocked load, written for every lane in the network. */
+  readonly laneUpdates = new Map<string, { bookedLoad: number; blockedVolume: number }>();
+  readonly pendingArrivals: PendingArrivalInsert[] = [];
 
   constructor(private readonly systems: SystemLogisticsRow[]) {}
 
@@ -40,7 +43,11 @@ export class MemoryDirectedLogisticsWorld implements DirectedLogisticsWorld {
     for (const u of updates) this.unservedShortfallUpdates.set(u.id, u.unservedShortfall);
   }
 
-  async appendLogisticsFlows(flows: LogisticsFlowInsert[]): Promise<void> {
-    this.flows.push(...flows);
+  async applyLaneLoadUpdates(updates: LaneLoadUpdate[]): Promise<void> {
+    for (const u of updates) this.laneUpdates.set(u.key, { bookedLoad: u.bookedLoad, blockedVolume: u.blockedVolume });
+  }
+
+  async appendPendingArrivals(arrivals: PendingArrivalInsert[]): Promise<void> {
+    this.pendingArrivals.push(...arrivals);
   }
 }

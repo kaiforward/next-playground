@@ -5,8 +5,7 @@ import {
   classifyMarketState,
   surplusDrawable,
   type SystemLogisticsState,
-  type RouteCost,
-  type ReachableSystemIds,
+  type RouteBookerFor,
 } from "@/lib/engine/directed-logistics";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { ECONOMY_CONSTANTS, TARGET_COVER } from "@/lib/constants/economy";
@@ -87,6 +86,10 @@ function sys(
     /** Urgency weight. Defaults to `demand` — nothing braked, no event running — which is what
      *  every fixture predating the two-figure split states by construction. */
     drawDemand?: number;
+    /** Goods already dispatched toward this system for this good — read only by the sink
+     *  classification (`stock + scheduledInbound` vs `logisticsTarget`). Defaults to 0 (no fixture
+     *  predating the inbound-aware sink test has anything in flight). */
+    scheduledInbound?: number;
   },
 ): SystemLogisticsState {
   const production = good.production ?? 0;
@@ -107,8 +110,40 @@ function sys(
   };
 }
 
+/**
+ * Build a `RouteBookerFor` fake from a plain per-unit price function, for tests that don't care
+ * about congestion. `place`, when given, caps what `routeAndBook` actually places (simulating a
+ * saturated lane) — the excess is reported `blocked`, never billed or drawn, exactly as a real
+ * `RouteBooker` would. Defaults to placing the whole requested quantity.
+ */
+function makeBooker(opts: {
+  price: (from: string, to: string) => number | null;
+  place?: (from: string, to: string, quantity: number) => number;
+}): RouteBookerFor {
+  return {
+    priceFrom: (sinkId: string) => (donorId: string) => opts.price(donorId, sinkId),
+    routeAndBook: (from: string, to: string, quantity: number) => {
+      if (from === to || quantity <= 0) return null;
+      const perUnit = opts.price(from, to);
+      if (perUnit === null) return null;
+      const placed = Math.min(opts.place ? opts.place(from, to, quantity) : quantity, quantity);
+      const key = `${from}->${to}`;
+      return {
+        placements: placed > 0 ? [{ quantity: placed, edges: [key], perUnit, fuelTotal: placed }] : [],
+        blocked: quantity - placed > 0 ? [{ laneKey: key, quantity: quantity - placed, foreignShare: 0 }] : [],
+      };
+    },
+  };
+}
+
+/** A booker with no congestion: whatever is requested is fully placed at the given per-unit cost. */
+function costBooker(cost: (from: string, to: string) => number | null): RouteBookerFor {
+  return makeBooker({ price: cost });
+}
+
 // Unit cost = hops; 1 hop between any two systems, unreachable for "far".
-const oneHop: RouteCost = (_from, to) => (to === "far" ? null : 1);
+const oneHopCost = (_from: string, to: string): number | null => (to === "far" ? null : 1);
+const oneHop = costBooker(oneHopCost);
 
 describe("matchFactionTransfers", () => {
   it("moves drawable surplus to a below-anchor deficit", () => {
@@ -438,27 +473,6 @@ describe("matchFactionTransfers", () => {
     expect(result.fundingBound.map((match) => match.toSystemId)).toEqual(["B", "C"]);
   });
 
-  it("limits zero-budget classification to bounded route candidates", () => {
-    const donors = Array.from({ length: 100 }, (_value, index) =>
-      sys(`S${index}`, 0, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 5 }),
-    );
-    const receiver = sys("D", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
-    let routeLookups = 0;
-    const result = matchFactionTransfers(
-      [...donors, receiver],
-      () => {
-        routeLookups++;
-        return 1;
-      },
-      () => ["S0"],
-    );
-
-    expect(routeLookups).toBe(1);
-    expect(result.fundingBound).toEqual([
-      { goodId: "food", fromSystemId: "S0", toSystemId: "D" },
-    ]);
-  });
-
   it("fills one deficit from every willing donor in route-cost order, stopping each at its reserve", () => {
     // Two donors, each clearing the 1.4× margin on its reserve of 10 (stock 24 ≥ 14) with
     // 24 − 10 = 14 to spare. The deficit's shortfall of 30 exceeds either donor's drawable, so a
@@ -468,9 +482,9 @@ describe("matchFactionTransfers", () => {
     const dear = sys("dear", 1000, { goodId: "food", stock: 24, logisticsTarget: 10, demand: 5 });
     const cheap = sys("cheap", 0, { goodId: "food", stock: 24, logisticsTarget: 10, demand: 5 });
     const deficit = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 30, demand: 5 });
-    const costByDonor: RouteCost = (from) => (from === "cheap" ? 1 : 2);
+    const costByDonor = (from: string) => (from === "cheap" ? 1 : 2);
 
-    const { transfers } = matchFactionTransfers([dear, cheap, deficit], costByDonor);
+    const { transfers } = matchFactionTransfers([dear, cheap, deficit], costBooker(costByDonor));
     expect(transfers).toHaveLength(2);
     expect(transfers[0]).toMatchObject({ fromSystemId: "cheap", toSystemId: "B", quantity: 14, cost: 14 });
     expect(transfers[1]).toMatchObject({ fromSystemId: "dear", toSystemId: "B", quantity: 14, cost: 28 });
@@ -493,17 +507,15 @@ describe("matchFactionTransfers", () => {
     expect(transfers.some((t) => t.toSystemId === "C")).toBe(false);
   });
 
-  it("breaks route-cost ties by stable system order, not enumeration order", () => {
-    // In production `reachableSystemIds` enumerates the hop-BFS neighbourhood — NOT system
-    // order — and a whole hop ring ties exactly on route cost, so the sort's order tie-break is
-    // the only thing deciding which ring member ships first. Enumerate donors out of order to
-    // prove the tie-break, not the enumeration, picks the winner.
+  it("breaks route-cost ties by stable system order, not donor-map iteration order", () => {
+    // Two donors tie exactly on route cost, so the sort's `source.order` tie-break — the system's
+    // position in the input array — is the only thing deciding which one ships first. D1 is listed
+    // first in `systems`, so it must ship first despite D2 holding the same stock and price.
     const d1 = sys("D1", 1000, { goodId: "food", stock: 24, logisticsTarget: 10, demand: 5 });
     const d2 = sys("D2", 0, { goodId: "food", stock: 24, logisticsTarget: 10, demand: 5 });
     const deficit = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 30, demand: 5 });
-    const enumeratesD2First: ReachableSystemIds = () => ["D2", "D1"];
 
-    const { transfers } = matchFactionTransfers([d1, d2, deficit], oneHop, enumeratesD2First);
+    const { transfers } = matchFactionTransfers([d1, d2, deficit], oneHop);
     expect(transfers).toHaveLength(2);
     expect(transfers[0]).toMatchObject({ fromSystemId: "D1", quantity: 14 });
     expect(transfers[1]).toMatchObject({ fromSystemId: "D2", quantity: 14 });
@@ -517,15 +529,6 @@ describe("matchFactionTransfers", () => {
     expect(matchFactionTransfers([surplus, producer], oneHop).transfers).toHaveLength(0);
   });
 
-  it("excludes a donor whose route cost is exactly zero, like an unreachable one", () => {
-    // perUnit === 0 sits on the `perUnit <= 0` boundary — a free-cost route must be rejected the
-    // same way a negative one would be, not treated as reachable-and-free.
-    const donor = sys("A", 100, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 5 });
-    const deficit = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
-    const zeroCost: RouteCost = () => 0;
-    expect(matchFactionTransfers([donor, deficit], zeroCost).transfers).toHaveLength(0);
-  });
-
   it(
     "does not blame the donor whose own affordable share exactly matched what it owed (affordable === wanted)",
     () => {
@@ -537,10 +540,10 @@ describe("matchFactionTransfers", () => {
       const d1 = sys("D1", 10, { goodId: "food", stock: 10, logisticsTarget: 0, donorReserve: 0, demand: 0 });
       const d2 = sys("D2", 0, { goodId: "food", stock: 20, logisticsTarget: 0, donorReserve: 0, demand: 0 });
       const deficit = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 25, demand: 5 });
-      const costByDonor: RouteCost = (from) => (from === "D1" ? 1 : 2);
+      const costByDonor = (from: string) => (from === "D1" ? 1 : 2);
 
-      const result = matchFactionTransfers([d1, d2, deficit], costByDonor);
-      expect(result.transfers).toEqual([
+      const result = matchFactionTransfers([d1, d2, deficit], costBooker(costByDonor));
+      expect(result.transfers).toMatchObject([
         { goodId: "food", fromSystemId: "D1", toSystemId: "B", quantity: 10, cost: 10 },
       ]);
       expect(result.fundingBound).toEqual([
@@ -569,6 +572,140 @@ describe("matchFactionTransfers", () => {
 
 });
 
+describe("matchFactionTransfers — inbound-aware sink classification", () => {
+  it("does not treat a sink as a deficit once enough goods are already in flight to clear the line, but does without that inbound", () => {
+    // B: stock 2 < logisticsTarget 10 × 0.8 = 8 → deficit on physical stock alone. scheduledInbound 6
+    // brings stock + inbound to 8 — exactly the threshold — clearing it (`8 < 8` is false), so B must
+    // not re-order a delivery it is already receiving. C is the identical fixture with nothing in
+    // flight, still a deficit — the only thing separating the two is the inbound term.
+    const donor = sys("A", 100, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 5 });
+    const covered = sys("B", 0, {
+      goodId: "food", stock: 2, logisticsTarget: 10, demand: 5, scheduledInbound: 6,
+    });
+    const uncovered = sys("C", 0, { goodId: "food", stock: 2, logisticsTarget: 10, demand: 5 });
+
+    expect(matchFactionTransfers([donor, covered], oneHop).transfers).toEqual([]);
+    const { transfers } = matchFactionTransfers([donor, uncovered], oneHop);
+    expect(transfers).toHaveLength(1);
+    expect(transfers[0].toSystemId).toBe("C");
+  });
+
+  it("gives nothing from a donor sitting at its reserve, regardless of how much of its own inbound is in flight", () => {
+    // A's physical stock sits exactly at its reserve (surplusDrawable's `aboveReserve <= 0` branch),
+    // so it donates 0 — the donor test never reads `scheduledInbound`, so a huge inbound figure on the
+    // donor's own market must not inflate what it is willing to give.
+    const atReserve = sys("A", 100, {
+      goodId: "food", stock: 500, logisticsTarget: 10, donorReserve: 500, demand: 5,
+      scheduledInbound: 500,
+    });
+    const deficit = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
+    expect(matchFactionTransfers([atReserve, deficit], oneHop).transfers).toEqual([]);
+  });
+});
+
+describe("matchFactionTransfers — booked routing, the per-deficit skip, and blocked volume", () => {
+  it("produces one transfer per placement when the booker splits a haul across paths, quantities summing to the draw", () => {
+    const donor = sys("A", 100, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 5 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
+    // shortfall = 10, drawable = 50, so the whole 10-unit draw is requested; the booker splits it
+    // across two paths of its own choosing.
+    const splitting: RouteBookerFor = {
+      priceFrom: () => () => 2,
+      routeAndBook: (_from, _to, quantity) => ({
+        placements: [
+          { quantity: quantity * 0.6, edges: ["p1"], perUnit: 2, fuelTotal: 3 },
+          { quantity: quantity * 0.4, edges: ["p2"], perUnit: 3, fuelTotal: 5 },
+        ],
+        blocked: [],
+      }),
+    };
+
+    const { transfers } = matchFactionTransfers([donor, deficit], splitting);
+    expect(transfers).toHaveLength(2);
+    expect(transfers[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B", edges: ["p1"], fuelTotal: 3, cost: 12 });
+    expect(transfers[1]).toMatchObject({ fromSystemId: "A", toSystemId: "B", edges: ["p2"], fuelTotal: 5, cost: 12 });
+    const summed = transfers.reduce((sum, t) => sum + t.quantity, 0);
+    expect(summed).toBeCloseTo(10, 10);
+  });
+
+  it("ends only the triggering deficit's fill on an unaffordable draw, leaving the remaining budget to fund a cheaper deficit behind it", () => {
+    // Severe wants 1000 from D1 (drawable 1000, frozen price 2). Budget 20 can only afford 10 of it —
+    // an unaffordable draw — and the lane is congested to boot: the booker places only 4 of the
+    // requested 10, blocking the rest. Only the PLACED cost (4 × 2 = 8) is billed, leaving a genuine
+    // 12 of budget for Mild — proving the skip does not zero the pool the way the retired
+    // `budget = 0; break` clamp did (see the red-proof arm in the task notes).
+    const severe = sys("Severe", 0, { goodId: "food", stock: 0, logisticsTarget: 1000, demand: 5 });
+    const d1 = sys("D1", 20, { goodId: "food", stock: 1100, logisticsTarget: 100, demand: 5 });
+    const mild = sys("Mild", 0, { goodId: "food", stock: 0, logisticsTarget: 5, demand: 1 });
+    const d2 = sys("D2", 0, { goodId: "food", stock: 100, logisticsTarget: 10, demand: 5 });
+
+    const booker: RouteBookerFor = {
+      priceFrom: (sinkId) => (donorId) => {
+        if (sinkId === "Severe" && donorId === "D1") return 2;
+        if (sinkId === "Mild" && donorId === "D2") return 1;
+        return null;
+      },
+      routeAndBook: (from, to, quantity) => {
+        if (from === "D1" && to === "Severe") {
+          const placed = Math.min(quantity, 4);
+          return {
+            placements: [{ quantity: placed, edges: ["choke"], perUnit: 2, fuelTotal: placed }],
+            blocked: quantity > placed ? [{ laneKey: "choke", quantity: quantity - placed, foreignShare: 0 }] : [],
+          };
+        }
+        return { placements: [{ quantity, edges: [`${from}->${to}`], perUnit: 1, fuelTotal: quantity }], blocked: [] };
+      },
+    };
+
+    const result = matchFactionTransfers([severe, d1, mild, d2], booker);
+    const severeTransfers = result.transfers.filter((t) => t.toSystemId === "Severe");
+    const mildTransfers = result.transfers.filter((t) => t.toSystemId === "Mild");
+    expect(severeTransfers).toHaveLength(1);
+    expect(severeTransfers[0].quantity).toBe(4);
+    expect(mildTransfers).toHaveLength(1);
+    expect(mildTransfers[0].quantity).toBe(5);
+    expect(result.budgetSkipped).toBe(1);
+  });
+
+  it("counts budgetSkipped for exactly the deficits an unaffordable draw ended, not deficits with no donor at all", () => {
+    // Severe and Second both hit an unaffordable draw against their own donor (skip each); Sourceless
+    // has no donor anywhere for its good, which is a structural `unservable` case, not a skip.
+    const severe = sys("Severe", 0, { goodId: "ore", stock: 0, logisticsTarget: 100, demand: 5 });
+    const d1 = sys("D1", 5, { goodId: "ore", stock: 200, logisticsTarget: 10, demand: 5 });
+    const second = sys("Second", 0, { goodId: "ore", stock: 0, logisticsTarget: 100, demand: 4 });
+    const d2 = sys("D2", 5, { goodId: "ore", stock: 200, logisticsTarget: 10, demand: 5 });
+    const sourceless = sys("Sourceless", 0, { goodId: "water", stock: 0, logisticsTarget: 50, demand: 5 });
+
+    const booker = costBooker((from, to) => {
+      if (from === "D1" && to === "Severe") return 1;
+      if (from === "D2" && to === "Second") return 1;
+      return null;
+    });
+
+    const result = matchFactionTransfers([severe, d1, second, d2, sourceless], booker);
+    expect(result.budgetSkipped).toBe(2);
+    expect(result.unservable.some((u) => u.systemId === "Sourceless")).toBe(true);
+  });
+
+  it("does not treat a congestion-blocked haul as unservable — the booker's blocked volume is its own signal", () => {
+    // D1 structurally holds 100 drawable — comfortably more than B's 50-unit shortfall — but the
+    // booker can only physically place 10 of any draw (a saturated lane). `unservable` reads priced
+    // reachability and live donor stock, never what the booker managed to move, so this deficit must
+    // not be reported unservable despite ending up mostly unfed. (The other emission site — no donor
+    // anywhere for the good — is untouched by this fixture and stays covered by the sourceless case
+    // above.)
+    const d1 = sys("D1", 1000, { goodId: "food", stock: 150, logisticsTarget: 50, demand: 5 });
+    const b = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 50, demand: 5 });
+    const congested = makeBooker({ price: () => 1, place: (_from, _to, quantity) => Math.min(quantity, 10) });
+
+    const result = matchFactionTransfers([d1, b], congested);
+    expect(result.transfers).toHaveLength(1);
+    expect(result.transfers[0].quantity).toBe(10);
+    expect(result.unservable).toEqual([]);
+    expect(result.fundingBound).toEqual([]);
+  });
+});
+
 // The temporary/structural distinction: `logisticsFundingBound` means "the work budget stopped a fill
 // that had enough reachable capacity to succeed"; `unservable` means "reachable donors and local
 // production together cannot supply this even with unlimited budget". Every fixture below is sized so
@@ -583,7 +720,7 @@ describe("matchFactionTransfers — the unservable result (structural vs. fundin
     const b = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 50, demand: 5 });
 
     const result = matchFactionTransfers([d1, b], oneHop);
-    expect(result.transfers).toEqual([
+    expect(result.transfers).toMatchObject([
       { goodId: "food", fromSystemId: "D1", toSystemId: "B", quantity: 20, cost: 20 },
     ]);
     expect(result.fundingBound).toEqual([{ goodId: "food", fromSystemId: "D1", toSystemId: "B" }]);
@@ -617,7 +754,7 @@ describe("matchFactionTransfers — the unservable result (structural vs. fundin
     const b = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 200, demand: 5 });
 
     const result = matchFactionTransfers([d1, b], oneHop);
-    expect(result.transfers).toEqual([
+    expect(result.transfers).toMatchObject([
       { goodId: "food", fromSystemId: "D1", toSystemId: "B", quantity: 10, cost: 10 },
     ]);
     expect(result.fundingBound).toEqual([{ goodId: "food", fromSystemId: "D1", toSystemId: "B" }]);
@@ -641,7 +778,7 @@ describe("matchFactionTransfers — the unservable result (structural vs. fundin
 
     const result = matchFactionTransfers([donor, d1, d2], oneHop);
 
-    expect(result.transfers).toEqual([
+    expect(result.transfers).toMatchObject([
       { goodId: "food", fromSystemId: "A", toSystemId: "D1", quantity: 100, cost: 100 },
     ]);
     expect(result.fundingBound).toEqual([]);
@@ -670,7 +807,7 @@ describe("matchFactionTransfers — the unservable result (structural vs. fundin
     const result = matchFactionTransfers([donor, d1, d2, d3], oneHop);
 
     // The contention itself: D1 is served whole, D2 gets only what is left, D3 nothing.
-    expect(result.transfers).toEqual([
+    expect(result.transfers).toMatchObject([
       { goodId: "food", fromSystemId: "A", toSystemId: "D1", quantity: 80, cost: 80 },
       { goodId: "food", fromSystemId: "A", toSystemId: "D2", quantity: 20, cost: 20 },
     ]);

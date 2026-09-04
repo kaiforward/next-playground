@@ -232,6 +232,10 @@ export interface LogisticsBudgetLedger {
   total: number;
   spent: number;
   fundingBoundCount: number;
+  /** Deficits whose fill an unaffordable draw ended this run — the gradual-binding read beside
+   *  `fundingBoundCount`, this faction group's own `TransferMatchResult.budgetSkipped`.
+   *  Instrumentation for the calibration harness; the processor itself makes no decision off it. */
+  budgetSkipped: number;
 }
 
 /** Transient, calibration-only signals a tick produced — never broadcast (`TickBroadcastRaw`)

@@ -46,11 +46,16 @@ import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { CYCLE_LENGTH, CONSTRUCTION_INTERVAL, LOGISTICS_INTERVAL, type TickCadence } from "@/lib/constants/tick-cadence";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
-import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { CONSTRUCTION } from "@/lib/constants/construction";
 import { EXPANSION } from "@/lib/constants/expansion";
-import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
+import { RELATIONS_FREQUENCY, getRelationTier, type RelationTier } from "@/lib/constants/relations";
+import { LANES } from "@/lib/constants/lanes";
+import { laneCapacity } from "@/lib/engine/lanes";
+import { buildLaneNetwork, createRouteBooker, type LaneNetwork } from "@/lib/engine/lane-routing";
+import { laneOpenFor } from "@/lib/engine/lane-access";
+import { scheduledInbound as computeScheduledInbound } from "@/lib/engine/freight";
+import { pairKey } from "@/lib/tick/world/relations-world";
 import {
   depositCountsOf, yieldsOf, effOf, yieldColumns, effColumns, RESOURCE_TYPES,
 } from "@/lib/engine/resources";
@@ -70,7 +75,7 @@ import { TREASURY, REFERENCE_VALUE, TAX_LEVEL_UNREST_PRESSURE } from "@/lib/cons
 import { maintenanceOutputMalus, maintenanceBufferScale } from "@/lib/engine/treasury";
 import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
 import type { EdgeView } from "@/lib/tick/world/trade-flow-topology";
-import type { ReachableSystemIds, RouteCost } from "@/lib/engine/directed-logistics";
+import type { RouteBookerFor } from "@/lib/engine/directed-logistics";
 import type { EventDefinition, EventPhaseDefinition, EventTypeId } from "@/lib/constants/events";
 import { buildModifiersForPhase } from "@/lib/engine/events";
 import type { GovernmentType, ResourceVector } from "@/lib/types/game";
@@ -135,7 +140,6 @@ import type {
   WorldEvent,
   WorldEventMetadata,
   WorldEventModifier,
-  WorldFlowEvent,
   WorldMarket,
   WorldSystem,
 } from "./types";
@@ -1223,6 +1227,19 @@ function rebuildWorldModifiers(
 let hopsCache: { key: World["connections"]; hops: Map<string, Map<string, number>> } | null =
   null;
 
+/**
+ * The lane graph a `RouteBooker` runs over depends on both the connection graph (never reassigned
+ * for the life of a world, same premise as `hopsCache` above) AND the lane rows (`world.lanes`),
+ * which DO change — lane level moves capacity, and directed-logistics itself rewrites booked/
+ * blocked load every cycle. Keyed on both arrays' identity so an investment or a load write
+ * rebuilds the network, while an unrelated stage's world (same connections, same lanes) reuses it.
+ */
+let laneNetworkCache: {
+  connectionsKey: World["connections"];
+  lanesKey: World["lanes"];
+  network: LaneNetwork;
+} | null = null;
+
 export async function runWorldTick(
   world: World,
   opts?: {
@@ -1259,6 +1276,7 @@ export async function runWorldTick(
   let markets = world.markets;
   const connections = toTickConnections(world);
   let ships = world.ships;
+  let lanes = world.lanes;
   let pendingArrivals = world.pendingArrivals;
   let flowEvents = world.flowEvents;
   let relations = world.relations;
@@ -1602,17 +1620,18 @@ export async function runWorldTick(
       processorsRun.push("migration");
     }
 
-    // directed-logistics and directed-build share one hop-BFS, run at the
-    // larger of their two (independently tunable) MAX_HOPS radii — each
-    // stage's routeCost closure still applies its OWN cutoff below, so a BFS
-    // computed at the larger radius is a safe superset for the smaller one.
-    // The BFS is computed once per world, not per tick (see hopsCache).
+    // directed-build's own hop-BFS, run at the larger of its and expansion's (independently
+    // tunable) reach radii — directed-build's routeCost closure still applies its OWN cutoff
+    // below, so a BFS computed at the larger radius is a safe superset for the smaller one.
+    // Directed-logistics no longer shares this BFS: it moved onto lane-network routing
+    // (docs/planned/logistics-lanes.md §2), with its own reach substrate below. The BFS is
+    // computed once per world, not per tick (see hopsCache).
     if (hopsCache?.key !== world.connections) {
       hopsCache = {
         key: world.connections,
         hops: computeBoundedHopDistances(
           connections,
-          Math.max(DIRECTED_LOGISTICS.MAX_HOPS, DIRECTED_BUILD.MAX_HOPS, EXPANSION.REACH_JUMPS),
+          Math.max(DIRECTED_BUILD.MAX_HOPS, EXPANSION.REACH_JUMPS),
         ),
       };
     }
@@ -1627,12 +1646,45 @@ export async function runWorldTick(
 
     // ── directed-logistics ──
     {
-      const routeCost: RouteCost = (f, t) => {
-        const h = hops.get(f)?.get(t);
-        return h === undefined || h > DIRECTED_LOGISTICS.MAX_HOPS ? null : h * DIRECTED_LOGISTICS.HOP_WEIGHT;
-      };
-      const reachableSystemIds: ReachableSystemIds = (systemId) =>
-        hops.get(systemId)?.keys() ?? [];
+      // The lane graph directed-logistics routes over — rebuilt only when the connection graph or
+      // the lane rows themselves change (see laneNetworkCache's own docstring).
+      if (laneNetworkCache?.connectionsKey !== world.connections || laneNetworkCache?.lanesKey !== world.lanes) {
+        laneNetworkCache = {
+          connectionsKey: world.connections,
+          lanesKey: world.lanes,
+          network: buildLaneNetwork(connections, world.lanes, (lane) => laneCapacity(lane.level)),
+        };
+      }
+      const laneNetwork = laneNetworkCache.network;
+      // One physical ledger for every hauling faction this run, so two factions booking the same
+      // lane see each other's load and congestion (docs/planned/logistics-lanes.md §2). The base
+      // `openEdge` here is never consulted directly — every real caller goes through `forHauler`
+      // below, which supplies its own hauler-specific traversability.
+      const laneBooker = createRouteBooker(laneNetwork, {
+        openEdge: () => true,
+        congestionMax: LANES.CONGESTION_MAX,
+        catchUp: catchUpFactor(cadence.logistics),
+      });
+      const laneByKey = new Map(world.lanes.map((l) => [l.key, l]));
+      const factionIdBySystemId = new Map(systems.map((s) => [s.id, s.factionId]));
+      const ownerOf = (systemId: string): { factionId: string | null } => ({
+        factionId: factionIdBySystemId.get(systemId) ?? null,
+      });
+      // Pairwise relation score, sorted-pair keyed exactly as `WorldFactionRelation` stores it
+      // (`InMemoryRelationsWorld`'s own convention); a pair with no row (never interacted, or one
+      // faction is itself) reads neutral (0), never a thrown lookup.
+      const relationScoreByPair = new Map(world.relations.map((r) => [pairKey(r.factionAId, r.factionBId), r.score]));
+      const tierBetween = (a: string, b: string): RelationTier =>
+        getRelationTier(relationScoreByPair.get(pairKey(a, b)) ?? 0);
+      const bookerFor = (factionKey: string | null): RouteBookerFor =>
+        laneBooker.forHauler(
+          (edgeKey) => {
+            const lane = laneByKey.get(edgeKey);
+            return lane !== undefined && laneOpenFor(factionKey, lane, ownerOf, tierBetween);
+          },
+          factionKey,
+        );
+
       // Directed-logistics moves goods only between developed systems.
       const rows = buildLogisticsRows(
         systems.filter((s) => developedSystemIds.has(s.id)),
@@ -1641,11 +1693,13 @@ export async function runWorldTick(
       const dlWorld = new MemoryDirectedLogisticsWorld(rows);
       const dlResult = await runDirectedLogisticsProcessor(dlWorld, { tick }, {
         interval: cadence.logistics,
-        routeCost,
-        reachableSystemIds,
+        bookerFor,
+        laneLoads: () => laneBooker.loads(),
+        scheduledInbound: computeScheduledInbound(pendingArrivals),
         fundingByFaction:
           fundedByFaction && new Map([...fundedByFaction].map(([id, f]) => [id, f.logistics])),
         drawBrakeCeiling: opts?.drawBrakeCeiling,
+        mintId: () => `haul-${nextId++}`,
       });
       markets = applyLogisticsMarketUpdates(
         markets,
@@ -1656,8 +1710,11 @@ export async function runWorldTick(
       dlStockUpdates = dlWorld.stockUpdates;
       dlFundingBoundUpdates = dlWorld.fundingBoundUpdates;
       dlUnservedShortfallUpdates = dlWorld.unservedShortfallUpdates;
-      const newLogisticsFlows: WorldFlowEvent[] = dlWorld.flows;
-      flowEvents = [...flowEvents, ...newLogisticsFlows];
+      pendingArrivals = [...pendingArrivals, ...dlWorld.pendingArrivals];
+      lanes = lanes.map((l) => {
+        const u = dlWorld.laneUpdates.get(l.key);
+        return u ? { ...l, bookedLoad: u.bookedLoad, blockedVolume: u.blockedVolume } : l;
+      });
       logisticsWorkByFaction = dlResult.workPerformedByFaction;
       logisticsBudget = dlResult.logisticsBudget;
       processorsRun.push("directed-logistics");
@@ -2026,11 +2083,12 @@ export async function runWorldTick(
     }
   }
 
-  // flowEvents has two writers now: directed-logistics appends on the cycle start, and
-  // goods-arrivals appends whenever a due row credits — every tick, not just cycle starts. The
-  // prune stays every-tick, outside any gate, so the retention window is enforced on the tick it
-  // expires rather than up to a cycle late. It is a filter over an already-bounded log; a
-  // cycle-start gate here is not worth the drift.
+  // flowEvents has one writer now: goods-arrivals appends whenever a due row credits — every
+  // tick, not just cycle starts (docs/planned/logistics-lanes.md §3: directed-logistics dispatches
+  // onto the pending-arrivals ledger and writes no flow row of its own; the flow log records goods
+  // actually delivered, which happens on credit). The prune stays every-tick, outside any gate, so
+  // the retention window is enforced on the tick it expires rather than up to a cycle late. It is
+  // a filter over an already-bounded log; a cycle-start gate here is not worth the drift.
   const flowRetentionFloor = tick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
   flowEvents = flowEvents.filter((f) => f.tick >= flowRetentionFloor);
 
@@ -2084,6 +2142,7 @@ export async function runWorldTick(
     buildings: flattenBuildings(systems),
     constructionProjects,
     markets,
+    lanes,
     pendingArrivals,
     events,
     modifiers: rebuildWorldModifiers(events, EVENT_DEFINITIONS),

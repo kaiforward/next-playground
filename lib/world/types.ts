@@ -869,9 +869,9 @@ export interface World {
   connections: WorldConnection[];
   /** One persistent row per undirected system pair carrying a connection — see `WorldLane`. */
   lanes: WorldLane[];
-  /** The scheduled-freight ledger — see `WorldPendingArrival`. Drained every tick by the
-   *  unconditional goods-arrivals stage; nothing writes to it yet (directed-logistics dispatch is a
-   *  future pass), so this reads empty until then. */
+  /** The scheduled-freight ledger — see `WorldPendingArrival`. Directed-logistics dispatch appends
+   *  a row per outbound transfer; the unconditional goods-arrivals stage drains it every tick,
+   *  removing rows that have arrived and writing back whatever is still in flight. */
   pendingArrivals: WorldPendingArrival[];
   markets: WorldMarket[];
   factions: WorldFaction[];

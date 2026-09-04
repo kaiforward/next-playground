@@ -3,15 +3,18 @@
  * measure of whether the generated galaxy actually produces the geography the spec claims:
  * concentrated traffic, cost-differentiated lanes, and a real cost to settling beyond a crossing.
  *
- * The concentration read is the premise-1 instrument. Its reachability now mirrors the shipped
- * router exactly (`world/tick.ts`'s directed-logistics block): the router is ownership-blind — it
- * hauls over an unweighted hop-BFS across ALL connections (`computeBoundedHopDistances`), gated
- * only by `DIRECTED_LOGISTICS.MAX_HOPS`, with no adjacency filter for foreign-held systems. A haul
- * is unreachable here iff the router itself could not have routed it: no path at all (disconnected
- * component) or hop-minimal distance over `DIRECTED_LOGISTICS.MAX_HOPS`. That hop-minimal distance
- * is judged independently of the edge-placement path below — a fuel-weighted shortest path can
- * legitimately take more hops than the hop-BFS minimum, so the two are never substituted for each
- * other.
+ * The concentration read is the premise-1 instrument. Its reachability USED TO mirror the shipped
+ * router exactly (`world/tick.ts`'s directed-logistics block, pre-lane-mechanics): the router was
+ * ownership-blind and hauled over an unweighted hop-BFS across ALL connections
+ * (`computeBoundedHopDistances`), gated by a hop cap. Directed-logistics has since moved onto
+ * lane-network routing (docs/planned/logistics-lanes.md §2: `createRouteBooker` over the lane
+ * graph, `laneOpenFor` traversability, no hop cap at all) — this module's `HOP_REACHABILITY_CAP`
+ * below is the pre-migration hop cap's value, kept ONLY as this instrument's own reachability
+ * proxy; it is no longer a claim that the number mirrors the router. Re-deriving this instrument
+ * against the lane network is unbooked follow-up work, not part of this pass.
+ * That hop-minimal distance is judged independently of the edge-placement path below — a
+ * fuel-weighted shortest path can legitimately take more hops than the hop-BFS minimum, so the two
+ * are never substituted for each other.
  *
  * The specific lane path a haul is placed onto, however, stays a MODELLING CHOICE, not a claim
  * about the router: the real matcher (`matchFactionTransfers`) only ever compares a cost number
@@ -38,13 +41,20 @@
  * broken".
  */
 import { buildFuelAdjacency, computeBoundedHopDistances, findShortestPath } from "@/lib/engine/pathfinding";
-import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
 import { quantile } from "@/lib/utils/math";
 import type { SystemControl, WorldFlowEvent } from "@/lib/world/types";
 import type {
   BeyondCrossingCohortEntry, FactionTopDecileShareEntry, GeographySummary,
 } from "./types";
+
+/**
+ * This instrument's own reachability proxy — the value directed-logistics' hop cap held before it
+ * moved onto lane-network routing (`DIRECTED_LOGISTICS.MAX_HOPS`, deleted with that migration; see
+ * module docstring). Frozen here rather than re-derived from anything live: nothing in the shipped
+ * router is hop-capped any more, so there is no longer a constant to mirror.
+ */
+const HOP_REACHABILITY_CAP = 4;
 
 /** One system's fields this module reads — a `TickSystem` or `WorldSystem` both satisfy it. */
 export interface GeographySystemInput {
@@ -143,9 +153,10 @@ export interface GeographyProjection {
    *  `foreignTransitHaulVolumeShare` below; distinct from `totalPlacedVolume`, which double-counts
    *  a multi-hop haul once per traversed edge. */
   placedHaulVolume: number;
-  /** Hauls the shipped router itself could not have routed: no path at all over the full,
-   *  ownership-blind connection graph (disconnected component), or hop-minimal distance over
-   *  `DIRECTED_LOGISTICS.MAX_HOPS` — mirrors `world/tick.ts`'s own routeCost cutoff exactly. Never
+  /** Hauls this instrument's own reachability proxy could not have routed: no path at all over the
+   *  full, ownership-blind connection graph (disconnected component), or hop-minimal distance over
+   *  `HOP_REACHABILITY_CAP` — the module's stand-in for the shipped router's own reach now that the
+   *  router itself routes over the lane network rather than a hop cap (see module docstring). Never
    *  placed, so they contribute 0 to both sides of the conservation identity above. Reported so a
    *  projection that silently drops most hauls is visible rather than reading as low traffic. */
   unreachableHaulCount: number;
@@ -189,10 +200,11 @@ export function computeGeographyProjection(
   if (flowEvents.length === 0 || ownershipSnapshots.length === 0) return emptyProjection();
 
   const projection = emptyProjection();
-  // Both graphs are ownership-blind and built once over every declared connection, matching the
-  // router: `hopDistances` is the exact reachability test (unweighted BFS, hop-capped); `adjacency`
-  // is this module's own fuel-weighted placement model over the same full connection set.
-  const hopDistances = computeBoundedHopDistances([...connections], DIRECTED_LOGISTICS.MAX_HOPS);
+  // Both graphs are ownership-blind and built once over every declared connection: `hopDistances`
+  // is this instrument's own reachability proxy (unweighted BFS, capped at HOP_REACHABILITY_CAP —
+  // no longer the router's actual cutoff, see module docstring); `adjacency` is this module's own
+  // fuel-weighted placement model over the same full connection set.
+  const hopDistances = computeBoundedHopDistances([...connections], HOP_REACHABILITY_CAP);
   const adjacency = buildFuelAdjacency([...connections]);
   // A run's hauls repeat the same few hundred donor/receiver pairs thousands of times over a fixed
   // topology. Pathing reads only `adjacency`, which is ownership-blind — ownership decides how a
@@ -204,7 +216,7 @@ export function computeGeographyProjection(
     const factionId = systemFactionById.get(flow.fromSystemId) ?? null;
 
     const hopDistance = hopDistances.get(flow.fromSystemId)?.get(flow.toSystemId);
-    if (hopDistance === undefined || hopDistance > DIRECTED_LOGISTICS.MAX_HOPS) {
+    if (hopDistance === undefined || hopDistance > HOP_REACHABILITY_CAP) {
       projection.unreachableHaulCount++;
       projection.unreachableHaulVolume += flow.quantity;
       continue;

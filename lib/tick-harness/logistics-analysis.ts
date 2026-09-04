@@ -18,8 +18,8 @@ import type { LogisticsActivitySummary } from "./types";
 
 /**
  * Ticks below which a run's logistics counters read as colonisation warm-up, not economy health.
- * Directed-logistics moves nothing until a faction has two same-faction developed systems within
- * MAX_HOPS, which is colonisation-paced: the first establish completes at tick 4128 and the first
+ * Directed-logistics moves nothing until a faction has two developed systems joined by an open
+ * lane path, which is colonisation-paced: the first establish completes at tick 4128 and the first
  * transfer lands at 4152 — the same two ticks at 20 systems / seed 7 and at 600 / seed 42, because
  * the establish duration is set by the absorption cap (68 work ÷ 0.4 per cycle ≈ 170 cycles), not by
  * galaxy size. A sub-window run therefore reports a pre-logistics galaxy — one of the three economy

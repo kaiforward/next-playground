@@ -213,6 +213,38 @@ describe("RouteBooker.routeAndBook — degenerate input", () => {
   });
 });
 
+describe("RouteBooker.forHauler — shared ledger, per-hauler openEdge", () => {
+  it("two haulers with different openEdge share one load ledger", () => {
+    const network = buildFixtureNetwork();
+    const booker = createRouteBooker(network, { openEdge: OPEN_ALL, congestionMax: CONGESTION_MAX, catchUp: 1 });
+
+    // Hauler A may use every edge; hauler B is closed off the cheap path entirely, so it must
+    // route the whole alternate corridor.
+    const haulerA = booker.forHauler(OPEN_ALL, "factionA");
+    const closeCheapPath = (key: string) => key !== laneKey("S", "A") && key !== laneKey("A", "T");
+    const haulerB = booker.forHauler(closeCheapPath, "factionB");
+
+    const bookingA = haulerA.routeAndBook("S", "T", 4);
+    expect(bookingA?.placements[0].edges).toEqual([laneKey("S", "A"), laneKey("A", "T")]);
+
+    const bookingB = haulerB.routeAndBook("S", "T", 3);
+    expect(bookingB?.placements[0].edges).toEqual([laneKey("S", "B"), laneKey("B", "T")]);
+
+    // One shared ledger: hauler A's booking is visible to hauler B's price/priority view on the
+    // edge they both could have used, and `loads()` reports the sum across both haulers.
+    const loads = booker.loads();
+    expect(loads.get(laneKey("S", "A"))?.booked).toBe(4);
+    expect(loads.get(laneKey("S", "B"))?.booked).toBe(3);
+
+    // Hauler B's own priceFrom never offers the cheap path at all — it stays closed to B
+    // regardless of what A booked on it.
+    const priceFromT_B = haulerB.priceFrom("T");
+    // forced onto the alternate: 100 fuel × congestion multiplier at load 3/capacity 100
+    // (1 + (3-1) × 0.03 = 1.06)
+    expect(priceFromT_B("S")).toBeCloseTo(106, 6);
+  });
+});
+
 // ── Dijkstra edge-cost hook — vacuity check on the pathfinding.ts refactor ──────────────────
 
 describe("dijkstra edgeCost hook", () => {

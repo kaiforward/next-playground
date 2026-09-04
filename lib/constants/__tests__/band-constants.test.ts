@@ -5,6 +5,7 @@ import {
   SHORTAGE_SATISFACTION,
 } from "@/lib/constants/economy";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import { scaleValue } from "@/lib/constants/economy-scale";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { GOODS } from "@/lib/constants/goods";
 import { COLONISATION } from "@/lib/constants/colonisation";
@@ -605,18 +606,24 @@ describe("mutation-acceptance premises — when one of these fails, re-sweep the
   // incremental sweep will NOT re-run them (the mutants sit in files a constants change does not
   // touch). The failure message names the re-sweep owed.
 
-  it("the shared BFS radius is the logistics hop cap — else world/tick.ts's h > MAX_HOPS arm goes live", () => {
-    // runWorldTick's hop map is bounded by max(logistics, build, expansion reach); while that max
-    // IS the logistics cap, no hop beyond it exists and the route-cost guard's far arm is dead.
-    // Raise build/expansion reach past it and the arm becomes reachable: re-sweep lib/world/tick.ts.
-    expect(Math.max(DIRECTED_LOGISTICS.MAX_HOPS, DIRECTED_BUILD.MAX_HOPS, EXPANSION.REACH_JUMPS))
-      .toBe(DIRECTED_LOGISTICS.MAX_HOPS);
+  it("the shared BFS radius is directed-build's own hop cap — else world/tick.ts's reach providers see a narrower map than they should", () => {
+    // runWorldTick's hop map is bounded by max(build, expansion reach) now that directed-logistics
+    // no longer contributes a hop-counted radius at all (it routes over the lane network instead,
+    // docs/planned/logistics-lanes.md §2 — no MAX_HOPS, no hop-BFS cutoff). While that max IS
+    // directed-build's own cap, no hop beyond it exists and a narrower expansion reach is the one
+    // ever binding. Raise expansion reach past it: re-sweep lib/world/tick.ts's reach/develop
+    // providers.
+    expect(Math.max(DIRECTED_BUILD.MAX_HOPS, EXPANSION.REACH_JUMPS)).toBe(DIRECTED_BUILD.MAX_HOPS);
   });
 
-  it("logistics HOP_WEIGHT is exactly 1 — else hop-cost arithmetic acceptances go live", () => {
-    // At 1.0, h * HOP_WEIGHT and h / HOP_WEIGHT coincide, and several route-cost mutants were
-    // accepted as equivalent on that basis. Any other value: re-sweep lib/world/tick.ts.
-    expect(DIRECTED_LOGISTICS.HOP_WEIGHT).toBe(1.0);
+  it("directed-logistics' GENERATION_PER_POP is scaled by the stated ×8.5 over its pre-lane value", () => {
+    // The budget was re-scaled ×8.5 alongside route cost's move from hops×1.0 (old typical cost ~2)
+    // to Σ fuel×congestion (new typical cost ~17) so aggregate spend keeps the same small fraction
+    // of budget it held before (docs/planned/logistics-lanes.md §2 — see the constant's own
+    // docstring for the arithmetic). This is the anti-drift guard on that literal: a fixture-level
+    // vacuity check (the funding-bound census staying at its pre-change level under new costs)
+    // lives in the processor test, which needs a full matcher run to construct.
+    expect(DIRECTED_LOGISTICS.GENERATION_PER_POP).toBeCloseTo(scaleValue(5 * 8.5), 6);
   });
 
   it("every good carries a positive basePrice — else unitValue/spent guards go live", () => {

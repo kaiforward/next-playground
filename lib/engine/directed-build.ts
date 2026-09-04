@@ -12,7 +12,7 @@ import type { SystemControl, WorldConstructionProject, WorldColonyEstablishProje
 import { DIRECTED_BUILD, SPECULATIVE_BASICS } from "@/lib/constants/directed-build";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { systemDevelopment, type DevelopmentRefs } from "@/lib/engine/development";
-import { surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
+import { surplusDrawable } from "@/lib/engine/directed-logistics";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { clamp } from "@/lib/utils/math";
 import { hasSurvivalShortfall } from "@/lib/engine/population";
@@ -34,6 +34,15 @@ import {
   labourDemand, housingPopCap, skill1Demand, skill2Demand, skill1Cap, skill2Cap,
   familyAnchorBuff, familyThroughput, inputDemandFromProduction, labourFulfilment,
 } from "@/lib/engine/industry";
+
+/**
+ * The build planner's own hop-priced route cost — unrelated to lane routing. Null means
+ * unreachable (beyond the planner's own hop budget or otherwise closed); a finite cost is hops ×
+ * weight (`hopRouteCost`). Declared locally rather than imported from `directed-logistics.ts`:
+ * that module's `RouteBookerFor` prices a lane-network path for the goods matcher, a different
+ * mechanism from this planner's hop-count reachability test.
+ */
+export type RouteCost = (fromSystemId: string, toSystemId: string) => number | null;
 
 /**
  * A good the necessity band ranks above every other good (water, food — `SURVIVAL_GOODS`). The ONE

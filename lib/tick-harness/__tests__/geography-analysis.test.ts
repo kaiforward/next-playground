@@ -106,7 +106,7 @@ describe("computeGeographyProjection", () => {
   });
 
   it("marks a haul unreachable when hop-minimal distance exceeds MAX_HOPS, even though a path exists", () => {
-    // Five-edge chain, no shortcut — hop-minimal distance is 5, over DIRECTED_LOGISTICS.MAX_HOPS (4).
+    // Five-edge chain, no shortcut — hop-minimal distance is 5, over HOP_REACHABILITY_CAP (4).
     const systems = [
       sys("h1", "f1", "r1"), sys("a", null, "r1"), sys("b", null, "r1"), sys("c", null, "r1"),
       sys("d", null, "r1"), sys("h2", "f1", "r1"),

@@ -12,6 +12,7 @@ import type { ConnectionInfo } from "./navigation";
 import { dijkstra, reconstructPath, type FuelAdjacency } from "./pathfinding";
 import { laneKey } from "./lanes";
 import type { WorldLane } from "@/lib/world/types";
+import type { RouteBookerFor } from "./directed-logistics";
 
 // ── Network ─────────────────────────────────────────────────────
 
@@ -113,6 +114,14 @@ export interface RouteBooker {
    * equals donor→sink cost.
    */
   priceFrom(sinkId: string): (donorId: string) => number | null;
+  /**
+   * A per-hauler view over this SAME physical ledger — `openEdge` replaces the booker's own at
+   * construction, everything else (booked/blocked load, congestion pricing) is shared, so two
+   * haulers with different traversability (e.g. different factions' `laneOpenFor`) still see each
+   * other's bookings and congestion on a shared edge. `factionKey` is bound into every
+   * `routeAndBook` call this view makes, for `foreignShare` attribution.
+   */
+  forHauler(openEdge: (laneKey: string) => boolean, factionKey: string | null): RouteBookerFor;
 }
 
 /**
@@ -154,10 +163,16 @@ export function createRouteBooker(
     return 1 + (opts.congestionMax - 1) * ratio;
   }
 
-  /** Live route cost: excludes any edge whose booked load has reached capacity. */
-  function liveEdgeCost(from: string, to: string, fuelCost: number): number | null {
+  /** Live route cost: excludes any edge whose booked load has reached capacity. `openEdge`
+   *  defaults to the booker's own (used by the base, un-`forHauler`'d view). */
+  function liveEdgeCost(
+    from: string,
+    to: string,
+    fuelCost: number,
+    openEdge: (laneKey: string) => boolean = opts.openEdge,
+  ): number | null {
     const key = laneKey(from, to);
-    if (!opts.openEdge(key)) return null;
+    if (!openEdge(key)) return null;
     const capacity = capacityFor(key);
     const load = booked.get(key) ?? 0;
     if (load >= capacity) return null;
@@ -169,9 +184,14 @@ export function createRouteBooker(
    * to name the choke edge of "the cheapest path" the spec's blocked-volume rule refers to, never
    * to place a booking.
    */
-  function edgeCostIgnoringSaturation(from: string, to: string, fuelCost: number): number | null {
+  function edgeCostIgnoringSaturation(
+    from: string,
+    to: string,
+    fuelCost: number,
+    openEdge: (laneKey: string) => boolean = opts.openEdge,
+  ): number | null {
     const key = laneKey(from, to);
-    if (!opts.openEdge(key)) return null;
+    if (!openEdge(key)) return null;
     const capacity = capacityFor(key);
     const load = booked.get(key) ?? 0;
     return fuelCost * congestionMultiplier(load, capacity);
@@ -222,6 +242,7 @@ export function createRouteBooker(
     to: string,
     quantity: number,
     factionKey: string | null = null,
+    openEdge: (laneKey: string) => boolean = opts.openEdge,
   ): RouteBooking | null {
     if (from === to || quantity <= 0) return null;
 
@@ -230,14 +251,20 @@ export function createRouteBooker(
     let remaining = quantity;
 
     while (remaining > 0) {
-      const live = dijkstra(from, network.adjacency, { stopAt: to, edgeCost: liveEdgeCost });
+      const live = dijkstra(from, network.adjacency, {
+        stopAt: to,
+        edgeCost: (f, t, fuelCost) => liveEdgeCost(f, t, fuelCost, openEdge),
+      });
       const liveCost = live.dist.get(to);
 
       if (liveCost === undefined) {
         // No path remains with any capacity left anywhere feasible. Name the choke edge from the
         // cheapest path ignoring saturation, if one exists at all — otherwise this is a reachability
         // gap, not congestion, and nothing is blocked.
-        const ideal = dijkstra(from, network.adjacency, { stopAt: to, edgeCost: edgeCostIgnoringSaturation });
+        const ideal = dijkstra(from, network.adjacency, {
+          stopAt: to,
+          edgeCost: (f, t, fuelCost) => edgeCostIgnoringSaturation(f, t, fuelCost, openEdge),
+        });
         if (ideal.dist.get(to) !== undefined) {
           const idealPath = reconstructPath(ideal.prev, to);
           const idealLaneKeys = pathToLaneKeys(idealPath);
@@ -306,10 +333,23 @@ export function createRouteBooker(
     return result;
   }
 
-  function priceFrom(sinkId: string): (donorId: string) => number | null {
-    const { dist } = dijkstra(sinkId, network.adjacency, { edgeCost: liveEdgeCost });
+  function priceFrom(
+    sinkId: string,
+    openEdge: (laneKey: string) => boolean = opts.openEdge,
+  ): (donorId: string) => number | null {
+    const { dist } = dijkstra(sinkId, network.adjacency, {
+      edgeCost: (f, t, fuelCost) => liveEdgeCost(f, t, fuelCost, openEdge),
+    });
     return (donorId: string) => dist.get(donorId) ?? null;
   }
 
-  return { routeAndBook, loads, priceFrom };
+  function forHauler(openEdge: (laneKey: string) => boolean, factionKey: string | null): RouteBookerFor {
+    return {
+      priceFrom: (sinkId: string) => priceFrom(sinkId, openEdge),
+      routeAndBook: (from: string, to: string, quantity: number) =>
+        routeAndBook(from, to, quantity, factionKey, openEdge),
+    };
+  }
+
+  return { routeAndBook, loads, priceFrom, forHauler };
 }
