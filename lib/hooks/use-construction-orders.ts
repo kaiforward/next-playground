@@ -5,7 +5,7 @@ import { narrowCommandResult } from "@/lib/types/guards";
 import { useCommandMutation, type CommandMutation } from "@/lib/hooks/use-command-mutation";
 import type { OrderBuildInput, AutomationInput } from "@/lib/schemas/construction-orders";
 import type {
-  OrderBuildResult, OrderColonyResult, CancelOrderResult, SetAutomationResult,
+  OrderBuildResult, OrderColonyResult, OrderLaneUpgradeResult, CancelOrderResult, SetAutomationResult,
 } from "@/lib/services/construction-orders";
 
 /**
@@ -19,6 +19,7 @@ import type {
 
 type OrderBuildData = Extract<OrderBuildResult, { ok: true }>["data"];
 type OrderColonyData = Extract<OrderColonyResult, { ok: true }>["data"];
+type OrderLaneUpgradeData = Extract<OrderLaneUpgradeResult, { ok: true }>["data"];
 type CancelOrderData = Extract<CancelOrderResult, { ok: true }>["data"];
 type SetAutomationData = Extract<SetAutomationResult, { ok: true }>["data"];
 
@@ -38,6 +39,16 @@ export function useOrderColony(systemId: string): CommandMutation<void, OrderCol
     const id = crypto.randomUUID();
     return sendCommand({ id, type: "orderColony", payload: { systemId } }).then((message) =>
       narrowCommandResult<OrderColonyData>(message.result),
+    );
+  });
+}
+
+/** Queue a lane-upgrade order for one lane (`orderLaneUpgrade` command). */
+export function useOrderLaneUpgrade(laneKey: string): CommandMutation<{ levels: number }, OrderLaneUpgradeData> {
+  return useCommandMutation((input: { levels: number }) => {
+    const id = crypto.randomUUID();
+    return sendCommand({ id, type: "orderLaneUpgrade", payload: { laneKey, ...input } }).then((message) =>
+      narrowCommandResult<OrderLaneUpgradeData>(message.result),
     );
   });
 }

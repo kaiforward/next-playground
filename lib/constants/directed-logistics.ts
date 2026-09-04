@@ -12,8 +12,15 @@ export const DIRECTED_LOGISTICS = {
    * physical reasons — thin or unreachable stock — never for money. Pricing the budget as a real
    * economic constraint is a separate, open design question; until it is answered this stays high
    * enough that funding-bound outcomes are rare, deliberate signals rather than an ambient brake.
+   *
+   * Re-denominated for lane-priced routing (docs/planned/logistics-lanes.md §2): route cost used to
+   * be hops × HOP_WEIGHT (1.0), typically ~2 hops at the median haul; it is now Σ per-lane fuel cost
+   * × congestion, typically ~2 lanes × ~8.5 fuel/lane ≈ 17 — roughly ×8.5 the old figure. Scaling
+   * the base value by the same ×8.5 keeps aggregate spend at the same small fraction of budget it
+   * held before (still the "rare, deliberate" signal the docstring above promises, not an ambient
+   * brake) rather than silently starving every haul under the new, larger cost.
    */
-  GENERATION_PER_POP: scaleValue(5),
+  GENERATION_PER_POP: scaleValue(5 * 8.5),
   /** A good is a surplus when stock ≥ its warehousing target × this (`classifyMarketState`), and an
    *  ordinary donor gives only once stock clears donorReserve × this (`surplusDrawable`) — both
    *  demand-denominated since the role split; no price-anchor quantity. Margin > 1 leaves a
@@ -91,9 +98,4 @@ export const DIRECTED_LOGISTICS = {
    * hypothesis, validated by simulator A/B only.
    */
   FUNDING_BOUND_RESIDUAL_FRACTION: 0.1,
-  /** Max hops a logistics transfer may span (beyond this, route cost is treated as unreachable). */
-  MAX_HOPS: 4,
-  /** Per-unit route cost = quantity × (hops × HOP_WEIGHT + totalFuelCost × FUEL_WEIGHT). */
-  HOP_WEIGHT: 1.0,
-  FUEL_WEIGHT: 0.1,
 } as const;

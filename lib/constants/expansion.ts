@@ -15,21 +15,20 @@
  * housing's own cost rather than drifting from it.
  */
 export const EXPANSION = {
-  /** Unclaimed systems within this many jumps of a faction's territory (any owned tier) are claim
-   * candidates — leapfrog allowed, bounded for performance. Must be ≤ the tick's hop-BFS radius. */
-  REACH_JUMPS: 3,
+  /** Unclaimed systems exactly this many jumps from a faction's territory (any owned tier) are claim
+   * candidates — adjacency only, no leapfrogging past a nearer unclaimed system to a richer one
+   * further out (docs/planned/logistics-lanes.md §1: claiming grows a faction's border outward one
+   * ring at a time). Must be ≤ the tick's hop-BFS radius. */
+  REACH_JUMPS: 1,
   /** Systems a faction claims per cycle start — small, so the map fills gradually. */
   MAX_CLAIMS_PER_CYCLE: 1,
-  /** Minimum claim score; below it a candidate isn't worth claiming. Permissive — excludes only
-   * zero-substrate systems. Scored on NORMALISED [0,1] substrate terms (`scoreClaimCandidate`), so
-   * the smallest achievable nonzero score is bounded well above float noise: one present resource
-   * type alone (diversity 1/`RESOURCE_TYPES.length` × its 3.0 weight ≈ 0.43) or the smallest
-   * archetype-table `peopleLand` alone (~100 of a galaxy max in the thousands, × its 1.0 weight
-   * ≈ 0.05), each still discounted by proximity at the worst in-reach case
-   * (`REACH_JUMPS` × `proximity` weight ⇒ ×0.4) — both comfortably above 1e-4. Set two orders of
-   * magnitude below that floor so it functions as a pure zero/nonzero gate, robust to future
-   * archetype-table retunes, rather than a near-miss threshold. */
-  SCORE_FLOOR: 0.0001,
+  /** Minimum claim score; below it a candidate isn't worth claiming. Zero — every in-reach candidate
+   * is claimable, including a barren adjacent system with no habitable land or resource deposit at
+   * all: `scoreClaimCandidate` still ranks it last (its substrate terms are both 0), but the floor no
+   * longer excludes it outright. `proposeFactionClaims`'s `>= scoreFloor` filter is kept (rather than
+   * dropped) so a future retune has a named place to reintroduce a floor without touching the filter
+   * itself; at 0 it is a no-op against `scoreClaimCandidate`'s output, which is never negative. */
+  SCORE_FLOOR: 0,
   /** Weights over the NORMALISED [0,1] substrate terms (`peopleLand` ÷ galaxy max, diversity ÷
    * `RESOURCE_TYPES.length` — `scoreClaimCandidate`) and the proximity discount. `proximity` feeds
    * 1 / (1 + proximity × minHops), so nearer candidates outscore equal-substrate distant ones.

@@ -3,7 +3,7 @@
  * colonisation acceptance bar, as opposed to the calibration bars every other analysis module reports.
  *
  * A calibration bar is read and judged; an identity either holds or the bookkeeping is broken. These
- * four are checked over what the run actually recorded, so a founding path that charges a colony
+ * five are checked over what the run actually recorded, so a founding path that charges a colony
  * twice, commits more than a faction holds, loses staged goods between the founder and the colony's
  * ledger, or writes a balance its own itemisation does not explain, fails the gate rather than
  * shifting a number nobody can attribute.
@@ -18,17 +18,20 @@ import type { FactionCycleRecord } from "./treasury-analysis";
 
 type BuildProject = Extract<WorldConstructionProject, { kind: "build" }>;
 type ColonyEstablish = Extract<WorldConstructionProject, { kind: "colony_establish" }>;
+type LaneUpgrade = Extract<WorldConstructionProject, { kind: "lane_upgrade" }>;
 
-/** The queue fields the charter census reads. A union of the two arms rather than one `Pick`, so
+/** The queue fields the charter census reads. A union of the three arms rather than one `Pick`, so
  *  `kind` still narrows to the arm that carries `charterPaid`. */
 export type CharterProjectRow =
   | Pick<BuildProject, "kind">
-  | Pick<ColonyEstablish, "kind" | "id" | "charterPaid">;
+  | Pick<ColonyEstablish, "kind" | "id" | "charterPaid">
+  | Pick<LaneUpgrade, "kind">;
 
 /** The queue fields the staged-goods identity reads, narrowed the same way. */
 export type StagedProjectRow =
   | Pick<BuildProject, "kind">
-  | Pick<ColonyEstablish, "kind" | "systemId" | "stagedManifest">;
+  | Pick<ColonyEstablish, "kind" | "systemId" | "stagedManifest">
+  | Pick<LaneUpgrade, "kind">;
 
 /**
  * Relative tolerance for float accumulation, matching the 1e-9 the rest of the harness compares
@@ -394,9 +397,65 @@ export function checkNetReconciliation(
   };
 }
 
-// ── The four, folded ─────────────────────────────────────────────────────────
+// ── 5. Directed-logistics dispatch drains into credits + in-flight ────────────
 
-/** The pass/fail half of the acceptance bar: four identities and the tolerance they were judged at. */
+/**
+ * Whole-run census for the fifth identity: what directed-logistics dispatched, what the arrivals
+ * stage actually credited, and what is still on the ledger at run end. Both sides are folded from
+ * independent recordings — `dispatchedTotal` from the directed-logistics processor's own dispatch
+ * loop (`TickProcessorResult.logisticsDispatched`), `appliedCreditTotal` from the goods-arrivals
+ * ADAPTER's own market writes (`InMemoryGoodsArrivalsWorld.appliedCreditTotal`), never the
+ * processor's `credited` tally — a credit the adapter silently drops (a destination row missing)
+ * would otherwise vanish from both sides at once and the identity would hold by construction.
+ */
+export interface DispatchDrainCensus {
+  /** Σ quantity debited from a donor at dispatch, every tick, every faction (incl. independents). */
+  dispatchedTotal: number;
+  /** Σ (stock after − stock before) the goods-arrivals adapter actually wrote, over BOTH outbound
+   *  and return-leg credits, every tick. */
+  appliedCreditTotal: number;
+  /** Σ quantity of every `WorldPendingArrival` row (both legs) still in the ledger at run end —
+   *  goods dispatched or bounced back but not yet credited anywhere. */
+  finalInFlight: number;
+}
+
+export function newDispatchDrainCensus(): DispatchDrainCensus {
+  return { dispatchedTotal: 0, appliedCreditTotal: 0, finalInFlight: 0 };
+}
+
+/**
+ * Σ dispatch debits == Σ arrival credits + in-flight.
+ *
+ * Traces one dispatch's whole life: a haul of `D` departs; at arrival, `c` is credited to the
+ * destination and the uncredited remainder `r = D − c` returns as a fresh ledger row; that row
+ * later credits `r` back to the donor. Whether mid-flight or fully settled, `c` (or the row still
+ * pending) plus `r` (or its own still-pending return row) always sums back to `D` — so over the
+ * WHOLE run, Σ dispatched must equal Σ every credit the adapter actually applied plus Σ whatever
+ * quantity is still sitting in the ledger, uncredited, when the run ends.
+ *
+ * Red-proofed by breaking the drain exactly as the spec's premise names it: make `settleArrivals`
+ * fail to remove a settled row so the SAME row is credited twice next tick with no second dispatch
+ * to match it — the extra credit shows up as a residual on the right, not a silently-doubled pass.
+ */
+export function checkDispatchDrain(census: DispatchDrainCensus): IdentityCheck {
+  const left = census.dispatchedTotal;
+  const right = census.appliedCreditTotal + census.finalInFlight;
+  const residual = left - right;
+  return {
+    name: "Σ dispatch debits = Σ arrival credits + in-flight + returned",
+    left,
+    right,
+    residual,
+    pass: withinTolerance(left, right, residual),
+    note:
+      `${left} dispatched vs ${census.appliedCreditTotal} credited (adapter-observed) + ` +
+      `${census.finalInFlight} still in-flight at run end`,
+  };
+}
+
+// ── The five, folded ─────────────────────────────────────────────────────────
+
+/** The pass/fail half of the acceptance bar: five identities and the tolerance they were judged at. */
 export interface ConservationSummary {
   /** Relative tolerance applied to every residual — printed, so a pass is never taken on trust. */
   tolerance: number;
@@ -411,6 +470,7 @@ export interface ConservationInputs {
   /** Per-faction balance before the first tick — the chain checks' opening value. */
   startingBalances: ReadonlyMap<string, number>;
   stagedLedger: StagedLedgerCensus;
+  dispatchDrain: DispatchDrainCensus;
 }
 
 /** One run's identities, labelled by the horizon or experiment that produced them. */
@@ -457,13 +517,14 @@ export function conservationGateFailure(
   return lines.join("\n");
 }
 
-/** Check all four identities, in the order the spec's acceptance section lists them. */
+/** Check all five identities, in the order the spec's acceptance section lists them. */
 export function summariseConservation(inputs: ConservationInputs): ConservationSummary {
   const checks = [
     checkCharterDebits(inputs.charters),
     checkFoundingWithinBalance(inputs.factionCycles, inputs.startingBalances),
     checkStagedLedger(inputs.stagedLedger),
     checkNetReconciliation(inputs.factionCycles, inputs.startingBalances),
+    checkDispatchDrain(inputs.dispatchDrain),
   ];
   return {
     tolerance: CONSERVATION_TOLERANCE,

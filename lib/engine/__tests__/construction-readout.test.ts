@@ -268,6 +268,33 @@ describe("computeFactionConstruction", () => {
     expect(r.all.map((row) => row.origin)).toEqual(["auto", "player"]);
     expect(r.all.every((row) => row.kind === "build" && row.buildingType === "housing")).toBe(true);
   });
+
+  it("counts a lane project's work in the faction's queue: it absorbs pool and appears in `all`", () => {
+    // One developed system, pool == cap (4): the lane project alone in the queue must absorb the
+    // whole pool exactly as an ordinary build would — proving fundQueue (which `all`'s ETA/nextCycleGain
+    // come from) is not silently skipping it.
+    const oneSystem: ConstructionSystemInfo[] = [
+      { id: "dev1", name: "Vela Prime", control: "developed", population: 80, buildings: {} },
+    ];
+    const laneOnly: WorldConstructionProject[] = [
+      { kind: "lane_upgrade", id: "lane1", origin: "auto", factionId: "f1", laneKey: "dev1|dev2", levels: 2, workTotal: 16, workDone: 0 },
+    ];
+    const r = computeFactionConstruction(laneOnly, oneSystem, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4, founded());
+    expect(r.pool).toBeCloseTo(4, 6);
+    expect(r.all).toHaveLength(1);
+    const row = r.all[0];
+    expect(row.kind).toBe("lane_upgrade");
+    if (row.kind !== "lane_upgrade") throw new Error("fixture: expected the lane row");
+    expect(row.laneKey).toBe("dev1|dev2");
+    expect(row.laneLabel).toBe("Vela Prime ↔ dev2"); // unknown endpoint falls back to its raw id
+    expect(row.nextCycleGain).toBe(4); // absorbs the whole pool, exactly like an ordinary build
+    expect(row.workUnit).toBeCloseTo(8, 6); // workTotal(16) / levels(2) — one level's work
+    // Neither per-system bucket sees it (no single system to bucket into), but the funded front does.
+    expect(r.buildOut).toHaveLength(0);
+    expect(r.expansion).toHaveLength(0);
+    expect(r.fundedFront).toHaveLength(1);
+    expect(r.fundedFront[0].kind).toBe("lane_upgrade");
+  });
 });
 
 describe("computeFactionConstruction — why a founding is stuck", () => {

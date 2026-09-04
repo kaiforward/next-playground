@@ -158,7 +158,7 @@ describe("getFactionConstruction — command summary", () => {
     const home = w.factions.find((f) => f.id === pid)!.homeworldId;
     orderBuild({ systemId: home, buildingType: HOUSING_TYPE, levels: 1 });
     const data = getFactionConstruction(pid);
-    expect(data.automation).toEqual({ build: true, colonisation: true });
+    expect(data.automation).toEqual({ build: true, colonisation: true, lanes: true });
     expect(data.buildSystems.some((s) => s.systemId === home && s.count >= 1)).toBe(true);
     expect(data.orderedCount).toBeGreaterThanOrEqual(1);
     // An AI faction reports no switches.

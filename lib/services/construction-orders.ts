@@ -7,23 +7,17 @@
  * HTTP handler mid-tick — these synchronous mutations are strictly ordered between ticks and the
  * open set they append to is exactly what the next directed-build cycle funds.
  */
-import { getWorld, hasWorld, setWorld } from "@/lib/world/store";
-import type { World, WorldSystem, WorldBuildProject, WorldColonyEstablishProject, WorldConstructionProject, WorldMarket } from "@/lib/world/types";
+import { setWorld } from "@/lib/world/store";
+import type { World, WorldSystem, WorldBuildProject, WorldColonyEstablishProject, WorldConstructionProject, WorldLaneUpgradeProject, WorldMarket } from "@/lib/world/types";
 import { computeBuildOptions, buildSiteFromSystem } from "@/lib/engine/build-options";
 import { sizeColonyEstablish, queuedBuildLevelsAt } from "@/lib/engine/directed-build";
 import { buildingsBySystem } from "@/lib/services/world-index";
 import { BUILDING_TYPES } from "@/lib/constants/industry";
 import { colonyEligibility, sizingParams } from "@/lib/services/colony-eligibility";
 import { COLONY_BLOCK_COPY } from "@/lib/types/colonisation";
-
-type Seat = { world: World; factionId: string };
-
-function requireSeat(): Seat | { error: string } {
-  if (!hasWorld()) return { error: "No world loaded." };
-  const world = getWorld();
-  if (!world.player) return { error: "This world has no player seat." };
-  return { world, factionId: world.player.controlledFactionId };
-}
+import { laneInvestor } from "@/lib/engine/lanes";
+import { LANES } from "@/lib/constants/lanes";
+import { requireSeat, type Seat } from "@/lib/services/player-seat";
 
 function playerSystem(seat: Seat, systemId: string): WorldSystem | { error: string } {
   const system = seat.world.systems.find((s) => s.id === systemId);
@@ -165,6 +159,78 @@ export function orderColony(input: { systemId: string }): OrderColonyResult {
   return { ok: true, data: { projectId: project.id } };
 }
 
+/**
+ * The reason a lane order is refused: the first endpoint that is unclaimed, else the first that
+ * belongs to a different faction. `laneInvestor` already treats both as "no investor" — this just
+ * names which one, and for which system, so the refusal reads as a place the player can act on.
+ */
+function laneRefusalReason(aSystem: WorldSystem, bSystem: WorldSystem, factionId: string): string {
+  for (const system of [aSystem, bSystem]) {
+    if (system.factionId === null) return `${system.name} is unclaimed.`;
+  }
+  for (const system of [aSystem, bSystem]) {
+    if (system.factionId !== factionId) return `${system.name} is not yours.`;
+  }
+  return "You do not control this lane.";
+}
+
+export type OrderLaneUpgradeResult =
+  | { ok: true; data: { projectId: string; levels: number } }
+  | { ok: false; error: string };
+
+/**
+ * Queue `levels` whole upgrade levels on the undirected lane `laneKey` — refused unless the player
+ * is the lane's investor (`laneInvestor`, `lib/engine/lanes.ts`: controls both endpoints at
+ * control ≥ controlled). Batches onto a standing `origin: "player"` row for the same lane exactly
+ * as `orderBuild` batches onto a (system, buildingType) row.
+ */
+export function orderLaneUpgrade(input: { laneKey: string; levels: number }): OrderLaneUpgradeResult {
+  const seat = requireSeat();
+  if ("error" in seat) return { ok: false, error: seat.error };
+  const lane = seat.world.lanes.find((l) => l.key === input.laneKey);
+  if (!lane) return { ok: false, error: `Unknown lane: ${input.laneKey}` };
+  const aSystem = seat.world.systems.find((s) => s.id === lane.aId);
+  const bSystem = seat.world.systems.find((s) => s.id === lane.bId);
+  if (!aSystem || !bSystem) return { ok: false, error: `Unknown lane: ${input.laneKey}` };
+
+  const investor = laneInvestor(lane, (systemId) => {
+    const system = systemId === aSystem.id ? aSystem : bSystem;
+    return { factionId: system.factionId, control: system.control };
+  });
+  if (investor !== seat.factionId) {
+    return { ok: false, error: laneRefusalReason(aSystem, bSystem, seat.factionId) };
+  }
+
+  // Batching: a repeat order extends the standing player row for this lane — same ledger row,
+  // growing workTotal, keeping its queue position and accrued work.
+  const existing = seat.world.constructionProjects.find(
+    (p): p is WorldLaneUpgradeProject =>
+      p.kind === "lane_upgrade" && p.origin === "player" && p.laneKey === input.laneKey,
+  );
+  if (existing) {
+    const levels = existing.levels + input.levels;
+    const workTotal = existing.workTotal + input.levels * LANES.UPGRADE_WORK_PER_LEVEL;
+    const constructionProjects = seat.world.constructionProjects.map((p) =>
+      p.id === existing.id ? { ...existing, levels, workTotal } : p,
+    );
+    setWorld({ ...seat.world, constructionProjects });
+    return { ok: true, data: { projectId: existing.id, levels } };
+  }
+
+  const project: WorldLaneUpgradeProject = {
+    kind: "lane_upgrade",
+    id: mintProjectId(seat.world),
+    factionId: seat.factionId,
+    origin: "player",
+    laneKey: input.laneKey,
+    levels: input.levels,
+    workTotal: input.levels * LANES.UPGRADE_WORK_PER_LEVEL,
+    workDone: 0,
+  };
+  commitNewProject(seat, project);
+  return { ok: true, data: { projectId: project.id, levels: project.levels } };
+}
+
 export type CancelOrderResult =
   | { ok: true; data: { projectId: string } }
   | { ok: false; error: string };
@@ -219,15 +285,19 @@ export function cancelOrder(input: { projectId: string }): CancelOrderResult {
 }
 
 export type SetAutomationResult =
-  | { ok: true; data: { build: boolean; colonisation: boolean } }
+  | { ok: true; data: { build: boolean; colonisation: boolean; lanes: boolean } }
   | { ok: false; error: string };
 
-export function setAutomation(input: { build: boolean; colonisation: boolean }): SetAutomationResult {
+/**
+ * Set the player's per-domain autonomic switches. Spreads onto the existing object rather than
+ * rebuilding it from `input` alone — the fix for a domain silently dropping whenever a future
+ * automation field is added without every caller learning about it in the same change.
+ */
+export function setAutomation(input: { build: boolean; colonisation: boolean; lanes: boolean }): SetAutomationResult {
   const seat = requireSeat();
   if ("error" in seat) return { ok: false, error: seat.error };
-  const player = seat.world.player;
-  if (!player) return { ok: false, error: "This world has no player seat." };
-  const automation = { build: input.build, colonisation: input.colonisation };
+  const { player } = seat;
+  const automation = { ...player.automation, ...input };
   setWorld({ ...seat.world, player: { ...player, automation } });
   return { ok: true, data: automation };
 }

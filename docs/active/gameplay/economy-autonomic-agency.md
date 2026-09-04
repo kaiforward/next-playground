@@ -15,7 +15,7 @@
 > [player-seat.md](./player-seat.md). Both mechanisms are also treasury-funded: the owning faction's
 > latched funded fraction scales what share of each pool's physical throughput runs — money is fuel,
 > never a source of capacity above the physical ceilings this doc specifies (see
-> [player-seat-purse.md](../../planned/player-seat-purse.md)). The personal trade-logistics layer
+> [player-seat-purse.md](./player-seat-purse.md)). The personal trade-logistics layer
 > (marketplace arbitrage, bounties) is retired with the pivot.
 
 ---
@@ -168,23 +168,28 @@ in the systems that produce it. Population-scaled, then scaled again by the fact
 `funded.logistics` fraction (upgrade-multiplied later). It is a **rate, not a stock** — a fresh pool each
 cycle, no carry-over.
 
-**Work = quantity × route cost**, where route cost combines hop count and total fuel cost along the path.
-This one choice does triple duty:
+**Work = quantity × route cost**, where route cost is the sum of each crossed lane's fuel cost, each
+priced by a congestion multiplier bounded above by a stated constant (`LANES.CONGESTION_MAX`, ~3×) that
+rises with how loaded the lane already is. This one choice does triple duty:
 
 1. **Limiter** — match until the pool is spent, then stop; the pool is a hard capacity ceiling on hauling.
 2. **Logistics unit** — population-scaled, treasury-funded (`funded.logistics`).
-3. **Distance-as-cost** — near deficits are cheap, distant ones expensive, so the matcher feeds nearby
-   suppliable systems and leaves the stranded few unfed, exactly as designed, with no money model.
+3. **Distance-as-cost** — near deficits are cheap, distant ones expensive, and a loaded lane grows
+   costlier still, so the matcher feeds nearby suppliable systems and leaves the stranded few unfed,
+   exactly as designed, with no money model.
 
 ### The matching engine
 
 Per faction, per cycle: rank deficits worst-first (shortfall × the draw figure), and for each, collect
-the reachable same-faction donors of that good with drawable stock within the hop budget and draw from
-them in **per-unit route-cost order** — `min(remaining shortfall, donor drawable, remaining pool /
-route cost)` from each in turn — until the shortfall is met, the donors are exhausted, or the pool is
-spent. One flow row per donor→deficit draw. The donor never drops below its own retained cover — the
-demand reserve for an ordinary holder, the export reserve for a structural producer — so moving goods
-never creates a new deficit. Deficits left unserved — pool spent, or no drawable stock in reach — are
+every same-faction donor of that good with drawable surplus reachable over open lanes — own, unclaimed,
+or friendly-or-allied space, no distance limit — and draw from them in **per-unit route-cost order** —
+`min(remaining shortfall, donor drawable, remaining pool / route cost)` from each in turn. An unaffordable
+draw ends only that deficit's fill, not the whole matching pass — the next deficit in the queue is still
+tried against the same pool. One flow row per donor→deficit draw. The donor never drops below its own
+retained cover — the demand reserve for an ordinary holder, the export reserve for a structural producer
+— so moving goods never creates a new deficit. The sink test reads standing stock plus what is already
+scheduled to arrive, so a delivery already dispatched does not order a second one; the donor test stays
+on physical stock alone. Deficits left unserved — pool spent, or no drawable stock in reach — are
 the residual. A deficit is recorded **funding-bound** only when the budget stopped a draw *and* the
 shortfall still standing exceeds 10% of the original (`FUNDING_BOUND_RESIDUAL_FRACTION`): the flag
 suppresses the build planner's capacity proposals and exempts producers from idle decay, so it must
@@ -197,17 +202,24 @@ price-anchor donor rule (~9 points at one measured seed, cover medians and every
 parity) — an accepted cost, on the record with its measurements in #212. The structural answer
 belongs to colonisation pacing and globally-aware production planning, not to the donor rule.
 
-### Silent application
+### Dispatch and arrival
 
-A matched transfer applies its stock deltas on the cycle boundary (`from −= q`, `to += q`, both
-band-clamped) and appends a **`TradeFlow` row tagged `flowType: "logistics"`**. There is no business
-object, no claimable mission, no money — the visible artifact is the flow arc on the map. (The earlier
-"expose a fraction as claimable Contracts" design was built then **ditched** before merge: discrete
-claimable trade missions are the wrong primitive for multiplayer. The player layer is being reworked into
-a bounty / surfaced-marketplace model after a global economy scale-up — see the scaling-rework doc.)
+A matched transfer is not instant: dispatch debits the donor's stock and writes a row onto the
+scheduled-freight ledger (`WorldPendingArrival`), booked onto every lane it crosses; the unconditional
+per-tick goods-arrivals stage drains that ledger, crediting the destination (band-clamped) when a haul's
+transit time is up and appending the **`TradeFlow` row tagged `flowType: "logistics"`** at that point. A
+credit that would overshoot the destination's band cap returns the uncredited remainder to the donor as a
+fresh leg over the reversed route, crediting it in full on arrival. There is no business object, no
+claimable mission, no money at the player layer — the visible artifact is the flow arc on the map. (The
+earlier "expose a fraction as claimable Contracts" design was built then **ditched** before merge:
+discrete claimable trade missions are the wrong primitive for multiplayer. The player layer is being
+reworked into a bounty / surfaced-marketplace model after a global economy scale-up — see the
+scaling-rework doc.)
 
-Routes are derived on demand and respect *current* topology — if a lane on the path is severed, the
-transfer fails. Only matched transfers are pathed (bounded by the pool), never all-pairs.
+Routes are booked against *current* lane capacity and congestion — a haul that exceeds the remaining
+capacity on its cheapest path ships what it can and re-routes the remainder over the next-cheapest path,
+repeating until placed or no path remains. Only matched transfers are pathed (bounded by the pool), never
+all-pairs.
 
 ---
 
@@ -360,8 +372,9 @@ on the boundary tick (`tick % interval === 0`); each processor scales its per-cy
 `catchUpFactor(interval)`, so the wall-clock rate is invariant to the interval at any universe scale. Two
 processors join the tick pipeline:
 
-- **`directedLogistics`** (`dependsOn: economy`) — classify markets, match surplus→deficit, apply silent
-  stock deltas + `logistics` flow rows.
+- **`directedLogistics`** (`dependsOn: economy`) — classify markets, match surplus→deficit, dispatch
+  debits the donor and writes the scheduled-freight ledger (goods-arrivals credits the destination and
+  writes the `logistics` flow row on arrival).
 - **`directedBuild`** (`dependsOn: directed-logistics`) — on the same cycle start, before its build
   step, each faction runs one **claim** and one **develop** step to grow its territory (see the
   [faction-system](./faction-system.md#territorial-expansion-claim-and-develop) control-flag model):
@@ -406,8 +419,8 @@ a visible residual of unserved deficits remains. Validated in the simulator firs
 ## Scope boundaries
 
 **In:** the logistics work-budget (per-system generation → faction pool, work = qty × route cost); the
-shared deficit/surplus/self-supply classification; greedy surplus→deficit matching with silent stock moves
-+ `logistics` flow rows; proactive housing (fed-and-calm, paced ahead of population, capped at habitable
+shared deficit/surplus/self-supply classification; greedy surplus→deficit matching over lane-routed,
+congestion-priced hauls, scheduled to arrive and write `logistics` flow rows; proactive housing (fed-and-calm, paced ahead of population, capped at habitable
 land); rate-deficit-driven, labour-gated industry builds (whole-level spare-labour gate; the planner
 proposes toward the physical ceilings, and the per-faction construction throughput pool alone paces the
 committed queue); both processors on their own cycle start.
@@ -416,7 +429,7 @@ committed queue); both processors on their own cycle start.
 - **Player trade layer** — the ditched claimable-Contract design; **retired entirely by the grand-strategy
   pivot** (personal trading is cut; the deleted scaling-rework doc's bounty/marketplace fork is moot).
 - **Treasury & money beyond funding the pools** — the budget is still a physical work allowance, not a
-  cost; treasury funding now scales it (see [player-seat-purse.md](../../planned/player-seat-purse.md)),
+  cost; treasury funding now scales it (see [player-seat-purse.md](./player-seat-purse.md)),
   but the logistics-efficiency band and the "faction prefers a player did it" payout asymmetry remain
   deferred → [player-seat-roadmap.md](../../planned/player-seat-roadmap.md).
 - **Route consequences** — per-system transit cost, event/revolt blocking, cargo damage, visible
@@ -433,8 +446,8 @@ committed queue); both processors on their own cycle start.
 
 ## Open calibration knobs (all simulator-tunable)
 
-- Logistics: the budget generation rate; surplus/deficit margins; hop budget / max logistics distance; the
-  hop-vs-fuel blend in route cost.
+- Logistics: the budget generation rate; surplus/deficit margins; the lane constants (`LANES` in
+  `lib/constants/lanes.ts` — base capacity, congestion ceiling, freight speed, upgrade work).
 - Build: `settleMargin` (housing headroom ahead of population); the `fed()` survival gate
   (`SHORTAGE_SATISFACTION`); `CONSTRUCTION.THROUGHPUT_PER_POP` and the per-build absorption cap (construction
   pace); `CONSTRUCTION.POINTS_PER_LEVEL` / `PAYBACK_HORIZON` / `BACKLOG_WINDOW` (Construction Centre

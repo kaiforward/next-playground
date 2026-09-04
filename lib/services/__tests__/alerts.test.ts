@@ -88,7 +88,9 @@ function withBuildings(
     ],
     // A spare system carries no construction projects at world-gen, but clearing them keeps the
     // headroom fixtures below independent of anything world-gen may queue there later.
-    constructionProjects: world.constructionProjects.filter((p) => !replaced.has(p.systemId)),
+    constructionProjects: world.constructionProjects.filter(
+      (p) => p.kind === "lane_upgrade" || !replaced.has(p.systemId),
+    ),
   };
 }
 
@@ -577,7 +579,7 @@ describe("getAlertData", () => {
           { systemId: target, buildingType: "housing", count: 3, idleCycles: 0 },
         ],
         constructionProjects: [
-          ...withTarget.constructionProjects.filter((p) => p.systemId !== target),
+          ...withTarget.constructionProjects.filter((p) => p.kind === "lane_upgrade" || p.systemId !== target),
           queuedFactory,
         ],
       };
@@ -628,7 +630,7 @@ describe("getAlertData", () => {
           { systemId: target, buildingType: "housing", count: 5, idleCycles: 0 },
         ],
         constructionProjects: [
-          ...withTarget.constructionProjects.filter((p) => p.systemId !== target),
+          ...withTarget.constructionProjects.filter((p) => p.kind === "lane_upgrade" || p.systemId !== target),
           queuedHousing,
         ],
       };

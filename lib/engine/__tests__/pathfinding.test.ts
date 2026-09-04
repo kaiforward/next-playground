@@ -4,6 +4,8 @@ import {
   findReachableSystems,
   validateRoute,
   boundedHopsFromOrigin,
+  dijkstra,
+  buildFuelAdjacency,
 } from "../pathfinding";
 import type { ConnectionInfo } from "../navigation";
 
@@ -234,5 +236,25 @@ describe("boundedHopsFromOrigin", () => {
     const hops = boundedHopsFromOrigin("Z", connections, 4);
     expect(hops.get("Z")).toBe(0);
     expect(hops.size).toBe(1);
+  });
+});
+
+// ── dijkstra (exported) — vacuity check: no edgeCost hook behaves exactly as before ─────
+
+describe("dijkstra (exported, no edgeCost hook)", () => {
+  it("matches findShortestPath's own settled distances for every ship-navigation fixture above", () => {
+    const adj = buildFuelAdjacency(connections);
+    const { dist } = dijkstra("sol", adj);
+    expect(dist.get("alpha_centauri")).toBe(10);
+    expect(dist.get("proxima")).toBe(17);
+    expect(dist.get("barnard")).toBe(16);
+  });
+
+  it("still honours maxFuel and stopAt with no edgeCost hook", () => {
+    const adj = buildFuelAdjacency(connections);
+    const limited = dijkstra("sol", adj, { maxFuel: 10 });
+    expect(limited.dist.has("proxima")).toBe(false);
+    const stopped = dijkstra("sol", adj, { stopAt: "arcturus" });
+    expect(stopped.dist.get("arcturus")).toBe(7);
   });
 });

@@ -3,6 +3,7 @@ import {
   newCharterCensus, recordCharterCensus, checkCharterDebits, checkFoundingWithinBalance,
   newStagedLedgerCensus, recordStagedLedger, checkStagedLedger, checkNetReconciliation,
   summariseConservation, CONSERVATION_TOLERANCE, withinTolerance, conservationGateFailure,
+  newDispatchDrainCensus, checkDispatchDrain,
 } from "../conservation-analysis";
 import type {
   CharterProjectRow, StagedProjectRow, IdentityCheck, ConservationSummary,
@@ -100,6 +101,16 @@ describe("charter census", () => {
     const census = newCharterCensus();
     recordCharterCensus([{ kind: "build" }, { kind: "build" }], census);
     expect(checkCharterDebits(census)).toMatchObject({ left: 0, right: 0, pass: true });
+  });
+
+  it("ignores lane_upgrade projects — a third arm the `kind` narrow still excludes correctly", () => {
+    const census = newCharterCensus();
+    recordCharterCensus(
+      [{ kind: "lane_upgrade" }, establish("p1", true)],
+      census,
+    );
+    const check = checkCharterDebits(census);
+    expect(check).toMatchObject({ left: 1, right: 1, pass: true });
   });
 });
 
@@ -264,7 +275,7 @@ describe("staged goods vs founder draws", () => {
 
   it("passes when every open colony's ledger matches what its draws took", () => {
     const check = sample(
-      [staged("c1", [40, 60]), staged("c2", [25]), { kind: "build" }],
+      [staged("c1", [40, 60]), staged("c2", [25]), { kind: "build" }, { kind: "lane_upgrade" }],
       new Map([["c1", totals(100)], ["c2", totals(25)]]),
     );
     expect(check.left).toBeCloseTo(125, 9);
@@ -535,22 +546,55 @@ describe("balance delta vs net", () => {
   });
 });
 
+describe("checkDispatchDrain", () => {
+  it("passes when dispatched equals credited plus in-flight", () => {
+    const census = newDispatchDrainCensus();
+    census.dispatchedTotal = 100;
+    census.appliedCreditTotal = 70;
+    census.finalInFlight = 30;
+    const check = checkDispatchDrain(census);
+    expect(check.pass).toBe(true);
+    expect(check.residual).toBe(0);
+  });
+
+  it("passes on a silent zero-flow run — never NaN", () => {
+    const check = checkDispatchDrain(newDispatchDrainCensus());
+    expect(check.pass).toBe(true);
+    expect(Number.isFinite(check.residual)).toBe(true);
+  });
+
+  it("fails when the adapter double-credits a row the drain never removed", () => {
+    // Red-proof: a broken `settleArrivals` that fails to remove a settled row lets the SAME
+    // credit apply twice with no matching second dispatch — exactly the residual this identity
+    // exists to catch.
+    const census = newDispatchDrainCensus();
+    census.dispatchedTotal = 100;
+    census.appliedCreditTotal = 170; // 100 credited once, plus a duplicate 70-unit re-credit
+    census.finalInFlight = 0;
+    const check = checkDispatchDrain(census);
+    expect(check.pass).toBe(false);
+    expect(check.residual).toBe(-70);
+  });
+});
+
 describe("summariseConservation", () => {
   const emptyInputs = {
     charters: newCharterCensus(),
     factionCycles: [],
     startingBalances: new Map<string, number>(),
     stagedLedger: newStagedLedgerCensus(),
+    dispatchDrain: newDispatchDrainCensus(),
   };
 
-  it("reports all four identities, in the order the spec lists them", () => {
+  it("reports all five identities, in the order the spec lists them", () => {
     const summary = summariseConservation(emptyInputs);
-    expect(summary.checks).toHaveLength(4);
+    expect(summary.checks).toHaveLength(5);
     expect(summary.checks.map((c) => c.name)).toEqual([
       "charter debits == chartered colonies",
       "founding committed <= opening balance",
       "staged goods == drawn from founders",
       "balance delta == net (income - paid - founding)",
+      "Σ dispatch debits = Σ arrival credits + in-flight + returned",
     ]);
     expect(summary.tolerance).toBe(CONSERVATION_TOLERANCE);
     expect(summary.allPass).toBe(true);

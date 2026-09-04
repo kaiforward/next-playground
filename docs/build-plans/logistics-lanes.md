@@ -260,6 +260,551 @@ survive the map-gen branch, with the owner decisions taken on them (2026-09-03):
   lanes and the knob has no felt effect until lane investment exists; revisit only if the
   lane-mechanics sim shows lane density changes play.
 
+## Build plan — lane-mechanics sub-project
+
+Sub-project 2 of the spec (`docs/planned/logistics-lanes.md` §1–4, §6–8, plus the map-gen plan's
+"Carried into…" items above). Branch: `feat/lane-mechanics` off `shared/logistics-lanes`. Phases
+are check-in pauses. **PR shape (proposal):** two sub-PRs into `shared/logistics-lanes` — the
+mechanics (Tasks 1–11, Gate B; sim-verifiable on their own) and the surfaces (Gate C, Tasks 12–15;
+prototype-gated) — because the UI needs an approved prototype between them and the mechanics can
+be reviewed while the prototype is being looked at. One PR if the owner prefers.
+
+### Resolution — every measure to its producer
+
+| Measure (spec prose) | State | Producer |
+|---|---|---|
+| lane level (float ≥ 0), one row per undirected pair | new | Task 1 `WorldLane.level`; generation writes 0 |
+| `capacity(level) = BASE_LANE_CAPACITY × (1 + level)` | new | Task 1 `laneCapacity` + `LANES.BASE_LANE_CAPACITY` (volume per reference cycle, `scaleValue`-denominated like `GENERATION_PER_POP`, `lib/constants/directed-logistics.ts:16`) |
+| capacity scaled by `catchUpFactor(LOGISTICS_INTERVAL)` at booking | exists | `catchUpFactor` (`lib/tick/shard.ts`), the processor's `catchUp` (`lib/tick/processors/directed-logistics.ts:90`); Task 5 passes it to the booker |
+| per-run booked load (resets each run) | new | Task 2 computes per booker; Task 5 persists on `WorldLane.bookedLoad` |
+| capacity-blocked volume, on the first saturated edge of the cheapest path | new | Task 2 `RouteBooking.blocked`; Task 5 persists `WorldLane.blockedVolume` |
+| attempted load = booked + blocked (decay input) | new | Task 6 reads the two Task-5 fields |
+| investability: faction controls both endpoints (`control ≥ controlled`) | exists (fields `lib/world/types.ts:104-106`) | Task 1 `laneInvestor` |
+| route cost = Σ edge `fuelCost` × bounded congestion multiplier; full edge excluded | new | Task 2 (`fuelCost` exists, `lib/world/types.ts:445`; `CONGESTION_MAX` Task 1) |
+| prices frozen within one deficit's fan-out, live across deficits | new | Task 2 booker contract (one search per deficit at the moment the queue reaches it) |
+| work-budget price = quantity × route cost | exists (`lib/engine/directed-logistics.ts:332-344` per-unit sort, `:355-359` cost) | Task 4 keeps the formula on the booker's `perUnit` |
+| per-deficit skip replacing the run-terminating clamp | new | Task 4 (replaces `budget = 0; break`, `lib/engine/directed-logistics.ts:375-379`) |
+| `GENERATION_PER_POP` re-denominated so spend keeps today's small fraction | exists (`lib/constants/directed-logistics.ts:8-16`) | Task 5 (value chosen at Gate B from the measured spend fraction) |
+| `MAX_HOPS` / `HOP_WEIGHT` / `FUEL_WEIGHT` deleted | exists (`lib/constants/directed-logistics.ts:94-98`; readers `lib/world/tick.ts:1610,1627`) | Task 5 |
+| traversable: own + unclaimed + friendly-or-allied holder | new predicate over existing data | Task 5 `laneOpenFor` (`getRelationTier(score)`, `lib/constants/relations.ts:143-156`; ownership `factionId`) |
+| faction match order: faction id ascending, pooled booking | new | Task 5 (the `null` group last — decided 2026-09-03; moot today, every system belongs to a faction) |
+| `arrival = now + max(0, round(Σ path fuelCost / FREIGHT_SPEED))` | new | Task 3 `freightArrivalTick`; `FREIGHT_SPEED` Task 1 |
+| scheduled inbound per (system, good) | new | Task 3 `scheduledInbound` over the ledger; Task 4 consumes at the sink test |
+| dispatch sizing against `maxStock − stock − scheduled inbound` | exists cap (`marketBandForRow(...).maxStock`, processor `:177-181`) | Task 5 adds the inbound term at the transfer clamp |
+| arrival credit up to band cap; remainder = return leg toward donor | new | Task 3 arrivals stage |
+| flow row emitted at arrival with credited quantity | exists shape (`ArrivalFlowInsert`) | Task 3 stage writes it; Task 5 stops the dispatch-time write |
+| interdiction query "flows crossing edge E in [t₁,t₂]" | new | Task 3 `flowsCrossingEdge` (no consumer this pass) |
+| lane upkeep = own term summed into `bills.maintenance` | new | Task 6 `laneUpkeepWork`; priced by the existing `maintenanceRatePerWork` (`lib/tick/processors/treasury.ts:134-138`) |
+| lane decay: idle buffer + whole-level-unused + reset-on-use | exists shape (`idleLevels` `lib/engine/infrastructure-decay.ts:95-96`, hysteresis `:130-137`) | Task 6 `decayLanes`, `LANES.IDLE_BUFFER_CYCLES` Task 1 |
+| lane-upgrade project in the committed queue, `origin` tagged | exists queue (`world.constructionProjects`, `orderOpenProjects` `lib/engine/construction.ts:312`) | Task 7 `kind: "lane_upgrade"` |
+| project dropped when an endpoint stops satisfying investability | exists site (`dropAbandonedBuildProjects`, `lib/world/tick.ts:1028-1034`) | Task 7 extends it |
+| effective level = built + queued | exists pattern (`queuedBuildLevelsBySystem`, `lib/engine/directed-build.ts:325-334`) | Task 8 `planLaneUpgradeProposals`'s own in-flight set |
+| no further proposal while an upgrade is open | exists pattern (colony in-flight gate, `lib/engine/directed-build.ts:1570-1574`) | Task 8 |
+| planner value = blocked volume the upgrade unblocks | new | Task 8 (`WorldLane.blockedVolume`, Task 5) on the existing ROI order (`orderProposals`, `construction.ts:355`) |
+| AI claiming: adjacent candidates, score floor softened | exists (`proposeFactionClaims` `lib/engine/expansion.ts:81-92`; `EXPANSION.REACH_JUMPS`/`SCORE_FLOOR`, `lib/constants/expansion.ts:20-28` — spec's `MIN_CLAIM_SCORE` is `SCORE_FLOOR` in code) | Task 8 |
+| player claim: adjacent, free, one per `PLAYER_CLAIM_COOLDOWN` cycles | new | Task 9 (`LANES.PLAYER_CLAIM_COOLDOWN` Task 1; `world.player.lastClaimTick` Task 9) |
+| `world.player.automation.lanes` | exists shape (five sites: `lib/world/types.ts:49`, `lib/types/api.ts:368`, `lib/schemas/construction-orders.ts:12`, `lib/world/gen.ts:242` (the spec's `:226` is drifted), `lib/services/construction-orders.ts:225-233`) | Task 9 |
+| `stockChange` over the whole cycle, not one tick | exists (snapshot `lib/world/tick.ts:1377-1386`, write `:1906-1916`, cadence caveat in the field docstring `lib/world/types.ts:539-548`; clear `:1005-1018`; sole reader `lib/services/alerts.ts:420-421`) | Task 10 persisted baseline |
+| "Survival stock falling" instance count before/after | new | Task 11 (harness has no seat — `categories: []`; the rule is folded galaxy-wide) |
+| per-lane utilisation distribution, top-decile flow share (real), in-transit volume, blocked volume | new | Task 11 `summariseLanes` |
+| deficit spell-length distribution on PHYSICAL stock | new in harness (instrument shape: `temp/lane-premise-diag.ts` `spellStats`) | Task 11 |
+| funding-bound market count | exists (`fundingBoundCensus`, `lib/tick-harness/logistics-analysis.ts:57`) | read at Gate B |
+| post-clamp skipped-deficit count | new | Task 4 `TransferMatchResult.budgetSkipped`; Task 11 sums |
+| contention-attributable unserved shortfall (first-mover read) | new | Task 2 `blocked[].foreignShare`; Task 11 folds per faction |
+| queued lane levels vs realised load (overshoot watch) | new | Task 11 from open projects + lane rows |
+| logistics wall-clock median and share of tick | new | Task 11 `TickInstrumentation.stageMs` (orchestrator-side timing, calibration-only like every other instrumentation field) |
+| goods-mass identity Σ dispatch debits = Σ arrival credits + in-flight + returned | new | Task 11 fifth identity, two independently-recorded sides |
+| zero-latency arm; faction-blind traversability arm | new | Task 11 `HarnessConfig.freightSpeed` / `.laneTraversal` threaded through `runWorldTick` opts like `drawBrakeCeiling` (`lib/world/tick.ts:1228`) |
+| overshoot read (deliveries landing above target) | new | Task 3 stage instrumentation; Task 11 sums |
+| lane state on the map: level, load vs capacity, in-flight | new | Task 12 `getLaneStates` slice |
+| in-transit rows with ETA on the Logistics tab | new | Task 13 (`SystemLogisticsData` gains transit rows; durations via `formatDuration`) |
+
+### Task 1 — Lane rows, lane constants, lane engine
+
+Files: `lib/world/types.ts` (`WorldLane`, `World.lanes`), `lib/world/gen.ts` (one row per undirected
+pair at level 0, beside the connections mapper `:189-193`), `lib/world/save.ts` (version bump — saves break, pre-1.0 policy), `lib/types/guards.ts`
+(save spot-check if the world guard enumerates collections), `lib/constants/lanes.ts` (new),
+`lib/engine/lanes.ts` (new), `lib/engine/__tests__/lanes.test.ts` (new). The generator's private index-keyed `laneKey`
+(`lib/engine/universe-gen.ts:425`) is a generation-time helper over array indices, not this key —
+rename it `pairKey` there so two `laneKey`s do not coexist.
+Interface: `WorldLane { key: string; aId: string; bId: string; level: number; bookedLoad: number;
+blockedVolume: number; idleCycles: number }` — `key` is the sorted `"a|b"` pair, the same key
+`buildOpenEdges` uses (`lib/tick/world/trade-flow-topology.ts`). `LANES = { BASE_LANE_CAPACITY,
+CONGESTION_MAX, FREIGHT_SPEED, UPGRADE_WORK_PER_LEVEL, IDLE_BUFFER_CYCLES, PLAYER_CLAIM_COOLDOWN }`
+— every value a proposal with its rationale docstring; `CONGESTION_MAX` carries the spec's ~3×.
+`laneKey(a, b): string`; `laneCapacity(level): number`; `laneInvestor(lane, ownerOf: (systemId) =>
+{ factionId, control }): string | null` (the faction controlling both endpoints, else null).
+Proves: two generated lanes never share a key and every connection pair has exactly one lane row
+(both directions collapse to one); `laneKey` is order-independent; `laneInvestor` returns null when
+one endpoint is unclaimed, when the endpoints belong to different factions, and when either is below
+`controlled`; capacity at level 0 is the baseline and strictly rises with level; a world with lanes
+round-trips `serialiseWorld`/`deserialiseWorld` byte-identical and a pre-bump save is refused.
+Consumes: nothing.
+
+### Task 2 — Route engine: edge-keyed cheapest path with congestion pricing and booking
+
+Files: `lib/engine/pathfinding.ts` (the private `dijkstra` gains an edge-cost hook and is exported;
+`findLowestFuelPath`/`findReachableSystems`/ship callers unchanged), `lib/engine/lane-routing.ts`
+(new), `lib/engine/__tests__/lane-routing.test.ts` (new), `lib/engine/__tests__/pathfinding.test.ts`.
+Interface: `pathfinding.ts` exports `dijkstra(originId, adjacency, options: { maxFuel?; stopAt?;
+edgeCost?: (from, to, fuelCost) => number | null })` — null closes the edge for this search.
+`lane-routing.ts`: `LaneNetwork` built by `buildLaneNetwork(connections, lanes, capacityOf: (lane)
+=> number)`; `createRouteBooker(network, opts: { openEdge: (laneKey) => boolean; congestionMax;
+catchUp }): RouteBooker`; `RouteBooker.routeAndBook(from, to, quantity): RouteBooking | null` where
+`RouteBooking { placements: Array<{ quantity; edges: string[]; perUnit; fuelTotal }>; blocked:
+Array<{ laneKey; quantity; foreignShare }> }` — placements cover the quantity placed (partial when
+no affordable path remains for the rest), `blocked` names the first saturated edge of the cheapest
+path per the spec's emission rule; `RouteBooker.loads(): ReadonlyMap<laneKey, { booked; blocked }>`;
+`RouteBooker.priceFrom(sinkId): (donorId) => number | null` — the frozen per-unit prices for one
+deficit's fan-out (one search per deficit; bookings apply after). `foreignShare` is the fraction of
+the saturated edge's booked load placed by other factions at the moment of blocking (the
+first-mover read's input). The booker is one physical ledger shared by every faction in a run.
+Proves: an edge at capacity is excluded, so the cheapest remaining path is returned rather than a
+priced-through one; the congestion multiplier never exceeds `congestionMax` even at load just under
+capacity; a haul larger than the cheapest path's remaining capacity ships that much on it and the
+rest on the next path, with blocked volume recorded once on the choke edge; a closed edge
+(`openEdge` false) is never traversed even when it is the only cheap route; two factions booking the
+same edge see each other's load; `dijkstra` with no hook returns the same paths as before for every
+ship-navigation fixture (the vacuity check on the refactor).
+Consumes: Task 1 (`WorldLane`, `laneCapacity`).
+
+### Task 3 — Pending-arrivals ledger, per-tick goods-arrivals stage, interdiction query
+
+Files: `lib/world/types.ts` (`WorldPendingArrival`, `World.pendingArrivals`), `lib/world/gen.ts`
+(empty), `lib/world/save.ts` (same bump as Task 1), `lib/engine/freight.ts` (new),
+`lib/tick/world/goods-arrivals-world.ts` (new), `lib/tick/adapters/memory/goods-arrivals.ts` (new),
+`lib/tick/processors/goods-arrivals.ts` (new), `lib/tick/types.ts` (processor name, instrumentation
+fields), `lib/world/tick.ts` (stage directly after ship-arrivals `:1323-1330`, before events;
+`pendingArrivals` threaded into `nextWorld`; `processorsRun.push` beside `:1329`), `docs/active/engineering/processor-architecture.md`
+(table row), `lib/world/__tests__/tick-stage-gating.test.ts` (enumerates stages), tests
+(`lib/tick/processors/__tests__/goods-arrivals.test.ts` new, adapter test).
+Interface: `WorldPendingArrival { id: string; factionId: string | null; fromSystemId; toSystemId;
+goodId; quantity; dispatchTick; arrivalTick; routeEdges: string[]; leg: "outbound" | "return" }`.
+`freight.ts`: `freightArrivalTick(now, fuelTotal, freightSpeed): number` (the spec formula, no
+per-hop floor); `scheduledInbound(ledger): ReadonlyMap<"systemId|goodId", number>` (outbound legs
+only); `flowsCrossingEdge(ledger, laneKey, fromTick, toTick): WorldPendingArrival[]`.
+`GoodsArrivalsWorld { getDueArrivals(tick); getMarketCaps(keys): Map<key, { stock; maxStock }>;
+creditMarkets(updates: { id; stock }[]); settleArrivals(applied: { id; credited; returned:
+WorldPendingArrival | null }[]); appendFlows(flows: ArrivalFlowInsert[]) }`. Processor result:
+`{ credited: number; returned: number; returnedRows: number; overshootVolume: number }` (instrumentation only). Rules the
+stage applies, verbatim from the spec: credit up to the band cap; remainder becomes a `return` leg
+toward the donor over the reversed edges at the same delay; flow row written for the credited
+quantity of an outbound leg. Two rules the spec leaves open, decided by the owner 2026-09-03 ("travelling back is
+fine, we'll just have to see how it performs"): a `return` leg travels back over the reversed edges at
+the same delay and credits the donor **uncapped** (the cancelled-colony precedent — staged materials
+return "uncapped", `docs/active/gameplay/player-seat.md` Cancel), and return legs write **no flow
+row** (the log stays a record of delivered goods). Gate B reads the return-leg volume.
+Proves: a row due this tick is credited and gone from the ledger, a row due next tick is untouched;
+credit stops at the band cap and the excess reappears as one return row toward the donor with the
+edges reversed; a return leg landing on the donor credits in full; the flow row carries the credited
+quantity, not the dispatched one; `freightArrivalTick` at a large speed returns `now` (the
+zero-latency fallback is reachable); `flowsCrossingEdge` returns exactly the rows whose window
+overlaps and whose route holds the edge; the stage runs on a non-boundary tick (delete the stage
+call, watch the mid-cycle arrival test fail).
+Consumes: Task 1 (`laneKey` for `routeEdges`).
+
+### Task 4 — Matcher engine: booked routing in the fill loop, per-deficit skip, inbound-aware sink
+
+Files: `lib/engine/directed-logistics.ts`, `lib/engine/__tests__/directed-logistics.test.ts`.
+Interface: `GoodMarketState.scheduledInbound?: number` (absent ⇒ 0); the sink test classifies
+`stock + scheduledInbound` against `logisticsTarget`, the donor test stays on `stock`.
+`matchFactionTransfers(systems, booker: RouteBookerFor)` where `RouteBookerFor = { priceFrom(sinkId):
+(donorId) => number | null; routeAndBook(from, to, quantity): RouteBooking | null }` — replaces
+`RouteCost` and `ReachableSystemIds` (both retired; candidates are every same-faction donor holding
+drawable surplus). `PlannedTransfer` gains `edges: string[]` and `fuelTotal: number` — one row per
+placement, so a partially-placed draw yields several. The budget clamp becomes a per-deficit skip:
+an unaffordable draw ends that deficit's fill and the remaining budget continues to the next
+deficit; `TransferMatchResult` gains `budgetSkipped: number` (deficits so ended) and keeps
+`fundingBound` / `unservable` with their present meanings. Candidate order is the frozen
+`priceFrom` order; `routeAndBook` is consulted inside the loop with the quantity.
+Proves: a sink with enough goods in flight to clear the deficit line is not a deficit, while the same
+stock without inbound is; a donor whose physical stock is at its reserve gives nothing regardless of
+its own inbound; one unaffordable draw leaves later, cheaper deficits still funded (the old
+run-terminating behaviour is the red arm); a haul the booker splits produces one transfer per
+placement whose quantities sum to the draw; `unservable` is unchanged by congestion (a blocked haul
+is not an unservable one — both emission sites, `:311` no-source and `:402-408` insufficient-source, stay as they are); `budgetSkipped` counts exactly the deficits the skip ended.
+Consumes: Task 2 (`RouteBooking`).
+
+### Task 5 — Logistics processor and tick wiring: dispatch to ledger, lane signals, traversability, constants
+
+Files: `lib/tick/processors/directed-logistics.ts`, `lib/tick/world/directed-logistics-world.ts`,
+`lib/tick/adapters/memory/directed-logistics.ts`, `lib/tick/processors/good-market-state.ts`
+(inbound joined at the matcher's feed only), `lib/world/tick.ts` (`:1605-1614` BFS radius loses the
+logistics term; `:1620-1660` the routeCost/reachable closures replaced by a per-run booker; lanes and
+ledger threaded), `lib/engine/lane-access.ts` (new — the traversability predicate),
+`lib/constants/directed-logistics.ts` (delete `MAX_HOPS`, `HOP_WEIGHT`, `FUEL_WEIGHT`; re-denominate
+`GENERATION_PER_POP` with the docstring's "rare, deliberate" promise restated against route cost),
+`lib/services/colony-eligibility.ts` (`COLONY_REACH_HOPS` restated over the two surviving radii),
+`lib/constants/__tests__/band-constants.test.ts:608-616`, `lib/world/__tests__/tick-logistics-reach.test.ts:73-80`
+(both re-authored), processor tests.
+Interface: `DirectedLogisticsProcessorParams` loses `routeCost`/`reachableSystemIds`, gains
+`bookerFor(factionKey: string | null): RouteBookerFor` and `scheduledInbound`; factions are matched
+in ascending id order, the `null` group last, against one shared booker. The processor debits donors
+at dispatch, writes `WorldPendingArrival` rows (`appendPendingArrivals`), writes no flow row, and
+emits `applyLaneLoadUpdates(updates: { key; bookedLoad; blockedVolume }[])` from `booker.loads()`
+for every lane (zero for unused ones — the reset). Transfer clamp reads
+`max − stock − scheduledInbound`. `lane-access.ts`: `laneOpenFor(haulerId, lane, ownerOf,
+tierBetween: (a, b) => RelationTier): boolean` — own, unclaimed, friendly, allied open; else closed;
+the `null` hauler traverses unclaimed only. Work billed = Σ transfer `cost` as today.
+Proves: nothing is credited at the destination on the dispatch tick (stock rises only when the
+arrivals stage runs); the ledger row's `arrivalTick` equals the freight formula over the placed
+path; a lane crossing neutral foreign space is closed to that hauler and open to a friendly one; the
+faction matched first books first on a shared edge (order test with two factions and one saturable
+lane); a lane unused this run reads `bookedLoad` 0 even if it was loaded last run; the BFS radius no
+longer names a logistics term (constant gone — tsc); the re-denominated budget keeps the
+funding-bound census at its pre-change level on the fixture (the vacuity check on the constant).
+Consumes: Task 2, Task 3, Task 4.
+
+### Task 6 — Lane upkeep and lane decay
+
+Files: `lib/engine/lanes.ts` (`laneUpkeepWork`, `decayLanes`), `lib/engine/treasury.ts` (no change
+if the rate is reused — verify), `lib/tick/processors/treasury.ts` (`bills.maintenance` gains the
+lane term; settlement gains `laneUpkeepBill`), `lib/tick/world/treasury-world.ts` +
+`lib/tick/adapters/memory/treasury.ts` (lanes and endpoint ownership readable at settlement),
+`lib/world/types.ts` (`WorldTreasurySettlement.laneUpkeepBill`), `lib/world/tick.ts` (decay applied
+in the logistics boundary block after the processor, on that run's attempted load), tests.
+Interface: `laneUpkeepWork(lanes, ownerOf): ReadonlyMap<factionId, number>` — Σ level ×
+`UPGRADE_WORK_PER_LEVEL` over lanes the faction is the investor of; the processor prices it with
+`maintenanceRatePerWork` × `catchUp` and adds it to `bills.maintenance` (one more term, same band,
+the spec's deliberate coupling). `decayLanes(lanes, catchUp, params: { idleBufferCycles }):
+{ lanes: WorldLane[]; shed: string[] }` — a lane whose attempted load leaves a whole level's
+capacity unused accrues `idleCycles`; at the buffer it sheds one level (never below 0) and resets;
+any run that uses the level resets the counter. A lane with no investor still decays (nobody pays).
+Proves: a lane at exactly one whole level of unused capacity accrues, one unit less does not; a
+congested run (blocked > 0) counts as use; the counter resets on a used run rather than pausing;
+level never goes below 0; a faction's maintenance bill rises by exactly the lane term and
+`funded.maintenance` moves with it on the ladder; a lane with an unclaimed endpoint bills nobody.
+Consumes: Task 1, Task 5 (`bookedLoad`, `blockedVolume`).
+
+### Task 7 — Lane-upgrade project kind
+
+Files: `lib/world/types.ts` (`WorldLaneUpgradeProject`; `systemId` moves off the base onto the two
+system-bound arms), every `kind` switch and `systemId` fold — the sibling walk: `lib/engine/construction.ts`,
+`construction-centre.ts`, `construction-readout.ts`, `directed-build.ts`, `lib/tick/processors/directed-build.ts`
+(landing loop gains a lane arm → `applyLaneLevelIncreases`), `lib/tick/world/directed-build-world.ts`
++ adapter, `lib/runtime/snapshot.ts`, `lib/services/{alerts,build-options,colony-eligibility,
+construction-orders,construction,ownership-map,tracker}.ts`, `lib/types/api.ts`, `lib/tick-harness/{build-analysis,
+conservation-analysis}.ts` (`CharterProjectRow`/`StagedProjectRow` unions), `lib/world/tick.ts`
+(`dropAbandonedBuildProjects` → drops a lane project when either endpoint is abandoned),
+`components/construction/{colony-section,construction-row}.tsx`, `components/system/{industry-ghosts.ts,
+industry-panel.tsx}`, `components/tracker/{tracker-panel,tracker-row}.tsx`, tests — the 22 non-test
+files that switch on `kind` today (grep-walked; `tsc` finds the exhaustive ones, the text grep the
+defaulted ones).
+Interface: `WorldLaneUpgradeProject extends WorldConstructionProjectBase { kind: "lane_upgrade";
+laneKey: string; levels: number }` with `workTotal = levels × UPGRADE_WORK_PER_LEVEL`; funding lands
+whole levels onto `WorldLane.level` through `fundQueueWithFloor`'s existing landing path.
+Proves: a funded lane project lands a level on the lane row and shrinks its own remaining levels; an
+abandonment at either endpoint drops the open lane project and refunds nothing (matching build
+projects); per-system folds ignore lane projects rather than throwing on a missing `systemId`
+(tsc — the base no longer has one); the construction readout counts a lane project's work in the
+faction's queue; the conservation charter census still narrows `kind` correctly with a third arm.
+Consumes: Task 1, Task 6.
+
+### Task 8 — Planner lane-upgrade opportunity and AI claiming changes
+
+Files: `lib/engine/directed-build.ts` (`planLaneUpgradeProposals`, `Proposal` union arm),
+`lib/engine/construction.ts` (`orderProposals` and its housing/survival tiebreaks tolerate the arm),
+`lib/tick/processors/directed-build.ts` (proposal expansion; `skipLanes` gate for the player faction),
+`lib/world/tick.ts` (`claimProvider` becomes adjacency-bounded: `h === 1`), `lib/engine/expansion.ts`
+(`proposeFactionClaims` floor no longer excludes zero-substrate — `SCORE_FLOOR` reduced to 0 or
+removed, docstring rewritten), `lib/constants/expansion.ts` (`REACH_JUMPS` → 1 with its docstring;
+`SCORE_FLOOR`), tests (`directed-build`, `expansion`).
+Interface: `LaneUpgradeProposal { kind: "lane_upgrade"; factionId; laneKey; levels: 1; value:
+number; work: number }` — `value` is the lane's `blockedVolume` from the last run, `work` is
+`UPGRADE_WORK_PER_LEVEL`; proposed only where `laneInvestor(lane) === factionId`, `blockedVolume > 0`,
+and no open `lane_upgrade` project names the lane; effective level (built + queued) is what the
+capacity read scores against. Rides `orderProposals` and the shared pool unchanged.
+Proves: a congested lane with an open upgrade project generates no second proposal; a lane the
+faction cannot invest in is never proposed however congested; a lane with zero blocked volume is
+never proposed; the proposal competes on ROI (a housing proposal still leads it — the existing
+housing-first order holds); AI candidates are exactly the unclaimed systems one lane from owned
+territory, and a barren adjacent system is claimable last; the player faction with `automation.lanes`
+off gets no lane proposals while other factions still do.
+Consumes: Task 1, Task 5 (`blockedVolume`), Task 7.
+
+### Task 9 — Player verbs: invest, claim, lanes automation
+
+Files: `lib/services/construction-orders.ts` (`orderLaneUpgrade`; `cancelOrder` lane arm;
+`setAutomation` gains `lanes` and spreads the existing object), `lib/services/claims.ts` (new —
+`claimSystem`), `lib/schemas/construction-orders.ts` (`orderLaneUpgradeSchema`, `automationSchema`
++ `lanes`), `lib/schemas/claims.ts` (new), `client/worker/game-worker.ts` (`GameCommandMap` entries,
+`Engine` members, `runCommand` cases), `lib/hooks/use-construction-orders.ts` (`useOrderLaneUpgrade`),
+`lib/hooks/use-claims.ts` (new), `lib/world/types.ts` (`world.player.lastClaimTick`; `automation.lanes`),
+`lib/types/api.ts:368`, `lib/world/gen.ts:242`, `lib/services/construction.ts` (automation read),
+tests.
+Interface: `orderLaneUpgrade({ laneKey, levels }): OrderLaneUpgradeResult` — refused unless the
+player is the lane's investor, batching onto a standing player row like `orderBuild`;
+`claimSystem({ systemId }): ClaimSystemResult` — refused unless unclaimed, adjacent to owned
+territory, and `currentTick − lastClaimTick ≥ PLAYER_CLAIM_COOLDOWN × cycle`; sets `controlled`.
+`setAutomation({ build, colonisation, lanes })`.
+Proves: an invest order on a lane with a foreign or unclaimed endpoint is refused naming the reason;
+a second claim inside the cooldown is refused, one after it succeeds; a claim on a non-adjacent
+system is refused; toggling `build` leaves `lanes` untouched (the spread fix — the rebuild-from-scratch
+is the red arm); a repeated invest order extends the standing row rather than opening a second.
+Consumes: Task 1 (`laneInvestor`), Task 7.
+
+### Task 10 — `stockChange` over the whole cycle
+
+Files: `lib/world/tick.ts` (`:1377-1386` snapshot and `:1906-1916` write; the `stockAtCycleStart`
+snapshot replaced by a persisted per-market baseline written at the end of every boundary tick),
+`lib/world/types.ts` (`WorldMarket.stockAtLastBoundary`; the `stockChange` docstring `:539-548`), the
+abandonment clear (`resetAbandonedMarkets`, `lib/world/tick.ts:1005-1018`), `lib/services/alerts.ts` (docstring only),
+`docs/active/gameplay/alert-bar.md`, tests (`tick` alert fields).
+Interface: `stockChange = (stock − stockAtLastBoundary) / catchUp`, computed on the boundary tick
+after every stage has run, then the baseline is rewritten from the current stock. First boundary
+after load: field absent ⇒ no `stockChange` written (the existing "absent, not zero" convention).
+Proves: a delivery landing mid-cycle appears in the next boundary's `stockChange`; a system with no
+change reads 0, not absent; the first boundary after a fresh load reports nothing; an abandoned
+system's baseline is cleared with its `stockChange`; two consecutive boundaries with the same net
+movement report the same figure (the window is one cycle, not two).
+Consumes: Task 3 (mid-cycle arrivals exist).
+
+### Task 11 — Harness: lane metrics, fifth identity, arms, wall-clock, alert census
+
+Files: `lib/tick-harness/lane-analysis.ts` (new), `lib/tick-harness/market-analysis.ts` (spell
+distribution promoted from `temp/lane-premise-diag.ts`), `lib/tick-harness/conservation-analysis.ts`
+(fifth identity), `lib/tick-harness/types.ts` (`HarnessResults` fields; `HarnessConfig.freightSpeed`,
+`.laneTraversal`), `lib/tick-harness/runner.ts` (collectors, registration), `lib/tick-harness/experiment.ts`
+(schema + comparison fields), `lib/tick/types.ts` (`TickInstrumentation.stageMs`, `logisticsDispatched`,
+`goodsArrivals`), `lib/world/tick.ts` (opts threading; timing around the two stages),
+`scripts/simulate.ts` (report blocks), `lib/tick-harness/__tests__/harness-results-fixture.ts`,
+`lib/engine/survival-stock.ts` (new — the cycles-to-empty rule extracted from `alerts.ts:420-421`
+so the service and the harness read one function), tests.
+Interface: `summariseLanes(...)` → `{ utilisation: { p50, p90, max, saturatedShare }, topDecileShare,
+inTransitVolume: { mean, max }, blockedVolume: { total, topLanes }, queuedVsRealised, foreignTransitShare,
+contentionShortfallByFaction, overshootVolume, budgetSkipped, survivalStockFalling: { count, share } }`;
+spell distribution `{ median, singleRunShare, p90 }` on physical stock, equilibrium window; identity
+"Σ dispatch debits = Σ arrival credits + in-flight + returned" with the left side from the logistics
+processor's own dispatch record and the right from the arrivals stage's credits plus the end-ledger;
+`stageMs.directedLogistics` / `.goodsArrivals` medians and share of tick. Arms: `freightSpeed`
+(overrides `LANES.FREIGHT_SPEED`), `laneTraversal: "tier" | "factionBlind"`.
+Proves: the identity fails when the ledger drain is broken (red-proof named in the spec); a
+zero-flow world reports zeros never NaN; the trafficked cohort is a subset of all lanes; the
+faction-blind arm opens strictly more edges than the tier arm on the fixture; the fixture-typed field
+fails the build if unregistered; `stageMs` is absent from every state frame (calibration-only).
+Consumes: Tasks 2–6, 8, 10.
+
+### Gate B — Mechanics calibration and owner acceptance (both horizons, seeds 42/43, 600 + 10,000 systems)
+
+Arms: live (tier traversability, proposed `FREIGHT_SPEED`), zero-latency (`freightSpeed` large),
+faction-blind traversability, pre-change baseline (the `shared/logistics-lanes` head, from git).
+Reads: every Task-11 metric; funding-bound count and `budgetSkipped` against baseline (the C3
+gates); spell median / single-run share / p90 and overshoot volume, latency arm vs zero-latency arm
+(the oscillation gate); "Survival stock falling" count before/after Task 10; logistics share of tick
+against the spec's baseline (9.0–13.3 ms / 7.2–8.6% at 600; 17.6 ms / 2.2% at 10,000) — a rise past
+~3× the share blocks; conservation identities; coarse health bar; contention shortfall per faction
+(first-mover read); queued-vs-realised (overshoot-then-decay); return-leg volume and count against
+delivered volume (the owner's "see how it performs" on returned overflow).
+Merge condition: no identity fails; funding-bound census and skipped-deficit count not materially up
+(else `GENERATION_PER_POP` is retuned here, not the mechanic); oscillation gate holds or the owner
+chooses the zero-latency setting (one constant); the wall-clock line holds; the owner picks the
+shipped `FREIGHT_SPEED`, `BASE_LANE_CAPACITY` and traversability arm by reading. **Bookings that
+live here:** the multi-cycle smoothing window for the survival alert (owner, 2026-09-03: "depends
+how long the travel time is") is decided from the alert census at the shipped speed; a route
+dictionary / per-source cache is booked only if the wall-clock line fails; the fuel-spread revisit
+retired at Gate A ("revisit fuel spread when lane mechanics ship") is read here — lane utilisation
+dispersion is the differentiator the map-gen gate deferred to.
+
+### Gate B — results (recorded 2026-09-04, 600 systems, 10,000 ticks; reports in `temp/sdd/lane-mechanics/gateB/`)
+
+Arms: live s42, live s43, zero-latency s42 (`freightSpeed` 1e6), faction-blind s42
+(`laneTraversal`); pre-change baseline = `shared/logistics-lanes` head `51d8f4db`, seed 42
+(`temp/sdd/lane-mechanics/sim-baseline-51d8f4db.txt`). Founding horizon (1,000 t) moves nothing
+on every arm — colonisation-gated warm-up, unchanged.
+
+| Read | baseline | live s42 | live s43 | zero-latency | faction-blind |
+|---|---|---|---|---|---|
+| conservation identities (5) | 4/4 pass | 5/5 | 5/5 | 5/5 | 5/5 |
+| quantity moved | 5.7M | 5.6M | 5.6M | 5.6M | 5.7M |
+| transfers | 43.5K | 50.3K | 43.9K | 50.5K | 51.5K |
+| budget spent frac / funding-bound / budget skipped | 0.001 / 0 / — | 0.002 / 0 / 0 | 0.002 / 0 / 0 | 0.002 / 0 / 0 | 0.003 / 0 / 0 |
+| lane utilisation p50 / p90 / saturated share | — | 0.00 / 0.30 / 2.7% | 0.00 / 0.27 / 2.4% | 0.00 / 0.30 / 2.6% | 0.00 / 0.35 / 3.0% |
+| top-decile booked share (real) | 0.365 (projection) | 0.402 | 0.418 | 0.402 | 0.396 |
+| blocked volume (total) | — | 4.2M | 4.9M | 4.1M | 3.9M |
+| in-transit volume mean / max | — | 7.4K / 85.6K | 5.7K / 93.2K | 1.2K / 80.5K | 7.8K / 98.0K |
+| foreign-transit share | 1.0M vol (blind) | 0.012 | 0.010 | 0.014 | 0.063 |
+| contention shortfall (Σ blocked × foreignShare) | — | 0 all factions | 0 | 0 | 35.9K top faction |
+| survival spells median / p90 / single-cycle share | 0.75–0.85 (premise 3) | 1.0 / 4.0 / 0.776 | 1.0 / 4.0 / 0.767 | 1.0 / 4.0 / 0.765 | 1.0 / 4.0 / 0.769 |
+| overshoot volume | — | 0 | 144 | 0 | 94 |
+| survival-stock-falling census (end) | — | 0 systems | 0 | 0 | 0 |
+| queued-vs-realised | — | 194 lanes, queued 1.00, util 0.20 | 172 / 1.00 / 0.23 | 194 / 1.00 / 0.20 | 239 / 1.00 / 0.19 |
+| directed-logistics median ms / share of Σ tick | 9.0–13.3 ms / 7.2–8.6% | 26.7 ms / 18.9% | 21.5 ms / 17.9% | 26.5 ms / 19.7% | 217 ms / 65.3% |
+| goods-arrivals median ms / share | — | 0.34 ms / 9.1% | 0.29 / 8.3% | 0.30 / 6.1% | 0.34 / 4.0% |
+
+Merge-condition readings:
+- **Identities:** all five pass on every arm; the goods-mass identity's residual is ≤ 1.2e-8.
+- **C3 gates:** funding-bound events 0 and budget-skipped 0 on every arm; spent fraction 0.002 vs
+  0.001 baseline — the re-denomination holds, `GENERATION_PER_POP` is not retuned.
+- **Oscillation gate:** spell median 1.0, single-cycle share 0.765–0.776 on the latency arms vs
+  0.765 on the zero-latency arm; overshoot 0–144 units against 5.6M moved. Nonzero latency does not
+  degrade correction — the inbound-aware sink test carries it. Latency ships enabled.
+- **Wall-clock line:** the logistics processor reads 2.2–2.6× its baseline share (18–20% vs
+  7.2–8.6%) at 600 systems — under the ~3× line. The new per-tick goods-arrivals stage adds 6–9% on
+  top, which the line did not anticipate; the two together are ~27% of tick. The 10,000-system size
+  was NOT run (projected ~2 h; owner call). The faction-blind arm costs 65% of tick — a reason to
+  keep the tier rule beyond gameplay.
+- **Traversability A/B:** the tier rule strands ~2% of volume against faction-blind (5.6M vs 5.7M)
+  and reads 1.2% foreign-transit share vs 6.3%; contention shortfall is 0 under the tier rule. Tier
+  ships.
+- **Survival alert:** 0 systems trip the census at run end on every arm — the one-cycle baseline
+  window captures scheduled arrivals; no multi-cycle smoothing needed now (owner's watch item
+  stands: revisit if trans-void hauls lengthen with a slower `FREIGHT_SPEED`).
+- **Route dictionary / per-source cache:** not needed at 600 systems (line holds); re-read at the
+  large size if that run is made.
+- **Fuel-spread revisit (from Gate A):** lane utilisation now differentiates lanes the map's fuel
+  spread could not — p90 0.30 against a p50 of 0, 2.5–3% of lane-samples saturated, top-decile
+  booked share 0.40 vs the 0.36 projection.
+- **Blocked volume** is the tuning headline: 4.2–4.9M blocked against 5.6M moved, on ~190 lanes
+  every one of which carries a queued upgrade (planner working as designed); `BASE_LANE_CAPACITY`
+  at `scaleValue(10)` is the constant this reads on. Owner decision.
+- **Return legs:** 0 returned on the live arms (the identity's "returned" term reads 0; overshoot
+  ≤ 144) — dispatch sizing against inbound leaves nothing to bounce.
+
+### Gate C — Surface prototype
+
+Arms: one browser-viewable HTML prototype of the Net-new UI list (below): lane selection and card,
+the invest and claim verbs' enabled/disabled states, the restyled lane layer (level → weight, load
+→ colour, in-flight → particles), the Logistics tab's in-transit rows, the third automation switch.
+Reads: owner review by eye.
+Merge condition: prototype approved (AGENTS UI rule) before Task 12 starts. The lane-card surface is
+decided (owner, 2026-09-03): a route-docked panel; the prototype shows that shape.
+
+### Task 12 — Map: lane state slice, lane layer restyle, lane selection, chord overlay retired
+
+Files: `lib/services/lanes.ts` (new — `getLaneStates`), `lib/runtime/snapshot.ts` (`lanes` slice),
+`lib/types/api.ts` (`LaneStateRow`, `TradeFlowEdgeInfo` re-keyed per lane), `lib/hooks/use-lanes.ts`
+(new), `lib/hooks/empty-slices.ts`, `lib/hooks/use-map-data.ts` (`ConnectionData` joined with lane
+state), `lib/services/trade-flow.ts` (`getTradeFlowEdges` reads in-flight per lane from the ledger's
+`routeEdges`, not chords from flow rows), `lib/engine/trade-flow-edges.ts` (`buildFlowEdges` becomes
+per-lane; delete if nothing remains), `components/map/pixi/objects/lane-style.ts` (level and load
+inputs beside fuel), `components/map/pixi/layers/{connection-layer,trade-flow-layer}.ts`,
+`components/map/pixi/lane-hit-test.ts` (new), `components/map/pixi/interactions.ts` (`onSelectLane`),
+`components/map/star-map.tsx`, `client/routes.ts` + `lib/utils/route-hrefs.ts` (if the route
+option is taken), `components/map/pixi/theme.ts`, `docs/active/engineering/map-rendering.md`, tests.
+Reuse: `laneStyleForFuel` (read: pure, three tiers) extended rather than duplicated; `TradeFlowLayer`
+particle machinery (read: `sync(systems, flowEdges)`) re-fed per lane; `findFactionAt` hit-test
+pattern (read: cell-gated on zoom) as the shape for the lane hit-test; `useGameSlice` slice
+convention (`use-trade-flow.ts`). New: `lane-hit-test.ts` — nothing fits because selection today is
+Voronoi-cell only (`interactions.ts:113-118`) and a lane is a segment between cells.
+Interface: `LaneStateRow { key; aId; bId; level; capacity; bookedLoad; blockedVolume; inFlight;
+investorFactionId: string | null; openUpgradeLevels }`; `findLaneAt(point, lanes, systems,
+tolerance): laneKey | null`; `TradeFlowEdgeInfo` gains `laneKey` and is one per lane per direction
+with in-flight volume; the chord builder's per-pair grouping is gone.
+Proves: a lane's drawn weight tracks its level and its colour tracks load/capacity (moved to a
+node-tested helper — a style is not asserted in jsdom); clicking within tolerance of a lane selects
+it and clicking inside a cell still selects the system (precedence stated: system cell wins when
+the point is within the star's hover radius); an in-flight haul draws particles on every lane of its
+route, not a chord between endpoints; the overlay reads zero edges when the ledger is empty; the
+`lanes` slice is absent from a frame for a world without lanes (empty-slice fallback).
+Consumes: Tasks 1, 3, 5, 7.
+
+### Task 13 — Lane card, verbs, transit rows, automation switch, copy
+
+Files: `components/panels/lane-panel.tsx` (new) or `components/map/lane-card.tsx` (new — per Gate C),
+`components/construction/claim-section.tsx` (new), `components/panels/system-overview.tsx`
+(`ClaimSection` beside `ColonySection`), `components/construction/faction-construction-card.tsx`
+(third switch), `components/system/logistics-panel.tsx` (in-transit rows), `lib/services/trade-flow.ts`
+(`getSystemLogistics` gains `inbound`/`outbound` transit rows with `arrivalTick`), `lib/types/api.ts`,
+`lib/glossary/terms.ts` + `docs/active/glossary.md` (lane level, lane capacity, in transit, congested,
+blocked volume; `jumpLane` updated; the stale `crossingLane` entry — it still describes a
+generator-marked class with its own line style, which #278 removed — corrected as part of this
+change), `lib/constants/system-tabs.ts` if a badge is added, tests (`.test.tsx`).
+Reuse: `DetailPanel` (read: `title, subtitle, headerAction, subHeader, backPath, scrollResetKey`),
+`Card`, `StatRow`, `Button` (`variant="action"` as `ColonySection` uses it), `ConstructionRow` for the
+open upgrade project, `TermLabel`/`Popover` for glossary terms, `formatDuration` for ETAs,
+`EmptyState`. New: `ClaimSection` — nothing fits because `ColonySection` is gated on `controlled`
+and the claim verb targets `unclaimed`; new: the lane card root (shape per Gate C).
+Interface: `SystemLogisticsData` gains `transit: { inbound: TransitRow[]; outbound: TransitRow[] }`,
+`TransitRow { goodId; goodName; quantity; otherSystemId; otherSystemName; arrivalTick }`; the lane
+card reads `LaneStateRow` + the open project; verbs dispatch Task 9 commands.
+Proves: the invest button is disabled with text naming the missing endpoint when the player does
+not control both; an in-transit row disappears once its arrival tick passes; the claim button is
+disabled during cooldown with the remaining time; the third switch toggles only `lanes`; every new
+player-facing string is a glossary term or plain copy through `/game-copy`.
+Consumes: Task 9, Task 12.
+
+### Task 14 — Band cross-wiring guard (carried from map-gen)
+
+Files: `lib/engine/__tests__/universe-gen-invariants.test.ts`, `lib/engine/universe-gen.ts` /
+`density-field.ts` only if the test needs a provenance export that does not exist.
+Interface: none new unless provenance must be exposed — then `CorridorPlan` waypoints carry their
+pair index and `generateConnections` returns the band lanes keyed by pair.
+Proves: on a fixture with two band corridors running geometrically close, every waypoint lane joins
+consecutive waypoints of the same pair's chain; a deliberately cross-wired waypoint fails the
+assertion (the red-proof the map-gen plan asked for); the repair-lane count is not the instrument.
+Consumes: nothing.
+
+### Task 15 — Doc fold and roadmap
+
+Files: `docs/active/gameplay/logistics-lanes.md` (new, from spec §1–4, §6–8, present tense),
+`docs/active/gameplay/universe.md` (any §5 residue not already folded), `docs/SPEC.md` (Active
+Systems entry; interaction map: Goods Arrivals node, DL → ledger → arrivals → EC edges, lane upkeep
+→ treasury, planner lane proposals), `docs/active/gameplay/economy-autonomic-agency.md` (matching
+engine, silent application → scheduled), `docs/active/gameplay/trade-simulation.md` (Map Overlay,
+Logistics Tab), `docs/active/gameplay/alert-bar.md` (Survival stock falling measure),
+`docs/active/gameplay/player-seat.md` (lanes automation, claim and invest verbs),
+`docs/active/gameplay/player-seat-purse.md` (lane upkeep line), `docs/active/gameplay/colonisation.md`
+(drop rule), `docs/active/engineering/{processor-architecture,tick-engine}.md`, `docs/active/glossary.md`,
+`docs/ROADMAP.md` (the logistics pass row loses what shipped and keeps its unbuilt leanings; the
+map-gen "Next step" line goes), delete `docs/planned/logistics-lanes.md` and this working file, memory
+pointer update.
+Interface: none.
+Proves: the doc-sync test's hand count matches; no active doc names a phase, plan or date; `git log
+-S` shows each deferred item below reached its booking.
+Consumes: everything.
+
+### Verification
+
+`npm run build`; `npx vitest run`; `npm run simulate` at both horizons quoted in each PR — the
+mechanics PR quotes Gate B's arms; the surfaces PR quotes the live arm to show the mechanics did
+not move. Sim metrics that must move: per-lane utilisation dispersion (lanes-off reads uniform 0),
+in-transit volume > 0 at the shipped speed and 0 on the zero-latency arm, blocked volume > 0 on at
+least one corridor at equilibrium, real top-decile share reported beside the Gate-A projection. Must
+not move: funding-bound census, conservation identities, coarse health bar. `npm run duplication`
+on the branch diff before review. Browser smoke on the lane card, claim verb, transit rows, and the
+survival alert on a net importer.
+
+### Doc fold
+
+Task 15 above; runs on the branch before the final review of the last sub-PR. This working file is
+deleted there.
+
+### Not covered
+
+- **War interdiction mechanics** — the query ships, nothing calls it. Booked: roadmap war row.
+- **Negotiated transit rights (treaties, tolls, per-lane grants)** — booked: one line on the
+  faction-direction design row (the relations input it needs).
+- **Migration / colonist delivery / founding-manifest rehost onto the path engine** — booked: the
+  logistics pass row already carries "unifying people-movement" and "hauling founding freight".
+- **Deep-space crossing lane class (tech-gated)** — booked: one line on the logistics pass row at
+  fold.
+- **Alert-bar congestion category** — dropped by the spec ("revisit after play"); the map's blocked
+  volume is the surface.
+- **Multi-cycle survival-alert window** — booked at Gate B.
+- **Route dictionary / per-source caching** — booked at Gate B (only if wall-clock fails).
+- **Ship travel unified onto the path-summed formula** — dropped: the spec assigns it to the ship
+  system's own surface pass.
+- **`lanePruneFraction`** — stays internal (decided at #278); revisited only if Gate B shows lane
+  density changing play.
+- **Independents' match order** (`null` group last) — decided (owner: independents are a concept,
+  not a population, today). Return-leg rules are decided (Task 3).
+- **`REACH_JUMPS`** kept at 1 rather than deleted — the constant keeps its reader; the spec's
+  "untouched" applies to the hop-cap cleanup, not to claiming's reach.
+
+### Net-new UI
+
+- **Lane card surface** — decided: a route-docked panel (`/lane/:key`,
+  `components/panels/lane-panel.tsx`) like the system and faction panels, because the card carries
+  a verb, an open project row and a cancel, which the detail-panel conventions already handle.
+- **Lane hit-test** (`lane-hit-test.ts`) — segment selection on the Pixi stage.
+- **Lane layer restyle** — level → weight, load → colour, in-flight → particles on the lane itself;
+  the chord overlay goes.
+- **`ClaimSection`** on the system overview for an unclaimed adjacent system.
+- **In-transit rows** on the Logistics tab.
+- **Third automation switch** on the faction construction card.
+
+---
+
 ## Spec
 
 Written 2026-08-31 from the evidence below plus the session's settled decisions:

@@ -17,7 +17,7 @@ describe("runTickHarness: logistics instruments", () => {
     const lg = results.logisticsActivity;
     expect(lg.transferCount).toBeGreaterThan(0);
     expect(lg.budgetSpentFrac).toBeGreaterThan(0);
-    expect(lg.flowRowsPerCycle).toBeGreaterThanOrEqual(1);
+    expect(lg.flowRowsPerReferenceCycle).toBeGreaterThanOrEqual(1);
   }, 60_000);
 
   it("wires the third-arm drawBrakeCeiling pin through to a measurable divergence", async () => {

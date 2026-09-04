@@ -34,6 +34,10 @@ const EMPTY_REALISED: ReadonlyMap<string, ReadonlyMap<string, number>> = new Map
  * realised production and work quantities arrive already catchUp-scaled from
  * their own cycles and are never rescaled. Logistics work is S-scaled and is
  * normalised by economyScale at accrual; realised production at collection.
+ *
+ * Maintenance folds in lane upkeep (`laneUpkeepWorkByFaction`, priced fresh from the settlement's
+ * lane levels, never accrued mid-cycle) at the same rate as building upkeep — one band, one bill,
+ * `lastSettlement.laneUpkeepBill` breaking out just the lane share for readers.
  */
 export async function runTreasuryProcessor(
   world: TreasuryWorld,
@@ -132,8 +136,15 @@ export async function runTreasuryProcessor(
     }
 
     const upkeep = maintenanceBill(levelsByType, params.rates.maintenanceRatePerWork);
+    // Lane upkeep rides the same band, same rate, as building upkeep (docs/planned/
+    // logistics-lanes.md §1) — priced fresh from this settlement's lane levels, never accrued
+    // mid-cycle, exactly like `upkeep` above.
+    const laneUpkeep =
+      (params.laneUpkeepWorkByFaction.get(t.factionId) ?? 0) *
+      params.rates.maintenanceRatePerWork *
+      catchUp;
     const bills = {
-      maintenance: upkeep.total * catchUp,
+      maintenance: upkeep.total * catchUp + laneUpkeep,
       logistics: pendingLogistics * params.rates.logisticsRatePerWork,
       construction: pendingConstruction * params.rates.constructionRatePerWork,
     };
@@ -161,6 +172,7 @@ export async function runTreasuryProcessor(
       paid: settled.paid,
       charged: settled.charged,
       foundingExpense: pendingFounding,
+      laneUpkeepBill: laneUpkeep,
     };
 
     updates.push({

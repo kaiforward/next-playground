@@ -46,11 +46,18 @@ import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { CYCLE_LENGTH, CONSTRUCTION_INTERVAL, LOGISTICS_INTERVAL, type TickCadence } from "@/lib/constants/tick-cadence";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
-import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { CONSTRUCTION } from "@/lib/constants/construction";
 import { EXPANSION } from "@/lib/constants/expansion";
-import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
+import { RELATIONS_FREQUENCY, getRelationTier, type RelationTier } from "@/lib/constants/relations";
+import { LANES } from "@/lib/constants/lanes";
+import {
+  laneCapacity, laneUpkeepWork, decayLanes, laneEndpoints, applyLaneLevelIncreases, type LaneEndpointOwner,
+} from "@/lib/engine/lanes";
+import { buildLaneNetwork, createRouteBooker, type LaneNetwork } from "@/lib/engine/lane-routing";
+import { laneOpenFor } from "@/lib/engine/lane-access";
+import { scheduledInbound as computeScheduledInbound } from "@/lib/engine/freight";
+import { pairKey } from "@/lib/tick/world/relations-world";
 import {
   depositCountsOf, yieldsOf, effOf, yieldColumns, effColumns, RESOURCE_TYPES,
 } from "@/lib/engine/resources";
@@ -70,12 +77,13 @@ import { TREASURY, REFERENCE_VALUE, TAX_LEVEL_UNREST_PRESSURE } from "@/lib/cons
 import { maintenanceOutputMalus, maintenanceBufferScale } from "@/lib/engine/treasury";
 import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
 import type { EdgeView } from "@/lib/tick/world/trade-flow-topology";
-import type { ReachableSystemIds, RouteCost } from "@/lib/engine/directed-logistics";
+import type { RouteBookerFor } from "@/lib/engine/directed-logistics";
 import type { EventDefinition, EventPhaseDefinition, EventTypeId } from "@/lib/constants/events";
 import { buildModifiersForPhase } from "@/lib/engine/events";
 import type { GovernmentType, ResourceVector } from "@/lib/types/game";
 
 import { runShipArrivalsProcessor } from "@/lib/tick/processors/ship-arrivals";
+import { runGoodsArrivalsProcessor } from "@/lib/tick/processors/goods-arrivals";
 import { runEventsProcessor } from "@/lib/tick/processors/events";
 import { runEconomyProcessor, economyMidCyclePayload } from "@/lib/tick/processors/economy";
 import { runInfrastructureDecayProcessor } from "@/lib/tick/processors/infrastructure-decay";
@@ -89,6 +97,7 @@ import { runRelationsProcessor } from "@/lib/tick/processors/relations";
 import { runTreasuryProcessor } from "@/lib/tick/processors/treasury";
 
 import { InMemoryShipArrivalsWorld } from "@/lib/tick/adapters/memory/ship-arrivals";
+import { InMemoryGoodsArrivalsWorld } from "@/lib/tick/adapters/memory/goods-arrivals";
 import { InMemoryEventsWorld } from "@/lib/tick/adapters/memory/events";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { InMemoryInfrastructureWorld } from "@/lib/tick/adapters/memory/infrastructure";
@@ -133,7 +142,6 @@ import type {
   WorldEvent,
   WorldEventMetadata,
   WorldEventModifier,
-  WorldFlowEvent,
   WorldMarket,
   WorldSystem,
 } from "./types";
@@ -995,10 +1003,11 @@ export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: str
  * `logisticsFundingBound` are all optional fields whose absence already reads as "not yet
  * assessed" — cleared (deleted) rather than zeroed, exactly as a freshly-created market row would
  * be. `productionSuppressed` has no such absent-reads-as-fresh convention, so it is explicitly set
- * false, mirroring `collapseDebt`'s explicit zero in `applyAbandonments` above. `stockChange` joins
- * the same clear for the same reason as `logisticsFundingBound`: it is a reading from a previous
- * life and must not survive into the next — a re-founded colony's warehouse is real, but its
- * predecessor's drain rate is not. `unservedShortfall` joins the same clear for the same reason: a
+ * false, mirroring `collapseDebt`'s explicit zero in `applyAbandonments` above. `stockChange` and
+ * its baseline `stockAtLastBoundary` join the same clear for the same reason as
+ * `logisticsFundingBound`: they are a reading from a previous life and must not survive into the
+ * next — a re-founded colony's warehouse is real, but its predecessor's drain rate and the point
+ * it was drained from are not. `unservedShortfall` joins the same clear for the same reason: a
  * structural reading names a shortfall THIS colony's donors and production could not close, and a
  * resettled colony has neither yet — its own local-supply story starts over.
  */
@@ -1012,6 +1021,7 @@ export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds
     delete next.squeezeCycles;
     delete next.logisticsFundingBound;
     delete next.stockChange;
+    delete next.stockAtLastBoundary;
     delete next.unservedShortfall;
     return next;
   });
@@ -1021,16 +1031,27 @@ export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds
  * Abandonment Rule 2's construction-side application: an open `build` project targeting a system
  * that just died would otherwise keep funding invisible construction on a world its former owner
  * lost — the UI hides it the moment `factionId` is null, but the pool would keep absorbing work
- * into it regardless. Scoped to `kind: "build"` only: a `colony_establish` project never targets an
- * already-developed system (its target is still `controlled`, which is never in survival shortfall
- * — the economy only classifies developed systems), so it is out of scope by construction.
+ * into it regardless. Scoped to `kind: "build"` and `kind: "lane_upgrade"` only: a `colony_establish`
+ * project never targets an already-developed system (its target is still `controlled`, which is
+ * never in survival shortfall — the economy only classifies developed systems), so it is out of scope
+ * by construction. A lane project is dropped when EITHER endpoint just abandoned — the lane is no
+ * longer investable at all once either side loses its faction, matching the spec's "dropped when
+ * either endpoint stops satisfying investability" (docs/planned/logistics-lanes.md §4). Refunds
+ * nothing either way, matching an ordinary build's own abandonment (work spent is lost).
  */
 export function dropAbandonedBuildProjects(
   projects: WorldConstructionProject[], abandonedSystemIds: string[],
 ): WorldConstructionProject[] {
   if (abandonedSystemIds.length === 0) return projects;
   const abandoned = new Set(abandonedSystemIds);
-  return projects.filter((p) => !(p.kind === "build" && abandoned.has(p.systemId)));
+  return projects.filter((p) => {
+    if (p.kind === "build") return !abandoned.has(p.systemId);
+    if (p.kind === "lane_upgrade") {
+      const [a, b] = laneEndpoints(p.laneKey);
+      return !abandoned.has(a) && !abandoned.has(b);
+    }
+    return true;
+  });
 }
 
 /**
@@ -1219,6 +1240,19 @@ function rebuildWorldModifiers(
 let hopsCache: { key: World["connections"]; hops: Map<string, Map<string, number>> } | null =
   null;
 
+/**
+ * The lane graph a `RouteBooker` runs over depends on both the connection graph (never reassigned
+ * for the life of a world, same premise as `hopsCache` above) AND the lane rows (`world.lanes`),
+ * which DO change — lane level moves capacity, and directed-logistics itself rewrites booked/
+ * blocked load every cycle. Keyed on both arrays' identity so an investment or a load write
+ * rebuilds the network, while an unrelated stage's world (same connections, same lanes) reuses it.
+ */
+let laneNetworkCache: {
+  connectionsKey: World["connections"];
+  lanesKey: World["lanes"];
+  network: LaneNetwork;
+} | null = null;
+
 export async function runWorldTick(
   world: World,
   opts?: {
@@ -1226,6 +1260,17 @@ export async function runWorldTick(
     /** Harness-only third-arm pin for the draw figure's brake — the second per-run override
      *  channel after `cadence`. The live game never sets it (absent ⇒ "live"). */
     drawBrakeCeiling?: DrawBrakeCeiling;
+    /** Harness-only arm: overrides `LANES.FREIGHT_SPEED` for this run's `freightArrivalTick` calls.
+     *  The live game never sets it (absent ⇒ the live constant). */
+    freightSpeed?: number;
+    /** Harness-only arm: `"factionBlind"` opens every lane in the network to every hauler,
+     *  ignoring ownership/relation traversability entirely (`laneOpenFor`); absent (or `"tier"`)
+     *  is the live game's own rule (own+unclaimed+friendly-or-allied). */
+    laneTraversal?: "tier" | "factionBlind";
+    /** Harness-only arm: take `stageMs` wall-clock timings for this run. The live game never sets
+     *  it (absent/false ⇒ no timing calls, `stageMs` stays undefined) — see
+     *  `TickInstrumentation.stageMs`'s own docstring. */
+    recordStageMs?: boolean;
   },
 ): Promise<{
   world: World;
@@ -1240,6 +1285,14 @@ export async function runWorldTick(
     logistics: LOGISTICS_INTERVAL,
   };
   const tick = world.meta.currentTick + 1;
+  // Calibration-only wall-clock, opt-in via `recordStageMs` (harness only — see
+  // `TickInstrumentation.stageMs`'s own docstring for why this can never reach a broadcast frame).
+  // Absent, `now()` is a no-op so two otherwise-identical runs return identical `instrumentation`.
+  const recordStageMs = opts?.recordStageMs ?? false;
+  const now = () => (recordStageMs ? performance.now() : 0);
+  const tickStart = now();
+  let directedLogisticsMs = 0;
+  let goodsArrivalsMs = 0;
   const rng = tickRng(world.meta.seed, tick);
   const eventsRng = tickRng(world.meta.seed, tick, EVENTS_RNG_STREAM);
 
@@ -1255,6 +1308,8 @@ export async function runWorldTick(
   let markets = world.markets;
   const connections = toTickConnections(world);
   let ships = world.ships;
+  let lanes = world.lanes;
+  let pendingArrivals = world.pendingArrivals;
   let flowEvents = world.flowEvents;
   let relations = world.relations;
   let alliancePacts = world.alliancePacts;
@@ -1329,12 +1384,35 @@ export async function runWorldTick(
     processorsRun.push("ship-arrivals");
   }
 
+  // ── goods-arrivals ──
+  // Load-bearing for the market alias above (see `let markets`): this stage is unconditional and
+  // the FIRST to touch markets (moved ahead of events, which held that role before this stage
+  // existed), and its adapter copies every row on construction — so `markets` stops aliasing
+  // `world.markets` here, before any stage writes. Gating this stage, or moving it after another
+  // market writer, would leave the previous world's rows exposed to mutation. Modelled on
+  // ship-arrivals: an unconditional per-tick drain, never a phase of directed-logistics (which
+  // structurally cannot run off its own boundary tick — docs/planned/logistics-lanes.md §3).
+  let goodsArrivals: TickInstrumentation["goodsArrivals"];
+  {
+    const stageStart = now();
+    const goodsArrivalsWorld = new InMemoryGoodsArrivalsWorld({ markets, pendingArrivals });
+    const result = await runGoodsArrivalsProcessor(goodsArrivalsWorld, { tick }, {
+      mintId: () => `goods-arrival-${nextId++}`,
+    });
+    markets = goodsArrivalsWorld.markets;
+    pendingArrivals = goodsArrivalsWorld.pendingArrivals;
+    flowEvents = [...flowEvents, ...goodsArrivalsWorld.flows];
+    goodsArrivals = {
+      ...result.goodsArrivals,
+      // Adapter-observed, not the processor's own tally — see the field's own docstring
+      // (`TickInstrumentation.goodsArrivals.appliedCreditTotal`).
+      appliedCreditTotal: goodsArrivalsWorld.appliedCreditTotal,
+    };
+    processorsRun.push("goods-arrivals");
+    goodsArrivalsMs = now() - stageStart;
+  }
+
   // ── events ──
-  // Load-bearing for the market alias above (see `let markets`): this stage is
-  // unconditional and the first to touch markets, and its adapter copies every
-  // row on construction — so `markets` stops aliasing `world.markets` here,
-  // before any stage writes. Gating this stage, or moving it after another
-  // market writer, would leave the previous world's rows exposed to mutation.
   {
     const eventsWorld = new InMemoryEventsWorld(
       { events, modifiers: [], markets },
@@ -1367,23 +1445,7 @@ export async function runWorldTick(
   // is pure waste. The gate emits the same mid-cycle broadcast the body would have,
   // so a gated tick is indistinguishable from an ungated one from the outside.
   let economySignals: EconomySignals | undefined;
-  // The realised per-cycle survival-good stock change's opening snapshot — captured here, BEFORE
-  // the economy processor mutates `stock` via production/consumption, so the write below (after
-  // directed logistics, further down this function) reads the true cycle-start value. Scoped to
-  // SURVIVAL_GOODS market rows belonging to a system that is developed AS OF THIS INSTANT — the
-  // same population the economy processor's own `getSystemIds` selects
-  // (`isEconomicallyActive`) — so "visited this cycle" at the write site means exactly "the economy
-  // processor assessed this system", nothing more, nothing less.
-  let stockAtCycleStart: Map<string, number> | undefined;
   if (isCycleStart(tick, cadence.cycle)) {
-    const developedNow = new Set(
-      systems.filter((s) => isEconomicallyActive(s.control)).map((s) => s.id),
-    );
-    stockAtCycleStart = new Map(
-      markets
-        .filter((m) => SURVIVAL_GOODS.includes(m.goodId) && developedNow.has(m.systemId))
-        .map((m) => [`${m.systemId}|${m.goodId}`, m.stock]),
-    );
     const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, EVENT_DEFINITIONS) });
     const economyResult = await runEconomyProcessor(economyWorld, newTickCtx(), {
       interval: cadence.cycle,
@@ -1559,6 +1621,9 @@ export async function runWorldTick(
   let foundingStalls: TickInstrumentation["foundingStalls"];
   // Calibration-only: directed-logistics' per-faction haul-budget ledger. Same reason.
   let logisticsBudget: TickInstrumentation["logisticsBudget"];
+  // Calibration-only: directed-logistics' Σ dispatched quantity and per-faction blocked entries. Same reason.
+  let logisticsDispatched: TickInstrumentation["logisticsDispatched"];
+  let logisticsBlocked: TickInstrumentation["logisticsBlocked"];
   // Calibration-only: directed-build's per-cycle strikeExplains-suppressed proposal resolution. Same reason.
   let strikeSuppressedProposals: TickInstrumentation["strikeSuppressedProposals"];
   const migrationResolves = isCycleStart(tick, cadence.cycle);
@@ -1597,17 +1662,18 @@ export async function runWorldTick(
       processorsRun.push("migration");
     }
 
-    // directed-logistics and directed-build share one hop-BFS, run at the
-    // larger of their two (independently tunable) MAX_HOPS radii — each
-    // stage's routeCost closure still applies its OWN cutoff below, so a BFS
-    // computed at the larger radius is a safe superset for the smaller one.
-    // The BFS is computed once per world, not per tick (see hopsCache).
+    // directed-build's own hop-BFS, run at the larger of its and expansion's (independently
+    // tunable) reach radii — directed-build's routeCost closure still applies its OWN cutoff
+    // below, so a BFS computed at the larger radius is a safe superset for the smaller one.
+    // Directed-logistics no longer shares this BFS: it moved onto lane-network routing
+    // (docs/planned/logistics-lanes.md §2), with its own reach substrate below. The BFS is
+    // computed once per world, not per tick (see hopsCache).
     if (hopsCache?.key !== world.connections) {
       hopsCache = {
         key: world.connections,
         hops: computeBoundedHopDistances(
           connections,
-          Math.max(DIRECTED_LOGISTICS.MAX_HOPS, DIRECTED_BUILD.MAX_HOPS, EXPANSION.REACH_JUMPS),
+          Math.max(DIRECTED_BUILD.MAX_HOPS, EXPANSION.REACH_JUMPS),
         ),
       };
     }
@@ -1622,12 +1688,51 @@ export async function runWorldTick(
 
     // ── directed-logistics ──
     {
-      const routeCost: RouteCost = (f, t) => {
-        const h = hops.get(f)?.get(t);
-        return h === undefined || h > DIRECTED_LOGISTICS.MAX_HOPS ? null : h * DIRECTED_LOGISTICS.HOP_WEIGHT;
-      };
-      const reachableSystemIds: ReachableSystemIds = (systemId) =>
-        hops.get(systemId)?.keys() ?? [];
+      const dlStageStart = now();
+      // The lane graph directed-logistics routes over — rebuilt only when the connection graph or
+      // the lane rows themselves change (see laneNetworkCache's own docstring).
+      if (laneNetworkCache?.connectionsKey !== world.connections || laneNetworkCache?.lanesKey !== world.lanes) {
+        laneNetworkCache = {
+          connectionsKey: world.connections,
+          lanesKey: world.lanes,
+          network: buildLaneNetwork(connections, world.lanes, (lane) => laneCapacity(lane.level)),
+        };
+      }
+      const laneNetwork = laneNetworkCache.network;
+      // One physical ledger for every hauling faction this run, so two factions booking the same
+      // lane see each other's load and congestion (docs/planned/logistics-lanes.md §2). The booker
+      // carries no traversability of its own — every real caller goes through `forHauler` below,
+      // which supplies its own hauler-specific traversability.
+      const laneBooker = createRouteBooker(laneNetwork, {
+        congestionMax: LANES.CONGESTION_MAX,
+        catchUp: catchUpFactor(cadence.logistics),
+      });
+      const laneByKey = new Map(world.lanes.map((l) => [l.key, l]));
+      const factionIdBySystemId = new Map(systems.map((s) => [s.id, s.factionId]));
+      const ownerOf = (systemId: string): { factionId: string | null } => ({
+        factionId: factionIdBySystemId.get(systemId) ?? null,
+      });
+      // Pairwise relation score, sorted-pair keyed exactly as `WorldFactionRelation` stores it
+      // (`InMemoryRelationsWorld`'s own convention); a pair with no row (never interacted, or one
+      // faction is itself) reads neutral (0), never a thrown lookup.
+      const relationScoreByPair = new Map(world.relations.map((r) => [pairKey(r.factionAId, r.factionBId), r.score]));
+      const tierBetween = (a: string, b: string): RelationTier =>
+        getRelationTier(relationScoreByPair.get(pairKey(a, b)) ?? 0);
+      // Harness-only arm: `factionBlind` opens every lane in the network to every hauler, ignoring
+      // ownership/relation traversability entirely — the fixture-proven contrast for
+      // `contentionShortfallByFaction`'s "the faction-blind arm opens strictly more edges than the
+      // tier arm" Proves entry. Absent (or "tier") is the live game's own rule.
+      const bookerFor = (factionKey: string | null): RouteBookerFor =>
+        laneBooker.forHauler(
+          opts?.laneTraversal === "factionBlind"
+            ? (edgeKey) => laneByKey.has(edgeKey)
+            : (edgeKey) => {
+                const lane = laneByKey.get(edgeKey);
+                return lane !== undefined && laneOpenFor(factionKey, lane, ownerOf, tierBetween);
+              },
+          factionKey,
+        );
+
       // Directed-logistics moves goods only between developed systems.
       const rows = buildLogisticsRows(
         systems.filter((s) => developedSystemIds.has(s.id)),
@@ -1636,11 +1741,14 @@ export async function runWorldTick(
       const dlWorld = new MemoryDirectedLogisticsWorld(rows);
       const dlResult = await runDirectedLogisticsProcessor(dlWorld, { tick }, {
         interval: cadence.logistics,
-        routeCost,
-        reachableSystemIds,
+        bookerFor,
+        laneLoads: () => laneBooker.loads(),
+        scheduledInbound: computeScheduledInbound(pendingArrivals),
         fundingByFaction:
           fundedByFaction && new Map([...fundedByFaction].map(([id, f]) => [id, f.logistics])),
         drawBrakeCeiling: opts?.drawBrakeCeiling,
+        freightSpeed: opts?.freightSpeed,
+        mintId: () => `haul-${nextId++}`,
       });
       markets = applyLogisticsMarketUpdates(
         markets,
@@ -1651,11 +1759,29 @@ export async function runWorldTick(
       dlStockUpdates = dlWorld.stockUpdates;
       dlFundingBoundUpdates = dlWorld.fundingBoundUpdates;
       dlUnservedShortfallUpdates = dlWorld.unservedShortfallUpdates;
-      const newLogisticsFlows: WorldFlowEvent[] = dlWorld.flows;
-      flowEvents = [...flowEvents, ...newLogisticsFlows];
+      pendingArrivals = [...pendingArrivals, ...dlWorld.pendingArrivals];
+      lanes = lanes.map((l) => {
+        const u = dlWorld.laneUpdates.get(l.key);
+        return u ? { ...l, bookedLoad: u.bookedLoad, blockedVolume: u.blockedVolume } : l;
+      });
+      // Decay reads this run's just-written attempted load (bookedLoad + blockedVolume), on the
+      // same catchUp scale the booker priced capacity at (docs/planned/logistics-lanes.md §1). Gated
+      // on `logisticsResolves` alone, not the three-way outer gate: off a logistics boundary the
+      // directed-logistics processor above early-returns (`dueKeys.length === 0`), so `laneUpdates`
+      // is empty and `lanes` still carries forward last run's figures untouched — decaying against
+      // that same stale load a second time on a tick where only migration or build resolves would
+      // double-accrue idleCycles the moment the three cadences diverge.
+      if (logisticsResolves) {
+        lanes = decayLanes(lanes, catchUpFactor(cadence.logistics), {
+          idleBufferCycles: LANES.IDLE_BUFFER_CYCLES,
+        }).lanes;
+      }
       logisticsWorkByFaction = dlResult.workPerformedByFaction;
       logisticsBudget = dlResult.logisticsBudget;
+      logisticsDispatched = dlResult.logisticsDispatched;
+      logisticsBlocked = dlResult.logisticsBlocked;
       processorsRun.push("directed-logistics");
+      directedLogisticsMs = now() - dlStageStart;
     }
 
     // ── directed-build ──
@@ -1679,7 +1805,11 @@ export async function runWorldTick(
         if (s.peopleLand > galaxyPeopleLandMax) galaxyPeopleLandMax = s.peopleLand;
       }
 
-      // Reach provider: a faction's in-reach UNCLAIMED candidates (reach extends from any owned tier).
+      // Reach provider: a faction's ADJACENT unclaimed candidates (reach extends from any owned
+      // tier), filtered on `h > EXPANSION.REACH_JUMPS` — genuinely a range bound now, though at the
+      // constant's live value of 1 it accepts only `h === 1`, identical to the adjacency-only
+      // reading before this filter existed. `hopsCache`'s BFS radius above still sizes against the
+      // same constant, so a future retune stays a safe superset here.
       const reachProvider = (factionId: string): ClaimCandidate[] => {
         const minHopByCandidate = new Map<string, number>();
         for (const s of systems) {
@@ -1687,7 +1817,7 @@ export async function runWorldTick(
           const neighbours = hops.get(s.id);
           if (!neighbours) continue;
           for (const [destId, h] of neighbours) {
-            if (h <= 0 || h > EXPANSION.REACH_JUMPS) continue;
+            if (h > EXPANSION.REACH_JUMPS) continue;
             if (factionBySystem.get(destId) !== null) continue; // only unclaimed
             const prev = minHopByCandidate.get(destId);
             if (prev === undefined || h < prev) minHopByCandidate.set(destId, h);
@@ -1748,7 +1878,7 @@ export async function runWorldTick(
           dlUnservedShortfallUpdates,
         ),
       );
-      const dbWorld = new MemoryDirectedBuildWorld(rows, constructionProjects);
+      const dbWorld = new MemoryDirectedBuildWorld(rows, constructionProjects, lanes);
       const dbResult = await runDirectedBuildProcessor(dbWorld, { tick }, {
         interval: cadence.construction,
         routeCost,
@@ -1841,6 +1971,8 @@ export async function runWorldTick(
       foundingDebitsBySourceSystem = foundingDebitsBySource(systems, dbWorld.developments);
       systems = applyDevelopments(systems, dbWorld.developments);
       constructionProjects = dbWorld.constructionProjects;
+      // Credit this run's landed lane_upgrade levels onto their lanes.
+      lanes = applyLaneLevelIncreases(lanes, dbWorld.laneLevelIncreases);
       // Persist the construction proposal-pressure counters into the market rows (proposalCycles only —
       // the same-tick economy/logistics writes on these rows are preserved by the spread inside).
       markets = applyBuildMarketUpdates(markets, dbWorld.proposalCycleUpdates);
@@ -1863,55 +1995,45 @@ export async function runWorldTick(
 
     // ── realised per-cycle survival-good stock change (persisted; read by nothing else in the
     // tick) ── Written HERE — after directed logistics has applied its own stock updates AND after
-    // directed-build's founding staging draws and staged manifest delivery above, still inside this
-    // outer cycle-start block. The interface is the realised change across the whole cycle: a
-    // founding donor's survival-good draw (`applyFoundingStagingDraws`) leaves its warehouse exactly
-    // as really as consumption does, so it belongs inside this figure rather than after it — and the
+    // directed-build's founding staging draws and staged manifest delivery above, gated on
+    // `migrationResolves` (equivalently `isCycleStart(tick, cadence.cycle)`) rather than the outer
+    // three-way gate above — because the interface is the realised change across the WHOLE cycle,
+    // and this is the last point in the tick that moves a survival good's `stock` ON A CYCLE
+    // BOUNDARY. A founding donor's draw (`applyFoundingStagingDraws`) leaves its warehouse exactly
+    // as really as consumption does, so it belongs inside this figure rather than after it — the
     // polarity makes that load-bearing rather than cosmetic. The one reader divides `stock` by
     // `−stockChange` for a cycles-to-empty countdown, so a drain left outside the figure reports a
-    // longer runway than the donor actually has: the reading would err toward reassurance on exactly
-    // the system that just gave its stores away. A donor that stages a manifest this cycle therefore
-    // reads more pessimistic for this one cycle than a mid-cycle read would show — accepted, the same
-    // way `populationChange` below accepts it, and it self-corrects next cycle from a fresh baseline.
+    // longer runway than the donor actually has. A logistics-only or build-only boundary tick (the
+    // cadences can diverge — see the harness `cadence` override) must NOT rewrite the baseline here:
+    // doing so would seed a sub-cycle snapshot the NEXT real cycle boundary then measures against,
+    // understating the whole-cycle drain and erring toward reassurance in the countdown.
     //
-    // Gated on `stockAtCycleStart`: absent whenever this tick was not an economy-cycle boundary
-    // (the snapshot is only taken then), so this skips cleanly on a tick where only logistics
-    // or build resolves, rather than diffing against a stale or absent snapshot.
+    // The window is a persisted baseline (`stockAtLastBoundary`), not a snapshot taken at this
+    // tick's own start: goods-arrivals now credits a haul on whatever tick it lands, which may be
+    // any tick of the cycle, not just this boundary one — a same-tick snapshot would miss every
+    // arrival that landed earlier in the cycle. Comparing against the figure this same write left
+    // at the PREVIOUS boundary covers the whole cycle regardless of which tick within it any haul
+    // actually credited.
     //
-    // Cadence caveat (see the field's own docstring, lib/world/types.ts): directed logistics runs
-    // on its OWN independently-tunable cadence (`cadence.logistics`). While it coincides with
-    // `cadence.cycle` — the live game's constants always do — this write captures the full
-    // production-minus-consumption-net-of-hauls figure the interface describes. If the two cadences
-    // are retuned apart, this only ever captures a logistics application that happens to land on
-    // THIS tick; a haul on any other tick is folded into `stock` without ever appearing in a
-    // reported change, and a cycle boundary with no coincident logistics run reports
-    // production-minus-consumption alone. Accepted rather than solved: capturing every haul
-    // regardless of cadence alignment needs a cross-tick accumulator carrying its own persisted
-    // baseline, which is a larger shape than this reading is worth.
-    //
-    // Placement is safe against resurrecting a row a colony founding just created or cleared, for
-    // the mirror of `populationChange`'s reason below. A founding TARGET is `controlled` right up to
-    // `applyDevelopments` this same run, so none of its rows are in `stockAtCycleStart` (keyed by
-    // the systems that were developed when the snapshot was taken) — its fresh rows from
-    // `addMarketsForSettledSystems`, and the manifest `applyStagedManifestDelivery` lands on them,
-    // are left untouched at `before === undefined`, absent as a never-assessed row should be. A
-    // founding SOURCE is `developed` throughout, so it was already in the snapshot and simply reads
-    // its post-draw `stock` here instead of its pre-draw one.
-    //
-    // Abandoned systems are excluded even though their survival-good rows sit in the snapshot:
-    // `resetAbandonedMarkets` already cleared this field above (before migration ran), and this
-    // system's control just flipped away from "developed" — writing a computed reading here would
-    // silently undo that clear with a stale figure from a colony that, as of this tick, no longer
-    // exists.
-    if (stockAtCycleStart) {
-      const snapshot = stockAtCycleStart;
+    // Scoped to survival-good rows of a system that is developed as of THIS INSTANT — after
+    // abandonment (which already cleared both this field and the baseline for a system leaving
+    // "developed" this cycle) and after `applyDevelopments` (which may just have made a founding
+    // target "developed" for the first time). A market row with no baseline yet — a fresh row from
+    // `addMarketsForSettledSystems`, or one whose baseline an abandonment just cleared — reads as
+    // never assessed: no `stockChange` is written, and the baseline is simply seeded from the
+    // current stock, the same "absent, not zero" convention `stockChange` itself uses. That is also
+    // why an abandoned-this-cycle system needs no separate exclusion here: it is no longer in
+    // `developedNow`, so this loop never touches it and the reset's clear stands untouched.
+    if (migrationResolves) {
+      const developedNow = new Set(
+        systems.filter((s) => isEconomicallyActive(s.control)).map((s) => s.id),
+      );
       const cycleCatchUp = catchUpFactor(cadence.cycle);
-      const abandonedThisCycle = new Set(abandonedSystemIds);
       markets = markets.map((m): WorldMarket => {
-        if (abandonedThisCycle.has(m.systemId)) return m;
-        const before = snapshot.get(`${m.systemId}|${m.goodId}`);
-        if (before === undefined) return m;
-        return { ...m, stockChange: (m.stock - before) / cycleCatchUp };
+        if (!SURVIVAL_GOODS.includes(m.goodId) || !developedNow.has(m.systemId)) return m;
+        const baseline = m.stockAtLastBoundary;
+        if (baseline === undefined) return { ...m, stockAtLastBoundary: m.stock };
+        return { ...m, stockChange: (m.stock - baseline) / cycleCatchUp, stockAtLastBoundary: m.stock };
       });
     }
 
@@ -1994,6 +2116,19 @@ export async function runWorldTick(
     if (treasuries.length > 0 && (treasuryResolves || hasWork)) {
       // The processor reads systems only when settling — a mid-cycle accrual
       // tick (band work without a cycle boundary) skips the O(systems) build.
+      // Lane upkeep is priced fresh from this settlement's lane levels, same as building upkeep
+      // (never accrued mid-cycle), so it is only worth computing on the settling tick. `lanes` here
+      // is already post-decay when logistics and the treasury cycle coincide on this tick (decay ran
+      // earlier, in the directed-logistics block above) — off that coincidence it's just this tick's
+      // carried-forward levels, decay or not.
+      let laneUpkeepWorkByFaction: ReadonlyMap<string, number> = new Map();
+      if (treasuryResolves) {
+        const systemById = new Map(systems.map((s) => [s.id, s]));
+        laneUpkeepWorkByFaction = laneUpkeepWork(lanes, (systemId): LaneEndpointOwner => {
+          const s = systemById.get(systemId);
+          return { factionId: s?.factionId ?? null, control: s?.control ?? "unclaimed" };
+        });
+      }
       const treasuryWorld = new InMemoryTreasuryWorld({
         treasuries,
         systems: treasuryResolves
@@ -2018,6 +2153,7 @@ export async function runWorldTick(
           economyScale: ECONOMY_SCALE,
           constructionWorkByFaction: constructionWorkByFaction ?? new Map(),
           logisticsWorkByFaction: logisticsWorkByFaction ?? new Map(),
+          laneUpkeepWorkByFaction,
           foundingDebitsByFaction: foundingDebitsByFaction ?? new Map(),
           rates: {
             headsTaxPerCycle: TREASURY.HEADS_TAX_PER_CYCLE,
@@ -2035,10 +2171,12 @@ export async function runWorldTick(
     }
   }
 
-  // Directed-logistics is the only writer of flowEvents, and it only appends on the
-  // cycle start — but the prune stays every-tick, outside the gate above, so the retention
-  // window is enforced on the tick it expires rather than up to a cycle late. It is a
-  // filter over an already-bounded log; the cycle-start gate is not worth the drift.
+  // flowEvents has one writer now: goods-arrivals appends whenever a due row credits — every
+  // tick, not just cycle starts (docs/planned/logistics-lanes.md §3: directed-logistics dispatches
+  // onto the pending-arrivals ledger and writes no flow row of its own; the flow log records goods
+  // actually delivered, which happens on credit). The prune stays every-tick, outside any gate, so
+  // the retention window is enforced on the tick it expires rather than up to a cycle late. It is
+  // a filter over an already-bounded log; a cycle-start gate here is not worth the drift.
   const flowRetentionFloor = tick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
   flowEvents = flowEvents.filter((f) => f.tick >= flowRetentionFloor);
 
@@ -2092,6 +2230,8 @@ export async function runWorldTick(
     buildings: flattenBuildings(systems),
     constructionProjects,
     markets,
+    lanes,
+    pendingArrivals,
     events,
     modifiers: rebuildWorldModifiers(events, EVENT_DEFINITIONS),
     ships,
@@ -2120,8 +2260,11 @@ export async function runWorldTick(
     markets,
     instrumentation: {
       buildCommitmentsByGood, migrationMoved, colonistDeliveryBySystem, foundingManifests, foundingStalls,
-      logisticsBudget, strikeSuppressedProposals, overshootDeathBySystem, growthBySystem,
-      teardownLevelsBySystem, abandonedSystemsByCause,
+      logisticsBudget, goodsArrivals, strikeSuppressedProposals, overshootDeathBySystem, growthBySystem,
+      teardownLevelsBySystem, abandonedSystemsByCause, logisticsDispatched, logisticsBlocked,
+      stageMs: recordStageMs
+        ? { tick: now() - tickStart, directedLogistics: directedLogisticsMs, goodsArrivals: goodsArrivalsMs }
+        : undefined,
     },
   };
 }

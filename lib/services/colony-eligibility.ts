@@ -22,14 +22,17 @@ import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
-import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { effectiveSpaceCost, HOUSING_TYPE } from "@/lib/constants/industry";
 import type { ColonyBlockReason } from "@/lib/types/colonisation";
 
-/** The hop radius the tick's shared BFS uses — seed-source reach for the colony verb matches it. */
-export const COLONY_REACH_HOPS = Math.max(
-  DIRECTED_LOGISTICS.MAX_HOPS, DIRECTED_BUILD.MAX_HOPS, EXPANSION.REACH_JUMPS,
-);
+/**
+ * The hop radius the tick's shared BFS uses — seed-source reach for the colony verb matches it.
+ * Directed-logistics dropped out of this max when it moved off hop-counted reachability onto
+ * lane-network routing (docs/planned/logistics-lanes.md §2): a haul's reach is now however far the
+ * lane graph and its `laneOpenFor` traversability carry it, not a hop budget, so only directed-
+ * build's own planning radius and expansion's claim reach remain.
+ */
+export const COLONY_REACH_HOPS = Math.max(DIRECTED_BUILD.MAX_HOPS, EXPANSION.REACH_JUMPS);
 
 /**
  * Nearest developed same-faction seed source within the tick's reach radius, or null.

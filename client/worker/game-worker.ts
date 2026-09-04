@@ -35,11 +35,13 @@ import type {
   ExportSaveInput,
   ImportSaveInput,
 } from "@/lib/schemas/game-setup";
-import type { OrderBuildInput, AutomationInput } from "@/lib/schemas/construction-orders";
+import type { OrderBuildInput, OrderLaneUpgradeInput, AutomationInput } from "@/lib/schemas/construction-orders";
+import type { ClaimSystemInput } from "@/lib/schemas/claims";
 import type { TreasuryPolicyInput } from "@/lib/schemas/treasury";
 import type { PinInput } from "@/lib/schemas/player-pins";
 import type { AlertCategoryInput, TrackerSectionInput } from "@/lib/schemas/player-settings";
-import type { OrderBuildResult, OrderColonyResult, CancelOrderResult, SetAutomationResult } from "@/lib/services/construction-orders";
+import type { OrderBuildResult, OrderColonyResult, OrderLaneUpgradeResult, CancelOrderResult, SetAutomationResult } from "@/lib/services/construction-orders";
+import type { ClaimSystemResult } from "@/lib/services/claims";
 import type { UpdateTreasuryPolicyResult } from "@/lib/services/treasury";
 import type { SetSystemPinResult } from "@/lib/services/player-pins";
 import type { SetAlertCategoryResult, SetTrackerSectionResult } from "@/lib/services/player-settings";
@@ -58,6 +60,8 @@ import { createWorkerHost, type WorkerHost, type RawWorkerScope } from "./host";
 
 type OrderBuildData = Extract<OrderBuildResult, { ok: true }>["data"];
 type OrderColonyData = Extract<OrderColonyResult, { ok: true }>["data"];
+type OrderLaneUpgradeData = Extract<OrderLaneUpgradeResult, { ok: true }>["data"];
+type ClaimSystemData = Extract<ClaimSystemResult, { ok: true }>["data"];
 type CancelOrderData = Extract<CancelOrderResult, { ok: true }>["data"];
 type SetAutomationData = Extract<SetAutomationResult, { ok: true }>["data"];
 type UpdateTreasuryPolicyData = Extract<UpdateTreasuryPolicyResult, { ok: true }>["data"];
@@ -72,6 +76,8 @@ type ImportSaveData = Extract<ImportSaveResult, { ok: true }>["data"];
 export interface GameCommandMap {
   orderBuild: { payload: OrderBuildInput & { systemId: string }; data: OrderBuildData };
   orderColony: { payload: { systemId: string }; data: OrderColonyData };
+  orderLaneUpgrade: { payload: OrderLaneUpgradeInput; data: OrderLaneUpgradeData };
+  claimSystem: { payload: ClaimSystemInput; data: ClaimSystemData };
   cancelOrder: { payload: { projectId: string }; data: CancelOrderData };
   setAutomation: { payload: AutomationInput; data: SetAutomationData };
   updateTreasuryPolicy: { payload: TreasuryPolicyInput & { factionId: string }; data: UpdateTreasuryPolicyData };
@@ -128,11 +134,13 @@ type StoreModule = typeof import("@/lib/world/store");
 type SnapshotModule = typeof import("@/lib/runtime/snapshot");
 type GameServiceModule = typeof import("@/lib/services/game");
 type ConstructionOrdersModule = typeof import("@/lib/services/construction-orders");
+type ClaimsModule = typeof import("@/lib/services/claims");
 type TreasuryModule = typeof import("@/lib/services/treasury");
 type PlayerPinsModule = typeof import("@/lib/services/player-pins");
 type PlayerSettingsModule = typeof import("@/lib/services/player-settings");
 type GameSetupSchemas = typeof import("@/lib/schemas/game-setup");
 type ConstructionOrderSchemas = typeof import("@/lib/schemas/construction-orders");
+type ClaimsSchemas = typeof import("@/lib/schemas/claims");
 type TreasurySchemas = typeof import("@/lib/schemas/treasury");
 type PlayerPinsSchemas = typeof import("@/lib/schemas/player-pins");
 type PlayerSettingsSchemas = typeof import("@/lib/schemas/player-settings");
@@ -152,6 +160,8 @@ interface Engine {
   importSave: GameServiceModule["importSave"];
   orderBuild: ConstructionOrdersModule["orderBuild"];
   orderColony: ConstructionOrdersModule["orderColony"];
+  orderLaneUpgrade: ConstructionOrdersModule["orderLaneUpgrade"];
+  claimSystem: ClaimsModule["claimSystem"];
   cancelOrder: ConstructionOrdersModule["cancelOrder"];
   setAutomation: ConstructionOrdersModule["setAutomation"];
   updateTreasuryPolicy: TreasuryModule["updateTreasuryPolicy"];
@@ -166,7 +176,9 @@ interface Engine {
     exportSaveSchema: GameSetupSchemas["exportSaveSchema"];
     importSaveSchema: GameSetupSchemas["importSaveSchema"];
     orderBuildSchema: ConstructionOrderSchemas["orderBuildSchema"];
+    orderLaneUpgradeSchema: ConstructionOrderSchemas["orderLaneUpgradeSchema"];
     automationSchema: ConstructionOrderSchemas["automationSchema"];
+    claimSystemSchema: ClaimsSchemas["claimSystemSchema"];
     treasuryPolicySchema: TreasurySchemas["treasuryPolicySchema"];
     pinSchema: PlayerPinsSchemas["pinSchema"];
     alertCategorySchema: PlayerSettingsSchemas["alertCategorySchema"];
@@ -179,18 +191,20 @@ interface Engine {
 
 async function loadEngine(config: BootConfig): Promise<Engine> {
   await bootHost(config);
-  const [tickLoopMod, storeMod, snapshotMod, gameMod, ordersMod, treasuryMod, pinsMod, settingsMod,
-    gameSetupSchemas, orderSchemas, treasurySchemas, pinsSchemas, settingsSchemas] = await Promise.all([
+  const [tickLoopMod, storeMod, snapshotMod, gameMod, ordersMod, claimsMod, treasuryMod, pinsMod, settingsMod,
+    gameSetupSchemas, orderSchemas, claimsSchemas, treasurySchemas, pinsSchemas, settingsSchemas] = await Promise.all([
     import("@/lib/world/tick-loop"),
     import("@/lib/world/store"),
     import("@/lib/runtime/snapshot"),
     import("@/lib/services/game"),
     import("@/lib/services/construction-orders"),
+    import("@/lib/services/claims"),
     import("@/lib/services/treasury"),
     import("@/lib/services/player-pins"),
     import("@/lib/services/player-settings"),
     import("@/lib/schemas/game-setup"),
     import("@/lib/schemas/construction-orders"),
+    import("@/lib/schemas/claims"),
     import("@/lib/schemas/treasury"),
     import("@/lib/schemas/player-pins"),
     import("@/lib/schemas/player-settings"),
@@ -214,6 +228,8 @@ async function loadEngine(config: BootConfig): Promise<Engine> {
     importSave: gameMod.importSave,
     orderBuild: ordersMod.orderBuild,
     orderColony: ordersMod.orderColony,
+    orderLaneUpgrade: ordersMod.orderLaneUpgrade,
+    claimSystem: claimsMod.claimSystem,
     cancelOrder: ordersMod.cancelOrder,
     setAutomation: ordersMod.setAutomation,
     updateTreasuryPolicy: treasuryMod.updateTreasuryPolicy,
@@ -228,7 +244,9 @@ async function loadEngine(config: BootConfig): Promise<Engine> {
       exportSaveSchema: gameSetupSchemas.exportSaveSchema,
       importSaveSchema: gameSetupSchemas.importSaveSchema,
       orderBuildSchema: orderSchemas.orderBuildSchema,
+      orderLaneUpgradeSchema: orderSchemas.orderLaneUpgradeSchema,
       automationSchema: orderSchemas.automationSchema,
+      claimSystemSchema: claimsSchemas.claimSystemSchema,
       treasuryPolicySchema: treasurySchemas.treasuryPolicySchema,
       pinSchema: pinsSchemas.pinSchema,
       alertCategorySchema: settingsSchemas.alertCategorySchema,
@@ -296,6 +314,22 @@ async function runCommand(
       }
       case "orderColony": {
         const { result } = await runWorldMutatingCommand(engine, () => engine.orderColony(envelope.payload));
+        return { type: "commandResult", id, result };
+      }
+      case "orderLaneUpgrade": {
+        const parsed = engine.schemas.orderLaneUpgradeSchema.safeParse(envelope.payload);
+        if (!parsed.success) {
+          return { type: "commandResult", id, result: { ok: false, error: zodIssueMessage(parsed.error) } };
+        }
+        const { result } = await runWorldMutatingCommand(engine, () => engine.orderLaneUpgrade(parsed.data));
+        return { type: "commandResult", id, result };
+      }
+      case "claimSystem": {
+        const parsed = engine.schemas.claimSystemSchema.safeParse(envelope.payload);
+        if (!parsed.success) {
+          return { type: "commandResult", id, result: { ok: false, error: zodIssueMessage(parsed.error) } };
+        }
+        const { result } = await runWorldMutatingCommand(engine, () => engine.claimSystem(parsed.data));
         return { type: "commandResult", id, result };
       }
       case "cancelOrder": {

@@ -21,6 +21,7 @@ function makeParams(overrides: Partial<TreasuryProcessorParams> = {}): TreasuryP
     economyScale: 1,
     constructionWorkByFaction: new Map(),
     logisticsWorkByFaction: new Map(),
+    laneUpkeepWorkByFaction: new Map(),
     foundingDebitsByFaction: new Map(),
     rates: RATES,
     ...overrides,
@@ -169,6 +170,53 @@ describe("treasury processor", () => {
     if (settled === null) throw new Error("expected a settlement on the cycle start");
     expect(settled.constructionBill).toBe(0);
     expect(JSON.parse(JSON.stringify(world.treasuries[0]))).toEqual(world.treasuries[0]);
+  });
+
+  it("bills lane upkeep as exactly one more maintenance term, and funded.maintenance moves with it", async () => {
+    const withoutLanes = new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
+    await runTreasuryProcessor(withoutLanes, ctxWithRealised(24, new Map()), makeParams());
+    const withLanes = new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
+    await runTreasuryProcessor(
+      withLanes,
+      ctxWithRealised(24, new Map()),
+      makeParams({ laneUpkeepWorkByFaction: new Map([["faction-1", 100]]) }),
+    );
+
+    const base = withoutLanes.treasuries[0].lastSettlement;
+    const withLane = withLanes.treasuries[0].lastSettlement;
+    if (base === null || withLane === null) throw new Error("expected both settlements");
+    const laneTerm = 100 * RATES.maintenanceRatePerWork; // catchUp 1 at interval === cadence
+    expect(withLane.maintenanceBill).toBeCloseTo(base.maintenanceBill + laneTerm, 9);
+    expect(withLane.laneUpkeepBill).toBeCloseTo(laneTerm, 9);
+    expect(base.laneUpkeepBill).toBeCloseTo(0, 9);
+
+    // Isolate the ladder's reaction to the lane term: no systems (no building bill, no income), so
+    // the ONLY maintenance charge either settlement carries is the lane term itself. Zero balance
+    // means the unbilled faction reads the zero-bill guard (funded = slider = 1) while the billed one
+    // is charged and cannot pay — funded.maintenance genuinely moves off the lane term, not off some
+    // other bill it happens to share the band with.
+    const unbilled = new InMemoryTreasuryWorld({ treasuries: [makeTreasury({ balance: 0 })], systems: [] });
+    await runTreasuryProcessor(unbilled, ctxWithRealised(24, new Map()), makeParams());
+    const billed = new InMemoryTreasuryWorld({ treasuries: [makeTreasury({ balance: 0 })], systems: [] });
+    await runTreasuryProcessor(
+      billed,
+      ctxWithRealised(24, new Map()),
+      makeParams({ laneUpkeepWorkByFaction: new Map([["faction-1", 100]]) }),
+    );
+    expect(unbilled.treasuries[0].funded.maintenance).toBe(1);
+    expect(billed.treasuries[0].funded.maintenance).toBeLessThan(unbilled.treasuries[0].funded.maintenance);
+  });
+
+  it("bills nobody for a faction with an unclaimed-endpoint lane (no entry in the upkeep map)", async () => {
+    const world = new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
+    await runTreasuryProcessor(
+      world,
+      ctxWithRealised(24, new Map()),
+      makeParams({ laneUpkeepWorkByFaction: new Map() }),
+    );
+    const settled = world.treasuries[0].lastSettlement;
+    if (settled === null) throw new Error("expected a settlement on the cycle start");
+    expect(settled.laneUpkeepBill).toBe(0);
   });
 
   it("shorts the ladder bottom-up under insolvency and latches the paid fraction as funding", async () => {

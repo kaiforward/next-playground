@@ -582,4 +582,29 @@ describe("applyAbandonments / resetAbandonedMarkets / dropAbandonedBuildProjects
     expect(resetAbandonedMarkets(markets, [])).toBe(markets);
     expect(dropAbandonedBuildProjects(projects, [])).toBe(projects);
   });
+
+  function laneProject(id: string, laneKey: string): WorldConstructionProject {
+    return {
+      kind: "lane_upgrade", id, factionId: "faction-1", origin: "auto", laneKey,
+      levels: 2, workTotal: 40, workDone: 10,
+    };
+  }
+
+  it("drops an open lane_upgrade project when its FIRST endpoint abandoned, refunding nothing", () => {
+    const projects = [laneProject("l1", "doomed|far"), buildProject("p2", "alive")];
+    const after = dropAbandonedBuildProjects(projects, ["doomed"]);
+    expect(after.map((p) => p.id)).toEqual(["p2"]);
+  });
+
+  it("drops an open lane_upgrade project when its SECOND endpoint abandoned", () => {
+    const projects = [laneProject("l1", "far|doomed")];
+    const after = dropAbandonedBuildProjects(projects, ["doomed"]);
+    expect(after).toEqual([]);
+  });
+
+  it("leaves a lane_upgrade project alone when neither endpoint abandoned", () => {
+    const project = laneProject("l1", "alive|other");
+    const after = dropAbandonedBuildProjects([project], ["doomed"]);
+    expect(after).toEqual([project]);
+  });
 });

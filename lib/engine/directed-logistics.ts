@@ -5,6 +5,12 @@
  * See docs/active/gameplay/economy-autonomic-agency.md.
  */
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import type { RouteBlocked, RouteBookerFor } from "./lane-routing";
+
+// Re-exported so existing callers (the processor, tests) keep importing the matcher's booker view
+// from here — the type itself now lives beside `RouteBooker` in `lane-routing.ts` (no runtime
+// import cycle between the booker and the matcher).
+export type { RouteBookerFor };
 
 export type MarketKind = "deficit" | "surplus" | "balanced";
 
@@ -31,6 +37,14 @@ export interface MarketClassification {
  * rather than a floored one — under the floor, no market could ever reach it. It says nothing about
  * the source side: `surplusDrawable` decides that separately, and a market with no local demand is
  * fully drawable there.
+ *
+ * `stock` is whatever the caller passes, not necessarily physical stock — the matcher's sink test
+ * feeds `stock + scheduledInbound` here (`docs/planned/logistics-lanes.md` §2/§3: a system with
+ * enough goods in flight to clear the deficit line is not a deficit, the oscillation guard the
+ * premise-3 falsification demands) while the donor test and every other reader
+ * (`market-analysis.ts`, `computeCoverLevels`) keep passing physical stock alone, deliberately —
+ * see `GoodMarketState.scheduledInbound`'s docstring. This function itself has no opinion on which;
+ * it only classifies whatever number it is handed.
  */
 export function classifyMarketState(stock: number, target: number): MarketClassification {
   // No demand ⇒ no cycles-of-supply target — never a sink, never a drawable surplus; treat as balanced.
@@ -150,6 +164,14 @@ export interface GoodMarketState {
   proposalCycles?: number;
   /** A reachable logistics match was constrained by the faction's funded haul work. */
   logisticsFundingBound?: boolean;
+  /** Goods already dispatched toward this system for this good, not yet arrived — the outbound leg
+   *  of the pending-arrivals ledger (`scheduledInbound`, `lib/engine/freight.ts`). Absent ⇒ 0. Read
+   *  by the sink test only, as `stock + scheduledInbound` against `logisticsTarget`
+   *  (`docs/planned/logistics-lanes.md` §3, "Deficit classification counts inbound") — the donor
+   *  test and every other reader of this good's stock stay on physical stock alone, so a shipment
+   *  in flight is counted exactly once and a world still lacking goods still reads as needing them
+   *  for welfare purposes. */
+  scheduledInbound?: number;
 }
 
 export interface SystemLogisticsState {
@@ -159,12 +181,22 @@ export interface SystemLogisticsState {
   goods: GoodMarketState[];
 }
 
+/**
+ * One booked placement of a draw. A haul the booker splits across multiple paths under congestion
+ * yields several `PlannedTransfer` rows for the same donor→sink draw, one per placement, whose
+ * quantities sum to what was actually placed — never the whole draw when part of it was blocked
+ * (`docs/planned/logistics-lanes.md` §2).
+ */
 export interface PlannedTransfer {
   goodId: string;
   fromSystemId: string;
   toSystemId: string;
   quantity: number;
   cost: number;
+  /** Lane keys crossed by this placement, in path order — `RoutePlacement.edges`. */
+  edges: string[];
+  /** This placement's summed raw (unweighted) fuel cost — `RoutePlacement.fuelTotal`. */
+  fuelTotal: number;
 }
 
 /** One deficit the budget left materially short. With donors filling a deficit in turn,
@@ -215,22 +247,18 @@ export interface TransferMatchResult {
   transfers: PlannedTransfer[];
   fundingBound: FundingBoundMatch[];
   unservable: UnservableDeficit[];
+  /** Deficits whose fill ended early because a draw was unaffordable — the per-deficit skip
+   *  (`docs/planned/logistics-lanes.md` §2) that replaced the old run-terminating budget clamp.
+   *  Counts deficits, not draws: a deficit with several donors contributes at most 1, at the donor
+   *  whose draw the budget stopped. Independent of `fundingBound`, which additionally requires the
+   *  residual left standing to be material (`FUNDING_BOUND_RESIDUAL_FRACTION`). */
+  budgetSkipped: number;
+  /** Every `RouteBooker.routeAndBook` blocked entry this faction's fan-out produced this cycle —
+   *  the congestion the booker itself recorded on a lane, surfaced here (rather than discarded, as
+   *  before) purely as calibration instrumentation for the harness's `contentionShortfallByFaction`
+   *  reading. Not consumed by any decision in this function. */
+  blocked: RouteBlocked[];
 }
-
-/** Per-unit route cost between two systems; null = unreachable / beyond hop budget. */
-export type RouteCost = (fromSystemId: string, toSystemId: string) => number | null;
-
-/**
- * Candidate source systems inside the route lookup's bounded neighbourhood. The second argument is
- * the complete faction system list so small standalone callers can deliberately use the fallback
- * without constructing a topology index.
- */
-export type ReachableSystemIds = (
-  toSystemId: string,
-  allSystemIds: readonly string[],
-) => Iterable<string>;
-
-export const allSystemIdsReachable: ReachableSystemIds = (_toSystemId, allSystemIds) => allSystemIds;
 
 interface Deficit { systemId: string; goodId: string; shortfall: number; severity: number; }
 interface Surplus {
@@ -243,20 +271,24 @@ interface Surplus {
 
 /**
  * Greedy surplus→deficit matching for ONE faction's systems (or all independents).
- * Budget = Σ system.generation, spent as quantity × routeCost. Worst-deficit-first; each deficit
- * then fills from every reachable donor in ascending route-cost order until its shortfall is met,
- * donors are exhausted, or the budget is spent — one transfer row per donor-draw. Transfers stop
- * when budget is exhausted, while bounded-neighbour classification continues so
- * wanted-but-unfunded endpoints remain observable.
+ * Budget = Σ system.generation, spent as the summed priced cost of what `booker.routeAndBook`
+ * actually places. Worst-deficit-first; each deficit fills from every same-faction donor holding
+ * drawable surplus, in ascending `priceFrom`-order (frozen for that deficit's whole fan-out), until
+ * its shortfall is met, donors are exhausted, or an unaffordable draw ends this deficit's fill —
+ * the **per-deficit skip** that replaces the old run-terminating budget clamp
+ * (`docs/planned/logistics-lanes.md` §2): the remaining budget carries forward to the next
+ * deficit rather than zeroing for the whole run, so one dear draw no longer starves every deficit
+ * behind it. A haul the booker splits across multiple paths under congestion yields one
+ * `PlannedTransfer` per placement, its quantities summing to what the booker actually placed — the
+ * unplaced remainder is congestion, which the booker itself records as blocked volume, and is
+ * neither drawn from the donor, billed, nor treated as unservable or funding-bound here.
  */
 export function matchFactionTransfers(
   systems: SystemLogisticsState[],
-  routeCost: RouteCost,
-  reachableSystemIds: ReachableSystemIds = allSystemIdsReachable,
+  booker: RouteBookerFor,
 ): TransferMatchResult {
   let budget = 0;
   for (const s of systems) budget += s.generation;
-  const allSystemIds = systems.map((system) => system.systemId);
 
   // Classify each (system, good) as deficit or surplus. Mutable drawable/stock-shortfall as we allocate.
   const deficits: Deficit[] = [];
@@ -265,7 +297,10 @@ export function matchFactionTransfers(
   for (let systemOrder = 0; systemOrder < systems.length; systemOrder++) {
     const s = systems[systemOrder];
     for (const g of s.goods) {
-      const c = classifyMarketState(g.stock, g.logisticsTarget);
+      // Sink test: stock plus what is already in flight toward this good, so a delivery already
+      // dispatched does not order a second one (docs/planned/logistics-lanes.md §3). The donor
+      // test below stays on physical stock alone.
+      const c = classifyMarketState(g.stock + (g.scheduledInbound ?? 0), g.logisticsTarget);
       // Self-supply gate: a system that produces at least its own demand is never a deficit
       // sink for that good (it refills from its own output), even when standing stock dips below
       // the warehousing target. Without this, high-throughput producers — which hold little
@@ -300,6 +335,8 @@ export function matchFactionTransfers(
   const transfers: PlannedTransfer[] = [];
   const fundingBound: FundingBoundMatch[] = [];
   const unservable: UnservableDeficit[] = [];
+  const blocked: RouteBlocked[] = [];
+  let budgetSkipped = 0;
   for (const d of deficits) {
     const sources = surplusesByGood.get(d.goodId);
     if (!sources) {
@@ -312,30 +349,49 @@ export function matchFactionTransfers(
       continue;
     }
 
-    // Two figures off one walk of this deficit's reachable donors.
+    // One search from this sink, frozen for its whole donor fan-out — later deficits re-search and
+    // see this deficit's bookings.
+    const priceFor = booker.priceFrom(d.systemId);
+    // A second, saturation-blind search from the SAME sink — see `RouteBookerFor.reachableFrom`'s
+    // own docstring. This is what `reachableDrawable` below reads instead of `priceFor`: congestion
+    // this run's own earlier deficits caused must not strand a donor out of the structural signal.
+    // Built lazily: a donor `priceFor` prices has a live path and so trivially a saturation-blind
+    // one, so the second search is only paid when some donor priced null.
+    let reachableFor: ((donorId: string) => boolean) | null = null;
+    const isReachable = (donorId: string): boolean => {
+      reachableFor ??= booker.reachableFrom(d.systemId);
+      return reachableFor(donorId);
+    };
+
+    // Two figures off one walk of this deficit's donors.
     //
-    // `candidates` — every willing donor with something LEFT to give, cheapest route first (tie:
-    // stable system order), one PlannedTransfer per donor-draw. A single-donor cap here left
-    // reachable stock unshipped beside standing deficits (~42% of equilibrium unmet tonnage in the
-    // attribution run). A dry donor is excluded: it could only contribute a zero-quantity transfer.
+    // `candidates` — every willing donor with something LEFT to give and an open priced path,
+    // cheapest first (tie: stable system order), one or more `PlannedTransfer` rows per donor-draw
+    // (the booker may split a single draw across paths under congestion). A single-donor cap here
+    // left reachable stock unshipped beside standing deficits (~42% of equilibrium unmet tonnage in
+    // the attribution run). A dry donor is excluded: it could only contribute a zero-quantity draw.
+    // Candidates still require a LIVE priced path (`priceFor`) — congestion may block a donor from
+    // actually shipping this run even though it counts toward the structural reading below.
     //
-    // `reachableDrawable` — total capacity this deficit can actually reach, summed from each donor's
-    // LIVE drawable, i.e. what it still holds after the deficits ahead of it in the queue took their
-    // share. The structural test asks whether the shortfall is closeable with what exists, not
-    // whether it would be closeable were this deficit the only one asking: where a faction's demand
-    // for a good outruns its supply, the deficits left with nothing are unservable in the plainest
-    // sense and have to say so. A donor already drawn dry contributes 0 here and is skipped as a
-    // candidate below — it could only ship a zero-quantity transfer. Deliberately independent of the
-    // budget mechanics that decide `fundingBound` too: the two questions are "does enough exist" and
-    // "did money reach what exists", and a deficit can fail both at once (see the type's own docstring).
+    // `reachableDrawable` — total capacity this deficit can actually reach, summed from each
+    // structurally-reachable donor's LIVE drawable, i.e. what it still holds after the deficits ahead
+    // of it in the queue took their share. Reachability is `reachableFor`, NOT `priceFor`: a donor
+    // whose only path is currently saturated (`priceFor` returns null, congestion) still counts here
+    // — congestion is not the same as "does not exist" (`docs/planned/logistics-lanes.md` §2, "a
+    // blocked haul is not an unservable one"). A donor `reachableFor` returns false for (no open path
+    // at all, traversability-closed) is not reachable for this test, exactly as an out-of-radius donor
+    // was not before the hop cap was deleted. The structural test asks whether the shortfall is
+    // closeable with what exists, not whether it would be closeable were this deficit the only one
+    // asking: where a faction's demand for a good outruns its supply, the deficits left with nothing
+    // are unservable in the plainest sense and have to say so. Deliberately independent of the budget
+    // mechanics that decide `fundingBound` too: the two questions are "does enough exist" and "did
+    // money reach what exists", and a deficit can fail both at once (see the type's own docstring).
     let reachableDrawable = 0;
     const candidates: Array<{ source: Surplus; perUnit: number }> = [];
-    for (const sourceSystemId of reachableSystemIds(d.systemId, allSystemIds)) {
-      const source = sources.get(sourceSystemId);
-      if (source === undefined) continue;
-      const perUnit = routeCost(source.systemId, d.systemId);
-      if (perUnit === null || perUnit <= 0) continue;
-      reachableDrawable += source.drawable;
+    for (const [sourceSystemId, source] of sources) {
+      const perUnit = priceFor(sourceSystemId);
+      if (perUnit !== null || isReachable(sourceSystemId)) reachableDrawable += source.drawable;
+      if (perUnit === null) continue;
       if (source.drawable <= 0) continue;
       candidates.push({ source, perUnit });
     }
@@ -354,27 +410,61 @@ export function matchFactionTransfers(
       const wanted = Math.min(remaining, source.drawable);
       const affordable = budget > 0 ? budget / perUnit : 0;
       const quantity = Math.min(wanted, affordable);
+      // Set when this candidate's LIVE billing overshoots the FROZEN quote `affordable` was sized
+      // against — see the comment below the placement loop. Distinct from `affordable < wanted`
+      // (this candidate's own stock/shortfall-limited share was smaller than what the budget could
+      // in principle afford): a draw can be exactly `affordable === wanted` (fully served, nothing
+      // left over) and still overshoot once congestion prices later placements above the quote.
+      let overshotBudget = false;
       if (Number.isFinite(quantity) && quantity > 0) {
-        const cost = quantity * perUnit;
-        transfers.push({
-          goodId: d.goodId,
-          fromSystemId: source.systemId,
-          toSystemId: d.systemId,
-          quantity,
-          cost,
-        });
-        source.drawable -= quantity;
-        remaining -= quantity;
-        budget -= cost;
+        const booking = booker.routeAndBook(source.systemId, d.systemId, quantity);
+        let placedTotal = 0;
+        if (booking) {
+          blocked.push(...booking.blocked);
+          for (const placement of booking.placements) {
+            const cost = placement.quantity * placement.perUnit;
+            transfers.push({
+              goodId: d.goodId,
+              fromSystemId: source.systemId,
+              toSystemId: d.systemId,
+              quantity: placement.quantity,
+              cost,
+              edges: placement.edges,
+              fuelTotal: placement.fuelTotal,
+            });
+            placedTotal += placement.quantity;
+            budget -= cost;
+          }
+          // `affordable` above was sized against the FROZEN per-deficit quote (`budget / perUnit`,
+          // `perUnit` from `priceFor`), but each placement above is billed at its own LIVE price
+          // (`placement.perUnit`) — and live ≥ frozen by construction: this very draw's earlier
+          // placements raise congestion, and a split under congestion can land part of the quantity
+          // on a costlier detour. A draw quoted at exactly the remaining budget can therefore charge
+          // above it. Left negative, `budget` would make `affordable` 0 for every donor and deficit
+          // for the rest of the run (`budget > 0 ? … : 0`) — a run-wide cliff, not the per-deficit
+          // binding the skip below implements — so it is floored at 0 here. `overshotBudget` still
+          // ends THIS candidate's fill (below): the budget genuinely ran out mid-draw, which
+          // `affordable < wanted` alone would not catch.
+          if (budget < 0) overshotBudget = true;
+          budget = Math.max(0, budget);
+        }
+        // The booker may place less than `quantity` under congestion (RouteBooking.blocked) — the
+        // unplaced part is neither drawn from the donor nor billed, and it is not this function's
+        // concern: the booker records it as blocked volume on the lane, not as `unservable` or
+        // `fundingBound` (docs/planned/logistics-lanes.md §2, "capacity-blocked volume is its own
+        // signal").
+        source.drawable -= placedTotal;
+        remaining -= placedTotal;
       }
-      // A budget-stopped draw ends this deficit's fill: later donors are unaffordable too, and
-      // iterating them would only fan out epsilon-sized transfers from float residue. The budget
-      // is clamped to exactly 0 for the same reason — `(budget / perUnit) * perUnit` can round
-      // below `budget`, and the residue would leak one sub-epsilon transfer into every remaining
-      // deficit. Classification continues either way (see the docstring).
-      if (affordable < wanted) {
+      // An unaffordable draw, or one that overshot the live budget above, ends THIS deficit's fill:
+      // later donors here are unaffordable too, and iterating them would only fan out epsilon-sized
+      // transfers from float residue. Unlike the retired run-terminating clamp, the budget itself is
+      // left exactly as spent (floored at 0, never negative) — the remaining budget stays available
+      // to fund cheaper deficits behind this one in the queue, which is the gradual binding §2 wants
+      // in place of a single cliff. Classification continues either way (see the docstring).
+      if (affordable < wanted || overshotBudget) {
         stoppedDonorId = source.systemId;
-        budget = 0;
+        budgetSkipped++;
         break;
       }
     }
@@ -408,5 +498,5 @@ export function matchFactionTransfers(
     }
   }
 
-  return { transfers, fundingBound, unservable };
+  return { transfers, fundingBound, unservable, budgetSkipped, blocked };
 }

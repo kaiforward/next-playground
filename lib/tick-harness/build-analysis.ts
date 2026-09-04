@@ -564,8 +564,16 @@ export function newInFlightEstablishTotals(): InFlightEstablishTotals {
  * ever reaches this. A colony committed and completed inside a single cycle never appears at all —
  * `summariseFoundingLifecycle` counts those rather than pretending they took zero cycles.
  */
+/** The queue fields this sampler reads — a union of the three arms (mirrors `CharterProjectRow`,
+ *  `lib/tick-harness/conservation-analysis.ts`) so a minimal fixture can stand in for a real project
+ *  row without carrying every field the full union requires. */
+export type SampledProjectRow =
+  | Pick<Extract<WorldConstructionProject, { kind: "colony_establish" }>, "kind" | "systemId">
+  | Pick<Extract<WorldConstructionProject, { kind: "build" }>, "kind">
+  | Pick<Extract<WorldConstructionProject, { kind: "lane_upgrade" }>, "kind">;
+
 export function sampleOpenColonies(
-  projects: ReadonlyArray<Pick<WorldConstructionProject, "kind" | "systemId">>,
+  projects: ReadonlyArray<SampledProjectRow>,
   tick: number,
   commitments: Map<string, number>,
   inFlight: InFlightEstablishTotals,
@@ -875,7 +883,7 @@ export function summariseColonisation(
   let colonyProgressSum = 0;
   const colonyByKind: Record<string, number> = {};
   for (const p of projects) {
-    if (p.kind !== "build") continue; // colony-establish has no buildingType/levels; its lifecycle is reported separately, by sampleOpenColonies/summariseFoundingLifecycle
+    if (p.kind !== "build") continue; // colony-establish and lane_upgrade carry no buildingType; a colony's lifecycle is reported separately, by sampleOpenColonies/summariseFoundingLifecycle
     const isHome = homeworldSet.has(p.systemId);
     if (isHome) { homeworldProjects++; homeworldLevels += p.levels; }
     else {

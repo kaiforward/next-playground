@@ -75,13 +75,21 @@ function sumTravelDuration(
 /**
  * Dijkstra over the fuel adjacency, with a linear-scan priority queue (fine for small graphs).
  * `maxFuel` drops any node the budget cannot reach; `stopAt` ends the search the moment that node
- * is the cheapest unvisited one, i.e. once its cost is final.
+ * is the cheapest unvisited one, i.e. once its cost is final. `edgeCost`, when given, replaces the
+ * raw `fuelCost` edge weight with `edgeCost(from, to, fuelCost)` — returning `null` closes the edge
+ * for this search only (excluded from the graph, never priced). Exported so callers pricing a
+ * congested or partially-closed graph (`lib/engine/lane-routing.ts`) reuse this search verbatim
+ * instead of re-deriving Dijkstra; every existing caller here omits the hook and is unaffected.
  * Returns the settled cost map and the predecessor map `reconstructPath` walks.
  */
-function dijkstra(
+export function dijkstra(
   originId: string,
   adjacency: FuelAdjacency,
-  options: { maxFuel?: number; stopAt?: string } = {},
+  options: {
+    maxFuel?: number;
+    stopAt?: string;
+    edgeCost?: (from: string, to: string, fuelCost: number) => number | null;
+  } = {},
 ): { dist: Map<string, number>; prev: Map<string, string> } {
   const dist = new Map<string, number>();
   const prev = new Map<string, string>();
@@ -108,7 +116,9 @@ function dijkstra(
     const neighbors = adjacency.get(current) ?? [];
     for (const { toSystemId, fuelCost } of neighbors) {
       if (visited.has(toSystemId)) continue;
-      const newDist = currentDist + fuelCost;
+      const weight = options.edgeCost ? options.edgeCost(current, toSystemId, fuelCost) : fuelCost;
+      if (weight === null) continue; // Edge closed for this search
+      const newDist = currentDist + weight;
       if (options.maxFuel !== undefined && newDist > options.maxFuel) continue;
       if (newDist < (dist.get(toSystemId) ?? Infinity)) {
         dist.set(toSystemId, newDist);
@@ -120,8 +130,12 @@ function dijkstra(
   return { dist, prev };
 }
 
-/** Walk the predecessor chain back from `target`; the returned path runs origin-first. */
-function reconstructPath(prev: Map<string, string>, target: string): string[] {
+/**
+ * Walk the predecessor chain back from `target`; the returned path runs origin-first. Exported
+ * alongside `dijkstra` so a caller with its own edge-cost hook (`lib/engine/lane-routing.ts`) can
+ * reconstruct paths from the `prev` map it gets back, instead of re-implementing this walk.
+ */
+export function reconstructPath(prev: Map<string, string>, target: string): string[] {
   const path: string[] = [];
   let node: string | undefined = target;
   while (node !== undefined) {

@@ -46,7 +46,14 @@ export interface WorldPlayer {
   controlledFactionId: string;
   /** Per-domain autonomic switches. Off = the planner stops PROPOSING in that domain for the player's
    *  faction; committed funding and manual orders always continue. AI factions never read this. */
-  automation: { build: boolean; colonisation: boolean };
+  automation: { build: boolean; colonisation: boolean; lanes: boolean };
+  /**
+   * Tick of the player's last successful `claimSystem` order (docs/planned/logistics-lanes.md §1) —
+   * absent means never claimed, not tick 0. `claimSystem` refuses a new claim until `currentTick −
+   * lastClaimTick ≥ PLAYER_CLAIM_COOLDOWN × CYCLE_LENGTH` (`lib/constants/lanes.ts`,
+   * `lib/constants/tick-cadence.ts`). Nothing inside the tick reads this.
+   */
+  lastClaimTick?: number;
   /**
    * Player-curated bookmark list for the Tracker panel (docs/active/gameplay/tracker.md), insertion-
    * ordered and deduplicated at the write boundary — never re-sorted, never capped. Pinning is a
@@ -374,7 +381,6 @@ export interface WorldBuilding {
 interface WorldConstructionProjectBase {
   id: string;
   factionId: string;
-  systemId: string;
   /** Who committed this row: the autonomic planner, or a player order (priority, display, cancel-permission). */
   origin: "auto" | "player";
   /** Total construction work to complete. */
@@ -393,6 +399,7 @@ interface WorldConstructionProjectBase {
  */
 export interface WorldBuildProject extends WorldConstructionProjectBase {
   kind: "build";
+  systemId: string;
   buildingType: string;
   /** Whole levels this project lands on completion (integer ≥ 1). */
   levels: number;
@@ -413,6 +420,7 @@ export interface WorldFoundingStockLine {
  */
 export interface WorldColonyEstablishProject extends WorldConstructionProjectBase {
   kind: "colony_establish";
+  systemId: string;
   /** Nearest developed same-faction system the seed population transfers from (fixed for the project's life). */
   sourceSystemId: string;
   /** Conserved starter population, sized at proposal to the whole-level habitable cap. */
@@ -433,16 +441,91 @@ export interface WorldColonyEstablishProject extends WorldConstructionProjectBas
 }
 
 /**
- * One committed construction project. A discriminated union: ordinary `build` levels, or a
- * `colony_establish` that lands a viable colony. Both are funded from the same per-faction throughput
- * pool by the same `fundQueue`, so build-vs-colonise arbitrates on one budget.
+ * A queued order to raise the undirected lane `laneKey` (`lib/engine/lanes.ts`) by `levels` whole
+ * levels. Unlike `WorldBuildProject`/`WorldColonyEstablishProject`, this row is not scoped to a single
+ * `systemId` — it carries its undirected lane key instead, and is dropped rather than reassigned when
+ * either endpoint stops satisfying investability (`dropAbandonedBuildProjects`, `lib/world/tick.ts`).
+ * Levels land incrementally exactly as a `kind: "build"` row's do: `fundQueueWithFloor` reads only
+ * `levels`/`workTotal`/`workDone`, so the same `workTotal ÷ levels` boundary landing applies here too
+ * (`splitLandedLevels`, `lib/engine/construction.ts`), crediting whole levels onto `WorldLane.level`
+ * via `applyLaneLevelIncreases`.
  */
-export type WorldConstructionProject = WorldBuildProject | WorldColonyEstablishProject;
+export interface WorldLaneUpgradeProject extends WorldConstructionProjectBase {
+  kind: "lane_upgrade";
+  laneKey: string;
+  /** Whole levels this project lands on completion (integer ≥ 1). */
+  levels: number;
+}
+
+/**
+ * One committed construction project. A discriminated union: ordinary `build` levels, a
+ * `colony_establish` that lands a viable colony, or a `lane_upgrade` that raises an undirected lane's
+ * invested level. All three are funded from the same per-faction throughput pool by the same
+ * `fundQueue`, so build-vs-colonise-vs-lane arbitrates on one budget.
+ */
+export type WorldConstructionProject = WorldBuildProject | WorldColonyEstablishProject | WorldLaneUpgradeProject;
 
 export interface WorldConnection {
   fromId: string;
   toId: string;
   fuelCost: number;
+}
+
+/**
+ * A persistent, undirected jump lane — one row per system pair that carries a `WorldConnection`
+ * (docs/planned/logistics-lanes.md §1). `aId < bId`, and `key` is exactly `${aId}|${bId}` — the same
+ * sorted-pair key `buildOpenEdges` dedupes reciprocal connection rows on
+ * (`lib/tick/world/trade-flow-topology.ts`) — so a lane and its open-edge view always agree on
+ * identity.
+ *
+ * `level` is the invested upgrade tier (float, ≥ 0; capacity rises with it, `laneCapacity` in
+ * `lib/engine/lanes.ts`) — level 0 is a lane nobody has invested in, not an impassable one: every
+ * generated lane carries a small baseline capacity with no investment (§1). `bookedLoad` is a
+ * per-run quota the logistics processor writes and resets each logistics run; `blockedVolume` is the
+ * volume a saturated edge turned away the same run; both read 0 until a logistics run has visited the
+ * lane. Booked + blocked is the "attempted load" figure lane decay reads. `idleCycles` is the lane
+ * analogue of `WorldBuilding.idleCycles`: a sustained-idle counter (the lane decay dead band, §1)
+ * that only advances while a whole level's capacity goes unused and resets on any run that uses it;
+ * it reads 0 until decay assessment runs against the lane.
+ */
+export interface WorldLane {
+  key: string;
+  aId: string;
+  bId: string;
+  level: number;
+  bookedLoad: number;
+  blockedVolume: number;
+  idleCycles: number;
+}
+
+/**
+ * One scheduled-freight ledger row (docs/planned/logistics-lanes.md §3) — written at dispatch by
+ * directed-logistics (a future pass; nothing dispatches onto this ledger yet), drained by the
+ * unconditional per-tick goods-arrivals stage. `routeEdges` is the ordered `laneKey` (`lib/engine/
+ * lanes.ts`) list the haul crosses — the interdiction query's substrate.
+ *
+ * `leg: "outbound"` is a donor→destination haul in flight; the destination's band cap
+ * (`marketBandForRow(...).maxStock`) applies at arrival, and any uncredited remainder is returned
+ * to the donor as a fresh `leg: "return"` row over the reversed `routeEdges`, arriving after the
+ * SAME delay (`arrivalTick − dispatchTick`) the outbound leg took. A return leg credits its target
+ * (the original donor) in full, uncapped — the cancelled-colony precedent (staged materials return
+ * uncapped, docs/active/gameplay/player-seat.md Cancel) — and is deliberately excluded from
+ * `scheduledInbound` (`lib/engine/freight.ts`): it is goods heading back to a donor, not inbound
+ * supply a destination should stop ordering against.
+ */
+export interface WorldPendingArrival {
+  id: string;
+  /** The hauling faction, or null for the independent (null-faction) group — matches
+   *  `SystemLogisticsRow.factionId`. */
+  factionId: string | null;
+  fromSystemId: string;
+  toSystemId: string;
+  goodId: string;
+  quantity: number;
+  dispatchTick: number;
+  arrivalTick: number;
+  routeEdges: string[];
+  leg: "outbound" | "return";
 }
 
 // ── Markets ─────────────────────────────────────────────────────
@@ -513,41 +596,51 @@ export interface WorldMarket {
    */
   logisticsFundingBound?: boolean;
   /**
-   * The realised change in `stock` across one economy cycle, after directed logistics has applied
-   * its hauls as stock deltas and after directed build has drawn this cycle's colony staging
-   * materials — production minus consumption, net of imports/exports and of what a founding donor
-   * shipped out to stand up a colony, denominated
-   * per reference cycle (dividing the realised change by this cycle's own `catchUpFactor`, the same
-   * denomination `WorldSystem.populationChange` uses) so the reading is unchanged if `CYCLE_LENGTH`
-   * is retuned. Written ONLY for `SURVIVAL_GOODS` (lib/constants/physical-economy.ts:153 — water and
-   * food); every other good's market row never carries this key, present or absent.
+   * The realised change in `stock` across one full economy cycle — the whole window between this
+   * boundary tick and the previous one, not just this tick's own delta — production minus
+   * consumption, net of imports/exports and of what a founding donor shipped out to stand up a
+   * colony, denominated per reference cycle (dividing the realised change by this cycle's own
+   * `catchUpFactor`, the same denomination `WorldSystem.populationChange` uses) so the reading is
+   * unchanged if `CYCLE_LENGTH` is retuned. Written ONLY for `SURVIVAL_GOODS`
+   * (lib/constants/physical-economy.ts:153 — water and food); every other good's market row never
+   * carries this key, present or absent.
    *
-   * Written by the tick body (lib/world/tick.ts), not by the directed-logistics engine or
-   * processor: snapshotted immediately BEFORE the economy processor mutates `stock` this cycle, and
-   * computed after the last stage of the same tick that moves it — directed build's founding
-   * staging draw and staged manifest delivery, which run after directed logistics' own stock
-   * updates. A founding donor's draw is a real loss from its warehouse, and this figure's one reader
-   * divides `stock` by `−stockChange` for a cycles-to-empty countdown, so leaving the draw out would
-   * report a longer runway than the donor has. Same absence convention as
-   * `logisticsFundingBound` above: absent means never assessed, written for every survival-good
-   * market row belonging to a system the economy processor visited this cycle (0 included, distinct
-   * from absent), untouched for a market row it did not visit, and cleared — not carried forward —
-   * on abandonment (`resetAbandonedMarkets`, lib/world/tick.ts) so a resettled colony's warehouse
-   * does not inherit its predecessor's drain rate. `stock` itself is deliberately left untouched by
-   * that same reset — the warehouse is real.
+   * Written by the tick body (lib/world/tick.ts) against the persisted baseline
+   * `stockAtLastBoundary` below, on the boundary tick, after the last stage of that tick that moves
+   * `stock` — directed build's founding staging draw and staged manifest delivery, which run after
+   * directed logistics' own stock updates and after the per-tick goods-arrivals stage that can
+   * credit a haul on ANY tick of the cycle, not only this boundary one. Comparing against the
+   * baseline (rather than a snapshot taken at this tick's own start) is what makes a haul that
+   * landed earlier in the cycle show up here at all. A founding donor's draw is a real loss from its
+   * warehouse, and this figure's one reader divides `stock` by `−stockChange` for a cycles-to-empty
+   * countdown, so leaving the draw out would report a longer runway than the donor has. Same absence
+   * convention as `logisticsFundingBound` above: absent means never assessed — written for every
+   * survival-good market row belonging to a system that is developed as of this boundary tick AND
+   * already carries a baseline from the previous one (0 included, distinct from absent); a row with
+   * no baseline yet (a fresh market row, or one an abandonment just cleared) writes no `stockChange`
+   * this boundary, only a baseline to diff against next time. Untouched for a market row the tick
+   * did not visit, and cleared — not carried forward — on abandonment (`resetAbandonedMarkets`,
+   * lib/world/tick.ts) so a resettled colony's warehouse does not inherit its predecessor's drain
+   * rate. `stock` itself is deliberately left untouched by that same reset — the warehouse is real.
    *
-   * Cadence caveat: this figure is exact only while `cadence.logistics` coincides with
-   * `cadence.cycle` — the live game's constants (LOGISTICS_INTERVAL === CYCLE_LENGTH === 24) always
-   * do. Directed logistics runs on its OWN independently-tunable cadence
-   * (lib/constants/tick-cadence.ts); if that cadence is retuned away from the economy cycle's, this
-   * figure captures only the logistics application (if any) that happens to land on the SAME tick as
-   * the economy cycle boundary — a haul applied on any other tick is folded into `stock` without ever
-   * appearing in a reported change, and a cycle boundary with no coincident logistics run reports
-   * production-minus-consumption alone, with no import/export correction that cycle. Authored for one
-   * job — the Survival stock falling alert's `stock / −stockChange` cycles-to-empty measure. Nothing
-   * inside the tick reads it.
+   * Authored for one job — the Survival stock falling alert's `stock / −stockChange` cycles-to-empty
+   * measure. Nothing inside the tick reads it.
    */
   stockChange?: number;
+  /**
+   * The `stock` this row carried at the end of the previous economy-cycle boundary tick — the
+   * baseline `stockChange` above diffs against, rather than a value snapshotted at the current
+   * tick's own start. Written and rewritten in lockstep with `stockChange`: on every boundary tick,
+   * for every survival-good row of a system developed as of that tick, this is set to the row's
+   * current `stock` regardless of whether a `stockChange` was written alongside it. Absent means
+   * this row has never stood at a boundary since it was created (or since abandonment last cleared
+   * it) — the same "absent, not zero" convention `stockChange` uses, and the reason the FIRST
+   * boundary a row is visited writes a baseline but no `stockChange`. Cleared alongside
+   * `stockChange` on abandonment (`resetAbandonedMarkets`, lib/world/tick.ts) for the same reason:
+   * a re-founded colony's drain rate starts over, not from where its predecessor's warehouse stood.
+   * Nothing outside this one computation reads it.
+   */
+  stockAtLastBoundary?: number;
   /**
    * How much of this row's demand no reachable same-faction donor and no local production could close
    * on the latest directed-logistics run — the deficit's `max(0, target − stock)` LESS the drawable
@@ -683,6 +776,15 @@ export interface WorldTreasurySettlement {
    * fractions, and founding is none of those — it is taken off the top, ahead of the ladder.
    */
   foundingExpense: number;
+  /**
+   * Lane upkeep folded into `maintenanceBill` this cycle (docs/planned/logistics-lanes.md §1: "build
+   * and upkeep ride the existing purse") — `laneUpkeepWork` priced at `maintenanceRatePerWork ×
+   * catchUp`, the same band, same rate, same ladder line as building upkeep; broken out here only so
+   * a reader can see how much of the one maintenance bill came from lanes. Optional so a save written
+   * before this field existed loads without it; absent reads as never-assessed, exactly like
+   * `charged` above.
+   */
+  laneUpkeepBill?: number;
 }
 
 /** One faction's treasury — the only persisted per-faction tick-mutable state. */
@@ -800,6 +902,12 @@ export interface World {
   /** Open (in-flight) construction projects across all factions; a landed/completed project is removed. */
   constructionProjects: WorldConstructionProject[];
   connections: WorldConnection[];
+  /** One persistent row per undirected system pair carrying a connection — see `WorldLane`. */
+  lanes: WorldLane[];
+  /** The scheduled-freight ledger — see `WorldPendingArrival`. Directed-logistics dispatch appends
+   *  a row per outbound transfer; the unconditional goods-arrivals stage drains it every tick,
+   *  removing rows that have arrived and writing back whatever is still in flight. */
+  pendingArrivals: WorldPendingArrival[];
   markets: WorldMarket[];
   factions: WorldFaction[];
   relations: WorldFactionRelation[];

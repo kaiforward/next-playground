@@ -217,9 +217,11 @@ reads any of them back — they exist purely for this read surface.
   on `populationChange` or on famine — a well-fed world whose population is falling fast enough
   (quality-starved growth losing to unrest) now raises the alert, which a famine-gated condition never
   could.
-- **`WorldMarket.stockChange`** — the realised change in `stock` across one economy cycle, written only
-  for the survival goods (water, food). Survival stock falling's `stock / −stockChange` cycles-to-empty
-  measure is built on it.
+- **`WorldMarket.stockChange`** — the realised change in `stock` across one full economy cycle, written
+  only for the survival goods (water, food). The window is measured against a persisted baseline
+  (`WorldMarket.stockAtLastBoundary`) rather than a value snapshotted at the boundary tick itself, so a
+  delivery that lands on any tick of the cycle — not only the boundary tick — still counts. Survival
+  stock falling's `stock / −stockChange` cycles-to-empty measure is built on it.
 - **`WorldSystem.buildBlocked`** — the directed-build planner's best-ranked dropped opportunity this
   run: a `BuildDropReason` and the ROI of what was dropped (ordering only, not comparable across
   systems or goods). Housing refusals never appear here — they are *No housing headroom*'s signal.

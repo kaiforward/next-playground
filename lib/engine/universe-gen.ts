@@ -422,7 +422,7 @@ function pushLane(
 
 /** Canonical key for an undirected system pair — the identity the duplicate-lane guard below
  *  dedupes on, independent of which direction a phase happens to realise the lane in. */
-function laneKey(aIndex: number, bIndex: number): string {
+function pairKey(aIndex: number, bIndex: number): string {
   return aIndex < bIndex ? `${aIndex}-${bIndex}` : `${bIndex}-${aIndex}`;
 }
 
@@ -449,7 +449,7 @@ function pushLaneOnce(
   fuelCost: number,
   isCrossing: boolean,
 ): void {
-  const key = laneKey(from.index, to.index);
+  const key = pairKey(from.index, to.index);
   if (accepted.pairs.has(key)) return;
   accepted.pairs.add(key);
   addAcceptedLane(accepted.index, from.x, from.y, to.x, to.y);
@@ -723,7 +723,7 @@ export function realizeCorridors(
   // lanes of its own.
   const accepted: AcceptedLanes = { pairs: new Set(), index: newLaneIndex(params.poissonMinDistance) };
   for (const c of existingConnections) {
-    const key = laneKey(c.fromSystemIndex, c.toSystemIndex);
+    const key = pairKey(c.fromSystemIndex, c.toSystemIndex);
     if (accepted.pairs.has(key)) continue;
     accepted.pairs.add(key);
     const p = coordByIndex.get(c.fromSystemIndex);

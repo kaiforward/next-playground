@@ -198,7 +198,7 @@ export function formatTierZeroIdle(t: TierZeroIdleSummary): string[] {
 }
 
 export function formatTable(results: HarnessResults): string {
-  const { marketHealth, roleCoverLevels, worldCohorts, eventImpacts, logisticsActivity, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, initialBuildingTotal, populationSnapshots, geography } = results;
+  const { marketHealth, roleCoverLevels, worldCohorts, eventImpacts, logisticsActivity, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, initialBuildingTotal, populationSnapshots, geography, laneMetrics, survivalSpellDistribution, stageTiming } = results;
 
   // Computed once and reused by both the population/unrest and infrastructure
   // summaries below — they used to each call toTickSystems(finalWorld) separately.
@@ -907,7 +907,7 @@ export function formatTable(results: HarnessResults): string {
       ["Budget spent frac", lg.budgetSpentFrac.toFixed(3)],
       ["Funding-bound events", fmtNum(lg.fundingBoundEvents)],
       ["Funding-bound set rate", lg.fundingBoundFlagSetRate.toFixed(3)],
-      ["Flow rows per cycle", lg.flowRowsPerCycle.toFixed(1)],
+      ["Flow rows / reference cycle", lg.flowRowsPerReferenceCycle.toFixed(1)],
     ];
     lines.push(...renderTable(["Metric", "Value"], [24, 16], lRows.map(([l, v]) => [l, v])));
     if (lg.byGood.length > 0) {
@@ -923,6 +923,56 @@ export function formatTable(results: HarnessResults): string {
         `default scale, so read low activity as "too early", not "broken" (a matured read needs ~5600 ticks).`,
       );
     }
+  }
+
+  // Lane mechanics (spec §8) — whole-run utilisation, congestion, blocked volume, foreign-transit
+  // share, per-faction contention, survival-stock census, plus the physical-stock spell
+  // distribution and calibration-only stage wall-clock.
+  {
+    const lm = laneMetrics;
+    lines.push("");
+    lines.push(
+      `Lane Mechanics (whole run` +
+        (results.config.freightSpeed !== undefined ? `, freightSpeed=${results.config.freightSpeed}` : "") +
+        (results.config.laneTraversal ? `, laneTraversal=${results.config.laneTraversal}` : "") +
+        "):",
+    );
+    const lmRows: [string, string][] = [
+      ["Utilisation p50/p90/max", `${lm.utilisation.p50.toFixed(2)} / ${lm.utilisation.p90.toFixed(2)} / ${lm.utilisation.max.toFixed(2)}`],
+      ["Saturated share", lm.utilisation.saturatedShare.toFixed(3)],
+      ["Top-decile booked share", lm.topDecileShare.toFixed(3)],
+      ["In-transit volume mean/max", `${fmtNum(lm.inTransitVolume.mean)} / ${fmtNum(lm.inTransitVolume.max)}`],
+      ["Blocked volume (total)", fmtNum(lm.blockedVolume.total)],
+      ["Foreign-transit share", lm.foreignTransitShare.toFixed(3)],
+      ["Overshoot volume", fmtNum(lm.overshootVolume)],
+      ["Budget skipped (deficits)", fmtNum(lm.budgetSkipped)],
+      ["Survival-stock falling", `${lm.survivalStockFalling.count} systems (${lm.survivalStockFalling.share.toFixed(3)})`],
+      ["Queued-vs-realised lanes", `${lm.queuedVsRealised.laneCount} lanes, mean queued ${lm.queuedVsRealised.meanQueuedLevels.toFixed(2)} vs mean util ${lm.queuedVsRealised.meanUtilisation.toFixed(2)}`],
+    ];
+    lines.push(...renderTable(["Metric", "Value"], [26, 20], lmRows.map(([l, v]) => [l, v])));
+    if (lm.blockedVolume.topLanes.length > 0) {
+      const top = lm.blockedVolume.topLanes.map((l) => `${l.laneKey} ${fmtNum(l.blocked)}`).join(", ");
+      lines.push(`  top blocked lanes: ${top}`);
+    }
+    if (lm.contentionShortfallByFaction.length > 0) {
+      lines.push("  contention shortfall by faction (Σ blocked × foreignShare):");
+      for (const c of lm.contentionShortfallByFaction.slice(0, 5)) {
+        lines.push(`    ${c.factionKey ?? "(independent)"}: ${fmtNum(c.shortfall)}`);
+      }
+    }
+    lines.push(
+      `  survival-good deficit spells (physical stock, n=${survivalSpellDistribution.n}): ` +
+        `median ${survivalSpellDistribution.median.toFixed(1)} cycles, ` +
+        `p90 ${survivalSpellDistribution.p90.toFixed(1)}, ` +
+        `single-cycle share ${survivalSpellDistribution.singleRunShare.toFixed(3)}`,
+    );
+    lines.push(
+      `  stage wall-clock: tick median ${stageTiming.tickMsMedian.toFixed(2)}ms | ` +
+        `directed-logistics median ${stageTiming.directedLogisticsMsMedian.toFixed(2)}ms ` +
+        `(${(stageTiming.directedLogisticsShare * 100).toFixed(1)}% of Σ tick) | ` +
+        `goods-arrivals median ${stageTiming.goodsArrivalsMsMedian.toFixed(2)}ms ` +
+        `(${(stageTiming.goodsArrivalsShare * 100).toFixed(1)}% of Σ tick)`,
+    );
   }
 
   // Geography acceptance instruments (spec §5) — flow concentration, fuel-cost spread over both

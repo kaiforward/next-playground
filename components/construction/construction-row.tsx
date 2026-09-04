@@ -32,8 +32,11 @@ export function ConstructionRow({
   const LinkComponent = useLinkComponent();
   const stalled = row.etaCycles === null;
   const baseTitle =
-    row.kind === "colony_establish" ? "Establish Colony" : `${row.buildingLabel} ×${row.levels}`;
-  const titleText = showSystem ? `${baseTitle} — ${row.systemName}` : baseTitle; // plain, for aria
+    row.kind === "colony_establish" ? "Establish Colony"
+      : row.kind === "build" ? `${row.buildingLabel} ×${row.levels}`
+      : `Lane Upgrade ×${row.levels}`;
+  const locationLabel = row.kind === "lane_upgrade" ? row.laneLabel : row.systemName;
+  const titleText = showSystem ? `${baseTitle} — ${locationLabel}` : baseTitle; // plain, for aria
   const rate = Math.round(row.nextCycleGain * 10) / 10; // 1-dp; avoids "+0/cyc" noise
   const rateText = rate > 0 ? `+${rate}/cyc` : "waiting";
 
@@ -45,12 +48,16 @@ export function ConstructionRow({
           {showSystem && (
             <>
               {" — "}
-              <LinkComponent
-                href={`/system/${row.systemId}`}
-                className="text-text-accent hover:text-text-accent-hover transition-colors"
-              >
-                {row.systemName}
-              </LinkComponent>
+              {row.kind === "lane_upgrade" ? (
+                <span className="text-text-accent">{row.laneLabel}</span>
+              ) : (
+                <LinkComponent
+                  href={`/system/${row.systemId}`}
+                  className="text-text-accent hover:text-text-accent-hover transition-colors"
+                >
+                  {row.systemName}
+                </LinkComponent>
+              )}
             </>
           )}
         </span>
@@ -87,8 +94,11 @@ export function ConstructionRow({
                 <span className="font-mono text-text-primary">{fractionPct(row.stagedFraction)}%</span>
                 <span className="text-text-tertiary"> of stores staged</span>
               </>
-            ) : (
+            ) : row.kind === "build" ? (
               row.detail
+            ) : (
+              // Placeholder wording until the lane surfaces get their copy pass.
+              "lane · raises freight capacity between the two systems"
             )}
           </span>
           {row.origin === "player" && onCancel && (

@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
 import { setWorld, getWorld, clearWorld } from "@/lib/world/store";
 import { colonyEligibility, findSeedSource, COLONY_REACH_HOPS } from "@/lib/services/colony-eligibility";
-import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { EXPANSION } from "@/lib/constants/expansion";
 import type { World, WorldConnection, WorldBuildProject, WorldColonyEstablishProject } from "@/lib/world/types";
@@ -127,11 +126,11 @@ describe("findSeedSource", () => {
 
   it("reaches exactly as far as the tick's own shared hop radius (max of the three source constants)", () => {
     // COLONY_REACH_HOPS is authored as Math.max(...) so the seed-source search matches whichever of
-    // the tick's own reach constants is largest — currently DIRECTED_LOGISTICS/DIRECTED_BUILD's 4,
+    // the tick's own two surviving reach constants is largest — currently DIRECTED_BUILD's 4,
     // strictly more than EXPANSION.REACH_JUMPS's 3. Placing the only candidate exactly at that
     // radius (not one hop short) is what would catch a swap to Math.min.
     expect(COLONY_REACH_HOPS).toBe(
-      Math.max(DIRECTED_LOGISTICS.MAX_HOPS, DIRECTED_BUILD.MAX_HOPS, EXPANSION.REACH_JUMPS),
+      Math.max(DIRECTED_BUILD.MAX_HOPS, EXPANSION.REACH_JUMPS),
     );
     const FACTION = "test-faction";
     const w = getWorld();

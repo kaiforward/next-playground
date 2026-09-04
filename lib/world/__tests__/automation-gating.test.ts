@@ -13,7 +13,7 @@ async function run(automation: { build: boolean; colonisation: boolean }): Promi
     seed: 42,
     playerFaction: { name: "Gating Seat", governmentType: "federation", doctrine: "mercantile" },
   });
-  if (world.player) world.player.automation = automation;
+  if (world.player) world.player.automation = { ...world.player.automation, ...automation };
   for (let t = 0; t < TICKS; t++) {
     const result = await runWorldTick(world);
     world = result.world;

@@ -8,7 +8,9 @@
 import { generateWorld } from "@/lib/world/gen";
 import { newFoundingStallTotals } from "../build-analysis";
 import { summariseFoundingEra } from "../treasury-analysis";
-import { newCharterCensus, newStagedLedgerCensus, summariseConservation } from "../conservation-analysis";
+import {
+  newCharterCensus, newStagedLedgerCensus, newDispatchDrainCensus, summariseConservation,
+} from "../conservation-analysis";
 import type { HarnessResults } from "../types";
 
 export function minimalHarnessResults(): HarnessResults {
@@ -32,7 +34,7 @@ export function minimalHarnessResults(): HarnessResults {
       transferCount: 0, activeTicks: 0, totalQuantity: 0, meanTransferSize: 0,
       participatingSystems: 0, byGood: [], budgetSpentFrac: 0, fundingBoundEvents: 0,
       fundingBoundFlaggedMarkets: 0, fundingBoundMarketCount: 0,
-      fundingBoundFlagSetRate: 0, flowRowsPerCycle: 0,
+      fundingBoundFlagSetRate: 0, flowRowsPerReferenceCycle: 0,
     },
     buildBurstSummary: { byGood: [], globalMax: 0, worstGood: null, worstTick: null },
     regionOverview: [],
@@ -79,6 +81,7 @@ export function minimalHarnessResults(): HarnessResults {
       factionCycles: [],
       startingBalances: new Map(),
       stagedLedger: newStagedLedgerCensus(),
+      dispatchDrain: newDispatchDrainCensus(),
     }),
     episodeCosts: { totalTeardownLevels: 0, totalOvershootDeaths: 0, byCohort: [] },
     foundingTrajectory: { buckets: [] },
@@ -103,6 +106,23 @@ export function minimalHarnessResults(): HarnessResults {
       foreignTransitHaulCount: 0,
       foreignTransitHaulVolume: 0,
       foreignTransitHaulVolumeShare: 0,
+    },
+    laneMetrics: {
+      utilisation: { p50: 0, p90: 0, max: 0, saturatedShare: 0 },
+      topDecileShare: 0,
+      inTransitVolume: { mean: 0, max: 0 },
+      blockedVolume: { total: 0, topLanes: [] },
+      queuedVsRealised: { laneCount: 0, meanQueuedLevels: 0, meanUtilisation: 0 },
+      foreignTransitShare: 0,
+      contentionShortfallByFaction: [],
+      overshootVolume: 0,
+      budgetSkipped: 0,
+      survivalStockFalling: { count: 0, share: 0 },
+    },
+    survivalSpellDistribution: { n: 0, median: 0, p90: 0, singleRunShare: 0 },
+    stageTiming: {
+      tickMsMedian: 0, directedLogisticsMsMedian: 0, goodsArrivalsMsMedian: 0,
+      directedLogisticsShare: 0, goodsArrivalsShare: 0,
     },
   };
 }

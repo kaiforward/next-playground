@@ -6,6 +6,9 @@ import {
   newDemandHuntingAccumulator,
   sampleDemandHunting,
   summariseDemandHunting,
+  newSpellAccumulator,
+  sampleSurvivalSpells,
+  summariseSpellDistribution,
 } from "../market-analysis";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
@@ -463,5 +466,68 @@ describe("demand hunting", () => {
     const { haulChurnRatio } = summariseDemandHunting(newDemandHuntingAccumulator(), flows);
     expect(haulChurnRatio).toBeCloseTo(10 / 910, 9);
     expect(haulChurnRatio).toBeLessThan(0.05);
+  });
+});
+
+// ── Survival-good deficit spell distribution ─────────────────────
+
+describe("survival spell distribution", () => {
+  const WAREHOUSE = DIRECTED_LOGISTICS.WAREHOUSE_COVER;
+  const waterRow = (stock: number, useRate = 1): WorldMarket => ({
+    systemId: "s1", goodId: "water", stock, anchorMult: 1, demandRate: 1,
+    honestUseRate: useRate, storageCapacity: 0,
+  });
+  const deep = () => waterRow(0); // deficit
+  const full = () => waterRow(WAREHOUSE * 2); // surplus
+
+  it("reports zeroes, never NaN, on a run that recorded no completed spell", () => {
+    const acc = newSpellAccumulator();
+    expect(summariseSpellDistribution(acc)).toEqual({ n: 0, median: 0, p90: 0, singleRunShare: 0 });
+  });
+
+  it("closes a spell the cycle it clears, counting its consecutive-deficit length", () => {
+    const acc = newSpellAccumulator();
+    sampleSurvivalSpells(acc, [deep()], 24, 0); // spell starts
+    sampleSurvivalSpells(acc, [deep()], 48, 0); // still deficit — length 2
+    sampleSurvivalSpells(acc, [full()], 72, 0); // clears — spell closes at length 2
+    const summary = summariseSpellDistribution(acc);
+    expect(summary.n).toBe(1);
+    expect(summary.median).toBe(2);
+  });
+
+  it("drops a spell still open at the last sample — censored, not completed", () => {
+    const acc = newSpellAccumulator();
+    sampleSurvivalSpells(acc, [deep()], 24, 0);
+    sampleSurvivalSpells(acc, [deep()], 48, 0);
+    // Run ends mid-deficit: nothing ever closes this spell.
+    expect(summariseSpellDistribution(acc).n).toBe(0);
+  });
+
+  it("excludes a spell that started before the equilibrium horizon even though it closes after it", () => {
+    const acc = newSpellAccumulator();
+    sampleSurvivalSpells(acc, [deep()], 10, 100); // spell starts before eqStartTick 100
+    sampleSurvivalSpells(acc, [full()], 130, 100); // closes after the horizon
+    expect(summariseSpellDistribution(acc).n).toBe(0);
+  });
+
+  it("ignores goods outside SURVIVAL_GOODS", () => {
+    const acc = newSpellAccumulator();
+    const ore = (stock: number): WorldMarket => ({
+      systemId: "s1", goodId: "ore", stock, anchorMult: 1, demandRate: 1,
+      honestUseRate: 1, storageCapacity: 0,
+    });
+    sampleSurvivalSpells(acc, [ore(0)], 24, 0);
+    sampleSurvivalSpells(acc, [ore(WAREHOUSE * 2)], 48, 0);
+    expect(summariseSpellDistribution(acc).n).toBe(0);
+  });
+
+  it("skips a row with no use figure rather than classifying it against a zero target", () => {
+    const acc = newSpellAccumulator();
+    const bare: WorldMarket = {
+      systemId: "s1", goodId: "water", stock: 0, anchorMult: 1, demandRate: 1, storageCapacity: 0,
+    };
+    sampleSurvivalSpells(acc, [bare], 24, 0);
+    sampleSurvivalSpells(acc, [bare], 48, 0);
+    expect(acc.activeByKey.size).toBe(0);
   });
 });

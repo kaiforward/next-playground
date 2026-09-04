@@ -12,9 +12,12 @@ import type {
 } from "@/lib/tick/world/directed-build-world";
 import type { TickProcessorResult } from "@/lib/tick/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
-import type { SystemControl, WorldColonyEstablishProject, WorldConstructionProject } from "@/lib/world/types";
+import type {
+  SystemControl, WorldColonyEstablishProject, WorldConstructionProject, WorldLane, WorldLaneUpgradeProject,
+} from "@/lib/world/types";
+import { LANES } from "@/lib/constants/lanes";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
-import type { RouteCost } from "@/lib/engine/directed-logistics";
+import type { RouteCost } from "@/lib/engine/directed-build";
 import type { ClaimCandidate, ExpansionParams } from "@/lib/engine/expansion";
 import { sizeColonyEstablish } from "@/lib/engine/directed-build";
 import type { ColonyEstablishCandidate, ColonyEstablishParams } from "@/lib/engine/directed-build";
@@ -347,7 +350,7 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
     const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, { control: "developed", foodCycles: 1 }));
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
-      player: { factionId: "f1", automation: { build: false, colonisation: true } },
+      player: { factionId: "f1", automation: { build: false, colonisation: true, lanes: true } },
     });
     expect(w.constructionProjects).toHaveLength(0);       // emission gated off
     expect(w.proposalCycleUpdates.get("A|food")).toBe(2); // …but the clock still advanced
@@ -359,7 +362,7 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
     const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, { control: "developed", foodCycles: 1 }));
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
-      player: { factionId: "f1", automation: { build: true, colonisation: false } },
+      player: { factionId: "f1", automation: { build: true, colonisation: false, lanes: true } },
     });
     expect(w.proposalCycleUpdates.get("A|food")).toBe(2);
     expect(w.constructionProjects.some((p) => p.kind === "build" && p.systemId === "B" && p.buildingType === "food")).toBe(true);
@@ -385,12 +388,12 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
     const on = new MemoryDirectedBuildWorld(rows());
     await runDirectedBuildProcessor(on, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
-      player: { factionId: "f1", automation: { build: true, colonisation: true } },
+      player: { factionId: "f1", automation: { build: true, colonisation: true, lanes: true } },
     });
     const off = new MemoryDirectedBuildWorld(rows());
     await runDirectedBuildProcessor(off, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
-      player: { factionId: "f1", automation: { build: false, colonisation: true } },
+      player: { factionId: "f1", automation: { build: false, colonisation: true, lanes: true } },
     });
 
     // Proposal EMISSION differs, as the existing tests above already pin…
@@ -411,12 +414,12 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
     const on = new MemoryDirectedBuildWorld(scenario(0, 0, 20, { control: "developed", foodCycles: 1 }));
     await runDirectedBuildProcessor(on, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
-      player: { factionId: "f1", automation: { build: true, colonisation: true } },
+      player: { factionId: "f1", automation: { build: true, colonisation: true, lanes: true } },
     });
     const off = new MemoryDirectedBuildWorld(scenario(0, 0, 20, { control: "developed", foodCycles: 1 }));
     await runDirectedBuildProcessor(off, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
-      player: { factionId: "f1", automation: { build: false, colonisation: true } },
+      player: { factionId: "f1", automation: { build: false, colonisation: true, lanes: true } },
     });
 
     // Proposal EMISSION differs, as the existing tests above already pin…
@@ -665,7 +668,7 @@ describe("runDirectedBuildProcessor: colony-establish phase", () => {
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
       develop: { candidateProvider: (f) => (f === "f1" ? candidates : []), params: COLONY_PARAMS },
-      player: { factionId: "f1", automation: { build: false, colonisation: true } },
+      player: { factionId: "f1", automation: { build: false, colonisation: true, lanes: true } },
     });
     const openColonies = w.constructionProjects.filter((p) => p.kind === "colony_establish");
     // Front-first funding gives one colony a cap's worth; the other four get zero and are dropped.
@@ -689,13 +692,13 @@ describe("runDirectedBuildProcessor: colony-establish phase", () => {
     await runDirectedBuildProcessor(on, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
       develop: { candidateProvider: (f) => (f === "f1" ? [colonyCand("c1")] : []), params: COLONY_PARAMS },
-      player: { factionId: "f1", automation: { build: true, colonisation: true } },
+      player: { factionId: "f1", automation: { build: true, colonisation: true, lanes: true } },
     });
     const off = new MemoryDirectedBuildWorld([saturatedHome(1000)]);
     await runDirectedBuildProcessor(off, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
       develop: { candidateProvider: (f) => (f === "f1" ? [colonyCand("c1")] : []), params: COLONY_PARAMS },
-      player: { factionId: "f1", automation: { build: true, colonisation: false } },
+      player: { factionId: "f1", automation: { build: true, colonisation: false, lanes: true } },
     });
 
     // Proposal EMISSION differs…
@@ -1089,7 +1092,7 @@ describe("runDirectedBuildProcessor: player automation gating (proposal generati
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable,
       construction: mkConstruction(4),
-      player: { factionId: "f1", automation: { build: false, colonisation: true } },
+      player: { factionId: "f1", automation: { build: false, colonisation: true, lanes: true } },
     });
     expect(w.constructionProjects.every((p) => p.id === "b-committed")).toBe(true);
     expect(w.constructionProjects[0]?.workDone).toBeGreaterThan(5);
@@ -1105,7 +1108,7 @@ describe("runDirectedBuildProcessor: player automation gating (proposal generati
       interval: INTERVAL, routeCost: reachable,
       construction: mkConstruction(6, 0.004),
       develop: { candidateProvider: (f) => (f === "f1" ? [colonyOf("c1", 1_000_000)] : []), params: COLONY_PARAMS },
-      player: { factionId: "f1", automation: { build: true, colonisation: false } },
+      player: { factionId: "f1", automation: { build: true, colonisation: false, lanes: true } },
     });
     expect(w.constructionProjects.some((p) => p.kind === "colony_establish")).toBe(false);
     expect(w.constructionProjects.some((p) => p.kind === "build")).toBe(true);
@@ -1116,7 +1119,7 @@ describe("runDirectedBuildProcessor: player automation gating (proposal generati
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable,
       construction: mkConstruction(4),
-      player: { factionId: "someone-else", automation: { build: false, colonisation: false } },
+      player: { factionId: "someone-else", automation: { build: false, colonisation: false, lanes: true } },
     });
     expect(w.constructionProjects.length).toBeGreaterThan(0); // f1 planned as usual
   });
@@ -2391,7 +2394,7 @@ describe("runDirectedBuildProcessor — what the colony planner is shown", () =>
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(2, 0.005),
       develop: { candidateProvider: () => [colonyOf("c1", 1_000_000)], params: COLONY_PARAMS },
-      player: { factionId: "f1", automation: { build: false, colonisation: true } },
+      player: { factionId: "f1", automation: { build: false, colonisation: true, lanes: true } },
     });
     expect(w.constructionProjects.some((p) => p.kind === "colony_establish")).toBe(true); // sanity
     expect(w.constructionProjects.some(
@@ -2516,5 +2519,84 @@ describe("runDirectedBuildProcessor — landing writes", () => {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(1000, 0), // zero pool
     });
     expect(w.constructionProjects).toEqual([]);
+  });
+});
+
+describe("runDirectedBuildProcessor: lane-upgrade phase", () => {
+  /** A developed system with no build deficits at all — population sets the pool, nothing else
+   *  competes for it, so lane-upgrade proposals are isolated. */
+  function laneRow(id: string, factionId: string, population = 1000): SystemBuildRow {
+    return {
+      systemId: id, factionId, control: "developed", population,
+      buildings: {}, yields: unitResourceVector(), extractionEff: unitResourceVector(),
+      depositCounts: emptyResourceVector(), peopleLand: 0, markets: [],
+    };
+  }
+
+  function congestedLane(key: string, aId: string, bId: string, blockedVolume: number, level = 0): WorldLane {
+    return { key, aId, bId, level, bookedLoad: 0, blockedVolume, idleCycles: 0 };
+  }
+
+  it("commits a lane_upgrade project for a congested lane the faction may invest in", async () => {
+    const lanes = [congestedLane("A|B", "A", "B", 50)];
+    const w = new MemoryDirectedBuildWorld([laneRow("A", "f1"), laneRow("B", "f1")], [], lanes);
+    // A tiny per-build cap so the project stays open (not landed) — easier to inspect than a landed row.
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(1),
+    });
+    const project = w.constructionProjects.find(
+      (p): p is WorldLaneUpgradeProject => p.kind === "lane_upgrade" && p.laneKey === "A|B",
+    );
+    expect(project).toBeDefined();
+    expect(project?.factionId).toBe("f1");
+    expect(project?.workTotal).toBe(LANES.UPGRADE_WORK_PER_LEVEL);
+  });
+
+  it("never proposes a lane with zero blocked volume, however high its invested level", async () => {
+    const lanes = [congestedLane("A|B", "A", "B", 0, 3)];
+    const w = new MemoryDirectedBuildWorld([laneRow("A", "f1"), laneRow("B", "f1")], [], lanes);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(1),
+    });
+    expect(w.constructionProjects.some((p) => p.kind === "lane_upgrade")).toBe(false);
+  });
+
+  it("never proposes a lane the faction cannot invest in, however congested — split ownership", async () => {
+    const lanes = [congestedLane("A|B", "A", "B", 500)];
+    const w = new MemoryDirectedBuildWorld([laneRow("A", "f1"), laneRow("B", "f2")], [], lanes);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(1),
+    });
+    expect(w.constructionProjects.some((p) => p.kind === "lane_upgrade")).toBe(false);
+  });
+
+  it("generates no second proposal for a lane an upgrade project is already open on", async () => {
+    const lanes = [congestedLane("A|B", "A", "B", 50)];
+    const existing: WorldLaneUpgradeProject = {
+      kind: "lane_upgrade", id: "existing", origin: "auto", factionId: "f1", laneKey: "A|B",
+      levels: 1, workTotal: LANES.UPGRADE_WORK_PER_LEVEL, workDone: 0,
+    };
+    const w = new MemoryDirectedBuildWorld([laneRow("A", "f1"), laneRow("B", "f1")], [existing], lanes);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(1),
+    });
+    const laneProjects = w.constructionProjects.filter((p) => p.kind === "lane_upgrade" && p.laneKey === "A|B");
+    expect(laneProjects).toHaveLength(1); // only the pre-existing project — no second one committed
+  });
+
+  it("the player faction with automation.lanes off gets no lane proposals; other factions are unaffected", async () => {
+    const lanes = [
+      congestedLane("A|B", "A", "B", 50),
+      congestedLane("C|D", "C", "D", 50),
+    ];
+    const w = new MemoryDirectedBuildWorld(
+      [laneRow("A", "f1"), laneRow("B", "f1"), laneRow("C", "f2"), laneRow("D", "f2")], [], lanes,
+    );
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(1),
+      player: { factionId: "f1", automation: { build: true, colonisation: true, lanes: false } },
+    });
+    expect(w.constructionProjects.some((p) => p.factionId === "f1" && p.kind === "lane_upgrade")).toBe(false);
+    expect(w.constructionProjects.some((p) => p.factionId === "f2" && p.kind === "lane_upgrade")).toBe(true);
   });
 });

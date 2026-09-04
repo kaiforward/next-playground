@@ -12,6 +12,7 @@ import { runWorldTick, toTickSystems, toTickConnections } from "@/lib/world/tick
 import {
   takeMarketSnapshot, computeMarketHealth, computeKneeBinding, SNAPSHOT_INTERVAL,
   newDemandHuntingAccumulator, sampleDemandHunting, summariseDemandHunting,
+  newSpellAccumulator, sampleSurvivalSpells, summariseSpellDistribution,
 } from "./market-analysis";
 import {
   trackEventLifecycles,
@@ -20,7 +21,15 @@ import {
 } from "./event-analysis";
 import { summariseLogistics, fundingBoundCensus, LOGISTICS_WARMUP_TICKS } from "./logistics-analysis";
 import type { LogisticsBudgetTotals } from "./logistics-analysis";
-import { summariseGeography, type OwnershipSnapshot } from "./geography-analysis";
+import { summariseGeography, ownershipAt, type OwnershipSnapshot } from "./geography-analysis";
+import { pairKey } from "@/lib/tick/world/relations-world";
+import {
+  newLaneRunAccumulator, sampleLaneUtilisation, sampleInTransitVolume, sampleLaneDispatch,
+  recordLogisticsBlocked, recordOvershootVolume, recordBudgetSkipped, summariseLanes,
+} from "./lane-analysis";
+import { catchUpFactor } from "@/lib/tick/shard";
+import { LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
+import { median } from "@/lib/utils/math";
 import {
   summariseBuildBursts, trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample,
   summariseFoundingStock, recordFoundingManifest, newFoundingStallTotals, recordFoundingStall,
@@ -39,8 +48,9 @@ import {
 import type { FactionCycleRecord, TreasurySnapshot } from "./treasury-analysis";
 import {
   newCharterCensus, recordCharterCensus, newStagedLedgerCensus, recordStagedLedger,
-  summariseConservation,
+  summariseConservation, newDispatchDrainCensus,
 } from "./conservation-analysis";
+import type { DispatchDrainCensus } from "./conservation-analysis";
 import {
   computeRoleCoverLevels, computeWorldCohorts, logisticsTargetsByKey, marketRolesByKey,
   summariseEpisodeCostsByCohort, summariseRatchetCheck,
@@ -63,6 +73,7 @@ import type {
   RegionOverviewEntry,
   MigrationThroughputSummary,
   StrikeSuppressionSummary,
+  StageTimingSummary,
 } from "./types";
 import type { TickEvent, TickSystem } from "@/lib/tick/rows";
 
@@ -177,13 +188,20 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   // numerator, folded by world cohort at the end via computeWorldCohorts. Transient instrumentation
   // (`runWorldTick().instrumentation`), so like migrationMoved it is accumulated per tick.
   const colonistDeliveryTotals = new Map<string, number>();
-  // Ownership as it stood at each cycle boundary — the basis geography classifies each haul
-  // against. Ownership only ever changes on a cycle boundary (colonisation lands and abandonment
-  // reverts there), so a snapshot per boundary is exact for every tick until the next one, and the
-  // end-of-run world alone would credit a system settled late with hauls that crossed it while it
-  // was still empty.
+  // Ownership and relation scores as they stood at each cycle boundary — the basis geography
+  // classifies each haul against, and now also the basis its reachability search gates traversal
+  // on (`laneOpenFor`, `geography-analysis.ts`). Ownership only ever changes on a cycle boundary
+  // (colonisation lands and abandonment reverts there), so a snapshot per boundary is exact for
+  // every tick until the next one, and the end-of-run world alone would credit a system settled
+  // late with hauls that crossed it while it was still empty. Relations drift every tick, so this
+  // snapshot is a coarser reading of them than of ownership — accurate at the boundary, not exact
+  // for every tick in the window.
   const ownershipSnapshots: OwnershipSnapshot[] = [
-    { fromTick: 0, systemFactionById: new Map(world.systems.map((s) => [s.id, s.factionId])) },
+    {
+      fromTick: 0,
+      systemFactionById: new Map(world.systems.map((s) => [s.id, s.factionId])),
+      relationScoreByPair: new Map(world.relations.map((r) => [pairKey(r.factionAId, r.factionBId), r.score])),
+    },
   ];
   // Whole-run abandonment counts by cause (famine-collapse vs decline-to-empty), folded from
   // `abandonedSystemsByCause` each cycle. Not cohorted: an abandoned system reverts to unclaimed
@@ -250,6 +268,22 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   // populationSnapshots, so computeTrailingProvisionVariance can read a trailing window off it at
   // the end of the run.
   const provisionSnapshots: Array<Map<string, number>> = [];
+  // Lane-mechanics (spec §8) and survival-spell accumulators — see their own modules' docstrings for
+  // why these are folded per tick/cycle rather than read off the final world.
+  const laneAcc = newLaneRunAccumulator();
+  const spellAcc = newSpellAccumulator();
+  const dispatchDrain: DispatchDrainCensus = newDispatchDrainCensus();
+  const logisticsInterval = config.cadence?.logistics ?? LOGISTICS_INTERVAL;
+  // Calibration-only wall-clock: Σ stage / Σ tick over EVERY tick (goods-arrivals and the outer tick
+  // total run unconditionally; a tick where directed-logistics did not resolve contributes 0 to its
+  // sum, which is exactly its correct share of that tick). Medians are read over a narrower sample —
+  // see the push sites below.
+  let tickMsSum = 0;
+  let directedLogisticsMsSum = 0;
+  let goodsArrivalsMsSum = 0;
+  const tickMsSamples: number[] = [];
+  const directedLogisticsMsSamples: number[] = [];
+  const goodsArrivalsMsSamples: number[] = [];
 
   const initialPopulationTotal = world.systems.reduce((sum, s) => sum + s.population, 0);
   // True tick-0 population per system — netGrowthPct's start denominator. Captured here rather
@@ -267,12 +301,14 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   // across the loop boundary rather than re-read per use.
   let currentMarkets: WorldMarket[] = world.markets;
 
-  // The two per-run override channels, both dev/measurement surfaces: the cadence, and the
-  // third-arm pin for the draw figure's brake. Absent both, the live loop's own defaults run.
-  const tickOpts =
-    config.cadence || config.drawBrakeCeiling
-      ? { cadence: config.cadence, drawBrakeCeiling: config.drawBrakeCeiling }
-      : undefined;
+  // The per-run override channels, all dev/measurement surfaces: the cadence, the third-arm pin for
+  // the draw figure's brake, the two lane-mechanics arms, and the harness's own opt-in to
+  // `stageMs` wall-clock timing (never set by the live game).
+  const tickOpts = {
+    cadence: config.cadence, drawBrakeCeiling: config.drawBrakeCeiling,
+    freightSpeed: config.freightSpeed, laneTraversal: config.laneTraversal,
+    recordStageMs: true,
+  };
 
   for (let t = 0; t < config.tickCount; t++) {
     const preTickMarkets = currentMarkets;
@@ -290,7 +326,53 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
         logisticsBudgetTotals.total += b.total;
         logisticsBudgetTotals.spent += b.spent;
         logisticsBudgetTotals.fundingBoundEvents += b.fundingBoundCount;
+        recordBudgetSkipped(laneAcc, b.budgetSkipped);
       }
+    }
+
+    // Lane mechanics (spec §8) and the fifth conservation identity. The dispatch/applied-credit
+    // totals just below run unconditionally, not gated to LOGISTICS_WARMUP_TICKS — the identity
+    // reconciles dispatched-vs-arrived over the whole run, so a founding-era contribution has to be
+    // counted, not windowed out. Every fold after them IS gated to LOGISTICS_WARMUP_TICKS, like the
+    // budget totals above: directed-logistics is colonisation-gated, and an unwindowed read of those
+    // would report the founding era as the whole run's lane health.
+    dispatchDrain.dispatchedTotal += result.instrumentation.logisticsDispatched ?? 0;
+    dispatchDrain.appliedCreditTotal += result.instrumentation.goodsArrivals?.appliedCreditTotal ?? 0;
+    if (world.meta.currentTick >= LOGISTICS_WARMUP_TICKS) {
+      recordOvershootVolume(laneAcc, result.instrumentation.goodsArrivals?.overshootVolume ?? 0);
+      if (result.instrumentation.logisticsBlocked) {
+        recordLogisticsBlocked(laneAcc, result.instrumentation.logisticsBlocked);
+      }
+      sampleInTransitVolume(laneAcc, world.pendingArrivals);
+      const dispatchedThisTick = world.pendingArrivals.filter(
+        (a) => a.leg === "outbound" && a.dispatchTick === world.meta.currentTick,
+      );
+      if (dispatchedThisTick.length > 0) {
+        const lanesByKey = new Map(world.lanes.map((l) => [l.key, l]));
+        const ownerAtTick = (systemId: string): string | null =>
+          ownershipAt(ownershipSnapshots, world.meta.currentTick).get(systemId) ?? null;
+        sampleLaneDispatch(laneAcc, dispatchedThisTick, lanesByKey, ownerAtTick);
+      }
+      if (world.meta.currentTick % logisticsInterval === 0) {
+        sampleLaneUtilisation(laneAcc, world.lanes, catchUpFactor(logisticsInterval));
+        // Spec §8 measures spells as "consecutive-logistics-run deficit spells" (premise 3's own
+        // cadence) — sampled on the logistics boundary, not the economy cycle, even though the two
+        // intervals default equal.
+        sampleSurvivalSpells(spellAcc, currentMarkets, world.meta.currentTick, LOGISTICS_WARMUP_TICKS);
+      }
+    }
+
+    if (result.instrumentation.stageMs) {
+      const { tick: tickMs, directedLogistics: dlMs, goodsArrivals: gaMs } = result.instrumentation.stageMs;
+      tickMsSum += tickMs;
+      directedLogisticsMsSum += dlMs;
+      goodsArrivalsMsSum += gaMs;
+      tickMsSamples.push(tickMs);
+      goodsArrivalsMsSamples.push(gaMs);
+      // Only ticks directed-logistics actually resolved on carry a nonzero figure — including every
+      // other tick's structural 0 would drag the median down to 0 given the stage resolves on a
+      // multi-tick cadence.
+      if (dlMs > 0) directedLogisticsMsSamples.push(dlMs);
     }
 
     if (result.instrumentation.buildCommitmentsByGood) {
@@ -309,6 +391,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       ownershipSnapshots.push({
         fromTick: world.meta.currentTick,
         systemFactionById: new Map(world.systems.map((s) => [s.id, s.factionId])),
+        relationScoreByPair: new Map(world.relations.map((r) => [pairKey(r.factionAId, r.factionBId), r.score])),
       });
     }
 
@@ -438,6 +521,23 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   // the report already builds rather than walking the world a second time.
   const finalTickSystems = toTickSystems(world);
 
+  // The fifth conservation identity's in-flight term: every pendingArrival row (both legs) still
+  // on the ledger when the run ends.
+  dispatchDrain.finalInFlight = world.pendingArrivals.reduce((sum, a) => sum + a.quantity, 0);
+
+  const developedSystemIds = new Set(
+    finalTickSystems.filter((s) => s.control === "developed").map((s) => s.id),
+  );
+  const laneMetrics = summariseLanes(laneAcc, world.constructionProjects, developedSystemIds, currentMarkets);
+  const survivalSpellDistribution = summariseSpellDistribution(spellAcc);
+  const stageTiming: StageTimingSummary = {
+    tickMsMedian: median(tickMsSamples),
+    directedLogisticsMsMedian: median(directedLogisticsMsSamples),
+    goodsArrivalsMsMedian: median(goodsArrivalsMsSamples),
+    directedLogisticsShare: tickMsSum > 0 ? directedLogisticsMsSum / tickMsSum : 0,
+    goodsArrivalsShare: tickMsSum > 0 ? goodsArrivalsMsSum / tickMsSum : 0,
+  };
+
   // The deficit share is measured against the warehousing target, which needs the systems'
   // real demand — a market row carries only the MIN_DEMAND-floored rate.
   const marketHealth = computeMarketHealth(
@@ -488,8 +588,8 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   };
 
   const geography = summariseGeography(
-    finalTickSystems, toTickConnections(world), world.factions, logisticsFlows, colonistDeliveryTotals,
-    ownershipSnapshots,
+    finalTickSystems, toTickConnections(world), world.lanes, world.factions, logisticsFlows,
+    colonistDeliveryTotals, ownershipSnapshots,
   );
 
   const episodeCosts = summariseEpisodeCostsByCohort(episodeCostTotals, finalTickSystems, homeworldIds);
@@ -516,7 +616,9 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       total: abandonedFamineCollapse + abandonedDeclineToEmpty,
     },
     eventImpacts,
-    logisticsActivity: summariseLogistics(logisticsFlows, logisticsBudgetTotals, fundingBoundFlags),
+    logisticsActivity: summariseLogistics(
+      logisticsFlows, logisticsBudgetTotals, fundingBoundFlags, config.tickCount,
+    ),
     buildBurstSummary: summariseBuildBursts(buildCommitments),
     regionOverview,
     label,
@@ -540,11 +642,15 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       factionCycles,
       startingBalances,
       stagedLedger: stagedLedgerCensus,
+      dispatchDrain,
     }),
     episodeCosts,
     foundingTrajectory,
     provisionRatchet,
     tierZeroIdle: summariseTierZeroIdle(finalTickSystems, homeworldIds),
     geography,
+    laneMetrics,
+    survivalSpellDistribution,
+    stageTiming,
   };
 }

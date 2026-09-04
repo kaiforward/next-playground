@@ -20,7 +20,7 @@ The open-edge list (`buildOpenEdges`, `lib/tick/world/trade-flow-topology.ts`) i
 
 ## One Topology, Two Movers
 
-- **Directed logistics** (goods) routes over a bounded hop-distance BFS on the same connection graph — the sole goods-mover. Its mechanism and cadence live in [economy-autonomic-agency.md](./economy-autonomic-agency.md).
+- **Directed logistics** (goods) routes over the persistent lane network (own, unclaimed, or friendly-or-allied space; no hop cap), cheapest-fuel-cost-first under congestion pricing — the sole goods-mover. Its mechanism and cadence live in [economy-autonomic-agency.md](./economy-autonomic-agency.md).
 - **Population migration** consumes the open-edge list directly: population flows toward same-faction neighbours with low unrest and high headroom (`popCap − population`), attenuated by distance (`1 / (1 + distanceDecay · fuelCost)`), conserved (relocated, not created) and capped per tick to prevent ping-pong. See [economy.md](./economy.md) for the full migration model.
 
 Both movers are gated to **developed** systems: migration's open edges are filtered so an edge carries population only when *both* endpoints are developed, and directed logistics only routes between developed participants. Unclaimed and controlled systems are economically inert — no goods, no migration (see [economy-autonomic-agency.md](./economy-autonomic-agency.md)).
@@ -29,7 +29,7 @@ Crossing lanes (a corridor's single long-haul link between two regions, priced a
 
 ## The Flow-Event Log
 
-Every directed-logistics haul is appended to a rolling in-memory list on the world (`world.flowEvents`, row type `WorldFlowEvent` in `lib/world/types.ts`), capturing the tick, the directional edge (source and destination), the good, the quantity, and `flowType: "logistics"`. The tick body prunes the log to `FLOW_HISTORY_TICKS` after each run, so its size stays bounded.
+Every *delivered* directed-logistics haul is appended to a rolling in-memory list on the world (`world.flowEvents`, row type `WorldFlowEvent` in `lib/world/types.ts`), capturing the tick, the directional edge (source and destination), the good, the quantity, and `flowType: "logistics"`. The write happens at arrival, not dispatch: the goods-arrivals stage appends the row once a haul's scheduled transit lands and credits its destination, so the log records what actually reached a market, not what left one. The tick body prunes the log to `FLOW_HISTORY_TICKS` after each run, so its size stays bounded.
 
 A "trade route" is a connected chain of edges moving the same good in the same direction over the window. Routes are not stored — they are computed on demand by walking the flow events, dropping edges below the route-inference floor, and stitching survivors into chains. The event log is the truth; routes are a presentation layer.
 

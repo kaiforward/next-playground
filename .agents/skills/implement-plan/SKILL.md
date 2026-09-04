@@ -59,7 +59,10 @@ trusting it accreted correctly.
 2. **TDD, where the red run is the detection list executed item by item.** Tests come from the
    `Proves` entries before implementation; each entry is seen red once — break the listed
    behaviour, watch the named test fail, restore. The implementer returns the red-proof record,
-   the does-not-prove line, and real command output — never "tests pass" as prose.
+   the does-not-prove line, and real command output — never "tests pass" as prose. **The implementer
+   runs scoped tests only** — the files it touched, for every red-proof and every check. The full
+   suite runs once per task, by the session, in step 5; an implementer that runs it per red-proof
+   multiplies a two-minute suite by the length of the detection list (owner correction, 2026-09-04).
 3. **Per-task review, before commit.** A reviewer agent checks the diff against the task's
    `Interface` (contract drift), its detection list (every entry actually pinned; vacuity), and
    the code-standards rules. This is checklist review — it verifies written invariants.
