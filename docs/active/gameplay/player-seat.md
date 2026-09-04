@@ -19,11 +19,13 @@ faction runs on the **same autonomic brain as every AI faction** — the directe
 directed-build processors plan and fund your territory exactly as they do a rival's — except you get a
 control surface on top of it:
 
-- **Per-domain automation switches** (`world.player.automation.build` / `.colonisation`) that gate the
-  planner's *proposal generation* for your faction — turn one off and the planner stops inventing new
-  work in that domain, while every already-committed project keeps funding and drawing down.
-- **Manual verbs** — order a build, direct a colony, cancel an order — standing in a system on its
-  Industry tab (build) or Overview (colonisation), next to the evidence.
+- **Per-domain automation switches** (`world.player.automation.build` / `.colonisation` / `.lanes`) that
+  gate the planner's *proposal generation* for your faction — turn one off and the planner stops
+  inventing new work in that domain, while every already-committed project keeps funding and drawing
+  down.
+- **Manual verbs** — order a build, direct a colony, cancel an order, invest in a lane
+  (`orderLaneUpgrade`), claim an adjacent system (`claimSystem`, free, one per cooldown) — the build and
+  colony verbs stand in a system on its Industry tab or Overview, next to the evidence.
 - **Queue priority** — your orders enter the *same* construction queue as autonomic proposals and
   outrank new ones, so directing the pool is immediate, not a suggestion the planner might defer.
 
@@ -35,12 +37,12 @@ both identities with no player seat, so the AI-only simulation is untouched.
 
 ## The seat
 
-`world.player: { controlledFactionId: string; automation: { build: boolean; colonisation: boolean };
-pinnedSystemIds: string[]; alertCategories: Record<AlertCategoryId, boolean>; trackerSections:
-Record<TrackerSectionKey, boolean> } | null` is a top-level, JSON-serialisable field on `World` — it
-survives save/load like everything else. The three fields after `automation` are the attention
-layer's: the Tracker's pin list, and the two settings records the alert bar and the Tracker store
-per-save. No processor reads any of them.
+`world.player: { controlledFactionId: string; automation: { build: boolean; colonisation: boolean; lanes:
+boolean }; lastClaimTick?: number; pinnedSystemIds: string[]; alertCategories: Record<AlertCategoryId,
+boolean>; trackerSections: Record<TrackerSectionKey, boolean> } | null` is a top-level, JSON-serialisable
+field on `World` — it survives save/load like everything else. `lastClaimTick` tracks the cooldown on the
+player's `claimSystem` verb; the remaining fields are the attention layer's: the Tracker's pin list, and
+the two settings records the alert bar and the Tracker store per-save. No processor reads any of them.
 Your faction is seeded as an **additional major** (`isMajor: true`) in `generateFactions`, placed by the
 same spacing + seed-biased `placeHomeworlds` logic as the eight presets: a major-quality homeworld with no
 special bonus, no forced centring, an auto-assigned colour clear of the preset hues. On entry the map
@@ -54,21 +56,21 @@ and a **"You"** badge marks your faction on the faction list and faction panel h
 ## Automation — per-domain switches, not a master toggle
 
 ```
-world.player.automation: { build: boolean; colonisation: boolean }   // both default true
+world.player.automation: { build: boolean; colonisation: boolean; lanes: boolean }   // all default true
 ```
 
 Each switch gates one domain's **proposal generation** in the directed-build processor for the player's
 faction only — AI factions never read the field. Toggled off:
 
-- The planner stops proposing new work in that domain (no new autonomic `build` proposals, or no new
-  `colony_establish` proposals).
+- The planner stops proposing new work in that domain (no new autonomic `build` proposals, no new
+  `colony_establish` proposals, or no new autonomic `lane_upgrade` proposals).
 - **Funding of already-committed projects always continues** — nothing already in flight stalls.
 - **Manual orders always continue** — the switches gate the *autonomic* planner, never your own verbs.
 
-There is no logistics switch: directed logistics has no manual verb in this slice, and a toggle with
-nothing behind it would be a lie. The switches surface as a pair of checkboxes on the faction
-construction command card (see UI, below); a set call replaces `world.player.automation` wholesale
-(`setAutomation`, `lib/services/construction-orders.ts`).
+The switches surface as checkboxes on the faction construction command card (see UI, below); a set call
+(`setAutomation`, `lib/services/construction-orders.ts`) spreads `input` onto the existing
+`world.player.automation` object rather than rebuilding it — a domain omitted from `input` keeps its
+current value instead of silently dropping to `undefined`.
 
 ---
 

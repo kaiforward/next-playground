@@ -590,9 +590,10 @@ applies the reset in one application:
 - **Market rows survive with their stock** — a resettler inherits real warehouses — but the demand-derived
   fields reset (`demandRate` to the pricing floor; use-rate/squeeze/funding-bound state cleared) so a
   resettled colony is not priced and rationed as the dead world it replaced.
-- **Open `build` projects targeting the system are dropped** — the former owner stops funding construction
-  on a world it lost. (`colony_establish` projects cannot target a developed system, so they are out of
-  scope by construction.)
+- **Open `build` projects targeting the system are dropped**, and so is any `lane_upgrade` project with
+  either endpoint abandoned — the former owner stops funding construction on a world it lost, and a lane
+  half-invested into a dead system is no better funded than one to nowhere. (`colony_establish` projects
+  cannot target a developed system, so they are out of scope by construction.)
 
 The husk is ordinary claimable frontier again through the existing claim and colony-candidate paths — no
 special resettlement machinery. The famine conjunct is the founding guard: colonies seed at 2 pops, so a

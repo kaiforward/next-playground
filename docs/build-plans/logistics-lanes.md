@@ -606,6 +606,61 @@ dictionary / per-source cache is booked only if the wall-clock line fails; the f
 retired at Gate A ("revisit fuel spread when lane mechanics ship") is read here — lane utilisation
 dispersion is the differentiator the map-gen gate deferred to.
 
+### Gate B — results (recorded 2026-09-04, 600 systems, 10,000 ticks; reports in `temp/sdd/lane-mechanics/gateB/`)
+
+Arms: live s42, live s43, zero-latency s42 (`freightSpeed` 1e6), faction-blind s42
+(`laneTraversal`); pre-change baseline = `shared/logistics-lanes` head `51d8f4db`, seed 42
+(`temp/sdd/lane-mechanics/sim-baseline-51d8f4db.txt`). Founding horizon (1,000 t) moves nothing
+on every arm — colonisation-gated warm-up, unchanged.
+
+| Read | baseline | live s42 | live s43 | zero-latency | faction-blind |
+|---|---|---|---|---|---|
+| conservation identities (5) | 4/4 pass | 5/5 | 5/5 | 5/5 | 5/5 |
+| quantity moved | 5.7M | 5.6M | 5.6M | 5.6M | 5.7M |
+| transfers | 43.5K | 50.3K | 43.9K | 50.5K | 51.5K |
+| budget spent frac / funding-bound / budget skipped | 0.001 / 0 / — | 0.002 / 0 / 0 | 0.002 / 0 / 0 | 0.002 / 0 / 0 | 0.003 / 0 / 0 |
+| lane utilisation p50 / p90 / saturated share | — | 0.00 / 0.30 / 2.7% | 0.00 / 0.27 / 2.4% | 0.00 / 0.30 / 2.6% | 0.00 / 0.35 / 3.0% |
+| top-decile booked share (real) | 0.365 (projection) | 0.402 | 0.418 | 0.402 | 0.396 |
+| blocked volume (total) | — | 4.2M | 4.9M | 4.1M | 3.9M |
+| in-transit volume mean / max | — | 7.4K / 85.6K | 5.7K / 93.2K | 1.2K / 80.5K | 7.8K / 98.0K |
+| foreign-transit share | 1.0M vol (blind) | 0.012 | 0.010 | 0.014 | 0.063 |
+| contention shortfall (Σ blocked × foreignShare) | — | 0 all factions | 0 | 0 | 35.9K top faction |
+| survival spells median / p90 / single-cycle share | 0.75–0.85 (premise 3) | 1.0 / 4.0 / 0.776 | 1.0 / 4.0 / 0.767 | 1.0 / 4.0 / 0.765 | 1.0 / 4.0 / 0.769 |
+| overshoot volume | — | 0 | 144 | 0 | 94 |
+| survival-stock-falling census (end) | — | 0 systems | 0 | 0 | 0 |
+| queued-vs-realised | — | 194 lanes, queued 1.00, util 0.20 | 172 / 1.00 / 0.23 | 194 / 1.00 / 0.20 | 239 / 1.00 / 0.19 |
+| directed-logistics median ms / share of Σ tick | 9.0–13.3 ms / 7.2–8.6% | 26.7 ms / 18.9% | 21.5 ms / 17.9% | 26.5 ms / 19.7% | 217 ms / 65.3% |
+| goods-arrivals median ms / share | — | 0.34 ms / 9.1% | 0.29 / 8.3% | 0.30 / 6.1% | 0.34 / 4.0% |
+
+Merge-condition readings:
+- **Identities:** all five pass on every arm; the goods-mass identity's residual is ≤ 1.2e-8.
+- **C3 gates:** funding-bound events 0 and budget-skipped 0 on every arm; spent fraction 0.002 vs
+  0.001 baseline — the re-denomination holds, `GENERATION_PER_POP` is not retuned.
+- **Oscillation gate:** spell median 1.0, single-cycle share 0.765–0.776 on the latency arms vs
+  0.765 on the zero-latency arm; overshoot 0–144 units against 5.6M moved. Nonzero latency does not
+  degrade correction — the inbound-aware sink test carries it. Latency ships enabled.
+- **Wall-clock line:** the logistics processor reads 2.2–2.6× its baseline share (18–20% vs
+  7.2–8.6%) at 600 systems — under the ~3× line. The new per-tick goods-arrivals stage adds 6–9% on
+  top, which the line did not anticipate; the two together are ~27% of tick. The 10,000-system size
+  was NOT run (projected ~2 h; owner call). The faction-blind arm costs 65% of tick — a reason to
+  keep the tier rule beyond gameplay.
+- **Traversability A/B:** the tier rule strands ~2% of volume against faction-blind (5.6M vs 5.7M)
+  and reads 1.2% foreign-transit share vs 6.3%; contention shortfall is 0 under the tier rule. Tier
+  ships.
+- **Survival alert:** 0 systems trip the census at run end on every arm — the one-cycle baseline
+  window captures scheduled arrivals; no multi-cycle smoothing needed now (owner's watch item
+  stands: revisit if trans-void hauls lengthen with a slower `FREIGHT_SPEED`).
+- **Route dictionary / per-source cache:** not needed at 600 systems (line holds); re-read at the
+  large size if that run is made.
+- **Fuel-spread revisit (from Gate A):** lane utilisation now differentiates lanes the map's fuel
+  spread could not — p90 0.30 against a p50 of 0, 2.5–3% of lane-samples saturated, top-decile
+  booked share 0.40 vs the 0.36 projection.
+- **Blocked volume** is the tuning headline: 4.2–4.9M blocked against 5.6M moved, on ~190 lanes
+  every one of which carries a queued upgrade (planner working as designed); `BASE_LANE_CAPACITY`
+  at `scaleValue(10)` is the constant this reads on. Owner decision.
+- **Return legs:** 0 returned on the live arms (the identity's "returned" term reads 0; overshoot
+  ≤ 144) — dispatch sizing against inbound leaves nothing to bounce.
+
 ### Gate C — Surface prototype
 
 Arms: one browser-viewable HTML prototype of the Net-new UI list (below): lane selection and card,
