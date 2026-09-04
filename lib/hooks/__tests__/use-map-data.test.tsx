@@ -3,6 +3,7 @@ import { renderHook } from "@testing-library/react";
 import { useMapData } from "../use-map-data";
 import { buildSystemRegionMap } from "@/lib/utils/region";
 import type { StarSystemInfo, UniverseData } from "@/lib/types/game";
+import type { LaneStateRow } from "@/lib/types/api";
 
 function system(id: string, regionId: string): StarSystemInfo {
   return {
@@ -48,6 +49,7 @@ function baseOptions() {
     regionMap: new Map(u.regions.map((r) => [r.id, r])),
     ownership: new Map(),
     playerFactionId: null,
+    laneStates: [] as LaneStateRow[],
   };
 }
 
@@ -56,5 +58,55 @@ describe("useMapData — connection rows", () => {
     const { result } = renderHook(() => useMapData(baseOptions()));
     expect(result.current.connections.find((c) => c.id === "a-b")?.fuelCost).toBe(3);
     expect(result.current.connections.find((c) => c.id === "b-c")?.fuelCost).toBe(7);
+  });
+
+  it("defaults level/load/blocked to inert values when no lane state exists for the pair", () => {
+    const { result } = renderHook(() => useMapData(baseOptions()));
+    const ab = result.current.connections.find((c) => c.id === "a-b");
+    expect(ab).toMatchObject({ level: 0, load: 0, blocked: false, laneKey: "a|b" });
+  });
+
+  it("joins lane state onto the matching connection by laneKey", () => {
+    const options = baseOptions();
+    options.laneStates = [
+      {
+        key: "a|b",
+        aId: "a",
+        bId: "b",
+        level: 2,
+        capacity: 20,
+        bookedLoad: 10,
+        blockedVolume: 0,
+        inFlight: 0,
+        investorFactionId: null,
+        openUpgradeLevels: 0,
+      },
+    ];
+    const { result } = renderHook(() => useMapData(options));
+    const ab = result.current.connections.find((c) => c.id === "a-b");
+    expect(ab).toMatchObject({ level: 2, load: 0.5, blocked: false });
+    // The untouched pair keeps its inert defaults.
+    const bc = result.current.connections.find((c) => c.id === "b-c");
+    expect(bc).toMatchObject({ level: 0, load: 0, blocked: false });
+  });
+
+  it("reads blocked when blockedVolume > 0, regardless of load", () => {
+    const options = baseOptions();
+    options.laneStates = [
+      {
+        key: "a|b",
+        aId: "a",
+        bId: "b",
+        level: 0,
+        capacity: 10,
+        bookedLoad: 0,
+        blockedVolume: 3,
+        inFlight: 0,
+        investorFactionId: null,
+        openUpgradeLevels: 0,
+      },
+    ];
+    const { result } = renderHook(() => useMapData(options));
+    expect(result.current.connections.find((c) => c.id === "a-b")).toMatchObject({ blocked: true });
   });
 });

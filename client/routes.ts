@@ -24,11 +24,13 @@ export type Route =
   | { name: "start" }
   | { name: "system"; systemId: string; tab: string }
   | { name: "faction"; factionId: string; tab: string }
+  | { name: "lane"; laneKey: string }
   | { name: "styleguide" };
 
 const PATTERNS = {
   system: "/system/:id/:tab?",
   faction: "/factions/:id/:tab?",
+  lane: "/lane/:key",
   start: "/start",
   styleguide: "/styleguide",
 } as const;
@@ -36,6 +38,7 @@ const PATTERNS = {
 export function useRoute(): Route {
   const [matchSystem, systemParams] = useWouterRoute(PATTERNS.system);
   const [matchFaction, factionParams] = useWouterRoute(PATTERNS.faction);
+  const [matchLane, laneParams] = useWouterRoute(PATTERNS.lane);
   const [matchStart] = useWouterRoute(PATTERNS.start);
   const [matchStyleguide] = useWouterRoute(PATTERNS.styleguide);
 
@@ -44,6 +47,11 @@ export function useRoute(): Route {
   }
   if (matchFaction && factionParams) {
     return { name: "faction", factionId: factionParams.id, tab: factionParams.tab ?? "" };
+  }
+  // The lane key's own "|" arrives percent-encoded (`laneHref`) — wouter/regexparam decode each
+  // param individually, so `laneParams.key` is already the literal `"a|b"` pair.
+  if (matchLane && laneParams) {
+    return { name: "lane", laneKey: laneParams.key };
   }
   if (matchStart) return { name: "start" };
   if (matchStyleguide) return { name: "styleguide" };

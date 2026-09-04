@@ -21,7 +21,7 @@ const EXPECTED_SLICE_KEYS: (keyof SnapshotSlices)[] = [
   "stability", "population", "development", "migration", "provision", "factions", "factionDetail",
   "relations", "systemVitals", "systemPopulation", "systemIndustry", "systemLogistics",
   "systemConstruction", "systemBuildOptions", "systemSubstrate", "market", "marketComparison",
-  "tradeFlow", "factionVitals", "factionConstruction", "factionTreasury", "constructionStalls",
+  "tradeFlow", "lanes", "factionVitals", "factionConstruction", "factionTreasury", "constructionStalls",
 ];
 
 /** The coarse slices — always complete, regardless of interest (frame-architecture spec, "Frame
@@ -29,7 +29,7 @@ const EXPECTED_SLICE_KEYS: (keyof SnapshotSlices)[] = [
 const COARSE_KEYS: (keyof SnapshotSlices)[] = [
   "atlas", "universe", "visibility", "events", "alerts", "tracker", "playerSettings", "ownership",
   "stability", "population", "development", "migration", "provision", "factions", "relations",
-  "tradeFlow", "factionVitals", "factionConstruction", "factionTreasury", "factionDetail",
+  "tradeFlow", "lanes", "factionVitals", "factionConstruction", "factionTreasury", "factionDetail",
   "constructionStalls",
 ];
 
@@ -215,6 +215,7 @@ describe("buildStateFrame — vacuity", () => {
     const comparisonEntryCounts = Object.values(frame.marketComparison ?? {}).map((c) => c.entries.length);
     expect(comparisonEntryCounts.some((n) => n > 0)).toBe(true);
     expect(Array.isArray(frame.tradeFlow?.logisticsEdges)).toBe(true);
+    expect(Array.isArray(frame.lanes)).toBe(true);
     expect(Object.keys(frame.factionVitals ?? {}).length).toBe(factionCount);
     expect(Object.keys(frame.factionConstruction ?? {}).length).toBe(factionCount);
     expect(Object.keys(frame.factionDetail ?? {}).length).toBe(factionCount);

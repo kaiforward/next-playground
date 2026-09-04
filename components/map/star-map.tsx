@@ -17,6 +17,8 @@ import { useStaticTiles } from "@/lib/hooks/use-static-tiles";
 import { useVisibility } from "@/lib/hooks/use-visibility";
 import { useOwnership } from "@/lib/hooks/use-ownership";
 import { useTradeFlow } from "@/lib/hooks/use-trade-flow";
+import { useLanes } from "@/lib/hooks/use-lanes";
+import { laneHref } from "@/lib/utils/route-hrefs";
 import { useStability } from "@/lib/hooks/use-stability";
 import { usePopulation } from "@/lib/hooks/use-population";
 import { useDevelopment } from "@/lib/hooks/use-development";
@@ -68,6 +70,7 @@ export function StarMap({
   const [alertRunSettingsOpen, setAlertRunSettingsOpen] = useState(false);
   const toggleAlertRunSettings = useCallback(() => setAlertRunSettingsOpen((open) => !open), []);
   const { logisticsEdges } = useTradeFlow(overlays.logistics);
+  const laneStates = useLanes();
   const stabilityBySystem = useStability(mapMode === "stability");
   // Population is fetched for its own choropleth AND as the weights for stability's population-weighted
   // aggregation (so a faction's stability number tracks its people, not its raw system count).
@@ -225,6 +228,11 @@ export function StarMap({
         : null,
     [selectedSystemId, universe.systems],
   );
+  // ── Selected lane = the open /lane/:key panel route ──
+  const selectedLaneKey = useMemo(() => {
+    const match = /^\/lane\/([^/]+)/.exec(pathname);
+    return match ? decodeURIComponent(match[1]) : null;
+  }, [pathname]);
 
   // ── Derived map data ────────────────────────────────────────────
   const mapData = useMapData({
@@ -236,6 +244,7 @@ export function StarMap({
     regionMap,
     ownership,
     playerFactionId: atlas.player?.controlledFactionId ?? null,
+    laneStates,
   });
 
   // ── Click handlers — navigate by id; the panel loads its own detail ──
@@ -264,6 +273,16 @@ export function StarMap({
   const onSelectFaction = useCallback(
     (factionId: string) => {
       navigate(`/factions/${factionId}`);
+    },
+    [navigate],
+  );
+
+  // A click resolved to a lane (within tolerance of its segment, see lane-hit-test.ts) — opens the
+  // lane's route-docked panel. Selecting a system while the lane panel is open re-points to the
+  // system panel like system-to-system already does (it's just a navigation).
+  const onSelectLane = useCallback(
+    (laneKey: string) => {
+      navigate(laneHref(laneKey));
     },
     [navigate],
   );
@@ -348,6 +367,8 @@ export function StarMap({
         onSelectSystem={onSelectSystem}
         onEmptyClick={onEmptyClick}
         onSelectFaction={onSelectFaction}
+        onSelectLane={onSelectLane}
+        selectedLaneKey={selectedLaneKey}
         centerTarget={centerTarget}
         centerOffsetX={centerOffsetX}
         onReady={handleReady}

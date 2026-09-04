@@ -8,6 +8,7 @@ import type { World, WorldSystem } from "@/lib/world/types";
 import { capacityGoodRates, computeSystemLabourSnapshot, inputDemandForGood } from "@/lib/engine/industry";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import { yieldsOf, effOf } from "@/lib/engine/resources";
+import { laneKey } from "@/lib/engine/lanes";
 
 // Imports/exports are summed over the flow window then normalised to a
 // per-REFERENCE_INTERVAL rate (so they share units with production/consumption, which are
@@ -175,23 +176,70 @@ describe("getSystemLogistics", () => {
 });
 
 describe("getTradeFlowEdges", () => {
-  it("aggregates window flows into the logistics edge set", () => {
-    // The per-good window total must clear LOGISTICS_ROUTE_FLOOR for the edge
-    // to render — inject a logistics flow comfortably above it.
+  it("reads zero edges when the arrivals ledger is empty", () => {
+    setWorld({ ...world, pendingArrivals: [] });
+    expect(getTradeFlowEdges().logisticsEdges).toHaveLength(0);
+  });
+
+  it("reads an in-flight ledger row's lane hop as a directed edge, above LOGISTICS_ROUTE_FLOOR", () => {
+    const key = laneKey(system.id, partnerA.id);
     setWorld({
       ...world,
-      flowEvents: [
-        { tick: 9, fromSystemId: system.id, toSystemId: partnerA.id, goodId: "water", quantity: 40 },
+      pendingArrivals: [
+        {
+          id: "arrival-1",
+          factionId: null,
+          fromSystemId: system.id,
+          toSystemId: partnerA.id,
+          goodId: "water",
+          quantity: 40,
+          dispatchTick: 9,
+          arrivalTick: 12,
+          routeEdges: [key],
+          leg: "outbound",
+        },
       ],
     });
     const edges = getTradeFlowEdges();
 
-    const logisticsEdge = edges.logisticsEdges.find(
-      (e) =>
-        (e.fromSystemId === system.id && e.toSystemId === partnerA.id) ||
-        (e.fromSystemId === partnerA.id && e.toSystemId === system.id),
-    );
+    const logisticsEdge = edges.logisticsEdges.find((e) => e.laneKey === key);
     expect(logisticsEdge).toBeDefined();
-    expect(logisticsEdge!.totalVolume).toBeGreaterThan(0);
+    expect(logisticsEdge!.fromSystemId).toBe(system.id);
+    expect(logisticsEdge!.toSystemId).toBe(partnerA.id);
+    expect(logisticsEdge!.totalVolume).toBe(40);
+    expect(logisticsEdge!.dominantGoodId).toBe("water");
+  });
+
+  it("emits one edge per lane crossed by a multi-hop route — no chord between origin and destination", () => {
+    const hop1 = laneKey(system.id, partnerA.id);
+    const hop2 = laneKey(partnerA.id, partnerB.id);
+    setWorld({
+      ...world,
+      pendingArrivals: [
+        {
+          id: "arrival-2",
+          factionId: null,
+          fromSystemId: system.id,
+          toSystemId: partnerB.id,
+          goodId: "food",
+          quantity: 10,
+          dispatchTick: 9,
+          arrivalTick: 14,
+          routeEdges: [hop1, hop2],
+          leg: "outbound",
+        },
+      ],
+    });
+    const edges = getTradeFlowEdges();
+
+    expect(edges.logisticsEdges).toHaveLength(2);
+    expect(edges.logisticsEdges.some((e) => e.laneKey === hop1)).toBe(true);
+    expect(edges.logisticsEdges.some((e) => e.laneKey === hop2)).toBe(true);
+    // Never a chord directly from system to partnerB.
+    expect(
+      edges.logisticsEdges.some(
+        (e) => e.fromSystemId === system.id && e.toSystemId === partnerB.id,
+      ),
+    ).toBe(false);
   });
 });

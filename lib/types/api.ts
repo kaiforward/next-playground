@@ -3,20 +3,46 @@ import type { SubstrateGoodRate, ConsumptionBreakdown } from "@/lib/engine/physi
 import type { SupplyRegime } from "@/lib/engine/population";
 import type { FillOrderRow, PotentialYieldRowView } from "@/lib/utils/substrate";
 
+/**
+ * One directed hop of in-flight freight over a single lane — the map overlay's edge unit. Unlike
+ * the retired chord builder (one row per system PAIR, aggregated across every lane a route crossed),
+ * this is one row per (lane, direction): a haul crossing three lanes contributes to three of these,
+ * not one chord between its origin and destination. `laneKey` identifies the lane
+ * (`lib/engine/lanes.ts`); `fromSystemId`/`toSystemId` are this hop's directed endpoints (particles
+ * spawn at `fromSystemId`, arrive at `toSystemId`).
+ */
 export interface TradeFlowEdgeInfo {
-  /** Net source system for the dominant good (where particles spawn). */
+  laneKey: string;
   fromSystemId: string;
-  /** Net destination system for the dominant good (where particles terminate). */
   toSystemId: string;
-  /** Sum of magnitudes across both directions and all goods. */
+  /** Sum of in-flight quantity crossing this lane in this direction, across every good and every
+   *  ledger row (outbound and return legs alike). */
   totalVolume: number;
+  /** The good with the largest share of `totalVolume` — carries the particle colour. */
   dominantGoodId: string;
-  /** Per-good magnitude (both directions summed). */
-  perGood: Record<string, number>;
 }
 /** The directed-logistics overlay edge set the map renders. */
 export interface TradeFlowEdges {
   logisticsEdges: TradeFlowEdgeInfo[];
+}
+/**
+ * One lane's live state for the map layer and the lane card (docs/planned/logistics-lanes.md §1) —
+ * `getLaneStates` (`lib/services/lanes.ts`) joins the persisted `WorldLane` row with its derived
+ * reads: `capacity` from `laneCapacity(level)`, `inFlight` summed from the arrivals ledger's
+ * `routeEdges`, `investorFactionId` from `laneInvestor`, and `openUpgradeLevels` from open
+ * `lane_upgrade` construction projects targeting this lane.
+ */
+export interface LaneStateRow {
+  key: string;
+  aId: string;
+  bId: string;
+  level: number;
+  capacity: number;
+  bookedLoad: number;
+  blockedVolume: number;
+  inFlight: number;
+  investorFactionId: string | null;
+  openUpgradeLevels: number;
 }
 /** Aggregate trading partner for a single good (top-N source or destination). */
 export interface TradeFlowPartner {

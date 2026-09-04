@@ -2,8 +2,9 @@ import type { Application, FederatedPointerEvent } from "pixi.js";
 import type { SystemLayer } from "./layers/system-layer";
 import type { SystemCells } from "./voronoi-cache";
 import { SystemObject } from "./objects/system-object";
-import { ANIM, CAMERA } from "./theme";
+import { ANIM, CAMERA, SIZES } from "./theme";
 import { findFactionAt } from "./faction-hit-test";
+import { findLaneAt, findSystemNear, resolveMapClick, type LaneHitTestLane, type LaneHitTestSystem } from "./lane-hit-test";
 import { movedBeyond } from "./camera";
 import type { MultiPolygon } from "./territory-utils";
 
@@ -11,6 +12,7 @@ interface InteractionCallbacks {
   onSelectSystem: (systemId: string) => void;
   onEmptyClick: () => void;
   onSelectFaction: (factionId: string) => void;
+  onSelectLane: (laneKey: string) => void;
 }
 
 /** Per-cell hit-testing context for empty-space clicks. */
@@ -26,12 +28,21 @@ interface FactionContext {
   selectActive: boolean;
 }
 
+/** Lane click hit-testing context (`lane-hit-test.ts`'s `findLaneAt`) — a lane is a segment between
+ *  two system points, which no existing hit-test shape fits. */
+interface LaneContext {
+  lanes: LaneHitTestLane[];
+  systems: LaneHitTestSystem[];
+  tolerance: number;
+}
+
 interface InteractionOptions {
   app: Application;
   systemLayer: SystemLayer;
   getCallbacks: () => InteractionCallbacks;
   getCellContext: () => CellContext;
   getFactionContext: () => FactionContext;
+  getLaneContext: () => LaneContext;
 }
 
 /**
@@ -46,6 +57,7 @@ export function setupInteractions({
   getCallbacks,
   getCellContext,
   getFactionContext,
+  getLaneContext,
 }: InteractionOptions): () => void {
   // ── System binding ────────────────────────────────────────────
   // Selection is resolved centrally on the stage's pointer-up (below) via the Voronoi cell hit-test —
@@ -94,34 +106,40 @@ export function setupInteractions({
     if (!hadDown) return;
     if (movedBeyond(downX, downY, e.global.x, e.global.y, CAMERA.clickDragThreshold)) return;
 
-    const { onSelectSystem, onEmptyClick, onSelectFaction } = getCallbacks();
+    const { onSelectSystem, onEmptyClick, onSelectFaction, onSelectLane } = getCallbacks();
     const { cells, toWorld } = getCellContext();
     const w = toWorld(e.global.x, e.global.y);
 
-    // Zoomed out, a click on a faction's territory selects the faction (opens /factions/[id]); this
-    // runs in every mode (political → panel; a value mode → also re-scopes via the pathname). Zoomed
-    // in, selectActive is false and we fall through to per-cell system selection.
+    // Precedence (docs/active/engineering/map-rendering.md → Selection):
+    //   1. faction (zoomed out, on a faction's territory)
+    //   2. system, when the point is within the star's own hover radius — a precise star click wins
+    //      over a nearby lane even though both can be geometrically close
+    //   3. lane, when the point is within tolerance of a lane segment
+    //   4. system, via the ordinary Voronoi cell hit-test
+    //   5. empty
     const { unions, selectActive } = getFactionContext();
-    if (selectActive && unions) {
-      const factionId = findFactionAt(unions, w.x, w.y);
-      if (factionId != null) {
-        onSelectFaction(factionId);
-        return;
-      }
-    }
+    const factionHit = selectActive && unions ? findFactionAt(unions, w.x, w.y) : null;
 
-    // A click anywhere inside a system's Voronoi cell selects that system — in every map mode, at
-    // every zoom, whether or not it landed on the star.
-    if (cells) {
-      const systemId = cells.findSystemAt(w.x, w.y);
-      if (systemId != null) {
-        onSelectSystem(systemId);
-        return;
-      }
-    }
+    const { lanes, systems, tolerance } = getLaneContext();
+    const systemNear = findSystemNear(w, systems, SIZES.systemHitRadius);
+    const laneAt = findLaneAt(w, lanes, systems, tolerance);
+    const cellSystemId = cells ? cells.findSystemAt(w.x, w.y) : null;
 
-    // Outside the map extent → clear the selection.
-    onEmptyClick();
+    const result = resolveMapClick({ factionHit, systemNear, laneAt, cellSystemId });
+    switch (result.kind) {
+      case "faction":
+        onSelectFaction(result.factionId);
+        return;
+      case "system":
+        onSelectSystem(result.systemId);
+        return;
+      case "lane":
+        onSelectLane(result.laneKey);
+        return;
+      case "empty":
+        onEmptyClick();
+        return;
+    }
   };
   app.stage.on("pointerdown", onStageDown);
   app.stage.on("pointerup", onStageUp);

@@ -22,3 +22,6 @@ export const systemHref = (systemId: string, tab: string): string =>
   tab === "" ? `/system/${systemId}` : `/system/${systemId}/${tab}`;
 export const factionHref = (factionId: string, tab: string): string =>
   tab === "" ? `/factions/${factionId}` : `/factions/${factionId}/${tab}`;
+/** `laneKey` is a sorted `"a|b"` pair (`lib/engine/lanes.ts`) — URL-encoded so the literal `|`
+ *  survives the route table's `:key` capture untouched. */
+export const laneHref = (laneKey: string): string => `/lane/${encodeURIComponent(laneKey)}`;

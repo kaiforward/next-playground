@@ -53,6 +53,7 @@ import { getSystemVitals } from "@/lib/services/system-vitals";
 import { getSystemPopulation } from "@/lib/services/system-population";
 import { getSystemIndustry, getSystemSubstrate } from "@/lib/services/universe";
 import { getSystemLogistics, getTradeFlowEdges } from "@/lib/services/trade-flow";
+import { getLaneStates } from "@/lib/services/lanes";
 import { getSystemConstruction, getFactionConstruction, readoutForFaction } from "@/lib/services/construction";
 import { getSystemBuildOptions } from "@/lib/services/build-options";
 import { getFactionVitals } from "@/lib/services/faction-vitals";
@@ -68,7 +69,7 @@ import type {
 import type {
   AlertData, TrackerData, SystemVitalsData, SystemPopulationData, SystemIndustryData,
   SystemLogisticsData, SystemConstructionData, SystemBuildOptionsData, FactionVitalsData,
-  FactionConstructionData, FactionTreasuryData, SystemSubstrateData, TradeFlowEdges,
+  FactionConstructionData, FactionTreasuryData, SystemSubstrateData, TradeFlowEdges, LaneStateRow,
 } from "@/lib/types/api";
 
 /** `getMarket`'s return shape, reused verbatim rather than re-declared, per the "reuse the existing
@@ -147,6 +148,7 @@ export interface SnapshotSlices {
   market: Record<string, MarketSlice>;
   marketComparison: Record<string, MarketComparisonSlice>;
   tradeFlow: TradeFlowEdges;
+  lanes: LaneStateRow[];
   factionVitals: Record<string, FactionVitalsData>;
   factionConstruction: Record<string, FactionConstructionData>;
   factionTreasury: Record<string, FactionTreasuryData>;
@@ -287,6 +289,7 @@ export function buildStateFrame(world: World, interest: InterestSet): StateFrame
     market,
     marketComparison,
     tradeFlow: getTradeFlowEdges(),
+    lanes: getLaneStates(),
     factionVitals,
     factionConstruction,
     factionTreasury,

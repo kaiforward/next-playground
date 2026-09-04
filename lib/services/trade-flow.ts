@@ -3,7 +3,7 @@ import { buildingsBySystem, flowEventsBySystem, marketsBySystem, systemNameById 
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { bucketVolumeHistory } from "@/lib/engine/system-trade-flow";
-import { buildFlowEdges, type RawFlowRow } from "@/lib/engine/trade-flow-edges";
+import { buildLaneFlowEdges } from "@/lib/engine/trade-flow-edges";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import type {
   TradeFlowEdges,
@@ -18,37 +18,14 @@ import {
 } from "@/lib/engine/logistics-readout";
 
 /**
- * Returns the directed-logistics map-overlay edge set, aggregated over the last
- * `FLOW_HISTORY_TICKS`.
+ * Returns the directed-logistics map-overlay edge set: one edge per (lane, direction) currently
+ * carrying in-flight freight, read straight from the scheduled-freight ledger's `routeEdges`
+ * (`WorldPendingArrival`) — not a window-summed chord between a haul's origin and destination. A
+ * ledger with nothing in flight (including a world with no lanes at all) reads as zero edges.
  */
 export function getTradeFlowEdges(): TradeFlowEdges {
   const world = getWorld();
-  const minTick = world.meta.currentTick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
-
-  // Group by (from, to, good) summing quantity over the window.
-  const grouped = new Map<string, RawFlowRow>();
-  for (const f of world.flowEvents) {
-    if (f.tick <= minTick || f.quantity <= 0) continue;
-    const key = `${f.fromSystemId}|${f.toSystemId}|${f.goodId}`;
-    const existing = grouped.get(key);
-    if (existing) {
-      existing.quantity += f.quantity;
-    } else {
-      grouped.set(key, {
-        fromSystemId: f.fromSystemId,
-        toSystemId: f.toSystemId,
-        goodId: f.goodId,
-        quantity: f.quantity,
-      });
-    }
-  }
-
-  const allSystemIds = new Set(world.systems.map((s) => s.id));
-  const logisticsEdges = buildFlowEdges(
-    [...grouped.values()],
-    allSystemIds,
-    TRADE_SIMULATION.LOGISTICS_ROUTE_FLOOR,
-  );
+  const logisticsEdges = buildLaneFlowEdges(world.pendingArrivals, TRADE_SIMULATION.LOGISTICS_ROUTE_FLOOR);
   return { logisticsEdges };
 }
 
