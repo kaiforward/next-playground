@@ -570,41 +570,51 @@ export interface WorldMarket {
    */
   logisticsFundingBound?: boolean;
   /**
-   * The realised change in `stock` across one economy cycle, after directed logistics has applied
-   * its hauls as stock deltas and after directed build has drawn this cycle's colony staging
-   * materials — production minus consumption, net of imports/exports and of what a founding donor
-   * shipped out to stand up a colony, denominated
-   * per reference cycle (dividing the realised change by this cycle's own `catchUpFactor`, the same
-   * denomination `WorldSystem.populationChange` uses) so the reading is unchanged if `CYCLE_LENGTH`
-   * is retuned. Written ONLY for `SURVIVAL_GOODS` (lib/constants/physical-economy.ts:153 — water and
-   * food); every other good's market row never carries this key, present or absent.
+   * The realised change in `stock` across one full economy cycle — the whole window between this
+   * boundary tick and the previous one, not just this tick's own delta — production minus
+   * consumption, net of imports/exports and of what a founding donor shipped out to stand up a
+   * colony, denominated per reference cycle (dividing the realised change by this cycle's own
+   * `catchUpFactor`, the same denomination `WorldSystem.populationChange` uses) so the reading is
+   * unchanged if `CYCLE_LENGTH` is retuned. Written ONLY for `SURVIVAL_GOODS`
+   * (lib/constants/physical-economy.ts:153 — water and food); every other good's market row never
+   * carries this key, present or absent.
    *
-   * Written by the tick body (lib/world/tick.ts), not by the directed-logistics engine or
-   * processor: snapshotted immediately BEFORE the economy processor mutates `stock` this cycle, and
-   * computed after the last stage of the same tick that moves it — directed build's founding
-   * staging draw and staged manifest delivery, which run after directed logistics' own stock
-   * updates. A founding donor's draw is a real loss from its warehouse, and this figure's one reader
-   * divides `stock` by `−stockChange` for a cycles-to-empty countdown, so leaving the draw out would
-   * report a longer runway than the donor has. Same absence convention as
-   * `logisticsFundingBound` above: absent means never assessed, written for every survival-good
-   * market row belonging to a system the economy processor visited this cycle (0 included, distinct
-   * from absent), untouched for a market row it did not visit, and cleared — not carried forward —
-   * on abandonment (`resetAbandonedMarkets`, lib/world/tick.ts) so a resettled colony's warehouse
-   * does not inherit its predecessor's drain rate. `stock` itself is deliberately left untouched by
-   * that same reset — the warehouse is real.
+   * Written by the tick body (lib/world/tick.ts) against the persisted baseline
+   * `stockAtLastBoundary` below, on the boundary tick, after the last stage of that tick that moves
+   * `stock` — directed build's founding staging draw and staged manifest delivery, which run after
+   * directed logistics' own stock updates and after the per-tick goods-arrivals stage that can
+   * credit a haul on ANY tick of the cycle, not only this boundary one. Comparing against the
+   * baseline (rather than a snapshot taken at this tick's own start) is what makes a haul that
+   * landed earlier in the cycle show up here at all. A founding donor's draw is a real loss from its
+   * warehouse, and this figure's one reader divides `stock` by `−stockChange` for a cycles-to-empty
+   * countdown, so leaving the draw out would report a longer runway than the donor has. Same absence
+   * convention as `logisticsFundingBound` above: absent means never assessed — written for every
+   * survival-good market row belonging to a system that is developed as of this boundary tick AND
+   * already carries a baseline from the previous one (0 included, distinct from absent); a row with
+   * no baseline yet (a fresh market row, or one an abandonment just cleared) writes no `stockChange`
+   * this boundary, only a baseline to diff against next time. Untouched for a market row the tick
+   * did not visit, and cleared — not carried forward — on abandonment (`resetAbandonedMarkets`,
+   * lib/world/tick.ts) so a resettled colony's warehouse does not inherit its predecessor's drain
+   * rate. `stock` itself is deliberately left untouched by that same reset — the warehouse is real.
    *
-   * Cadence caveat: this figure is exact only while `cadence.logistics` coincides with
-   * `cadence.cycle` — the live game's constants (LOGISTICS_INTERVAL === CYCLE_LENGTH === 24) always
-   * do. Directed logistics runs on its OWN independently-tunable cadence
-   * (lib/constants/tick-cadence.ts); if that cadence is retuned away from the economy cycle's, this
-   * figure captures only the logistics application (if any) that happens to land on the SAME tick as
-   * the economy cycle boundary — a haul applied on any other tick is folded into `stock` without ever
-   * appearing in a reported change, and a cycle boundary with no coincident logistics run reports
-   * production-minus-consumption alone, with no import/export correction that cycle. Authored for one
-   * job — the Survival stock falling alert's `stock / −stockChange` cycles-to-empty measure. Nothing
-   * inside the tick reads it.
+   * Authored for one job — the Survival stock falling alert's `stock / −stockChange` cycles-to-empty
+   * measure. Nothing inside the tick reads it.
    */
   stockChange?: number;
+  /**
+   * The `stock` this row carried at the end of the previous economy-cycle boundary tick — the
+   * baseline `stockChange` above diffs against, rather than a value snapshotted at the current
+   * tick's own start. Written and rewritten in lockstep with `stockChange`: on every boundary tick,
+   * for every survival-good row of a system developed as of that tick, this is set to the row's
+   * current `stock` regardless of whether a `stockChange` was written alongside it. Absent means
+   * this row has never stood at a boundary since it was created (or since abandonment last cleared
+   * it) — the same "absent, not zero" convention `stockChange` uses, and the reason the FIRST
+   * boundary a row is visited writes a baseline but no `stockChange`. Cleared alongside
+   * `stockChange` on abandonment (`resetAbandonedMarkets`, lib/world/tick.ts) for the same reason:
+   * a re-founded colony's drain rate starts over, not from where its predecessor's warehouse stood.
+   * Nothing outside this one computation reads it.
+   */
+  stockAtLastBoundary?: number;
   /**
    * How much of this row's demand no reachable same-faction donor and no local production could close
    * on the latest directed-logistics run — the deficit's `max(0, target − stock)` LESS the drawable

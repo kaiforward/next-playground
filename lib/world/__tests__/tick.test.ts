@@ -30,7 +30,7 @@ import type { TaxLevel } from "@/lib/types/game";
 import type { SystemDevelopment } from "@/lib/tick/world/directed-build-world";
 import type { TickSystem } from "@/lib/tick/rows";
 import type {
-  World, WorldBuildProject, WorldFactionTreasury, WorldMarket, WorldShip,
+  World, WorldBuildProject, WorldFactionTreasury, WorldMarket, WorldPendingArrival, WorldShip,
   WorldSystem,
 } from "../types";
 
@@ -1915,10 +1915,13 @@ describe("runWorldTick — the smoothed population trend (WorldSystem.population
 // ── the realised per-cycle survival-good stock change ─────────────────
 // `WorldMarket.stockChange` is written by the tick body itself, after directed logistics has
 // applied its own stock updates — not by the directed-logistics engine or processor, neither of
-// which sees the economy processor's earlier production/consumption write. These pin the write's
-// inclusion of the same-tick logistics haul, its survival-goods-only scope, its absence convention
-// and the abandonment clear. Whether anything inside the tick reads it back is proven separately
-// (the poisoning test below).
+// which sees the economy processor's earlier production/consumption write. The window is measured
+// against a persisted baseline (`stockAtLastBoundary`) rather than a value snapshotted at the
+// boundary tick's own start, because goods-arrivals credits a haul on whatever tick it lands, not
+// only the boundary one — these pin that whole-cycle window (including a mid-cycle arrival), the
+// same-tick logistics/staging inclusion, the survival-goods-only scope, the absence convention (a
+// row's first boundary seeds a baseline but reports no figure), and the abandonment clear. Whether
+// anything inside the tick reads the figure back is proven separately (the poisoning test below).
 
 /** Reads `stockChange` off a market row, failing with a clear message rather than silently
  *  treating an unassessed row as 0 — the exact distinction these tests exist to pin. */
@@ -1944,13 +1947,35 @@ const STOCK_CADENCE: TickCadence = { cycle: 1, logistics: 1, construction: 999 }
 /** Same economy cadence, logistics parked — isolates the economy-only (pre-import) figure. */
 const NO_LOGISTICS_CADENCE: TickCadence = { cycle: 1, logistics: NEVER, construction: 999 };
 
+/** Runs a fresh world up to (and including) its very first economy-cycle boundary purely to seed
+ *  `stockAtLastBoundary` — a row's FIRST boundary writes a baseline but no `stockChange` (the
+ *  absence convention these tests pin elsewhere), so every test below that wants an assessed
+ *  figure has to clear that first boundary before the one it measures. `cadence.cycle` ticks from
+ *  a fresh (`meta.currentTick === 0`) world always lands exactly on that first boundary. */
+async function seedStockBaseline(world: World, cadence: TickCadence): Promise<World> {
+  return runTicks(world, cadence.cycle, cadence);
+}
+
+/** Jumps straight to the tick before `targetTick` via `meta.currentTick`, then runs the one real
+ *  tick that lands on it — the same fast-forward the population denomination test uses, so a
+ *  boundary far in the future costs one processed tick, not a full simulated run to get there. */
+async function tickTo(world: World, targetTick: number, cadence: TickCadence): Promise<World> {
+  const jumped: World = { ...world, meta: { ...world.meta, currentTick: targetTick - 1 } };
+  return (await runWorldTick(jumped, { cadence })).world;
+}
+
 describe("runWorldTick — the realised per-cycle survival-good stock change (WorldMarket.stockChange)", () => {
   it("includes the import: the same starting deficit reports a materially smaller drain with logistics resolving than with it parked", async () => {
     const { b, world } = twoSystemWaterGradient((market) => ({ ...market, stock: 500 }));
 
-    // Same starting world, only whether directed logistics resolves this tick differs.
-    const localOnlyAfter = (await runWorldTick(world, { cadence: NO_LOGISTICS_CADENCE })).world;
-    const withHaulAfter = (await runWorldTick(world, { cadence: STOCK_CADENCE })).world;
+    // Seeds both systems' water baselines on a no-logistics tick first, so the two branches below
+    // start from an identical `stockAtLastBoundary` rather than each hitting the first-boundary
+    // absence convention.
+    const seeded = await seedStockBaseline(world, NO_LOGISTICS_CADENCE);
+
+    // Same seeded world, only whether directed logistics resolves this tick differs.
+    const localOnlyAfter = (await runWorldTick(seeded, { cadence: NO_LOGISTICS_CADENCE })).world;
+    const withHaulAfter = (await runWorldTick(seeded, { cadence: STOCK_CADENCE })).world;
 
     const localOnly = requireStockChange(localOnlyAfter, b, "water");
     const withHaul = requireStockChange(withHaulAfter, b, "water");
@@ -1980,7 +2005,8 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
     // This faction's only developed system in a 60-system galaxy at seed 7 has no same-faction
     // developed neighbour to reach — directed logistics resolves (cadence coincident) but finds no
     // donor, same as an unfunded deficit with nothing reachable.
-    const after = (await runWorldTick(world, { cadence: STOCK_CADENCE })).world;
+    const seeded = await seedStockBaseline(world, STOCK_CADENCE);
+    const after = (await runWorldTick(seeded, { cadence: STOCK_CADENCE })).world;
 
     expect(requireStockChange(after, systemId, "water")).toBeLessThan(0);
   });
@@ -1996,11 +2022,12 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
 
   it("clears on abandonment while `stock` itself is retained — the warehouse survives, the reading does not", () => {
     const base = generateWorld({ systemCount: 60, seed: 7 }).markets[0];
-    const stale: WorldMarket = { ...base, stockChange: -42, stock: 777 };
+    const stale: WorldMarket = { ...base, stockChange: -42, stockAtLastBoundary: 819, stock: 777 };
 
     const [reset] = resetAbandonedMarkets([stale], [stale.systemId]);
 
     expect(reset.stockChange).toBeUndefined();
+    expect(reset.stockAtLastBoundary).toBeUndefined();
     expect(reset.stock).toBe(777);
   });
 
@@ -2011,11 +2038,11 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
     // through this run — at full dissatisfaction the growth term is exactly zero and unrest pins at
     // 1, so ln(1.02) ÷ declineRate is ~40 reference cycles (measured: abandoned at tick 952), inside
     // the ~125 reference cycles 3,000 ticks buys at any cadence. The exact tick the population
-    // processor reports this system in
-    // `abandonedSystemIds` is the same tick `stockAtCycleStart` snapshotted its water row while the
-    // system was still developed, so without the write site's own guard that snapshot would be
-    // recomputed against and written back over `resetAbandonedMarkets`' clear, further up this same
-    // tick.
+    // processor reports this system in `abandonedSystemIds` is the same tick the write site's own
+    // `developedNow` set is built — after `resetAbandonedMarkets` already cleared both `stockChange`
+    // and `stockAtLastBoundary` for it — so without the write site excluding a no-longer-developed
+    // system, this same tick's write would recompute a figure and reseed the baseline right over
+    // that clear.
     const base = generateWorld({ systemCount: 60, seed: 7 });
     const systemId = base.factions[0].homeworldId;
     let world: World = {
@@ -2039,6 +2066,8 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
     if (!water) throw new Error("expected the water market row to survive abandonment");
     expect(water.stockChange).toBeUndefined();
     expect("stockChange" in water).toBe(false);
+    expect(water.stockAtLastBoundary).toBeUndefined();
+    expect("stockAtLastBoundary" in water).toBe(false);
   }, 60_000);
 
   it("a never-assessed survival-good market row reports stockChange absent, and it survives a save round-trip as absent, not 0", async () => {
@@ -2058,6 +2087,7 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
     if (!untouched) throw new Error("expected the ticked world to still carry this market row");
     expect(untouched.stockChange).toBeUndefined();
     expect("stockChange" in untouched).toBe(false);
+    expect("stockAtLastBoundary" in untouched).toBe(false);
 
     const result = deserialiseWorld(serialiseWorld(after));
     if (!result.ok) throw new Error(`expected the save round-trip to succeed: ${result.error}`);
@@ -2067,24 +2097,91 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
     expect("stockChange" in reloaded).toBe(false);
   });
 
-  it("carries stockChange forward, unchanged, on a survival-good row belonging to a system the economy skipped this cycle", async () => {
-    // The third set-and-clear case, distinct from the two above: not a non-survival good (never gets
-    // the field at all) and not a never-assessed row (never touched at all), but a row that WAS
-    // assessed on a real cycle and then sits through a mid-cycle tick where the economy stage bails
-    // internally — `stockAtCycleStart` is never built, so the write further down this function never
-    // runs at all, and the row's prior reading survives verbatim.
+  it("the first boundary after a fresh load seeds the baseline but reports no stockChange, and the SECOND boundary is the first to report one", async () => {
     const generated = generateWorld({ systemCount: 60, seed: 7 });
     const developed = generated.systems.find((s) => s.control === "developed");
     if (!developed) throw new Error("expected at least one developed system in a freshly generated world");
 
-    const afterCycle = await runTicks(generated, CYCLE_LENGTH);
-    const assessed = requireStockChange(afterCycle, developed.id, "water");
+    const afterFirstBoundary = await runTicks(generated, CYCLE_LENGTH);
+    const firstBoundaryRow = marketRow(afterFirstBoundary, developed.id, "water");
+    expect(firstBoundaryRow.stockChange).toBeUndefined();
+    expect(firstBoundaryRow.stockAtLastBoundary).toBe(firstBoundaryRow.stock);
+
+    const afterSecondBoundary = await runTicks(afterFirstBoundary, CYCLE_LENGTH);
+    const assessed = requireStockChange(afterSecondBoundary, developed.id, "water");
+    expect(assessed).not.toBe(0); // non-vacuous: a real reading, not a coincidental zero
+  });
+
+  it("a stored stockChange of exactly 0 survives a tick this row's write site never visits, distinguishably from absent", async () => {
+    // The hazard is representational: 0 is falsy, so a merge written as `value || undefined` (or a
+    // truthiness-guarded copy) would silently turn a legitimate no-change cycle into "absent" — the
+    // exact distinction `requireStockChange` above exists to enforce. There is no fixture that
+    // reliably drives the live economy to an exact-zero realised change, so the 0 is planted
+    // directly and carried through a real non-boundary tick, mirroring populationChange's own
+    // exact-zero test above.
+    const generated = generateWorld({ systemCount: 60, seed: 7 });
+    const developed = generated.systems.find((s) => s.control === "developed");
+    if (!developed) throw new Error("expected at least one developed system in a freshly generated world");
+    const planted: World = {
+      ...generated,
+      markets: generated.markets.map((m) =>
+        m.systemId === developed.id && m.goodId === "water"
+          ? { ...m, stockChange: 0, stockAtLastBoundary: m.stock }
+          : m,
+      ),
+    };
+
+    // Day 1 — not a cycle boundary at the default cadence, so the write site never touches this row.
+    const after = (await runWorldTick(planted)).world;
+    const water = marketRow(after, developed.id, "water");
+    expect(water.stockChange).not.toBeUndefined();
+    expect(water.stockChange).toBe(0);
+  });
+
+  it("carries stockChange forward, unchanged, on a survival-good row belonging to a system the economy skipped this cycle", async () => {
+    // The third set-and-clear case, distinct from the two above: not a non-survival good (never gets
+    // the field at all) and not a never-assessed row (never touched at all), but a row that WAS
+    // assessed on a real cycle and then sits through a mid-cycle tick where the economy stage bails
+    // internally — the write below reads `developedNow` off `systems`, but never runs at all on a
+    // mid-cycle tick, so the row's prior reading survives verbatim.
+    const generated = generateWorld({ systemCount: 60, seed: 7 });
+    const developed = generated.systems.find((s) => s.control === "developed");
+    if (!developed) throw new Error("expected at least one developed system in a freshly generated world");
+
+    // Two full cycles: the first boundary only seeds the baseline (the convention pinned above), so
+    // the SECOND is the first tick this row reports an assessed figure.
+    const afterFirstCycle = await runTicks(generated, CYCLE_LENGTH);
+    const afterSecondCycle = await runTicks(afterFirstCycle, CYCLE_LENGTH);
+    const assessed = requireStockChange(afterSecondCycle, developed.id, "water");
     expect(assessed).not.toBe(0); // non-vacuous: a real reading, not a coincidental zero
 
-    const afterMidCycle = (await runWorldTick(afterCycle)).world;
+    const afterMidCycle = (await runWorldTick(afterSecondCycle)).world;
     const midCycle = afterMidCycle.markets.find((m) => m.systemId === developed.id && m.goodId === "water");
     if (!midCycle) throw new Error("expected the water market row to survive the tick");
     expect(midCycle.stockChange).toBe(assessed);
+  });
+
+  it("two consecutive boundaries under a steady net movement report comparable figures — the window is one cycle, not an accumulating one", async () => {
+    // If the baseline were read but never rewritten after use, the SECOND assessed boundary would
+    // diff against the same stale baseline the FIRST one did, reporting roughly double the true
+    // per-cycle change — and a third would report roughly triple. Three consecutive boundaries on a
+    // steady economy (no abandonment, founding or logistics to introduce a real regime change) is
+    // what catches that: each reading should sit near the others, not grow cycle over cycle.
+    const generated = generateWorld({ systemCount: 60, seed: 7 });
+    const developed = generated.systems.find((s) => s.control === "developed");
+    if (!developed) throw new Error("expected at least one developed system in a freshly generated world");
+
+    const afterFirstBoundary = await runTicks(generated, CYCLE_LENGTH); // baseline only
+    const afterSecondBoundary = await runTicks(afterFirstBoundary, CYCLE_LENGTH);
+    const afterThirdBoundary = await runTicks(afterSecondBoundary, CYCLE_LENGTH);
+
+    const second = requireStockChange(afterSecondBoundary, developed.id, "water");
+    const third = requireStockChange(afterThirdBoundary, developed.id, "water");
+    expect(second).not.toBe(0); // non-vacuous: a real reading, not a coincidental zero
+
+    // A window that silently spanned two cycles would report roughly 2× here; this stays well
+    // under that, bounding drift to ordinary cycle-over-cycle economy movement instead.
+    expect(Math.abs(third - second)).toBeLessThan(Math.abs(second) * 0.5);
   });
 
   it("denominates per reference cycle: retuning CYCLE_LENGTH away from REFERENCE_INTERVAL leaves the figure unchanged", async () => {
@@ -2097,10 +2194,20 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
     // the population denomination test uses, but avoiding the OPPOSITE clamp here: an
     // actually "ample" stock (well above the knee) collapses production to 0 via that same brake,
     // which would make both readings 0 in vacuous agreement rather than proving anything.
+    // The baseline is seeded directly on the fixture rather than through an actual first-boundary
+    // tick: an extra real tick before the measured one would take its own Euler-sized step through
+    // the same production brake, at a DIFFERENT step size per cadence (REFERENCE_INTERVAL vs its
+    // double) — introducing exactly the nonlinearity this test exists to rule out. Seeding the
+    // baseline as "whatever `stock` already is" is what a row's first-ever assessment always does
+    // (`stockAtLastBoundary` set with no `stockChange` alongside it), so this is a faithful
+    // fixture, not a shortcut around the mechanism.
     const world: World = {
       ...base,
       buildings: base.buildings.map((b) =>
         b.systemId === systemId && b.buildingType === "water" ? { ...b, count: b.count * 3 } : b,
+      ),
+      markets: base.markets.map((m) =>
+        m.systemId === systemId && m.goodId === "water" ? { ...m, stockAtLastBoundary: m.stock } : m,
       ),
     };
 
@@ -2108,19 +2215,73 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
     // the population denomination test. Logistics and construction stay parked so only the economy
     // cycle's own production/consumption feeds the figure.
     const referenceCadence: TickCadence = { cycle: REFERENCE_INTERVAL, logistics: NEVER, construction: NEVER };
-    const referenceWorld: World = { ...world, meta: { ...world.meta, currentTick: REFERENCE_INTERVAL - 1 } };
-    const referenceAfter = (await runWorldTick(referenceWorld, { cadence: referenceCadence })).world;
+    const referenceAfter = await tickTo(world, REFERENCE_INTERVAL, referenceCadence);
 
     const retunedCycle = REFERENCE_INTERVAL * 2;
     const retunedCadence: TickCadence = { cycle: retunedCycle, logistics: NEVER, construction: NEVER };
-    const retunedWorld: World = { ...world, meta: { ...world.meta, currentTick: retunedCycle - 1 } };
-    const retunedAfter = (await runWorldTick(retunedWorld, { cadence: retunedCadence })).world;
+    const retunedAfter = await tickTo(world, retunedCycle, retunedCadence);
 
     const reference = requireStockChange(referenceAfter, systemId, "water");
     const retuned = requireStockChange(retunedAfter, systemId, "water");
 
     expect(reference).toBeGreaterThan(0); // non-vacuous: real net production, not two zeros agreeing
     expect(retuned).toBeCloseTo(reference, 6);
+  });
+
+  it("includes a mid-cycle pendingArrivals credit in the NEXT boundary's figure — the goods-arrivals stage can land on any tick, not only the boundary one", async () => {
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const developed = base.systems.find((s) => s.control === "developed");
+    if (!developed) throw new Error("expected at least one developed system in a freshly generated world");
+
+    // Empties the good's warehouse first so a 500-unit credit sits comfortably under its band cap
+    // regardless of where the economy alone leaves stock over the cycle below.
+    const emptied: World = {
+      ...base,
+      markets: base.markets.map((m) =>
+        m.systemId === developed.id && m.goodId === "water" ? { ...m, stock: 0 } : m,
+      ),
+    };
+
+    // Logistics stays parked: the only stage that can move `stock` besides the economy is the
+    // pendingArrivals row seeded below, landing on a tick this cadence's own dispatch never touches.
+    const cadence: TickCadence = { cycle: CYCLE_LENGTH, logistics: NEVER, construction: NEVER };
+    const seeded = await seedStockBaseline(emptied, cadence); // first boundary: baseline only
+
+    const midCycleTick = seeded.meta.currentTick + Math.floor(CYCLE_LENGTH / 2);
+    const arrival: WorldPendingArrival = {
+      id: "mid-cycle-arrival-test",
+      factionId: null,
+      fromSystemId: developed.id,
+      toSystemId: developed.id,
+      goodId: "water",
+      quantity: 500,
+      dispatchTick: midCycleTick - 1,
+      arrivalTick: midCycleTick,
+      routeEdges: [],
+      leg: "outbound",
+    };
+    const withArrival: World = { ...seeded, pendingArrivals: [...seeded.pendingArrivals, arrival] };
+
+    const withoutArrivalAfter = await runTicks(seeded, CYCLE_LENGTH, cadence);
+    const withArrivalAfter = await runTicks(withArrival, CYCLE_LENGTH, cadence);
+
+    // Premise: the arrival actually landed mid-cycle rather than riding unresolved into the window
+    // this assertion is measuring.
+    const stillPending = withArrivalAfter.pendingArrivals.find((p) => p.id === arrival.id);
+    expect(stillPending).toBeUndefined();
+
+    const withoutChange = requireStockChange(withoutArrivalAfter, developed.id, "water");
+    const withChange = requireStockChange(withArrivalAfter, developed.id, "water");
+
+    // Both branches share one seeded baseline, so the credited quantity has to appear in the gap
+    // between their reported changes, scaled by the one denominator — the same identity the
+    // founding-staging-draw test below uses. Unlike that test's single-tick isolation, this arrival
+    // lands with half a cycle still to run, giving the economy time to consume some of what it just
+    // received differently than it would have without it — so the gap is close to, not exactly, the
+    // raw quantity. A same-tick-only window (the old snapshot) would have missed the credit
+    // entirely, reporting near 0 here instead of near the full 500.
+    const reportedGap = (withChange - withoutChange) * catchUpFactor(CYCLE_LENGTH);
+    expect(Math.abs(reportedGap - arrival.quantity)).toBeLessThan(arrival.quantity * 0.02);
   });
 
   // ── colony-founding staging draw, driven through runWorldTick, not applyFoundingStagingDraws ──

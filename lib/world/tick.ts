@@ -997,10 +997,11 @@ export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: str
  * `logisticsFundingBound` are all optional fields whose absence already reads as "not yet
  * assessed" — cleared (deleted) rather than zeroed, exactly as a freshly-created market row would
  * be. `productionSuppressed` has no such absent-reads-as-fresh convention, so it is explicitly set
- * false, mirroring `collapseDebt`'s explicit zero in `applyAbandonments` above. `stockChange` joins
- * the same clear for the same reason as `logisticsFundingBound`: it is a reading from a previous
- * life and must not survive into the next — a re-founded colony's warehouse is real, but its
- * predecessor's drain rate is not. `unservedShortfall` joins the same clear for the same reason: a
+ * false, mirroring `collapseDebt`'s explicit zero in `applyAbandonments` above. `stockChange` and
+ * its baseline `stockAtLastBoundary` join the same clear for the same reason as
+ * `logisticsFundingBound`: they are a reading from a previous life and must not survive into the
+ * next — a re-founded colony's warehouse is real, but its predecessor's drain rate and the point
+ * it was drained from are not. `unservedShortfall` joins the same clear for the same reason: a
  * structural reading names a shortfall THIS colony's donors and production could not close, and a
  * resettled colony has neither yet — its own local-supply story starts over.
  */
@@ -1014,6 +1015,7 @@ export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds
     delete next.squeezeCycles;
     delete next.logisticsFundingBound;
     delete next.stockChange;
+    delete next.stockAtLastBoundary;
     delete next.unservedShortfall;
     return next;
   });
@@ -1386,23 +1388,7 @@ export async function runWorldTick(
   // is pure waste. The gate emits the same mid-cycle broadcast the body would have,
   // so a gated tick is indistinguishable from an ungated one from the outside.
   let economySignals: EconomySignals | undefined;
-  // The realised per-cycle survival-good stock change's opening snapshot — captured here, BEFORE
-  // the economy processor mutates `stock` via production/consumption, so the write below (after
-  // directed logistics, further down this function) reads the true cycle-start value. Scoped to
-  // SURVIVAL_GOODS market rows belonging to a system that is developed AS OF THIS INSTANT — the
-  // same population the economy processor's own `getSystemIds` selects
-  // (`isEconomicallyActive`) — so "visited this cycle" at the write site means exactly "the economy
-  // processor assessed this system", nothing more, nothing less.
-  let stockAtCycleStart: Map<string, number> | undefined;
   if (isCycleStart(tick, cadence.cycle)) {
-    const developedNow = new Set(
-      systems.filter((s) => isEconomicallyActive(s.control)).map((s) => s.id),
-    );
-    stockAtCycleStart = new Map(
-      markets
-        .filter((m) => SURVIVAL_GOODS.includes(m.goodId) && developedNow.has(m.systemId))
-        .map((m) => [`${m.systemId}|${m.goodId}`, m.stock]),
-    );
     const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, EVENT_DEFINITIONS) });
     const economyResult = await runEconomyProcessor(economyWorld, newTickCtx(), {
       interval: cadence.cycle,
@@ -1883,54 +1869,40 @@ export async function runWorldTick(
     // ── realised per-cycle survival-good stock change (persisted; read by nothing else in the
     // tick) ── Written HERE — after directed logistics has applied its own stock updates AND after
     // directed-build's founding staging draws and staged manifest delivery above, still inside this
-    // outer cycle-start block. The interface is the realised change across the whole cycle: a
-    // founding donor's survival-good draw (`applyFoundingStagingDraws`) leaves its warehouse exactly
-    // as really as consumption does, so it belongs inside this figure rather than after it — and the
-    // polarity makes that load-bearing rather than cosmetic. The one reader divides `stock` by
-    // `−stockChange` for a cycles-to-empty countdown, so a drain left outside the figure reports a
-    // longer runway than the donor actually has: the reading would err toward reassurance on exactly
-    // the system that just gave its stores away. A donor that stages a manifest this cycle therefore
-    // reads more pessimistic for this one cycle than a mid-cycle read would show — accepted, the same
-    // way `populationChange` below accepts it, and it self-corrects next cycle from a fresh baseline.
+    // outer cycle-start block — because the interface is the realised change across the WHOLE
+    // cycle, and this is the last point in the tick that moves a survival good's `stock`. A founding
+    // donor's draw (`applyFoundingStagingDraws`) leaves its warehouse exactly as really as
+    // consumption does, so it belongs inside this figure rather than after it — the polarity makes
+    // that load-bearing rather than cosmetic. The one reader divides `stock` by `−stockChange` for a
+    // cycles-to-empty countdown, so a drain left outside the figure reports a longer runway than the
+    // donor actually has.
     //
-    // Gated on `stockAtCycleStart`: absent whenever this tick was not an economy-cycle boundary
-    // (the snapshot is only taken then), so this skips cleanly on a tick where only logistics
-    // or build resolves, rather than diffing against a stale or absent snapshot.
+    // The window is a persisted baseline (`stockAtLastBoundary`), not a snapshot taken at this
+    // tick's own start: goods-arrivals now credits a haul on whatever tick it lands, which may be
+    // any tick of the cycle, not just this boundary one — a same-tick snapshot would miss every
+    // arrival that landed earlier in the cycle. Comparing against the figure this same write left
+    // at the PREVIOUS boundary covers the whole cycle regardless of which tick within it any haul
+    // actually credited.
     //
-    // Cadence caveat (see the field's own docstring, lib/world/types.ts): directed logistics runs
-    // on its OWN independently-tunable cadence (`cadence.logistics`). While it coincides with
-    // `cadence.cycle` — the live game's constants always do — this write captures the full
-    // production-minus-consumption-net-of-hauls figure the interface describes. If the two cadences
-    // are retuned apart, this only ever captures a logistics application that happens to land on
-    // THIS tick; a haul on any other tick is folded into `stock` without ever appearing in a
-    // reported change, and a cycle boundary with no coincident logistics run reports
-    // production-minus-consumption alone. Accepted rather than solved: capturing every haul
-    // regardless of cadence alignment needs a cross-tick accumulator carrying its own persisted
-    // baseline, which is a larger shape than this reading is worth.
-    //
-    // Placement is safe against resurrecting a row a colony founding just created or cleared, for
-    // the mirror of `populationChange`'s reason below. A founding TARGET is `controlled` right up to
-    // `applyDevelopments` this same run, so none of its rows are in `stockAtCycleStart` (keyed by
-    // the systems that were developed when the snapshot was taken) — its fresh rows from
-    // `addMarketsForSettledSystems`, and the manifest `applyStagedManifestDelivery` lands on them,
-    // are left untouched at `before === undefined`, absent as a never-assessed row should be. A
-    // founding SOURCE is `developed` throughout, so it was already in the snapshot and simply reads
-    // its post-draw `stock` here instead of its pre-draw one.
-    //
-    // Abandoned systems are excluded even though their survival-good rows sit in the snapshot:
-    // `resetAbandonedMarkets` already cleared this field above (before migration ran), and this
-    // system's control just flipped away from "developed" — writing a computed reading here would
-    // silently undo that clear with a stale figure from a colony that, as of this tick, no longer
-    // exists.
-    if (stockAtCycleStart) {
-      const snapshot = stockAtCycleStart;
+    // Scoped to survival-good rows of a system that is developed as of THIS INSTANT — after
+    // abandonment (which already cleared both this field and the baseline for a system leaving
+    // "developed" this cycle) and after `applyDevelopments` (which may just have made a founding
+    // target "developed" for the first time). A market row with no baseline yet — a fresh row from
+    // `addMarketsForSettledSystems`, or one whose baseline an abandonment just cleared — reads as
+    // never assessed: no `stockChange` is written, and the baseline is simply seeded from the
+    // current stock, the same "absent, not zero" convention `stockChange` itself uses. That is also
+    // why an abandoned-this-cycle system needs no separate exclusion here: it is no longer in
+    // `developedNow`, so this loop never touches it and the reset's clear stands untouched.
+    {
+      const developedNow = new Set(
+        systems.filter((s) => isEconomicallyActive(s.control)).map((s) => s.id),
+      );
       const cycleCatchUp = catchUpFactor(cadence.cycle);
-      const abandonedThisCycle = new Set(abandonedSystemIds);
       markets = markets.map((m): WorldMarket => {
-        if (abandonedThisCycle.has(m.systemId)) return m;
-        const before = snapshot.get(`${m.systemId}|${m.goodId}`);
-        if (before === undefined) return m;
-        return { ...m, stockChange: (m.stock - before) / cycleCatchUp };
+        if (!SURVIVAL_GOODS.includes(m.goodId) || !developedNow.has(m.systemId)) return m;
+        const baseline = m.stockAtLastBoundary;
+        if (baseline === undefined) return { ...m, stockAtLastBoundary: m.stock };
+        return { ...m, stockChange: (m.stock - baseline) / cycleCatchUp, stockAtLastBoundary: m.stock };
       });
     }
 
