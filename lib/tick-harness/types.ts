@@ -568,11 +568,11 @@ export interface BeyondCrossingCohortEntry {
 /**
  * The map-generation acceptance instruments (spec §5): whether the generated galaxy's geography
  * actually concentrates flow, differentiates lane cost, and makes settling beyond a crossing
- * measurably costlier — reachability is this instrument's own reachability proxy, a frozen hop cap
- * (`HOP_REACHABILITY_CAP`, hop-BFS over the full connection graph) that no longer mirrors the
- * shipped router, which has since moved onto lane-network routing with no hop cap at all; the
- * specific lane path a haul is placed onto is this module's own fuel-weighted shortest-path model
- * over that same full adjacency, since the real matcher never records a chosen path.
+ * measurably costlier — reachability mirrors the shipped router's own rule (a path over the lane
+ * network where every lane crossed is open to the hauling faction: own+unclaimed+friendly-or-allied,
+ * `laneOpenFor`); the specific lane path a haul is placed onto is this module's own fuel-weighted
+ * shortest-path model over the full, ownership-blind connection graph, since the real matcher never
+ * records a chosen path (`geography-analysis.ts`'s module docstring has the full split).
  */
 export interface GeographySummary {
   /** Share of edge-crossing haul volume the top decile of trafficked edges carries, aggregate
@@ -593,11 +593,9 @@ export interface GeographySummary {
   /** Colony-cluster-vs-homeworld-cluster cohort: `["interior", "beyond-crossing"]`, always both
    *  rows present even at 0 colonies (an empty cohort reads 0/0/0, never a missing row). */
   beyondCrossingCohort: BeyondCrossingCohortEntry[];
-  /** Hauls this instrument's frozen reachability proxy could not have routed: no path at all over
-   *  the full, ownership-blind connection graph, or hop-minimal distance over
-   *  `HOP_REACHABILITY_CAP` — no longer a claim about the shipped router, which routes over the
-   *  lane network with no hop cap. A projection that silently drops most hauls must be visible
-   *  here, not read as low traffic. */
+  /** Hauls the router's own reachability rule could not have routed: no path over the lane network
+   *  from donor to sink where every lane crossed is open to the hauling faction. A projection that
+   *  silently drops most hauls must be visible here, not read as low traffic. */
   unreachableHaulCount: number;
   unreachableHaulVolume: number;
   /** unreachableHaulVolume / (total haul volume across every flow event, placed or not). 0 when

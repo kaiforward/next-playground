@@ -3,58 +3,62 @@
  * measure of whether the generated galaxy actually produces the geography the spec claims:
  * concentrated traffic, cost-differentiated lanes, and a real cost to settling beyond a crossing.
  *
- * The concentration read is the premise-1 instrument. Its reachability USED TO mirror the shipped
- * router exactly (`world/tick.ts`'s directed-logistics block, pre-lane-mechanics): the router was
- * ownership-blind and hauled over an unweighted hop-BFS across ALL connections
- * (`computeBoundedHopDistances`), gated by a hop cap. Directed-logistics has since moved onto
- * lane-network routing (docs/planned/logistics-lanes.md §2: `createRouteBooker` over the lane
- * graph, `laneOpenFor` traversability, no hop cap at all) — this module's `HOP_REACHABILITY_CAP`
- * below is the pre-migration hop cap's value, kept ONLY as this instrument's own reachability
- * proxy; it is no longer a claim that the number mirrors the router. Re-deriving this instrument
- * against the lane network is unbooked follow-up work, not part of this pass.
- * That hop-minimal distance is judged independently of the edge-placement path below — a
- * fuel-weighted shortest path can legitimately take more hops than the hop-BFS minimum, so the two
- * are never substituted for each other.
+ * The concentration read is the premise-1 instrument. Its reachability mirrors the shipped router's
+ * own rule (docs/planned/logistics-lanes.md §2, `world/tick.ts`'s `bookerFor`): a haul is reachable
+ * iff a path exists over the LANE NETWORK (`buildLaneNetwork`, `lib/engine/lane-routing.ts` — a
+ * connection with no matching `WorldLane` row is not part of it) from donor to sink where every lane
+ * crossed is open to the hauling faction (`laneOpenFor`, `lib/engine/lane-access.ts`:
+ * own+unclaimed+friendly-or-allied). Ownership and relation tiers are read from the haul's own
+ * per-cycle `OwnershipSnapshot` (below): `systemFactionById` as before, plus `relationScoreByPair`
+ * — a pair with no row reads neutral (0), mirroring `tierBetween`'s own default in `world/tick.ts`.
+ * Performance: at most one Dijkstra search per distinct (hauling faction, donor) pair per snapshot
+ * window, cached (`reachabilityCache` below) — a run repeats the same few hundred donor/receiver
+ * pairs thousands of times over a fixed topology and ownership/relations are constant within one
+ * window, so the cache bounds the search count to distinct hauling contexts, not the flow count.
+ * That reachability search is judged independently of the edge-placement path below — the modelled
+ * placement path can legitimately take a different route (and can legitimately transit foreign-held
+ * space a *lane* traversability check would itself forbid, see below), so the two are never
+ * substituted for each other.
  *
  * The specific lane path a haul is placed onto, however, stays a MODELLING CHOICE, not a claim
  * about the router: the real matcher (`matchFactionTransfers`) only ever compares a cost number
  * between a donor and a receiver — it never records or chooses a lane sequence. This module models
- * that unrecorded path as the fuel-weighted shortest path (`buildFuelAdjacency` + Dijkstra) over
- * the same full, ownership-blind adjacency the router routes over, so it can attribute volume to
- * individual lanes for the concentration and fuel-spread reads. A haul the router itself could not
+ * that unrecorded path as the fuel-weighted shortest path (`buildFuelAdjacency` + Dijkstra) over the
+ * same full, ownership-blind adjacency, deliberately NOT the tier-filtered one the router's own
+ * booking runs over: this path exists only to attribute already-reachable volume to individual
+ * lanes for the concentration and fuel-spread reads, and running it over the full graph is what lets
+ * `foreignTransitHaul*` below measure how much of that reachable traffic the model would still push
+ * through foreign-held space if nothing else diverted it. A haul the reachability search could not
  * route contributes to neither side of the conservation identity below; a haul it could route is
  * always placed, even when its modelled path happens to transit a foreign-held system in between —
  * that transit is measured, not excluded (`foreignTransitHaul*` below).
  *
  * Ownership basis: a haul is classified against who held each system AT HAUL TIME, not at the end
- * of the run. The runner samples ownership once per cycle (`ownershipSnapshots`, `runner.ts`) and
- * this module resolves every flow through the latest snapshot at or before its own tick, so a
- * transit system that was unclaimed when the goods moved and was settled later does not count as
- * foreign transit, and a donor whose faction has since abandoned it still attributes its hauls.
- * Ownership sampled per cycle is an approximation only within one cycle — ownership changes on
- * cycle boundaries (colonisation, abandonment), so a snapshot taken at each boundary is exact for
- * every tick until the next one. The lane-cohort reads below (fuel spread, cross-faction lanes,
- * beyond-crossing cohort) stay END-OF-RUN reads: they describe the map as it finished, not a haul.
+ * of the run. The runner samples ownership (and relation scores) once per cycle
+ * (`ownershipSnapshots`, `runner.ts`) and this module resolves every flow through the latest
+ * snapshot at or before its own tick, so a transit system that was unclaimed when the goods moved
+ * and was settled later does not count as foreign transit, and a donor whose faction has since
+ * abandoned it still attributes its hauls. Ownership sampled per cycle is an approximation only
+ * within one cycle — ownership changes on cycle boundaries (colonisation, abandonment), so a
+ * snapshot taken at each boundary is exact for every tick until the next one. The lane-cohort reads
+ * below (fuel spread, cross-faction lanes, beyond-crossing cohort) stay END-OF-RUN reads: they
+ * describe the map as it finished, not a haul.
  *
  * NaN rule throughout, matching `logistics-analysis.ts`: a zero denominator reports 0, never NaN —
  * `JSON.stringify` renders NaN as null, which reads as "not measured" rather than "measured, and
  * broken".
  */
-import { buildFuelAdjacency, computeBoundedHopDistances, findShortestPath } from "@/lib/engine/pathfinding";
+import { buildFuelAdjacency, dijkstra, findShortestPath } from "@/lib/engine/pathfinding";
+import { buildLaneNetwork } from "@/lib/engine/lane-routing";
+import { laneOpenFor, type LaneAccessOwner } from "@/lib/engine/lane-access";
+import { getRelationTier, type RelationTier } from "@/lib/constants/relations";
+import { pairKey } from "@/lib/tick/world/relations-world";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
 import { quantile } from "@/lib/utils/math";
-import type { SystemControl, WorldFlowEvent } from "@/lib/world/types";
+import type { SystemControl, WorldFlowEvent, WorldLane } from "@/lib/world/types";
 import type {
   BeyondCrossingCohortEntry, FactionTopDecileShareEntry, GeographySummary,
 } from "./types";
-
-/**
- * This instrument's own reachability proxy — the value directed-logistics' hop cap held before it
- * moved onto lane-network routing (`DIRECTED_LOGISTICS.MAX_HOPS`, deleted with that migration; see
- * module docstring). Frozen here rather than re-derived from anything live: nothing in the shipped
- * router is hop-capped any more, so there is no longer a constant to mirror.
- */
-const HOP_REACHABILITY_CAP = 4;
 
 /** One system's fields this module reads — a `TickSystem` or `WorldSystem` both satisfy it. */
 export interface GeographySystemInput {
@@ -91,27 +95,35 @@ function edgeKey(a: string, b: string): string {
 
 // ── Ownership over time ──────────────────────────────────────────
 
-/** Who held each system over one window of ticks — the reading applies from `fromTick` until the
- *  next snapshot's `fromTick`. */
+/** Who held each system, and each faction pair's relation score, over one window of ticks — the
+ *  reading applies from `fromTick` until the next snapshot's `fromTick`. `relationScoreByPair` is
+ *  keyed exactly as `WorldFactionRelation` stores it (`pairKey`, `lib/tick/world/relations-world.ts`
+ *  — the sorted-pair convention); absent entirely (a caller with no relations history) or missing a
+ *  given pair both read neutral (0), matching `tierBetween`'s own default in `world/tick.ts`. */
 export interface OwnershipSnapshot {
   fromTick: number;
   systemFactionById: ReadonlyMap<string, string | null>;
+  relationScoreByPair?: ReadonlyMap<string, number>;
 }
 
 /** One snapshot covering the whole run — what a caller with only an end-of-run ownership map (a
- *  unit test, or a world that never changed hands) passes. */
+ *  unit test, or a world that never changed hands) passes. `relationScoreByPair` is optional and
+ *  defaults every pair to neutral, same as an omitted one on a hand-built `OwnershipSnapshot`. */
 export function singleOwnershipSnapshot(
   systemFactionById: ReadonlyMap<string, string | null>,
+  relationScoreByPair?: ReadonlyMap<string, number>,
 ): OwnershipSnapshot[] {
-  return [{ fromTick: 0, systemFactionById }];
+  return [{ fromTick: 0, systemFactionById, relationScoreByPair }];
 }
 
-/** The latest snapshot at or before `tick`, by binary search over an ascending-`fromTick` list.
- *  A tick before the first snapshot reads that first snapshot — the run's opening ownership is the
- *  only reading available for it, and it is the correct one. */
-export function ownershipAt(
+/** The latest snapshot at or before `tick`, by binary search over an ascending-`fromTick` list —
+ *  shared by `ownershipAt` (below, ownership-only callers) and the reachability search (which also
+ *  needs `relationScoreByPair`). A tick before the first snapshot reads that first snapshot — the
+ *  run's opening ownership/relations is the only reading available for it, and it is the correct
+ *  one. */
+function snapshotAt(
   snapshots: ReadonlyArray<OwnershipSnapshot>, tick: number,
-): ReadonlyMap<string, string | null> {
+): OwnershipSnapshot {
   let lo = 0;
   let hi = snapshots.length - 1;
   let best = 0;
@@ -124,7 +136,16 @@ export function ownershipAt(
       hi = mid - 1;
     }
   }
-  return snapshots[best].systemFactionById;
+  return snapshots[best];
+}
+
+/** The latest snapshot at or before `tick`, by binary search over an ascending-`fromTick` list.
+ *  A tick before the first snapshot reads that first snapshot — the run's opening ownership is the
+ *  only reading available for it, and it is the correct one. */
+export function ownershipAt(
+  snapshots: ReadonlyArray<OwnershipSnapshot>, tick: number,
+): ReadonlyMap<string, string | null> {
+  return snapshotAt(snapshots, tick).systemFactionById;
 }
 
 // ── Flow projection ──────────────────────────────────────────────
@@ -153,12 +174,11 @@ export interface GeographyProjection {
    *  `foreignTransitHaulVolumeShare` below; distinct from `totalPlacedVolume`, which double-counts
    *  a multi-hop haul once per traversed edge. */
   placedHaulVolume: number;
-  /** Hauls this instrument's own reachability proxy could not have routed: no path at all over the
-   *  full, ownership-blind connection graph (disconnected component), or hop-minimal distance over
-   *  `HOP_REACHABILITY_CAP` — the module's stand-in for the shipped router's own reach now that the
-   *  router itself routes over the lane network rather than a hop cap (see module docstring). Never
-   *  placed, so they contribute 0 to both sides of the conservation identity above. Reported so a
-   *  projection that silently drops most hauls is visible rather than reading as low traffic. */
+  /** Hauls the router's own reachability rule could not have routed: no path over the lane network
+   *  from donor to sink where every lane crossed is open to the hauling faction (own+unclaimed+
+   *  friendly-or-allied, see module docstring). Never placed, so they contribute 0 to both sides of
+   *  the conservation identity above. Reported so a projection that silently drops most hauls is
+   *  visible rather than reading as low traffic. */
   unreachableHaulCount: number;
   unreachableHaulVolume: number;
   /** Placed hauls whose MODELLED path (see module docstring) transits at least one intermediate
@@ -195,28 +215,52 @@ function emptyProjection(): GeographyProjection {
 export function computeGeographyProjection(
   flowEvents: ReadonlyArray<WorldFlowEvent>,
   connections: ReadonlyArray<ConnectionInfo>,
+  lanes: ReadonlyArray<WorldLane>,
   ownershipSnapshots: ReadonlyArray<OwnershipSnapshot>,
 ): GeographyProjection {
   if (flowEvents.length === 0 || ownershipSnapshots.length === 0) return emptyProjection();
 
   const projection = emptyProjection();
-  // Both graphs are ownership-blind and built once over every declared connection: `hopDistances`
-  // is this instrument's own reachability proxy (unweighted BFS, capped at HOP_REACHABILITY_CAP —
-  // no longer the router's actual cutoff, see module docstring); `adjacency` is this module's own
-  // fuel-weighted placement model over the same full connection set.
-  const hopDistances = computeBoundedHopDistances([...connections], HOP_REACHABILITY_CAP);
+  // The placement model's graph: ownership-blind, fuel-weighted, over every declared connection
+  // (see module docstring for why this deliberately does NOT match the reachability graph below).
   const adjacency = buildFuelAdjacency([...connections]);
+  // The reachability graph: only connections carrying a lane row, exactly what the shipped router's
+  // own booker routes over (`buildLaneNetwork`, `lib/engine/lane-routing.ts`). `capacityOf` is
+  // irrelevant here — only `.adjacency` is read, never `.capacities` — so it's a constant stub.
+  const laneNetwork = buildLaneNetwork([...connections], [...lanes], () => 0);
   // A run's hauls repeat the same few hundred donor/receiver pairs thousands of times over a fixed
   // topology. Pathing reads only `adjacency`, which is ownership-blind — ownership decides how a
   // haul is CLASSIFIED, never where it routes — so one cache serves every snapshot window.
   const pathCache = new Map<string, string[] | null>();
+  // One Dijkstra per distinct (hauling faction, donor) pair per snapshot window at most — traversal
+  // is gated by `laneOpenFor`, which depends only on ownership/relations (constant within a window)
+  // and the hauling faction, never on the sink, so a single search from the donor answers every
+  // sink at once. Keyed by the window's own `fromTick`, which uniquely identifies it.
+  const reachabilityCache = new Map<string, ReadonlyMap<string, number>>();
+  function reachableFrom(snapshot: OwnershipSnapshot, factionId: string | null, donorId: string): ReadonlyMap<string, number> {
+    const cacheKey = `${snapshot.fromTick}|${factionId ?? " "}|${donorId}`;
+    const cached = reachabilityCache.get(cacheKey);
+    if (cached) return cached;
+    const systemFactionById = snapshot.systemFactionById;
+    const ownerOf = (systemId: string): LaneAccessOwner => ({ factionId: systemFactionById.get(systemId) ?? null });
+    const relationScoreByPair = snapshot.relationScoreByPair;
+    const tierBetween = (a: string, b: string): RelationTier =>
+      getRelationTier(relationScoreByPair?.get(pairKey(a, b)) ?? 0);
+    const { dist } = dijkstra(donorId, laneNetwork.adjacency, {
+      edgeCost: (from, to, fuelCost) =>
+        (laneOpenFor(factionId, { aId: from, bId: to }, ownerOf, tierBetween) ? fuelCost : null),
+    });
+    reachabilityCache.set(cacheKey, dist);
+    return dist;
+  }
 
   for (const flow of flowEvents) {
-    const systemFactionById = ownershipAt(ownershipSnapshots, flow.tick);
+    const snapshot = snapshotAt(ownershipSnapshots, flow.tick);
+    const systemFactionById = snapshot.systemFactionById;
     const factionId = systemFactionById.get(flow.fromSystemId) ?? null;
 
-    const hopDistance = hopDistances.get(flow.fromSystemId)?.get(flow.toSystemId);
-    if (hopDistance === undefined || hopDistance > HOP_REACHABILITY_CAP) {
+    const reachable = reachableFrom(snapshot, factionId, flow.fromSystemId);
+    if (!reachable.has(flow.toSystemId)) {
       projection.unreachableHaulCount++;
       projection.unreachableHaulVolume += flow.quantity;
       continue;
@@ -230,9 +274,11 @@ export function computeGeographyProjection(
       pathCache.set(cacheKey, path);
     }
     if (path === null) {
-      // Router-reachable by hop count but the fuel-weighted model finds no path — should not occur
-      // given the two graphs share connectivity, but if it does this haul is router-routable and
-      // must not be double-counted as unreachable; it simply has no lane path to place.
+      // Reachable over the (tier-filtered) lane network but the full ownership-blind placement
+      // model finds no path — should not occur, since the lane network's edges are a subset of
+      // the full connection graph's (adding edges never removes reachability), but if it does this
+      // haul is router-routable and must not be double-counted as unreachable; it simply has no
+      // modelled path to place volume onto.
       continue;
     }
 
@@ -442,6 +488,7 @@ export function countBorderConflicts(events: ReadonlyArray<{ type: string }>): n
 export function summariseGeography(
   systems: ReadonlyArray<GeographySystemInput>,
   connections: ReadonlyArray<ConnectionInfo>,
+  lanes: ReadonlyArray<WorldLane>,
   factions: ReadonlyArray<GeographyFactionInput>,
   flowEvents: ReadonlyArray<WorldFlowEvent>,
   migrantInflowBySystem: ReadonlyMap<string, number> = new Map(),
@@ -451,6 +498,7 @@ export function summariseGeography(
   const projection = computeGeographyProjection(
     flowEvents,
     connections,
+    lanes,
     ownershipSnapshots && ownershipSnapshots.length > 0
       ? ownershipSnapshots
       : singleOwnershipSnapshot(systemFactionById),

@@ -22,6 +22,7 @@ import {
 import { summariseLogistics, fundingBoundCensus, LOGISTICS_WARMUP_TICKS } from "./logistics-analysis";
 import type { LogisticsBudgetTotals } from "./logistics-analysis";
 import { summariseGeography, ownershipAt, type OwnershipSnapshot } from "./geography-analysis";
+import { pairKey } from "@/lib/tick/world/relations-world";
 import {
   newLaneRunAccumulator, sampleLaneUtilisation, sampleInTransitVolume, sampleLaneDispatch,
   recordLogisticsBlocked, recordOvershootVolume, recordBudgetSkipped, summariseLanes,
@@ -187,13 +188,20 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   // numerator, folded by world cohort at the end via computeWorldCohorts. Transient instrumentation
   // (`runWorldTick().instrumentation`), so like migrationMoved it is accumulated per tick.
   const colonistDeliveryTotals = new Map<string, number>();
-  // Ownership as it stood at each cycle boundary — the basis geography classifies each haul
-  // against. Ownership only ever changes on a cycle boundary (colonisation lands and abandonment
-  // reverts there), so a snapshot per boundary is exact for every tick until the next one, and the
-  // end-of-run world alone would credit a system settled late with hauls that crossed it while it
-  // was still empty.
+  // Ownership and relation scores as they stood at each cycle boundary — the basis geography
+  // classifies each haul against, and now also the basis its reachability search gates traversal
+  // on (`laneOpenFor`, `geography-analysis.ts`). Ownership only ever changes on a cycle boundary
+  // (colonisation lands and abandonment reverts there), so a snapshot per boundary is exact for
+  // every tick until the next one, and the end-of-run world alone would credit a system settled
+  // late with hauls that crossed it while it was still empty. Relations drift every tick, so this
+  // snapshot is a coarser reading of them than of ownership — accurate at the boundary, not exact
+  // for every tick in the window.
   const ownershipSnapshots: OwnershipSnapshot[] = [
-    { fromTick: 0, systemFactionById: new Map(world.systems.map((s) => [s.id, s.factionId])) },
+    {
+      fromTick: 0,
+      systemFactionById: new Map(world.systems.map((s) => [s.id, s.factionId])),
+      relationScoreByPair: new Map(world.relations.map((r) => [pairKey(r.factionAId, r.factionBId), r.score])),
+    },
   ];
   // Whole-run abandonment counts by cause (famine-collapse vs decline-to-empty), folded from
   // `abandonedSystemsByCause` each cycle. Not cohorted: an abandoned system reverts to unclaimed
@@ -383,6 +391,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       ownershipSnapshots.push({
         fromTick: world.meta.currentTick,
         systemFactionById: new Map(world.systems.map((s) => [s.id, s.factionId])),
+        relationScoreByPair: new Map(world.relations.map((r) => [pairKey(r.factionAId, r.factionBId), r.score])),
       });
     }
 
@@ -579,8 +588,8 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   };
 
   const geography = summariseGeography(
-    finalTickSystems, toTickConnections(world), world.factions, logisticsFlows, colonistDeliveryTotals,
-    ownershipSnapshots,
+    finalTickSystems, toTickConnections(world), world.lanes, world.factions, logisticsFlows,
+    colonistDeliveryTotals, ownershipSnapshots,
   );
 
   const episodeCosts = summariseEpisodeCostsByCohort(episodeCostTotals, finalTickSystems, homeworldIds);
