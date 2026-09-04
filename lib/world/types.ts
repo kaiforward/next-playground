@@ -480,10 +480,11 @@ export interface WorldConnection {
  *
  * `level` is the invested upgrade tier (float, ≥ 0; capacity rises with it, `laneCapacity` in
  * `lib/engine/lanes.ts`) — level 0 is a lane nobody has invested in, not an impassable one: every
- * generated lane carries a small baseline capacity with no investment (§1). `bookedLoad` is a
- * per-run quota the logistics processor writes and resets each logistics run; `blockedVolume` is the
- * volume a saturated edge turned away the same run; both read 0 until a logistics run has visited the
- * lane. Booked + blocked is the "attempted load" figure lane decay reads. `idleCycles` is the lane
+ * generated lane carries a small baseline capacity with no investment (§1). `bookedLoad` is the
+ * volume crossing the lane in the current logistics run's window — hauls dispatched this run and
+ * hauls from earlier runs whose crossing lands now (§2) — rewritten every logistics run;
+ * `blockedVolume` is the volume a saturated edge turned away the same run; both read 0 until a
+ * logistics run has visited the lane. Booked + blocked is the "attempted load" figure lane decay reads. `idleCycles` is the lane
  * analogue of `WorldBuilding.idleCycles`: a sustained-idle counter (the lane decay dead band, §1)
  * that only advances while a whole level's capacity goes unused and resets on any run that uses it;
  * it reads 0 until decay assessment runs against the lane.

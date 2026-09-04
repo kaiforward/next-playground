@@ -1699,13 +1699,24 @@ export async function runWorldTick(
         };
       }
       const laneNetwork = laneNetworkCache.network;
+      // Harness-only arm: overrides `LANES.FREIGHT_SPEED` for this run's `freightArrivalTick` calls
+      // AND the booker's own window math below — both must agree on the same speed a haul actually
+      // crosses lanes at.
+      const effectiveFreightSpeed = opts?.freightSpeed ?? LANES.FREIGHT_SPEED;
       // One physical ledger for every hauling faction this run, so two factions booking the same
       // lane see each other's load and congestion (docs/active/gameplay/logistics-lanes.md §2). The booker
       // carries no traversability of its own — every real caller goes through `forHauler` below,
-      // which supplies its own hauler-specific traversability.
+      // which supplies its own hauler-specific traversability. Seeded from the ledger BEFORE this
+      // run's own dispatches touch it (`pendingArrivals` here is still the pre-dispatch ledger — see
+      // `scheduledInbound` below, which reads the same variable) so every haul already in flight
+      // occupies the window its crossing lands in first (docs/active/gameplay/logistics-lanes.md §2).
       const laneBooker = createRouteBooker(laneNetwork, {
         congestionMax: LANES.CONGESTION_MAX,
         catchUp: catchUpFactor(cadence.logistics),
+        windowTicks: cadence.logistics,
+        now: tick,
+        freightSpeed: effectiveFreightSpeed,
+        scheduled: pendingArrivals,
       });
       const laneByKey = new Map(world.lanes.map((l) => [l.key, l]));
       const factionIdBySystemId = new Map(systems.map((s) => [s.id, s.factionId]));
@@ -1747,7 +1758,7 @@ export async function runWorldTick(
         fundingByFaction:
           fundedByFaction && new Map([...fundedByFaction].map(([id, f]) => [id, f.logistics])),
         drawBrakeCeiling: opts?.drawBrakeCeiling,
-        freightSpeed: opts?.freightSpeed,
+        freightSpeed: effectiveFreightSpeed,
         mintId: () => `haul-${nextId++}`,
       });
       markets = applyLogisticsMarketUpdates(

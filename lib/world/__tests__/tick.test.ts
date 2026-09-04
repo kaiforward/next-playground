@@ -941,6 +941,74 @@ describe("runWorldTick — logistics/assessment ordering", () => {
     const idleLane = afterSecondRun.lanes.find((l) => l.key === key);
     expect(idleLane?.bookedLoad).toBe(0);
   });
+
+  it("books a two-hop haul's far lane into a LATER window: bookedLoad is 0 there at dispatch, nonzero once that window arrives", async () => {
+    // a → mid → b, at the shipped FREIGHT_SPEED (no override). `mid` is a synthetic relay id that
+    // never appears in `systems` — `laneOpenFor` reads an absent id as unclaimed (open to every
+    // hauler), so it needs no market/ownership fixture of its own, only lane graph edges.
+    // Each hop's fuel is 1: the near hop (a-mid) starts at offset 0 (window 0), and the far hop
+    // (mid-b) starts at round(1 / 0.5) = 2 ticks out — window 2 at this run's windowTicks (1, since
+    // logistics resolves every tick here) — landing in window 0 only two runs later.
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const a = base.factions[0].homeworldId;
+    const b = base.factions[1].homeworldId;
+    const factionId = base.factions[0].id;
+    const mid = "synthetic-relay";
+    const nearKey = laneKey(a, mid);
+    const farKey = laneKey(mid, b);
+    const world: World = {
+      ...base,
+      systems: base.systems.map((system) =>
+        system.id === b ? { ...system, factionId, unrest: 0 } : system,
+      ),
+      buildings: base.buildings.filter(
+        (building) => !(building.systemId === b && building.buildingType === "water"),
+      ),
+      markets: base.markets.map((market) => {
+        if (market.systemId === a && market.goodId === "water") return { ...market, stock: 1_000_000 };
+        if (market.systemId === b && market.goodId === "water") return { ...market, stock: 0 };
+        return market;
+      }),
+      connections: [
+        ...base.connections,
+        { fromId: a, toId: mid, fuelCost: 1 },
+        { fromId: mid, toId: a, fuelCost: 1 },
+        { fromId: mid, toId: b, fuelCost: 1 },
+        { fromId: b, toId: mid, fuelCost: 1 },
+      ],
+      // Ample capacity (high level) — this test isolates window placement, not congestion (same
+      // reasoning as `twoSystemWaterGradient`'s own lane fixture above).
+      lanes: [
+        ...base.lanes,
+        {
+          key: nearKey,
+          aId: a < mid ? a : mid,
+          bId: a < mid ? mid : a,
+          level: 10_000, bookedLoad: 0, blockedVolume: 0, idleCycles: 0,
+        },
+        {
+          key: farKey,
+          aId: mid < b ? mid : b,
+          bId: mid < b ? b : mid,
+          level: 10_000, bookedLoad: 0, blockedVolume: 0, idleCycles: 0,
+        },
+      ],
+    };
+    const cadence = { cycle: 1, logistics: 1, construction: 999 };
+
+    const afterDispatch = (await runWorldTick(world, { cadence })).world;
+    expect(afterDispatch.lanes.find((l) => l.key === nearKey)?.bookedLoad ?? 0).toBeGreaterThan(0);
+    expect(afterDispatch.lanes.find((l) => l.key === farKey)?.bookedLoad ?? 0).toBe(0);
+
+    // One tick later the far crossing is window 1, still not this run's window 0.
+    const afterOne = (await runWorldTick(afterDispatch, { cadence })).world;
+    expect(afterOne.lanes.find((l) => l.key === farKey)?.bookedLoad ?? 0).toBe(0);
+
+    // Two ticks after dispatch, the far crossing's own window (originally window 2) IS this run's
+    // window 0 — the ledger seeding now places it where `bookedLoad` reads it.
+    const afterTwo = (await runWorldTick(afterOne, { cadence })).world;
+    expect(afterTwo.lanes.find((l) => l.key === farKey)?.bookedLoad ?? 0).toBeGreaterThan(0);
+  });
 });
 
 describe("runWorldTick — lane upkeep and decay wiring", () => {

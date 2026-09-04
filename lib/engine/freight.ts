@@ -18,6 +18,28 @@ export function freightArrivalTick(now: number, fuelTotal: number, freightSpeed:
 }
 
 /**
+ * The tick each hop of a route STARTS crossing, given the whole path's fuel costs in hop order:
+ * hop 0 starts at `dispatchTick` itself, hop i at `dispatchTick + round(Σ fuel of hops before it /
+ * freightSpeed)` — the same rounding family as `freightArrivalTick`, applied to the cumulative fuel
+ * consumed BEFORE each hop rather than the path total. A crossing that straddles a window boundary
+ * belongs to the window it starts in (`docs/active/gameplay/logistics-lanes.md` §2), which is why
+ * this returns the start tick of every hop rather than just the arrival tick of the last one.
+ */
+export function hopCrossingTicks(
+  dispatchTick: number,
+  hopFuelCosts: readonly number[],
+  freightSpeed: number,
+): number[] {
+  const ticks: number[] = [];
+  let cumFuelBefore = 0;
+  for (const fuelCost of hopFuelCosts) {
+    ticks.push(dispatchTick + Math.max(0, Math.round(cumFuelBefore / freightSpeed)));
+    cumFuelBefore += fuelCost;
+  }
+  return ticks;
+}
+
+/**
  * Outbound-leg scheduled inbound, keyed `"toSystemId|goodId"` — the inbound-aware classification
  * term §3 adds at the matcher's feed site ("the sink test reads stock + scheduled inbound for that
  * good"). Return legs are deliberately excluded: they are goods heading back to a donor, not

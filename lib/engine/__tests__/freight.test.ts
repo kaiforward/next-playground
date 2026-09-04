@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { freightArrivalTick, scheduledInbound, flowsCrossingEdge } from "@/lib/engine/freight";
+import { freightArrivalTick, hopCrossingTicks, scheduledInbound, flowsCrossingEdge } from "@/lib/engine/freight";
 import type { WorldPendingArrival } from "@/lib/world/types";
 
 function arrival(over: Partial<WorldPendingArrival> & { id: string }): WorldPendingArrival {
@@ -31,6 +31,29 @@ describe("freightArrivalTick", () => {
     // A pathological negative fuel total (never produced by real routing) must not schedule
     // arrival before dispatch.
     expect(freightArrivalTick(100, -50, 5)).toBe(100);
+  });
+});
+
+describe("hopCrossingTicks", () => {
+  it("starts hop 0 at dispatchTick and each later hop at the cumulative fuel of hops before it", () => {
+    // Hops of fuel 10, 5, 20 at speed 5: hop0 starts at +0, hop1 at round(10/5)=2,
+    // hop2 at round((10+5)/5)=3.
+    expect(hopCrossingTicks(100, [10, 5, 20], 5)).toEqual([100, 102, 103]);
+  });
+
+  it("a straddling crossing is charged to the window it STARTS in — the start tick, not the end", () => {
+    // A single hop of fuel 48 at speed 1 spans ticks 100..148 — straddling a 24-tick window
+    // boundary at 124 — but hopCrossingTicks reports only its start (100), which is what the
+    // booker buckets by window.
+    expect(hopCrossingTicks(100, [48], 1)).toEqual([100]);
+  });
+
+  it("at a very large freightSpeed every hop starts at dispatchTick — the zero-latency fallback", () => {
+    expect(hopCrossingTicks(100, [10, 5, 20], 1_000_000)).toEqual([100, 100, 100]);
+  });
+
+  it("returns one entry per hop, empty for an empty route", () => {
+    expect(hopCrossingTicks(100, [], 5)).toEqual([]);
   });
 });
 

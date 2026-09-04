@@ -33,9 +33,10 @@ carries:
   every lane is traversable at a small baseline capacity with no investment at all. There is no
   impassable lane except a severed one — a war-era state this substrate only reserves a hook for
   (§3); nothing in the shipped game severs a lane.
-- **`bookedLoad`** and **`blockedVolume`** — the running-total quota and the volume a saturated edge
-  turned away, both written by the logistics processor and **reset every logistics run** (they read
-  the *attempted load* of the run just finished, never a cumulative figure).
+- **`bookedLoad`** and **`blockedVolume`** — this run's crossing load (§2: every haul crossing the
+  lane in the current window, whenever it was dispatched) and the volume a saturated edge turned
+  away, both written by the logistics processor and **rewritten every logistics run** (they read the
+  *attempted load* of the run just finished, never a cumulative figure).
 - **`idleCycles`** — the lane-decay countdown (below).
 
 **Capacity** rises linearly with level (`laneCapacity`, `lib/engine/lanes.ts`):
@@ -108,6 +109,26 @@ Every matched transfer routes over a real cheapest path, computed inside the log
   stays a donor-stock capacity measure. A saturated corridor therefore shows full lanes, longer
   detours elsewhere, and rising blocked volume on the choke edge, read by the planner (§4) and the
   map surfaces (§7).
+- **A lane is booked for the cycle the cargo crosses it, not the cycle it is dispatched.** Every
+  reservation is still made at dispatch — a haul never leaves without room on every lane of its
+  route — but each lane's reservation lands in the logistics-run window the cargo will be crossing
+  it in: with the hops' crossing ticks derived from cumulative fuel over `FREIGHT_SPEED`
+  (`hopCrossingTicks`, `lib/engine/freight.ts`), lane 1 is charged to this run, a lane reached three
+  cycles out to the run three cycles out. A crossing that straddles a run boundary is charged to the
+  window it starts in. The booker therefore keeps load per (lane, window) rather than per lane, and
+  seeds every run from the freight ledger before placing anything new — every haul already in
+  flight and due to cross a lane in a given window occupies that window first — so an earlier
+  reservation always outranks a later dispatch for the same lane and week. Route search prices each
+  edge at the window the haul would reach it (arrival time carried along the path, so the cost of an
+  edge depends on the path prefix), and exclusion, splitting room and blocked volume all read that
+  window's load. The one search that is not windowed is the frozen sink-to-donor price snapshot
+  (`priceFrom`, `reachableFrom`) that orders a deficit's donors: rooted at the sink, it cannot know
+  when a haul would reach each lane, so it reads current-window load — a ranking heuristic only;
+  the placement itself is always priced and booked at the true crossing window. Nothing is ever
+  turned back mid-journey: turned-away volume stays a dispatch-time reading. A lane's persisted `bookedLoad` is its current-window load — hauls crossing it this run,
+  whenever they were dispatched — which is what the map colour, the lane card's Booked tile and lane
+  decay's "attempted load" all read; at the zero-latency freight speed every crossing falls in the
+  dispatching window and the ledger collapses to the single per-run figure it replaces.
 - **Route cost is the work-budget price**: the same summed, congestion-priced cost bills the
   faction's logistics work, replacing the old hop-count price. There is no `MAX_HOPS` any more —
   reach is bounded by cost, not a hop cap, and an unaffordable draw against the faction's work
