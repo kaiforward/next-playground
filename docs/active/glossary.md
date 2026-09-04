@@ -429,8 +429,8 @@ crossing lanes cost the most.
 eroded gradually if the lane sits unused for a long stretch. A lane with no investment sits at
 level 0.
 
-**Lane capacity** — How much volume a jump lane can carry per cycle before it turns any further
-hauls away. Rises with lane level.
+**Lane capacity** — How much volume the logistics infrastructure on a jump lane can book per cycle.
+Hauls past it are turned away; nothing limits what is already travelling. Rises with lane level.
 
 **In transit** — Goods already dispatched and travelling a lane, counted at neither system until
 they arrive.

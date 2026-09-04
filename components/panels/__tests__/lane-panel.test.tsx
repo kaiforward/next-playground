@@ -182,6 +182,17 @@ describe("LanePanel", () => {
     expect(screen.queryByText("congested")).not.toBeInTheDocument();
   });
 
+  it("labels the per-run booking tile Booked", () => {
+    seed({ laneDetail: { "sys-a|sys-b": laneDetailFixture({}) } });
+    render(
+      <WouterRuntimeProvider>
+        <LanePanel laneKey="sys-a|sys-b" />
+      </WouterRuntimeProvider>,
+    );
+    expect(screen.getByText("Booked")).toBeInTheDocument();
+    expect(screen.queryByText("Load")).not.toBeInTheDocument();
+  });
+
   it("renders an empty-state cargo card when nothing is in flight, and a row per ledger entry otherwise", () => {
     seed({
       laneDetail: {

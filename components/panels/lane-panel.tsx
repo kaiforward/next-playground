@@ -90,12 +90,12 @@ function LaneVitals({ detail }: { detail: LaneDetailData }) {
         hint={<>capacity <span className="font-mono text-text-primary">{Math.round(detail.capacity)}</span>/cyc</>}
       />
       <VitalTile
-        label={<TermLabel id="laneCapacity">Load</TermLabel>}
+        label={<TermLabel id="laneCapacity">Booked</TermLabel>}
         dotColor="var(--color-status-amber)"
         value={String(Math.round(loadPct))}
         unit="%"
         meter={{ pct: loadPct, color: "var(--color-status-amber)" }}
-        hint={<><span className="font-mono text-text-primary">{Math.round(detail.bookedLoad)}</span> of {Math.round(detail.capacity)} booked</>}
+        hint={<><span className="font-mono text-text-primary">{Math.round(detail.bookedLoad)}</span> of {Math.round(detail.capacity)} this run</>}
       />
       <VitalTile
         label={<TermLabel id="inTransit">In transit</TermLabel>}
