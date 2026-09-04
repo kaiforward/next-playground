@@ -19,10 +19,16 @@ export function laneKey(a: string, b: string): string {
 /**
  * Recover a lane's two endpoint system ids from its `laneKey` — the inverse of `laneKey` itself,
  * shared so no caller splits the `"a|b"` convention inline (`dropAbandonedBuildProjects`,
- * `lib/world/tick.ts`, is the first of several).
+ * `lib/world/tick.ts`, is the first of several). Throws on a key with no `"|"` — every real lane
+ * key is minted by `laneKey` itself, so a malformed one reaching here is a programming error, not
+ * game state to degrade gracefully around (a silent `undefined` endpoint would otherwise render as
+ * the literal string "undefined" downstream, e.g. `construction-readout.ts`'s lane label).
  */
 export function laneEndpoints(key: string): [string, string] {
   const [a, b] = key.split("|");
+  if (a === undefined || b === undefined) {
+    throw new Error(`laneEndpoints: malformed lane key "${key}" — expected "a|b"`);
+  }
   return [a, b];
 }
 

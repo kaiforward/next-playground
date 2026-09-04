@@ -4,7 +4,7 @@ import { emptyResourceVector, unitResourceVector } from "@/lib/engine/resources"
 import { runDirectedLogisticsProcessor, type DirectedLogisticsProcessorParams } from "@/lib/tick/processors/directed-logistics";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import type { RouteBookerFor } from "@/lib/engine/directed-logistics";
-import { createRouteBooker, buildLaneNetwork } from "@/lib/engine/lane-routing";
+import { createRouteBooker, buildLaneNetwork, type LaneLoad } from "@/lib/engine/lane-routing";
 import { LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import {
@@ -20,13 +20,16 @@ import type { SystemLogisticsRow } from "@/lib/tick/world/directed-logistics-wor
 // quantity), so `freightArrivalTick` resolves to the dispatch tick itself for every test that
 // doesn't care about transit delay — the delay formula gets its own dedicated tests below.
 
-const NO_LOADS = (): ReadonlyMap<string, { booked: number; blocked: number }> => new Map();
+const NO_LOADS = (): ReadonlyMap<string, LaneLoad> => new Map();
 
 /** Every hauler gets its own booker (no shared congestion) at a flat per-unit `cost`. `null` from
- *  `cost` closes the route (unreachable), matching a real booker's `priceFrom`/`routeAndBook`. */
+ *  `cost` closes the route (unreachable), matching a real booker's `priceFrom`/`routeAndBook`.
+ *  `reachableFrom` mirrors `cost !== null` too — these fakes carry no congestion, so reachability
+ *  and live pricing never diverge the way a real saturated lane would. */
 function flatBookerFor(cost: (from: string, to: string) => number | null): DirectedLogisticsProcessorParams["bookerFor"] {
   return (): RouteBookerFor => ({
     priceFrom: (sinkId: string) => (donorId: string) => cost(donorId, sinkId),
+    reachableFrom: (sinkId: string) => (donorId: string) => cost(donorId, sinkId) !== null,
     routeAndBook: (from: string, to: string, quantity: number) => {
       if (from === to || quantity <= 0) return null;
       const perUnit = cost(from, to);
@@ -187,6 +190,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const FUEL_TOTAL = 17;
     const bookerFor = (): RouteBookerFor => ({
       priceFrom: () => () => 1,
+      reachableFrom: () => () => true,
       routeAndBook: (from, to, quantity) => ({
         placements: [{ quantity, edges: [`${from}->${to}`], perUnit: 1, fuelTotal: FUEL_TOTAL }],
         blocked: [],
@@ -230,7 +234,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
       ],
       () => 1000,
     );
-    const laneBooker = createRouteBooker(network, { openEdge: () => true, congestionMax: 3, catchUp: 1 });
+    const laneBooker = createRouteBooker(network, { congestionMax: 3, catchUp: 1 });
     const systems = [
       { systemId: "A", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mA", "food", 95, 20)] },
       { systemId: "B", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10, 20)] },
@@ -274,7 +278,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
       ],
       (lane) => (lane.key === "Bottleneck|Hub" ? 10 : 100_000),
     );
-    const laneBooker = createRouteBooker(network, { openEdge: () => true, congestionMax: 3, catchUp: 1 });
+    const laneBooker = createRouteBooker(network, { congestionMax: 3, catchUp: 1 });
     const bookerFor = (factionKey: string | null): RouteBookerFor => laneBooker.forHauler(() => true, factionKey);
 
     // bFaction's rows are listed FIRST (reverse of ascending-id order) — a processor that trusted
@@ -300,8 +304,8 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     expect(aDispatched).toBeCloseTo(10, 6);
     expect(bDispatched).toBe(0);
     const choke = laneBooker.loads().get("Bottleneck|Hub");
-    expect(choke?.booked).toBeCloseTo(10, 6);
-    expect(choke?.blocked).toBeGreaterThan(0); // bFaction's shortfall found no room left
+    expect(choke?.bookedLoad).toBeCloseTo(10, 6);
+    expect(choke?.blockedVolume).toBeGreaterThan(0); // bFaction's shortfall found no room left
   });
 
   it("reports work performed by the faction, equal to the planned transfer cost", async () => {

@@ -14,9 +14,9 @@
  * whole run's lane health.
  */
 import { laneCapacity } from "@/lib/engine/lanes";
-import { survivalCyclesToEmpty } from "@/lib/engine/survival-stock";
+import { survivalCyclesToEmpty, SURVIVAL_STOCK_CYCLES_THRESHOLD } from "@/lib/engine/survival-stock";
 import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
-import { SURVIVAL_STOCK_CYCLES_THRESHOLD } from "@/lib/services/alerts";
+import type { LogisticsBlockedEntry } from "@/lib/engine/lane-routing";
 import { median, quantile } from "@/lib/utils/math";
 import type { WorldConstructionProject, WorldLane, WorldMarket, WorldPendingArrival } from "@/lib/world/types";
 
@@ -135,7 +135,7 @@ export function sampleLaneDispatch(
  *  `contentionShortfallByFaction` — Σ blocked quantity × foreignShare, per hauling faction key. */
 export function recordLogisticsBlocked(
   acc: LaneRunAccumulator,
-  blocked: ReadonlyArray<{ factionKey: string | null; laneKey?: string; quantity: number; foreignShare: number }>,
+  blocked: ReadonlyArray<LogisticsBlockedEntry>,
 ): void {
   for (const b of blocked) {
     acc.contentionShortfallByFaction.set(

@@ -12,7 +12,6 @@ import type { ConnectionInfo } from "./navigation";
 import { dijkstra, reconstructPath, type FuelAdjacency } from "./pathfinding";
 import { laneKey } from "./lanes";
 import type { WorldLane } from "@/lib/world/types";
-import type { RouteBookerFor } from "./directed-logistics";
 
 // ── Network ─────────────────────────────────────────────────────
 
@@ -25,9 +24,9 @@ import type { RouteBookerFor } from "./directed-logistics";
 export interface LaneNetwork {
   adjacency: FuelAdjacency;
   /** laneKey → raw per-cycle capacity (`capacityOf(lane)`, before the booker's `catchUp` scale). */
-  capacities: Map<string, number>;
+  capacities: ReadonlyMap<string, number>;
   /** Every lane key, sorted — the deterministic iteration order `loads()` and network construction use. */
-  laneKeys: string[];
+  laneKeys: readonly string[];
 }
 
 /**
@@ -36,8 +35,8 @@ export interface LaneNetwork {
  * the booked-and-priced graph a `RouteBooker` runs over.
  */
 export function buildLaneNetwork(
-  connections: ConnectionInfo[],
-  lanes: WorldLane[],
+  connections: readonly ConnectionInfo[],
+  lanes: readonly WorldLane[],
   capacityOf: (lane: WorldLane) => number,
 ): LaneNetwork {
   const lanesByKey = new Map<string, WorldLane>();
@@ -89,37 +88,65 @@ export interface RouteBlocked {
   foreignShare: number;
 }
 
+/** A `RouteBlocked` entry tagged with the hauling faction key that produced it (`null` =
+ *  independents) — the shape every calibration-instrumentation consumer of blocked volume actually
+ *  wants (`TickProcessorResult.logisticsBlocked`, the directed-logistics processor's own fold, and
+ *  the harness's `recordLogisticsBlocked`), declared once here rather than re-declared inline at
+ *  each site. */
+export type LogisticsBlockedEntry = RouteBlocked & { factionKey: string | null };
+
 export interface RouteBooking {
   placements: RoutePlacement[];
   blocked: RouteBlocked[];
 }
 
-export interface RouteBooker {
-  /**
-   * Route `quantity` units from `from` to `to` and book them onto every edge crossed. A haul that
-   * exceeds the remaining capacity on its cheapest path ships up to that capacity on it and
-   * re-routes the remainder over the next-cheapest path (the now-saturated edge excluded),
-   * repeating until placed or no path remains — `placements` covers what was placed, which is
-   * `quantity` only when nothing was blocked or unreachable. `factionKey` (null for unclaimed/no
-   * faction) attributes the booking for `foreignShare` reads on later blocks; it does not affect
-   * routing or pricing. Returns `null` for degenerate input (`from === to` or `quantity <= 0`).
-   */
-  routeAndBook(from: string, to: string, quantity: number, factionKey?: string | null): RouteBooking | null;
-  /** Booked and blocked totals for every lane in the network (0 for an untouched lane). */
-  loads(): ReadonlyMap<string, { booked: number; blocked: number }>;
-  /**
-   * One search from `sinkId` over the graph as it stands (congestion-priced, saturated edges
-   * excluded) — frozen for the caller's whole fan-out from this sink; `routeAndBook` re-searches
-   * live and is not affected by calling this first. The graph is undirected, so sink→donor cost
-   * equals donor→sink cost.
-   */
+/** One lane's booked/blocked load — `RouteBooker.loads()`'s own value shape, and the fields
+ *  `LaneLoadUpdate` (`lib/tick/world/directed-logistics-world.ts`) persists them under, so the
+ *  engine's in-memory reading and the persisted write-back share one name for each quantity rather
+ *  than a third spelling (`booked`/`blocked`) appearing only at this boundary. */
+export interface LaneLoad {
+  bookedLoad: number;
+  blockedVolume: number;
+}
+
+/**
+ * The matcher's (and any other caller's) view of a `RouteBooker` for ONE hauler — a structural
+ * subset any real booker satisfies and a test can hand-roll without constructing a lane network.
+ * `priceFrom` freezes one sink's prices to every donor for that deficit's whole fan-out
+ * (`docs/planned/logistics-lanes.md` §2: "prices are frozen at the moment the severity queue
+ * reaches that deficit"); `routeAndBook` is consulted inside the fill loop with the quantity being
+ * drawn, and places it onto the shared network, so a later deficit's `priceFrom` reflects prior
+ * bookings.
+ */
+export interface RouteBookerFor {
   priceFrom(sinkId: string): (donorId: string) => number | null;
   /**
-   * A per-hauler view over this SAME physical ledger — `openEdge` replaces the booker's own at
-   * construction, everything else (booked/blocked load, congestion pricing) is shared, so two
-   * haulers with different traversability (e.g. different factions' `laneOpenFor`) still see each
-   * other's bookings and congestion on a shared edge. `factionKey` is bound into every
-   * `routeAndBook` call this view makes, for `foreignShare` attribution.
+   * One search from `sinkId` over the graph IGNORING saturation (only `openEdge` can close an edge
+   * here, exactly like `priceFrom`'s frozen snapshot but never excluding a donor for lack of
+   * capacity) — frozen the same way, for the caller's whole fan-out. A donor congestion has
+   * currently priced out of `priceFrom` (a saturated path returns `null` there) still reads
+   * reachable here: reachability is a structural question (does a path exist at all), congestion is
+   * a this-run contention question, and `unservable`'s own structural test needs the former without
+   * the latter (`docs/planned/logistics-lanes.md` §2, "a blocked haul is not an unservable one").
+   */
+  reachableFrom(sinkId: string): (donorId: string) => boolean;
+  routeAndBook(from: string, to: string, quantity: number): RouteBooking | null;
+}
+
+export interface RouteBooker {
+  /** Booked and blocked totals for every lane in the network (0 for an untouched lane). */
+  loads(): ReadonlyMap<string, LaneLoad>;
+  /**
+   * A per-hauler view over this SAME physical ledger — `openEdge` is the per-client traversability
+   * policy (spec §6: goods route over own+unclaimed+friendly-or-allied, a future migration client
+   * would pass a narrower predicate); a closed edge is never traversed, full stop, independent of
+   * capacity. Everything else (booked/blocked load, congestion pricing) is shared, so two haulers
+   * with different traversability (e.g. different factions' `laneOpenFor`) still see each other's
+   * bookings and congestion on a shared edge. `factionKey` (null for unclaimed/no faction) is bound
+   * into every `routeAndBook` call this view makes, for `foreignShare` attribution; it does not
+   * affect routing or pricing. This is the booker's whole public surface: there is no traversal-open
+   * top-level view, so a caller cannot reach for `routeAndBook`/`priceFrom` without first choosing a
+   * traversability policy through `forHauler`.
    */
   forHauler(openEdge: (laneKey: string) => boolean, factionKey: string | null): RouteBookerFor;
 }
@@ -127,22 +154,23 @@ export interface RouteBooker {
 /**
  * Build a `RouteBooker` over `network` — one physical ledger meant to be shared by every faction
  * routing in a run, so two factions booking the same edge see each other's load and congestion.
+ * Traversability is supplied per view, via `forHauler` — this booker itself carries no
+ * traversability policy of its own.
  *
- * `openEdge(laneKey)` is the per-client traversability policy (spec §6: goods route over
- * own+unclaimed+friendly-or-allied, a future migration client would pass a narrower predicate) —
- * a closed edge is never traversed, full stop, independent of capacity. `congestionMax` bounds the
- * per-edge multiplier; `catchUp` scales each lane's raw per-cycle `capacityOf` into this run's
- * actual capacity, applied here so callers pass the same raw number regardless of catch-up factor.
+ * `congestionMax` bounds the per-edge multiplier; `catchUp` scales each lane's raw per-cycle
+ * `capacityOf` into this run's actual capacity, applied here so callers pass the same raw number
+ * regardless of catch-up factor.
  *
  * Congestion curve: `multiplier(load, capacity) = 1 + (congestionMax - 1) * min(load / capacity, 1)`
  * — linear in load, 1 at zero load, `congestionMax` exactly at load === capacity. An edge is
  * excluded from live routing once its booked load REACHES capacity (`load >= capacity` closes it,
  * cost `null`), so a live-routed edge's multiplier is always strictly below `congestionMax`; the
- * bound is reached only by the saturation-ignoring search used solely to name a choke edge.
+ * bound is reached only by the saturation-ignoring search used solely to name a choke edge (and, at
+ * `reachableFrom`, to test reachability without congestion at all).
  */
 export function createRouteBooker(
   network: LaneNetwork,
-  opts: { openEdge: (laneKey: string) => boolean; congestionMax: number; catchUp: number },
+  opts: { congestionMax: number; catchUp: number },
 ): RouteBooker {
   const booked = new Map<string, number>();
   const blockedVolume = new Map<string, number>();
@@ -163,13 +191,13 @@ export function createRouteBooker(
     return 1 + (opts.congestionMax - 1) * ratio;
   }
 
-  /** Live route cost: excludes any edge whose booked load has reached capacity. `openEdge`
-   *  defaults to the booker's own (used by the base, un-`forHauler`'d view). */
+  /** Live route cost: excludes any edge whose booked load has reached capacity. `openEdge` is
+   *  always supplied by the caller — every real path runs through `forHauler`'s bound view. */
   function liveEdgeCost(
     from: string,
     to: string,
     fuelCost: number,
-    openEdge: (laneKey: string) => boolean = opts.openEdge,
+    openEdge: (laneKey: string) => boolean,
   ): number | null {
     const key = laneKey(from, to);
     if (!openEdge(key)) return null;
@@ -188,7 +216,7 @@ export function createRouteBooker(
     from: string,
     to: string,
     fuelCost: number,
-    openEdge: (laneKey: string) => boolean = opts.openEdge,
+    openEdge: (laneKey: string) => boolean,
   ): number | null {
     const key = laneKey(from, to);
     if (!openEdge(key)) return null;
@@ -241,8 +269,8 @@ export function createRouteBooker(
     from: string,
     to: string,
     quantity: number,
-    factionKey: string | null = null,
-    openEdge: (laneKey: string) => boolean = opts.openEdge,
+    factionKey: string | null,
+    openEdge: (laneKey: string) => boolean,
   ): RouteBooking | null {
     if (from === to || quantity <= 0) return null;
 
@@ -325,17 +353,17 @@ export function createRouteBooker(
     return { placements, blocked };
   }
 
-  function loads(): ReadonlyMap<string, { booked: number; blocked: number }> {
-    const result = new Map<string, { booked: number; blocked: number }>();
+  function loads(): ReadonlyMap<string, LaneLoad> {
+    const result = new Map<string, LaneLoad>();
     for (const key of network.laneKeys) {
-      result.set(key, { booked: booked.get(key) ?? 0, blocked: blockedVolume.get(key) ?? 0 });
+      result.set(key, { bookedLoad: booked.get(key) ?? 0, blockedVolume: blockedVolume.get(key) ?? 0 });
     }
     return result;
   }
 
   function priceFrom(
     sinkId: string,
-    openEdge: (laneKey: string) => boolean = opts.openEdge,
+    openEdge: (laneKey: string) => boolean,
   ): (donorId: string) => number | null {
     const { dist } = dijkstra(sinkId, network.adjacency, {
       edgeCost: (f, t, fuelCost) => liveEdgeCost(f, t, fuelCost, openEdge),
@@ -343,13 +371,26 @@ export function createRouteBooker(
     return (donorId: string) => dist.get(donorId) ?? null;
   }
 
+  /** `reachableFrom`'s search, ignoring saturation entirely — see `RouteBookerFor.reachableFrom`'s
+   *  own docstring for why congestion must not remove a donor from this reading. */
+  function reachableFrom(
+    sinkId: string,
+    openEdge: (laneKey: string) => boolean,
+  ): (donorId: string) => boolean {
+    const { dist } = dijkstra(sinkId, network.adjacency, {
+      edgeCost: (f, t, fuelCost) => edgeCostIgnoringSaturation(f, t, fuelCost, openEdge),
+    });
+    return (donorId: string) => dist.has(donorId);
+  }
+
   function forHauler(openEdge: (laneKey: string) => boolean, factionKey: string | null): RouteBookerFor {
     return {
       priceFrom: (sinkId: string) => priceFrom(sinkId, openEdge),
+      reachableFrom: (sinkId: string) => reachableFrom(sinkId, openEdge),
       routeAndBook: (from: string, to: string, quantity: number) =>
         routeAndBook(from, to, quantity, factionKey, openEdge),
     };
   }
 
-  return { routeAndBook, loads, priceFrom, forHauler };
+  return { loads, forHauler };
 }

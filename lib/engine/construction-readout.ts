@@ -129,6 +129,14 @@ export type ConstructionProjectRow =
   | ConstructionProjectColonyRow
   | ConstructionProjectLaneRow;
 
+/** `ConstructionProjectRow` minus the lane arm — the per-system Construction section's own row
+ *  type. A lane row carries no `systemId` (an undirected pair, not a single system), so
+ *  `getSystemConstruction` (`lib/services/construction.ts`) always filters it out before returning;
+ *  this names the narrower type that filter actually produces, rather than leaving the wider union
+ *  on a surface that can never carry the excluded arm. The faction card keeps the full
+ *  `ConstructionProjectRow` — it lists lane rows too. */
+export type SystemConstructionRow = Exclude<ConstructionProjectRow, ConstructionProjectLaneRow>;
+
 interface FundedFrontRowBase {
   projectId: string;
   /** Building type + level count ("Housing ×4"), "Establish Colony", or "Lane Upgrade ×N" — mirrors

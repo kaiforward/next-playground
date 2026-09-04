@@ -14,3 +14,11 @@ export function survivalCyclesToEmpty(stock: number, stockChange: number | undef
   if (stockChange === undefined || stockChange >= 0) return null;
   return stock / -stockChange;
 }
+
+/** Cycles-to-empty threshold for Survival stock falling — authored from remedy time (one logistics
+ *  cycle for the matcher to route a haul, one for the goods to land, one of margin for the player to
+ *  notice and act), not read off a distribution. Shared by the alert bar's Survival stock falling
+ *  category (`lib/services/alerts.ts`) and the calibration harness's `survivalStockFalling` lane
+ *  metric (`lib/tick-harness/lane-analysis.ts`), so both read the identical threshold rather than a
+ *  second hand-copied "3". */
+export const SURVIVAL_STOCK_CYCLES_THRESHOLD = 3;

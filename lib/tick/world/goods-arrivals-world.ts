@@ -7,8 +7,20 @@
  * `runWorldTick` wires into the shared pipeline. See
  * `docs/active/engineering/processor-architecture.md` for the broader pattern.
  */
-import type { LogisticsFlowInsert } from "./directed-logistics-world";
 import type { WorldPendingArrival } from "@/lib/world/types";
+
+/** One flow row, written when the goods-arrivals stage credits an outbound leg's quantity onto its
+ *  destination — the flow log's own record of goods actually delivered (a return leg writes none).
+ *  Named for its writer: moved here from `directed-logistics-world.ts` once that module stopped
+ *  writing flow rows itself (dispatch no longer credits a destination; see
+ *  `docs/planned/logistics-lanes.md` §3). */
+export interface ArrivalFlowInsert {
+  tick: number;
+  fromSystemId: string;
+  toSystemId: string;
+  goodId: string;
+  quantity: number;
+}
 
 /**
  * One market's band cap, keyed `"systemId|goodId"` (same composite `marketRowsBySystem`
@@ -51,5 +63,5 @@ export interface GoodsArrivalsWorld {
   /** Drain each processed row from the ledger and append any minted return leg in its place. */
   settleArrivals(applied: SettledArrival[]): Promise<void>;
   /** Append flow rows for the credited quantity of outbound legs only — a return leg writes none. */
-  appendFlows(flows: LogisticsFlowInsert[]): Promise<void>;
+  appendFlows(flows: ArrivalFlowInsert[]): Promise<void>;
 }

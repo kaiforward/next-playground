@@ -5,7 +5,12 @@
  * See docs/active/gameplay/economy-autonomic-agency.md.
  */
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
-import type { RouteBlocked, RouteBooking } from "./lane-routing";
+import type { RouteBlocked, RouteBookerFor } from "./lane-routing";
+
+// Re-exported so existing callers (the processor, tests) keep importing the matcher's booker view
+// from here — the type itself now lives beside `RouteBooker` in `lane-routing.ts` (no runtime
+// import cycle between the booker and the matcher).
+export type { RouteBookerFor };
 
 export type MarketKind = "deficit" | "surplus" | "balanced";
 
@@ -255,19 +260,6 @@ export interface TransferMatchResult {
   blocked: RouteBlocked[];
 }
 
-/**
- * The matcher's view of a `RouteBooker` (`lib/engine/lane-routing.ts`) — a structural subset any
- * real booker satisfies and a test can hand-roll without constructing a lane network. `priceFrom`
- * freezes one sink's prices to every donor for that deficit's whole fan-out (`docs/planned/
- * logistics-lanes.md` §2: "prices are frozen at the moment the severity queue reaches that
- * deficit"); `routeAndBook` is consulted inside the fill loop with the quantity being drawn, and
- * places it onto the shared network, so a later deficit's `priceFrom` reflects prior bookings.
- */
-export interface RouteBookerFor {
-  priceFrom(sinkId: string): (donorId: string) => number | null;
-  routeAndBook(from: string, to: string, quantity: number): RouteBooking | null;
-}
-
 interface Deficit { systemId: string; goodId: string; shortfall: number; severity: number; }
 interface Surplus {
   systemId: string;
@@ -360,6 +352,16 @@ export function matchFactionTransfers(
     // One search from this sink, frozen for its whole donor fan-out — later deficits re-search and
     // see this deficit's bookings.
     const priceFor = booker.priceFrom(d.systemId);
+    // A second, saturation-blind search from the SAME sink — see `RouteBookerFor.reachableFrom`'s
+    // own docstring. This is what `reachableDrawable` below reads instead of `priceFor`: congestion
+    // this run's own earlier deficits caused must not strand a donor out of the structural signal.
+    // Built lazily: a donor `priceFor` prices has a live path and so trivially a saturation-blind
+    // one, so the second search is only paid when some donor priced null.
+    let reachableFor: ((donorId: string) => boolean) | null = null;
+    const isReachable = (donorId: string): boolean => {
+      reachableFor ??= booker.reachableFrom(d.systemId);
+      return reachableFor(donorId);
+    };
 
     // Two figures off one walk of this deficit's donors.
     //
@@ -368,24 +370,28 @@ export function matchFactionTransfers(
     // (the booker may split a single draw across paths under congestion). A single-donor cap here
     // left reachable stock unshipped beside standing deficits (~42% of equilibrium unmet tonnage in
     // the attribution run). A dry donor is excluded: it could only contribute a zero-quantity draw.
+    // Candidates still require a LIVE priced path (`priceFor`) — congestion may block a donor from
+    // actually shipping this run even though it counts toward the structural reading below.
     //
-    // `reachableDrawable` — total capacity this deficit can actually reach, summed from each priced
-    // donor's LIVE drawable, i.e. what it still holds after the deficits ahead of it in the queue
-    // took their share. A donor `priceFor` returns null for (no open path with capacity left) is not
-    // reachable for this test, exactly as an out-of-radius donor was not before the hop cap was
-    // deleted. The structural test asks whether the shortfall is closeable with what exists, not
-    // whether it would be closeable were this deficit the only one asking: where a faction's demand
-    // for a good outruns its supply, the deficits left with nothing are unservable in the plainest
-    // sense and have to say so. A donor already drawn dry contributes 0 here and is skipped as a
-    // candidate below — it could only ship a zero-quantity draw. Deliberately independent of the
-    // budget mechanics that decide `fundingBound` too: the two questions are "does enough exist" and
-    // "did money reach what exists", and a deficit can fail both at once (see the type's own docstring).
+    // `reachableDrawable` — total capacity this deficit can actually reach, summed from each
+    // structurally-reachable donor's LIVE drawable, i.e. what it still holds after the deficits ahead
+    // of it in the queue took their share. Reachability is `reachableFor`, NOT `priceFor`: a donor
+    // whose only path is currently saturated (`priceFor` returns null, congestion) still counts here
+    // — congestion is not the same as "does not exist" (`docs/planned/logistics-lanes.md` §2, "a
+    // blocked haul is not an unservable one"). A donor `reachableFor` returns false for (no open path
+    // at all, traversability-closed) is not reachable for this test, exactly as an out-of-radius donor
+    // was not before the hop cap was deleted. The structural test asks whether the shortfall is
+    // closeable with what exists, not whether it would be closeable were this deficit the only one
+    // asking: where a faction's demand for a good outruns its supply, the deficits left with nothing
+    // are unservable in the plainest sense and have to say so. Deliberately independent of the budget
+    // mechanics that decide `fundingBound` too: the two questions are "does enough exist" and "did
+    // money reach what exists", and a deficit can fail both at once (see the type's own docstring).
     let reachableDrawable = 0;
     const candidates: Array<{ source: Surplus; perUnit: number }> = [];
     for (const [sourceSystemId, source] of sources) {
       const perUnit = priceFor(sourceSystemId);
+      if (perUnit !== null || isReachable(sourceSystemId)) reachableDrawable += source.drawable;
       if (perUnit === null) continue;
-      reachableDrawable += source.drawable;
       if (source.drawable <= 0) continue;
       candidates.push({ source, perUnit });
     }
@@ -404,6 +410,12 @@ export function matchFactionTransfers(
       const wanted = Math.min(remaining, source.drawable);
       const affordable = budget > 0 ? budget / perUnit : 0;
       const quantity = Math.min(wanted, affordable);
+      // Set when this candidate's LIVE billing overshoots the FROZEN quote `affordable` was sized
+      // against — see the comment below the placement loop. Distinct from `affordable < wanted`
+      // (this candidate's own stock/shortfall-limited share was smaller than what the budget could
+      // in principle afford): a draw can be exactly `affordable === wanted` (fully served, nothing
+      // left over) and still overshoot once congestion prices later placements above the quote.
+      let overshotBudget = false;
       if (Number.isFinite(quantity) && quantity > 0) {
         const booking = booker.routeAndBook(source.systemId, d.systemId, quantity);
         let placedTotal = 0;
@@ -423,6 +435,18 @@ export function matchFactionTransfers(
             placedTotal += placement.quantity;
             budget -= cost;
           }
+          // `affordable` above was sized against the FROZEN per-deficit quote (`budget / perUnit`,
+          // `perUnit` from `priceFor`), but each placement above is billed at its own LIVE price
+          // (`placement.perUnit`) — and live ≥ frozen by construction: this very draw's earlier
+          // placements raise congestion, and a split under congestion can land part of the quantity
+          // on a costlier detour. A draw quoted at exactly the remaining budget can therefore charge
+          // above it. Left negative, `budget` would make `affordable` 0 for every donor and deficit
+          // for the rest of the run (`budget > 0 ? … : 0`) — a run-wide cliff, not the per-deficit
+          // binding the skip below implements — so it is floored at 0 here. `overshotBudget` still
+          // ends THIS candidate's fill (below): the budget genuinely ran out mid-draw, which
+          // `affordable < wanted` alone would not catch.
+          if (budget < 0) overshotBudget = true;
+          budget = Math.max(0, budget);
         }
         // The booker may place less than `quantity` under congestion (RouteBooking.blocked) — the
         // unplaced part is neither drawn from the donor nor billed, and it is not this function's
@@ -432,13 +456,13 @@ export function matchFactionTransfers(
         source.drawable -= placedTotal;
         remaining -= placedTotal;
       }
-      // An unaffordable draw ends THIS deficit's fill: later donors here are unaffordable too, and
-      // iterating them would only fan out epsilon-sized transfers from float residue. Unlike the
-      // retired run-terminating clamp, the budget itself is left exactly as spent — the remaining
-      // budget stays available to fund cheaper deficits behind this one in the queue, which is the
-      // gradual binding §2 wants in place of a single cliff. Classification continues either way
-      // (see the docstring).
-      if (affordable < wanted) {
+      // An unaffordable draw, or one that overshot the live budget above, ends THIS deficit's fill:
+      // later donors here are unaffordable too, and iterating them would only fan out epsilon-sized
+      // transfers from float residue. Unlike the retired run-terminating clamp, the budget itself is
+      // left exactly as spent (floored at 0, never negative) — the remaining budget stays available
+      // to fund cheaper deficits behind this one in the queue, which is the gradual binding §2 wants
+      // in place of a single cliff. Classification continues either way (see the docstring).
+      if (affordable < wanted || overshotBudget) {
         stoppedDonorId = source.systemId;
         budgetSkipped++;
         break;

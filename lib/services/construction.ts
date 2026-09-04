@@ -18,6 +18,7 @@ import {
   type ConstructionSystemInfo,
   type FactionConstructionReadout,
   type FoundingReadoutInputs,
+  type SystemConstructionRow,
 } from "@/lib/engine/construction-readout";
 import { orderOpenProjects } from "@/lib/engine/construction";
 import { surplusDrawable } from "@/lib/engine/directed-logistics";
@@ -187,8 +188,12 @@ export function getSystemConstruction(systemId: string): SystemConstructionData 
 
   const readout = readoutForFaction(system.factionId);
   // Lane rows carry no systemId (an undirected pair, not a single system) — excluded from every
-  // per-system view; they are listed at faction level only.
-  const projects = readout.all.filter((r) => r.kind !== "lane_upgrade" && r.systemId === systemId);
+  // per-system view; they are listed at faction level only. The type predicate narrows the filter
+  // result to `SystemConstructionRow` so the visible arm's type matches what this filter actually
+  // returns, rather than the wider union `SystemConstructionData` used to carry.
+  const projects = readout.all.filter(
+    (r): r is SystemConstructionRow => r.kind !== "lane_upgrade" && r.systemId === systemId,
+  );
   if (projects.length > 0) return { visibility: "visible", factionId: system.factionId, projects };
   // Nothing under way here: a controlled world still shows the section (that's the question you
   // bring to it); a developed world hides it (avoids clutter on the common case).

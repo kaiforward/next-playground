@@ -1,4 +1,5 @@
 import type { SupplyState } from "@/lib/engine/population";
+import type { LogisticsBlockedEntry } from "@/lib/engine/lane-routing";
 
 // ── Typed tick event payloads ─────────────────────────────────────
 
@@ -113,7 +114,7 @@ export interface TickProcessorResult {
    *  tagged with the hauling faction key (`null` = independents) — the harness's
    *  `contentionShortfallByFaction` reading. Surfaced via `runWorldTick().instrumentation`, never
    *  broadcast or persisted. */
-  logisticsBlocked?: Array<{ factionKey: string | null; laneKey: string; quantity: number; foreignShare: number }>;
+  logisticsBlocked?: LogisticsBlockedEntry[];
   /** Directed-build proposals `strikeExplains` suppressed this cycle (directed-build), resolved per
    *  (system, good) pair and summed across every due faction: `eligible` is every pair with capacity
    *  in the good — the pairs a strike can silence at all — and `suppressed` is the subset where it

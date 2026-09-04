@@ -348,15 +348,16 @@ export type SystemIndustryData =
   | { visibility: "unknown" };
 
 // ── Construction (build-queue / colony-visibility) ────────────────────────────
-import type { ConstructionProjectRow } from "@/lib/engine/construction-readout";
+import type { SystemConstructionRow } from "@/lib/engine/construction-readout";
 
 /** Per-system Construction section state. `hidden` renders nothing (developed with nothing building);
- *  `empty` is the controlled-not-yet-colonised state; `visible` carries the rows for this system.
- *  `empty`/`visible` carry `factionId` so the section can link to the faction roll-up. */
+ *  `empty` is the controlled-not-yet-colonised state; `visible` carries the rows for this system —
+ *  `SystemConstructionRow`, never the lane arm (a lane carries no single `systemId`). `empty`/
+ *  `visible` carry `factionId` so the section can link to the faction roll-up. */
 export type SystemConstructionData =
   | { visibility: "hidden" }
   | { visibility: "empty"; control: "controlled"; factionId: string }
-  | { visibility: "visible"; factionId: string; projects: ConstructionProjectRow[] };
+  | { visibility: "visible"; factionId: string; projects: SystemConstructionRow[] };
 
 /** Faction command-summary card state — pool composition + automation switches + link lists. */
 export interface FactionConstructionData {

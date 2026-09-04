@@ -2,8 +2,8 @@ import type { TickProcessorResult } from "../types";
 import type {
   GoodsArrivalsWorld,
   SettledArrival,
+  ArrivalFlowInsert,
 } from "@/lib/tick/world/goods-arrivals-world";
-import type { LogisticsFlowInsert } from "@/lib/tick/world/directed-logistics-world";
 import type { WorldPendingArrival } from "@/lib/world/types";
 
 export interface GoodsArrivalsProcessorParams {
@@ -67,7 +67,7 @@ export async function runGoodsArrivalsProcessor(
   for (const [key, cap] of caps) runningStock.set(key, cap.stock);
 
   const settled: SettledArrival[] = [];
-  const flows: LogisticsFlowInsert[] = [];
+  const flows: ArrivalFlowInsert[] = [];
   let creditedTotal = 0;
   let returnedTotal = 0;
   let returnedRows = 0;
@@ -78,6 +78,15 @@ export async function runGoodsArrivalsProcessor(
     const stockBefore = runningStock.get(key) ?? 0;
 
     if (row.leg === "return") {
+      // A return leg's destination is the original donor, which — unlike an outbound leg's
+      // destination — has no cap-driven room test: it credits in full, uncapped (the
+      // cancelled-colony precedent). But `creditMarkets` writes nothing for an id with no market
+      // row (an unreachable case today: market rows are never deleted, only reset), so crediting
+      // into `runningStock` for a key `caps` never returned would mint units `creditMarkets` then
+      // silently drops. Leave such a row unsettled instead — it stays in the ledger and retries
+      // next tick — rather than count it credited and lose it.
+      const cap = caps.get(key);
+      if (!cap) continue;
       runningStock.set(key, stockBefore + row.quantity);
       creditedTotal += row.quantity;
       settled.push({ id: row.id, credited: row.quantity, returned: null });

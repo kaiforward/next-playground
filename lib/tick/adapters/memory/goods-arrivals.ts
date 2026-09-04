@@ -3,8 +3,8 @@ import type {
   MarketCapView,
   MarketCreditUpdate,
   SettledArrival,
+  ArrivalFlowInsert,
 } from "@/lib/tick/world/goods-arrivals-world";
-import type { LogisticsFlowInsert } from "@/lib/tick/world/directed-logistics-world";
 import type { WorldMarket, WorldPendingArrival } from "@/lib/world/types";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
@@ -18,7 +18,7 @@ import { GOODS } from "@/lib/constants/goods";
 export class InMemoryGoodsArrivalsWorld implements GoodsArrivalsWorld {
   markets: WorldMarket[];
   pendingArrivals: WorldPendingArrival[];
-  readonly flows: LogisticsFlowInsert[] = [];
+  readonly flows: ArrivalFlowInsert[] = [];
   /** Calibration instrumentation only: Σ (stock after − stock before) this adapter actually wrote in
    *  `creditMarkets`, over every update whose market row was found — the fifth conservation
    *  identity's RIGHT-side credit term. A key the update list names but this adapter finds no
@@ -76,7 +76,7 @@ export class InMemoryGoodsArrivalsWorld implements GoodsArrivalsWorld {
     return Promise.resolve();
   }
 
-  appendFlows(flows: LogisticsFlowInsert[]): Promise<void> {
+  appendFlows(flows: ArrivalFlowInsert[]): Promise<void> {
     this.flows.push(...flows);
     return Promise.resolve();
   }

@@ -55,6 +55,13 @@ function buildFixtureNetwork(): LaneNetwork {
 const CONGESTION_MAX = 3;
 const OPEN_ALL = () => true;
 
+/** Every direct test goes through `forHauler` — `RouteBooker`'s own public surface is just
+ *  `loads()` + `forHauler()` (no traversal-open top-level view, see `RouteBooker`'s own
+ *  docstring), so `openEdge` must be chosen at every call site rather than left to a default. */
+function hauler(booker: ReturnType<typeof createRouteBooker>, openEdge: (key: string) => boolean = OPEN_ALL, factionKey: string | null = null) {
+  return booker.forHauler(openEdge, factionKey);
+}
+
 describe("RouteBooker.routeAndBook — zero-capacity lane", () => {
   it("excludes a zero-capacity lane from live routing and, when it is the only route, blocks the full haul on it", () => {
     // A single edge S-A whose capacityOf returns 0 — no alternate route exists at all.
@@ -64,12 +71,13 @@ describe("RouteBooker.routeAndBook — zero-capacity lane", () => {
       { fromSystemId: "A", toSystemId: "S", fuelCost: 5 },
     ];
     const network = buildLaneNetwork(connections, lanes, () => 0);
-    const booker = createRouteBooker(network, { openEdge: OPEN_ALL, congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const booker = createRouteBooker(network, { congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const h = hauler(booker);
 
-    const booking = booker.routeAndBook("S", "A", 5);
+    const booking = h.routeAndBook("S", "A", 5);
     expect(booking?.placements).toEqual([]);
     expect(booking?.blocked).toEqual([{ laneKey: laneKey("S", "A"), quantity: 5, foreignShare: 0 }]);
-    expect(booker.loads().get(laneKey("S", "A"))).toEqual({ booked: 0, blocked: 5 });
+    expect(booker.loads().get(laneKey("S", "A"))).toEqual({ bookedLoad: 0, blockedVolume: 5 });
   });
 });
 
@@ -91,16 +99,17 @@ describe("buildLaneNetwork", () => {
 describe("RouteBooker.routeAndBook — capacity exclusion", () => {
   it("excludes an edge at capacity, returning the cheapest remaining path instead of pricing through it", () => {
     const network = buildFixtureNetwork();
-    const booker = createRouteBooker(network, { openEdge: OPEN_ALL, congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const booker = createRouteBooker(network, { congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const h = hauler(booker);
 
     // Saturate the cheap path exactly.
-    const first = booker.routeAndBook("S", "T", 10);
+    const first = h.routeAndBook("S", "T", 10);
     expect(first?.placements).toEqual([
       { quantity: 10, edges: [laneKey("S", "A"), laneKey("A", "T")], perUnit: 10, fuelTotal: 10 },
     ]);
 
     // The cheap path is now fully booked — the next haul must take the pricier alternate.
-    const second = booker.routeAndBook("S", "T", 5);
+    const second = h.routeAndBook("S", "T", 5);
     expect(second?.placements).toHaveLength(1);
     expect(second?.placements[0].edges).toEqual([laneKey("S", "B"), laneKey("B", "T")]);
     expect(second?.placements[0].quantity).toBe(5);
@@ -108,12 +117,13 @@ describe("RouteBooker.routeAndBook — capacity exclusion", () => {
 
   it("never prices an edge above congestionMax, even at load just under capacity", () => {
     const network = buildFixtureNetwork();
-    const booker = createRouteBooker(network, { openEdge: OPEN_ALL, congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const booker = createRouteBooker(network, { congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const h = hauler(booker);
 
     // Book 9 of the 10-capacity path, one unit short of saturation.
-    booker.routeAndBook("S", "T", 9);
+    h.routeAndBook("S", "T", 9);
     // The last affordable unit: multiplier at load=9,capacity=10 is 1 + (3-1)*0.9 = 2.8 per edge.
-    const last = booker.routeAndBook("S", "T", 1);
+    const last = h.routeAndBook("S", "T", 1);
     expect(last?.placements).toHaveLength(1);
     const perUnit = last?.placements[0].perUnit ?? 0;
     // fuelTotal 10 at multiplier 2.8 = 28 (5*2.8 + 5*2.8).
@@ -125,9 +135,10 @@ describe("RouteBooker.routeAndBook — capacity exclusion", () => {
 describe("RouteBooker.routeAndBook — partial fill, reroute, blocked volume", () => {
   it("ships what fits on the cheapest path and reroutes the rest, recording blocked volume once on the choke edge", () => {
     const network = buildFixtureNetwork();
-    const booker = createRouteBooker(network, { openEdge: OPEN_ALL, congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const booker = createRouteBooker(network, { congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const h = hauler(booker);
 
-    const booking = booker.routeAndBook("S", "T", 15);
+    const booking = h.routeAndBook("S", "T", 15);
     expect(booking?.placements).toHaveLength(2);
     expect(booking?.placements[0]).toMatchObject({ quantity: 10, edges: [laneKey("S", "A"), laneKey("A", "T")] });
     expect(booking?.placements[1]).toMatchObject({ quantity: 5, edges: [laneKey("S", "B"), laneKey("B", "T")] });
@@ -136,9 +147,9 @@ describe("RouteBooker.routeAndBook — partial fill, reroute, blocked volume", (
     expect(booking?.blocked).toEqual([{ laneKey: laneKey("S", "A"), quantity: 5, foreignShare: 0 }]);
 
     const loads = booker.loads();
-    expect(loads.get(laneKey("S", "A"))).toEqual({ booked: 10, blocked: 5 });
-    expect(loads.get(laneKey("A", "T"))).toEqual({ booked: 10, blocked: 0 });
-    expect(loads.get(laneKey("S", "B"))).toEqual({ booked: 5, blocked: 0 });
+    expect(loads.get(laneKey("S", "A"))).toEqual({ bookedLoad: 10, blockedVolume: 5 });
+    expect(loads.get(laneKey("A", "T"))).toEqual({ bookedLoad: 10, blockedVolume: 0 });
+    expect(loads.get(laneKey("S", "B"))).toEqual({ bookedLoad: 5, blockedVolume: 0 });
   });
 });
 
@@ -146,9 +157,10 @@ describe("RouteBooker.routeAndBook — closed edges", () => {
   it("never traverses a closed edge, even when it is the only cheap route", () => {
     const network = buildFixtureNetwork();
     const openEdge = (key: string) => key !== laneKey("S", "A");
-    const booker = createRouteBooker(network, { openEdge, congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const booker = createRouteBooker(network, { congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const h = hauler(booker, openEdge);
 
-    const booking = booker.routeAndBook("S", "T", 5);
+    const booking = h.routeAndBook("S", "T", 5);
     expect(booking?.placements).toHaveLength(1);
     expect(booking?.placements[0].edges).toEqual([laneKey("S", "B"), laneKey("B", "T")]);
   });
@@ -156,9 +168,10 @@ describe("RouteBooker.routeAndBook — closed edges", () => {
   it("reports nothing blocked, and nothing placed, when the destination is unreachable over open edges", () => {
     const network = buildFixtureNetwork();
     const openEdge = (key: string) => key !== laneKey("S", "A") && key !== laneKey("S", "B");
-    const booker = createRouteBooker(network, { openEdge, congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const booker = createRouteBooker(network, { congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const h = hauler(booker, openEdge);
 
-    const booking = booker.routeAndBook("S", "T", 5);
+    const booking = h.routeAndBook("S", "T", 5);
     expect(booking?.placements).toEqual([]);
     expect(booking?.blocked).toEqual([]);
   });
@@ -167,10 +180,10 @@ describe("RouteBooker.routeAndBook — closed edges", () => {
 describe("RouteBooker.routeAndBook — shared ledger across factions", () => {
   it("lets two factions see and contend for each other's booked load on the same edge", () => {
     const network = buildFixtureNetwork();
-    const booker = createRouteBooker(network, { openEdge: OPEN_ALL, congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const booker = createRouteBooker(network, { congestionMax: CONGESTION_MAX, catchUp: 1 });
 
-    booker.routeAndBook("S", "T", 6, "factionA");
-    const second = booker.routeAndBook("S", "T", 6, "factionB");
+    hauler(booker, OPEN_ALL, "factionA").routeAndBook("S", "T", 6);
+    const second = hauler(booker, OPEN_ALL, "factionB").routeAndBook("S", "T", 6);
 
     // Only 4 units of room remained on the cheap path; factionB is pushed onto the alternate for the rest.
     expect(second?.placements[0]).toMatchObject({ quantity: 4, edges: [laneKey("S", "A"), laneKey("A", "T")] });
@@ -179,44 +192,72 @@ describe("RouteBooker.routeAndBook — shared ledger across factions", () => {
     // The choke edge's booked load (10) is 6 factionA + 4 factionB — 60% foreign to factionB.
     expect(second?.blocked).toEqual([{ laneKey: laneKey("S", "A"), quantity: 2, foreignShare: 0.6 }]);
 
-    expect(booker.loads().get(laneKey("S", "A"))).toEqual({ booked: 10, blocked: 2 });
+    expect(booker.loads().get(laneKey("S", "A"))).toEqual({ bookedLoad: 10, blockedVolume: 2 });
   });
 });
 
 describe("RouteBooker.priceFrom", () => {
   it("prices every reachable donor from a sink over the current graph, undirected", () => {
     const network = buildFixtureNetwork();
-    const booker = createRouteBooker(network, { openEdge: OPEN_ALL, congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const booker = createRouteBooker(network, { congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const h = hauler(booker);
 
-    const priceFromT = booker.priceFrom("T");
+    const priceFromT = h.priceFrom("T");
     expect(priceFromT("S")).toBe(10); // cheap path, uncongested: 5 + 5
     expect(priceFromT("nowhere")).toBeNull();
   });
 
   it("freezes prices for the caller's fan-out — a later routeAndBook does not retroactively change them", () => {
     const network = buildFixtureNetwork();
-    const booker = createRouteBooker(network, { openEdge: OPEN_ALL, congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const booker = createRouteBooker(network, { congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const h = hauler(booker);
 
-    const priceFromT = booker.priceFrom("T");
+    const priceFromT = h.priceFrom("T");
     const before = priceFromT("S");
-    booker.routeAndBook("S", "T", 10); // saturates the cheap path
+    h.routeAndBook("S", "T", 10); // saturates the cheap path
     expect(priceFromT("S")).toBe(before); // the returned lookup is a frozen snapshot
+  });
+});
+
+describe("RouteBooker.reachableFrom — reachability ignores saturation, not traversability", () => {
+  it("stays true for a donor whose only path is saturated, unlike priceFrom", () => {
+    const network = buildFixtureNetwork();
+    const booker = createRouteBooker(network, { congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const h = hauler(booker);
+
+    // Saturate BOTH paths so priceFrom genuinely returns null for S.
+    h.routeAndBook("S", "T", 10); // fills the cheap path
+    h.routeAndBook("S", "T", 100); // fills the alternate too
+
+    expect(h.priceFrom("T")("S")).toBeNull(); // no live-priced path remains
+    expect(h.reachableFrom("T")("S")).toBe(true); // a path still structurally exists
+  });
+
+  it("is false for a donor no open edge reaches at all", () => {
+    const network = buildFixtureNetwork();
+    const openEdge = (key: string) => key !== laneKey("S", "A") && key !== laneKey("S", "B");
+    const booker = createRouteBooker(network, { congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const h = hauler(booker, openEdge);
+
+    expect(h.reachableFrom("T")("S")).toBe(false);
+    expect(h.reachableFrom("T")("nowhere")).toBe(false);
   });
 });
 
 describe("RouteBooker.routeAndBook — degenerate input", () => {
   it("returns null for same origin and destination, and for a non-positive quantity", () => {
     const network = buildFixtureNetwork();
-    const booker = createRouteBooker(network, { openEdge: OPEN_ALL, congestionMax: CONGESTION_MAX, catchUp: 1 });
-    expect(booker.routeAndBook("S", "S", 5)).toBeNull();
-    expect(booker.routeAndBook("S", "T", 0)).toBeNull();
+    const booker = createRouteBooker(network, { congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const h = hauler(booker);
+    expect(h.routeAndBook("S", "S", 5)).toBeNull();
+    expect(h.routeAndBook("S", "T", 0)).toBeNull();
   });
 });
 
 describe("RouteBooker.forHauler — shared ledger, per-hauler openEdge", () => {
   it("two haulers with different openEdge share one load ledger", () => {
     const network = buildFixtureNetwork();
-    const booker = createRouteBooker(network, { openEdge: OPEN_ALL, congestionMax: CONGESTION_MAX, catchUp: 1 });
+    const booker = createRouteBooker(network, { congestionMax: CONGESTION_MAX, catchUp: 1 });
 
     // Hauler A may use every edge; hauler B is closed off the cheap path entirely, so it must
     // route the whole alternate corridor.
@@ -233,8 +274,8 @@ describe("RouteBooker.forHauler — shared ledger, per-hauler openEdge", () => {
     // One shared ledger: hauler A's booking is visible to hauler B's price/priority view on the
     // edge they both could have used, and `loads()` reports the sum across both haulers.
     const loads = booker.loads();
-    expect(loads.get(laneKey("S", "A"))?.booked).toBe(4);
-    expect(loads.get(laneKey("S", "B"))?.booked).toBe(3);
+    expect(loads.get(laneKey("S", "A"))?.bookedLoad).toBe(4);
+    expect(loads.get(laneKey("S", "B"))?.bookedLoad).toBe(3);
 
     // Hauler B's own priceFrom never offers the cheap path at all — it stays closed to B
     // regardless of what A booked on it.

@@ -148,6 +148,25 @@ describe("runGoodsArrivalsProcessor", () => {
     expect(world.flows).toEqual([]);
   });
 
+  it("leaves a return leg unsettled, crediting nothing, when its destination has no market row at all", async () => {
+    // A return leg's destination (the original donor) has no market row — unreachable in live play
+    // (market rows are never deleted, only reset), but `creditMarkets` writes nothing for an id it
+    // finds no row for, so crediting this key into `runningStock` would mint units the credit write
+    // silently drops. The row must instead stay in the ledger, untouched, to retry next tick.
+    const world = new InMemoryGoodsArrivalsWorld({
+      markets: [],
+      pendingArrivals: [
+        pending({ id: "return-1", leg: "return", fromSystemId: "sink", toSystemId: "ghost-donor", quantity: 50, arrivalTick: 10 }),
+      ],
+    });
+
+    const result = await runGoodsArrivalsProcessor(world, ctx(10), { mintId });
+
+    expect(result.goodsArrivals.credited).toBe(0);
+    expect(world.pendingArrivals).toHaveLength(1);
+    expect(world.pendingArrivals[0].id).toBe("return-1");
+  });
+
   it("returns the whole quantity when the destination has no market row at all", async () => {
     const world = new InMemoryGoodsArrivalsWorld({
       markets: [],

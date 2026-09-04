@@ -79,14 +79,6 @@ export interface UnservedShortfallUpdate {
   unservedShortfall: number;
 }
 
-export interface LogisticsFlowInsert {
-  tick: number;
-  fromSystemId: string;
-  toSystemId: string;
-  goodId: string;
-  quantity: number;
-}
-
 /** One lane's booked/blocked load after this run's matching — `RouteBooker.loads()` written back
  *  for EVERY lane in the network, zero for one no faction touched this run (the reset: a lane
  *  loaded last run and left idle this run must read back to 0, not keep a stale figure). */

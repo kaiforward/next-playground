@@ -69,8 +69,9 @@ faction only — AI factions never read the field. Toggled off:
 
 The switches surface as checkboxes on the faction construction command card (see UI, below); a set call
 (`setAutomation`, `lib/services/construction-orders.ts`) spreads `input` onto the existing
-`world.player.automation` object rather than rebuilding it — a domain omitted from `input` keeps its
-current value instead of silently dropping to `undefined`.
+`world.player.automation` object rather than rebuilding it from `input` alone — the schema
+(`automationSchema`) requires all three booleans, so `input` never actually omits one, but the spread
+keeps the set call robust against a future field the schema hasn't caught up to yet.
 
 ---
 

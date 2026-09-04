@@ -104,9 +104,9 @@ describe("summariseLanes", () => {
   it("folds contention shortfall as Σ blocked quantity × foreignShare, per hauling faction", () => {
     const acc = newLaneRunAccumulator();
     recordLogisticsBlocked(acc, [
-      { factionKey: "f1", quantity: 10, foreignShare: 0.5 },
-      { factionKey: "f1", quantity: 4, foreignShare: 1 },
-      { factionKey: null, quantity: 2, foreignShare: 0 },
+      { factionKey: "f1", laneKey: "a|b", quantity: 10, foreignShare: 0.5 },
+      { factionKey: "f1", laneKey: "a|b", quantity: 4, foreignShare: 1 },
+      { factionKey: null, laneKey: "a|b", quantity: 2, foreignShare: 0 },
     ]);
     const summary = summariseLanes(acc, [], new Set(), []);
     expect(summary.contentionShortfallByFaction).toEqual([

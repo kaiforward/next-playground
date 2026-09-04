@@ -56,7 +56,7 @@ import {
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
-import { survivalCyclesToEmpty } from "@/lib/engine/survival-stock";
+import { survivalCyclesToEmpty, SURVIVAL_STOCK_CYCLES_THRESHOLD } from "@/lib/engine/survival-stock";
 import { ALERT_CATEGORIES, BUILD_DROP_SEVERITY } from "@/lib/constants/alerts";
 import type { AlertTier, AlertCategoryId } from "@/lib/types/alerts";
 import type {
@@ -73,13 +73,6 @@ const EMPTY_ALERT_DATA: AlertData = {
 /** Band order, worst first, for the final categories array — critical chips lead, then important,
  *  then info. Ranks the thirteen alert CATEGORIES against each other by their authored `AlertTier`. */
 const TIER_RANK: Record<AlertTier, number> = { critical: 0, important: 1, info: 2 };
-
-/** Cycles-to-empty threshold for Survival stock falling — authored from remedy time (one logistics
- *  cycle for the matcher to route a haul, one for the goods to land, one of margin for the player to
- *  notice and act), not read off a distribution. */
-// Exported so the calibration harness's `survivalStockFalling` lane metric (`lib/tick-harness/
-// lane-analysis.ts`) reads the identical threshold rather than a second hand-copied "3".
-export const SURVIVAL_STOCK_CYCLES_THRESHOLD = 3;
 
 /**
  * Population collapse's entry threshold — a MAGNITUDE, compared against `WorldSystem.populationTrend`

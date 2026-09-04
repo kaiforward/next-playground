@@ -115,13 +115,22 @@ function sys(
  * about congestion. `place`, when given, caps what `routeAndBook` actually places (simulating a
  * saturated lane) — the excess is reported `blocked`, never billed or drawn, exactly as a real
  * `RouteBooker` would. Defaults to placing the whole requested quantity.
+ *
+ * `reachable`, when given, is the fake's `reachableFrom` predicate — independent of `price`, so a
+ * test can simulate a donor whose path exists but is currently saturated (`price` null,
+ * `reachable` true) as well as a genuinely closed donor (both null/false). Defaults to mirroring
+ * `price !== null`, matching every fixture predating the reachable/price split, where the two never
+ * diverged.
  */
 function makeBooker(opts: {
   price: (from: string, to: string) => number | null;
   place?: (from: string, to: string, quantity: number) => number;
+  reachable?: (from: string, to: string) => boolean;
 }): RouteBookerFor {
   return {
     priceFrom: (sinkId: string) => (donorId: string) => opts.price(donorId, sinkId),
+    reachableFrom: (sinkId: string) => (donorId: string) =>
+      opts.reachable ? opts.reachable(donorId, sinkId) : opts.price(donorId, sinkId) !== null,
     routeAndBook: (from: string, to: string, quantity: number) => {
       if (from === to || quantity <= 0) return null;
       const perUnit = opts.price(from, to);
@@ -611,6 +620,7 @@ describe("matchFactionTransfers — booked routing, the per-deficit skip, and bl
     // across two paths of its own choosing.
     const splitting: RouteBookerFor = {
       priceFrom: () => () => 2,
+      reachableFrom: () => () => true,
       routeAndBook: (_from, _to, quantity) => ({
         placements: [
           { quantity: quantity * 0.6, edges: ["p1"], perUnit: 2, fuelTotal: 3 },
@@ -645,6 +655,8 @@ describe("matchFactionTransfers — booked routing, the per-deficit skip, and bl
         if (sinkId === "Mild" && donorId === "D2") return 1;
         return null;
       },
+      reachableFrom: (sinkId) => (donorId) =>
+        (sinkId === "Severe" && donorId === "D1") || (sinkId === "Mild" && donorId === "D2"),
       routeAndBook: (from, to, quantity) => {
         if (from === "D1" && to === "Severe") {
           const placed = Math.min(quantity, 4);
@@ -703,6 +715,103 @@ describe("matchFactionTransfers — booked routing, the per-deficit skip, and bl
     expect(result.transfers[0].quantity).toBe(10);
     expect(result.unservable).toEqual([]);
     expect(result.fundingBound).toEqual([]);
+  });
+
+  it("does not treat a saturated (price-null) donor as unservable when it is still structurally reachable", () => {
+    // D1 holds ample drawable (100) but its only path to B is currently saturated — `price` returns
+    // null (congestion), exactly as a real booker's `priceFrom` would for a lane at capacity — while
+    // `reachable` reports true (the path exists, only saturation closes it). `reachableDrawable`
+    // reads `reachableFrom`, not `priceFrom`, so this deficit's 50-unit want is structurally
+    // closeable and must not be reported unservable, even though nothing can actually ship this run.
+    const d1 = sys("D1", 100, { goodId: "food", stock: 150, logisticsTarget: 50, demand: 5 });
+    const b = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 50, demand: 5 });
+    const saturated = makeBooker({ price: () => null, reachable: () => true });
+
+    const result = matchFactionTransfers([d1, b], saturated);
+    expect(result.transfers).toEqual([]); // nothing priced, so nothing ships this run
+    expect(result.unservable).toEqual([]);
+  });
+
+  it("still treats a politically-closed donor (unreachable, not merely saturated) as unservable", () => {
+    // Same shape as above, but `reachable` also reports false — a donor traversability genuinely
+    // excludes, not one congestion has merely priced out for this run. This deficit's want must
+    // still read unservable: `reachableDrawable` is 0, exactly the pre-existing "no donor at all"
+    // reading.
+    const d1 = sys("D1", 100, { goodId: "food", stock: 150, logisticsTarget: 50, demand: 5 });
+    const b = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 50, demand: 5 });
+    const closed = makeBooker({ price: () => null, reachable: () => false });
+
+    const result = matchFactionTransfers([d1, b], closed);
+    expect(result.transfers).toEqual([]);
+    expect(result.unservable).toEqual([{ goodId: "food", systemId: "B", shortfall: 50 }]);
+  });
+});
+
+describe("matchFactionTransfers — budget floors at 0 rather than going negative on a live-price overshoot", () => {
+  it("does not starve a cheap deficit behind a donor whose live billing overshot its frozen quote", () => {
+    // D1's drawable is sized to exactly 10 (stock 10, donorReserve 0) — the SAME shape the "affordable
+    // === wanted" regression test below uses, deliberately, so `affordable(10) < wanted(10)` reads
+    // FALSE here too and cannot by itself explain a stop. Severe's fill draws from D1 at a FROZEN quote
+    // of 2/unit (`priceFrom`), sized against the budget (20) to `affordable = 10` — exactly D1's whole
+    // drawable, so `wanted === affordable` and the pre-existing `affordable < wanted` check alone would
+    // NOT catch this draw. The booker's `routeAndBook` instead bills the whole draw at a LIVE 3/unit (as
+    // a real congestion-priced placement can, once earlier placements in the same draw raise the price)
+    // — 10 × 3 = 30, overshooting the 20 budget by 10. Only the overshoot detection (`budget < 0` before
+    // flooring) can catch this and stop Severe's fill; without it `stoppedDonorId` never gets set for
+    // Severe at all (the for-of loop simply exhausts its one candidate), so `budgetSkipped` undercounts
+    // by exactly one. Without the floor besides, `budget` stays at -10 and every later `affordable`
+    // computes to 0 regardless (`budget > 0 ? … : 0`) — the same reading a floored 0 produces — so
+    // Cheap's own transfer is unaffected either way; what the floor's absence actually breaks is
+    // Severe's own classification, which this test pins directly.
+    const severe = sys("Severe", 0, { goodId: "food", stock: 0, logisticsTarget: 1000, demand: 5 });
+    const d1 = sys("D1", 20, { goodId: "food", stock: 10, logisticsTarget: 0, donorReserve: 0, demand: 0 });
+    const cheap = sys("Cheap", 0, { goodId: "food", stock: 0, logisticsTarget: 5, demand: 1 });
+    const d2 = sys("D2", 0, { goodId: "food", stock: 1000, logisticsTarget: 10, demand: 5 });
+
+    const overshootBooker: RouteBookerFor = {
+      priceFrom: (sinkId) => (donorId) => {
+        if (sinkId === "Severe" && donorId === "D1") return 2; // frozen quote: 20 budget / 2 = 10 affordable
+        if (sinkId === "Cheap" && donorId === "D2") return 1;
+        return null;
+      },
+      reachableFrom: (sinkId) => (donorId) =>
+        (sinkId === "Severe" && donorId === "D1") || (sinkId === "Cheap" && donorId === "D2"),
+      routeAndBook: (from, to, quantity) => {
+        if (from === "D1" && to === "Severe") {
+          // Bills the WHOLE requested quantity at a live price above the frozen quote.
+          return { placements: [{ quantity, edges: ["choke"], perUnit: 3, fuelTotal: quantity }], blocked: [] };
+        }
+        return { placements: [{ quantity, edges: [`${from}->${to}`], perUnit: 1, fuelTotal: quantity }], blocked: [] };
+      },
+    };
+
+    const result = matchFactionTransfers([severe, d1, cheap, d2], overshootBooker);
+    const severeTransfers = result.transfers.filter((t) => t.toSystemId === "Severe");
+    const cheapTransfers = result.transfers.filter((t) => t.toSystemId === "Cheap");
+    expect(severeTransfers).toHaveLength(1);
+    expect(severeTransfers[0]).toMatchObject({ fromSystemId: "D1", quantity: 10, cost: 30 });
+    // The overshoot billed 30 against a 20 budget — floored at 0, never negative.
+    expect(cheapTransfers).toHaveLength(0);
+    // Both deficits register as budget-stopped — Severe by its own overshoot, Cheap by the floored-
+    // to-0 budget it inherited. Neither is silently dropped with no accounting.
+    expect(result.budgetSkipped).toBe(2);
+  });
+
+  it("still does not blame a donor whose affordable share exactly matched what it owed (no overshoot)", () => {
+    // Regression pin: the floor must only trigger on a genuine overshoot (budget goes negative), not
+    // merely on hitting 0 exactly. D1's stock-limited share of the deficit (10, at a live price equal
+    // to its frozen quote) exactly exhausts the budget — no overshoot — so D1 must not be the donor
+    // the skip names.
+    const d1 = sys("D1", 10, { goodId: "food", stock: 10, logisticsTarget: 0, donorReserve: 0, demand: 0 });
+    const d2 = sys("D2", 0, { goodId: "food", stock: 20, logisticsTarget: 0, donorReserve: 0, demand: 0 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 25, demand: 5 });
+    const costByDonor = (from: string) => (from === "D1" ? 1 : 2);
+
+    const result = matchFactionTransfers([d1, d2, deficit], costBooker(costByDonor));
+    expect(result.transfers).toMatchObject([
+      { goodId: "food", fromSystemId: "D1", toSystemId: "B", quantity: 10, cost: 10 },
+    ]);
+    expect(result.fundingBound).toEqual([{ goodId: "food", fromSystemId: "D2", toSystemId: "B" }]);
   });
 });
 

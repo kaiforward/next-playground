@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   laneKey,
+  laneEndpoints,
   laneCapacity,
   laneInvestor,
   laneUpkeepWork,
@@ -18,6 +19,16 @@ describe("laneKey", () => {
 
   it("is the sorted \"a|b\" pair", () => {
     expect(laneKey("system-2", "system-1")).toBe("system-1|system-2");
+  });
+});
+
+describe("laneEndpoints", () => {
+  it("is the inverse of laneKey", () => {
+    expect(laneEndpoints(laneKey("system-2", "system-1"))).toEqual(["system-1", "system-2"]);
+  });
+
+  it("throws on a malformed key with no \"|\"", () => {
+    expect(() => laneEndpoints("system-1")).toThrow(/malformed lane key/);
   });
 });
 

@@ -1700,11 +1700,10 @@ export async function runWorldTick(
       }
       const laneNetwork = laneNetworkCache.network;
       // One physical ledger for every hauling faction this run, so two factions booking the same
-      // lane see each other's load and congestion (docs/planned/logistics-lanes.md §2). The base
-      // `openEdge` here is never consulted directly — every real caller goes through `forHauler`
-      // below, which supplies its own hauler-specific traversability.
+      // lane see each other's load and congestion (docs/planned/logistics-lanes.md §2). The booker
+      // carries no traversability of its own — every real caller goes through `forHauler` below,
+      // which supplies its own hauler-specific traversability.
       const laneBooker = createRouteBooker(laneNetwork, {
-        openEdge: () => true,
         congestionMax: LANES.CONGESTION_MAX,
         catchUp: catchUpFactor(cadence.logistics),
       });
@@ -1767,10 +1766,11 @@ export async function runWorldTick(
       });
       // Decay reads this run's just-written attempted load (bookedLoad + blockedVolume), on the
       // same catchUp scale the booker priced capacity at (docs/planned/logistics-lanes.md §1). Gated
-      // on `logisticsResolves` alone, not the three-way outer gate: this block itself still runs
-      // (and rewrites bookedLoad/blockedVolume) on a tick where only migration or build resolves, and
-      // decaying against that same stale load a second time would double-accrue idleCycles the moment
-      // the three cadences diverge.
+      // on `logisticsResolves` alone, not the three-way outer gate: off a logistics boundary the
+      // directed-logistics processor above early-returns (`dueKeys.length === 0`), so `laneUpdates`
+      // is empty and `lanes` still carries forward last run's figures untouched — decaying against
+      // that same stale load a second time on a tick where only migration or build resolves would
+      // double-accrue idleCycles the moment the three cadences diverge.
       if (logisticsResolves) {
         lanes = decayLanes(lanes, catchUpFactor(cadence.logistics), {
           idleBufferCycles: LANES.IDLE_BUFFER_CYCLES,
@@ -1806,9 +1806,10 @@ export async function runWorldTick(
       }
 
       // Reach provider: a faction's ADJACENT unclaimed candidates (reach extends from any owned
-      // tier). `h === 1` — not `<= EXPANSION.REACH_JUMPS` — is the adjacency bound itself; the
-      // constant (kept at 1) is what `hopsCache`'s BFS radius above sizes against, not a filter this
-      // read still needs to apply as a range.
+      // tier), filtered on `h > EXPANSION.REACH_JUMPS` — genuinely a range bound now, though at the
+      // constant's live value of 1 it accepts only `h === 1`, identical to the adjacency-only
+      // reading before this filter existed. `hopsCache`'s BFS radius above still sizes against the
+      // same constant, so a future retune stays a safe superset here.
       const reachProvider = (factionId: string): ClaimCandidate[] => {
         const minHopByCandidate = new Map<string, number>();
         for (const s of systems) {
@@ -1816,7 +1817,7 @@ export async function runWorldTick(
           const neighbours = hops.get(s.id);
           if (!neighbours) continue;
           for (const [destId, h] of neighbours) {
-            if (h !== 1) continue;
+            if (h > EXPANSION.REACH_JUMPS) continue;
             if (factionBySystem.get(destId) !== null) continue; // only unclaimed
             const prev = minHopByCandidate.get(destId);
             if (prev === undefined || h < prev) minHopByCandidate.set(destId, h);
@@ -1994,14 +1995,18 @@ export async function runWorldTick(
 
     // ── realised per-cycle survival-good stock change (persisted; read by nothing else in the
     // tick) ── Written HERE — after directed logistics has applied its own stock updates AND after
-    // directed-build's founding staging draws and staged manifest delivery above, still inside this
-    // outer cycle-start block — because the interface is the realised change across the WHOLE
-    // cycle, and this is the last point in the tick that moves a survival good's `stock`. A founding
-    // donor's draw (`applyFoundingStagingDraws`) leaves its warehouse exactly as really as
-    // consumption does, so it belongs inside this figure rather than after it — the polarity makes
-    // that load-bearing rather than cosmetic. The one reader divides `stock` by `−stockChange` for a
-    // cycles-to-empty countdown, so a drain left outside the figure reports a longer runway than the
-    // donor actually has.
+    // directed-build's founding staging draws and staged manifest delivery above, gated on
+    // `migrationResolves` (equivalently `isCycleStart(tick, cadence.cycle)`) rather than the outer
+    // three-way gate above — because the interface is the realised change across the WHOLE cycle,
+    // and this is the last point in the tick that moves a survival good's `stock` ON A CYCLE
+    // BOUNDARY. A founding donor's draw (`applyFoundingStagingDraws`) leaves its warehouse exactly
+    // as really as consumption does, so it belongs inside this figure rather than after it — the
+    // polarity makes that load-bearing rather than cosmetic. The one reader divides `stock` by
+    // `−stockChange` for a cycles-to-empty countdown, so a drain left outside the figure reports a
+    // longer runway than the donor actually has. A logistics-only or build-only boundary tick (the
+    // cadences can diverge — see the harness `cadence` override) must NOT rewrite the baseline here:
+    // doing so would seed a sub-cycle snapshot the NEXT real cycle boundary then measures against,
+    // understating the whole-cycle drain and erring toward reassurance in the countdown.
     //
     // The window is a persisted baseline (`stockAtLastBoundary`), not a snapshot taken at this
     // tick's own start: goods-arrivals now credits a haul on whatever tick it lands, which may be
@@ -2019,7 +2024,7 @@ export async function runWorldTick(
     // current stock, the same "absent, not zero" convention `stockChange` itself uses. That is also
     // why an abandoned-this-cycle system needs no separate exclusion here: it is no longer in
     // `developedNow`, so this loop never touches it and the reset's clear stands untouched.
-    {
+    if (migrationResolves) {
       const developedNow = new Set(
         systems.filter((s) => isEconomicallyActive(s.control)).map((s) => s.id),
       );

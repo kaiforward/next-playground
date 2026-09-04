@@ -9,6 +9,7 @@ import {
   type RouteBookerFor,
   type PlannedTransfer,
 } from "@/lib/engine/directed-logistics";
+import type { LaneLoad, LogisticsBlockedEntry } from "@/lib/engine/lane-routing";
 import { toGoodMarketStates, type DrawBrakeCeiling } from "@/lib/tick/processors/good-market-state";
 import { freightArrivalTick } from "@/lib/engine/freight";
 import { LANES } from "@/lib/constants/lanes";
@@ -31,9 +32,9 @@ export interface DirectedLogisticsProcessorParams {
    *  in the match order below. */
   bookerFor(factionKey: string | null): RouteBookerFor;
   /** The shared booker's own `loads()` — every lane in the network, read back once after every
-   *  faction has matched, so an untouched lane resets to `{ booked: 0, blocked: 0 }` rather than
-   *  keeping a stale figure from the last run that used it. */
-  laneLoads(): ReadonlyMap<string, { booked: number; blocked: number }>;
+   *  faction has matched, so an untouched lane resets to `{ bookedLoad: 0, blockedVolume: 0 }`
+   *  rather than keeping a stale figure from the last run that used it. */
+  laneLoads(): ReadonlyMap<string, LaneLoad>;
   /** Outbound-leg scheduled inbound, keyed `"toSystemId|goodId"` (`lib/engine/freight.ts`
    *  `scheduledInbound`) — read at the matcher's feed site (the sink test) and at the dispatch
    *  clamp; omitted only by fixtures with no ledger to speak of. */
@@ -168,7 +169,7 @@ export async function runDirectedLogisticsProcessor(
   const unservedShortfallByMarketId = new Map<string, number>();
   // Calibration instrumentation only: every faction's `RouteBlocked` entries this cycle, tagged with
   // the hauling faction key — the harness's `contentionShortfallByFaction` reading.
-  const logisticsBlocked: Array<{ factionKey: string | null; laneKey: string; quantity: number; foreignShare: number }> = [];
+  const logisticsBlocked: LogisticsBlockedEntry[] = [];
   for (const factionId of orderedFactionKeys(byFaction.keys())) {
     const group = byFaction.get(factionId);
     if (!group) continue; // unreachable: factionId is drawn from byFaction's own keys
@@ -277,7 +278,7 @@ export async function runDirectedLogisticsProcessor(
   // reset a lane loaded on a prior run needs (docs/planned/logistics-lanes.md §1's decay reads
   // "attempted load", so a stale nonzero figure would misread as still-loaded).
   const laneLoadUpdates: LaneLoadUpdate[] = [...params.laneLoads().entries()].map(
-    ([key, { booked, blocked }]) => ({ key, bookedLoad: booked, blockedVolume: blocked }),
+    ([key, { bookedLoad, blockedVolume }]) => ({ key, bookedLoad, blockedVolume }),
   );
   if (laneLoadUpdates.length > 0) await world.applyLaneLoadUpdates(laneLoadUpdates);
 

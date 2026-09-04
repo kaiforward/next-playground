@@ -292,13 +292,13 @@ be reviewed while the prototype is being looked at. One PR if the owner prefers.
 | scheduled inbound per (system, good) | new | Task 3 `scheduledInbound` over the ledger; Task 4 consumes at the sink test |
 | dispatch sizing against `maxStock − stock − scheduled inbound` | exists cap (`marketBandForRow(...).maxStock`, processor `:177-181`) | Task 5 adds the inbound term at the transfer clamp |
 | arrival credit up to band cap; remainder = return leg toward donor | new | Task 3 arrivals stage |
-| flow row emitted at arrival with credited quantity | exists shape (`LogisticsFlowInsert`) | Task 3 stage writes it; Task 5 stops the dispatch-time write |
+| flow row emitted at arrival with credited quantity | exists shape (`ArrivalFlowInsert`) | Task 3 stage writes it; Task 5 stops the dispatch-time write |
 | interdiction query "flows crossing edge E in [t₁,t₂]" | new | Task 3 `flowsCrossingEdge` (no consumer this pass) |
 | lane upkeep = own term summed into `bills.maintenance` | new | Task 6 `laneUpkeepWork`; priced by the existing `maintenanceRatePerWork` (`lib/tick/processors/treasury.ts:134-138`) |
 | lane decay: idle buffer + whole-level-unused + reset-on-use | exists shape (`idleLevels` `lib/engine/infrastructure-decay.ts:95-96`, hysteresis `:130-137`) | Task 6 `decayLanes`, `LANES.IDLE_BUFFER_CYCLES` Task 1 |
 | lane-upgrade project in the committed queue, `origin` tagged | exists queue (`world.constructionProjects`, `orderOpenProjects` `lib/engine/construction.ts:312`) | Task 7 `kind: "lane_upgrade"` |
 | project dropped when an endpoint stops satisfying investability | exists site (`dropAbandonedBuildProjects`, `lib/world/tick.ts:1028-1034`) | Task 7 extends it |
-| effective level = built + queued | exists pattern (`queuedBuildLevelsBySystem`, `lib/engine/directed-build.ts:325-334`) | Task 8 `queuedLaneLevels` |
+| effective level = built + queued | exists pattern (`queuedBuildLevelsBySystem`, `lib/engine/directed-build.ts:325-334`) | Task 8 `planLaneUpgradeProposals`'s own in-flight set |
 | no further proposal while an upgrade is open | exists pattern (colony in-flight gate, `lib/engine/directed-build.ts:1570-1574`) | Task 8 |
 | planner value = blocked volume the upgrade unblocks | new | Task 8 (`WorldLane.blockedVolume`, Task 5) on the existing ROI order (`orderProposals`, `construction.ts:355`) |
 | AI claiming: adjacent candidates, score floor softened | exists (`proposeFactionClaims` `lib/engine/expansion.ts:81-92`; `EXPANSION.REACH_JUMPS`/`SCORE_FLOOR`, `lib/constants/expansion.ts:20-28` — spec's `MIN_CLAIM_SCORE` is `SCORE_FLOOR` in code) | Task 8 |
@@ -385,7 +385,7 @@ per-hop floor); `scheduledInbound(ledger): ReadonlyMap<"systemId|goodId", number
 only); `flowsCrossingEdge(ledger, laneKey, fromTick, toTick): WorldPendingArrival[]`.
 `GoodsArrivalsWorld { getDueArrivals(tick); getMarketCaps(keys): Map<key, { stock; maxStock }>;
 creditMarkets(updates: { id; stock }[]); settleArrivals(applied: { id; credited; returned:
-WorldPendingArrival | null }[]); appendFlows(flows: LogisticsFlowInsert[]) }`. Processor result:
+WorldPendingArrival | null }[]); appendFlows(flows: ArrivalFlowInsert[]) }`. Processor result:
 `{ credited: number; returned: number; returnedRows: number; overshootVolume: number }` (instrumentation only). Rules the
 stage applies, verbatim from the spec: credit up to the band cap; remainder becomes a `return` leg
 toward the donor over the reversed edges at the same delay; flow row written for the credited
@@ -492,8 +492,7 @@ files that switch on `kind` today (grep-walked; `tsc` finds the exhaustive ones,
 defaulted ones).
 Interface: `WorldLaneUpgradeProject extends WorldConstructionProjectBase { kind: "lane_upgrade";
 laneKey: string; levels: number }` with `workTotal = levels × UPGRADE_WORK_PER_LEVEL`; funding lands
-whole levels onto `WorldLane.level` through `fundQueueWithFloor`'s existing landing path;
-`queuedLaneLevels(openProjects): ReadonlyMap<laneKey, number>` beside `queuedBuildLevelsBySystem`.
+whole levels onto `WorldLane.level` through `fundQueueWithFloor`'s existing landing path.
 Proves: a funded lane project lands a level on the lane row and shrinks its own remaining levels; an
 abandonment at either endpoint drops the open lane project and refunds nothing (matching build
 projects); per-system folds ignore lane projects rather than throwing on a missing `systemId`

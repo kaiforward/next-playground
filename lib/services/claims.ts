@@ -3,19 +3,10 @@
  * (docs/planned/logistics-lanes.md §1). Unlike `orderBuild`/`orderColony`, this is not funded
  * through the construction pool: it costs nothing but time, gated by `PLAYER_CLAIM_COOLDOWN`.
  */
-import { getWorld, hasWorld, setWorld } from "@/lib/world/store";
-import type { World } from "@/lib/world/types";
+import { setWorld } from "@/lib/world/store";
+import { requireSeat } from "@/lib/services/player-seat";
 import { LANES } from "@/lib/constants/lanes";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
-
-type Seat = { world: World; factionId: string };
-
-function requireSeat(): Seat | { error: string } {
-  if (!hasWorld()) return { error: "No world loaded." };
-  const world = getWorld();
-  if (!world.player) return { error: "This world has no player seat." };
-  return { world, factionId: world.player.controlledFactionId };
-}
 
 export type ClaimSystemResult =
   | { ok: true; data: { systemId: string; nextClaimTick: number } }
@@ -31,8 +22,7 @@ export type ClaimSystemResult =
 export function claimSystem(input: { systemId: string }): ClaimSystemResult {
   const seat = requireSeat();
   if ("error" in seat) return { ok: false, error: seat.error };
-  const player = seat.world.player;
-  if (!player) return { ok: false, error: "This world has no player seat." };
+  const { player } = seat;
 
   const system = seat.world.systems.find((s) => s.id === input.systemId);
   if (!system) return { ok: false, error: `System ${input.systemId} not found.` };

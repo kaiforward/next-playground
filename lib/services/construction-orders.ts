@@ -7,7 +7,7 @@
  * HTTP handler mid-tick — these synchronous mutations are strictly ordered between ticks and the
  * open set they append to is exactly what the next directed-build cycle funds.
  */
-import { getWorld, hasWorld, setWorld } from "@/lib/world/store";
+import { setWorld } from "@/lib/world/store";
 import type { World, WorldSystem, WorldBuildProject, WorldColonyEstablishProject, WorldConstructionProject, WorldLaneUpgradeProject, WorldMarket } from "@/lib/world/types";
 import { computeBuildOptions, buildSiteFromSystem } from "@/lib/engine/build-options";
 import { sizeColonyEstablish, queuedBuildLevelsAt } from "@/lib/engine/directed-build";
@@ -17,15 +17,7 @@ import { colonyEligibility, sizingParams } from "@/lib/services/colony-eligibili
 import { COLONY_BLOCK_COPY } from "@/lib/types/colonisation";
 import { laneInvestor } from "@/lib/engine/lanes";
 import { LANES } from "@/lib/constants/lanes";
-
-type Seat = { world: World; factionId: string };
-
-function requireSeat(): Seat | { error: string } {
-  if (!hasWorld()) return { error: "No world loaded." };
-  const world = getWorld();
-  if (!world.player) return { error: "This world has no player seat." };
-  return { world, factionId: world.player.controlledFactionId };
-}
+import { requireSeat, type Seat } from "@/lib/services/player-seat";
 
 function playerSystem(seat: Seat, systemId: string): WorldSystem | { error: string } {
   const system = seat.world.systems.find((s) => s.id === systemId);
@@ -304,8 +296,7 @@ export type SetAutomationResult =
 export function setAutomation(input: { build: boolean; colonisation: boolean; lanes: boolean }): SetAutomationResult {
   const seat = requireSeat();
   if ("error" in seat) return { ok: false, error: seat.error };
-  const player = seat.world.player;
-  if (!player) return { ok: false, error: "This world has no player seat." };
+  const { player } = seat;
   const automation = { ...player.automation, ...input };
   setWorld({ ...seat.world, player: { ...player, automation } });
   return { ok: true, data: automation };

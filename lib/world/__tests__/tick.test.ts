@@ -2267,6 +2267,35 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
     expect(assessed).not.toBe(0); // non-vacuous: a real reading, not a coincidental zero
   });
 
+  it("does not touch stockAtLastBoundary or stockChange on a logistics-only boundary tick — gated on migrationResolves, not the outer three-way block", async () => {
+    // Diverging cadence: logistics resolves every 12 ticks, the economy cycle only every 24 — the
+    // same logistics-12/cycle-24 pattern the lane-decay tests use elsewhere in this file. Tick 60 is
+    // a logistics-only boundary (60 % 12 === 0, 60 % 24 === 12, so migration does NOT resolve there),
+    // strictly between the cycle boundaries at 48 and 72.
+    const cadence: TickCadence = { cycle: 24, logistics: 12, construction: NEVER };
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const systemId = base.factions[0].homeworldId;
+    const world: World = {
+      ...base,
+      markets: base.markets.map((m) =>
+        m.systemId === systemId && m.goodId === "water" ? { ...m, stock: 500 } : m,
+      ),
+    };
+
+    // Two full cycles at this cadence: the first (tick 24) seeds the baseline with no assessed
+    // change yet (the absence convention pinned above); the second (tick 48) produces an ASSESSED
+    // `stockChange` this test can watch for staleness.
+    let current = await runTicks(world, 24, cadence);
+    current = await runTicks(current, 24, cadence);
+    const beforeBaseline = marketRow(current, systemId, "water").stockAtLastBoundary;
+    const beforeChange = requireStockChange(current, systemId, "water");
+
+    const afterLogisticsOnly = await tickTo(current, 60, cadence);
+
+    expect(marketRow(afterLogisticsOnly, systemId, "water").stockAtLastBoundary).toBe(beforeBaseline);
+    expect(requireStockChange(afterLogisticsOnly, systemId, "water")).toBe(beforeChange);
+  });
+
   it("a stored stockChange of exactly 0 survives a tick this row's write site never visits, distinguishably from absent", async () => {
     // The hazard is representational: 0 is falsy, so a merge written as `value || undefined` (or a
     // truthiness-guarded copy) would silently turn a legitimate no-change cycle into "absent" — the
