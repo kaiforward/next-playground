@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   valueRampColorPixi, rampFloorPixi, rampTopPixi, ABSENT_COLOR, rampCssStops, ABSENT_CSS, deEmphasise,
-  provisionLegendStops,
+  provisionLegendStops, lanesLegendStops,
 } from "@/components/map/pixi/value-ramp";
 import { SUPPLIED_PROVISION, RATIONING_PROVISION, DEPRIVED_PROVISION } from "@/lib/constants/economy";
+import { LANE_BAND_COLOR } from "@/components/map/pixi/theme";
 
 function channels(color: number): [number, number, number] {
   return [(color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff];
@@ -169,6 +170,38 @@ describe("provisionLegendStops — stepped legend carries stop POSITIONS, not ev
       const [r, g, b] = [16, 8, 0].map((shift) => (valueRampColorPixi(value, 1, "provision") >> shift) & 0xff);
       expect(stops[i].css, `band ${i} @ ${value}`).toBe(`rgb(${r}, ${g}, ${b})`);
     }
+  });
+});
+
+describe("valueRampColorPixi — lanes mode, stepped on the band index", () => {
+  it("returns exactly three distinct colours for the three band indexes", () => {
+    const fine = valueRampColorPixi(0, 1, "lanes");
+    const busy = valueRampColorPixi(1, 1, "lanes");
+    const congested = valueRampColorPixi(2, 1, "lanes");
+    expect(new Set([fine, busy, congested]).size).toBe(3);
+    expect(fine).toBe(LANE_BAND_COLOR.fine);
+    expect(busy).toBe(LANE_BAND_COLOR.busy);
+    expect(congested).toBe(LANE_BAND_COLOR.congested);
+  });
+  it("the same colour reads for any value within a band — 0.4 reads fine, 1.6 reads busy", () => {
+    expect(valueRampColorPixi(0.4, 1, "lanes")).toBe(LANE_BAND_COLOR.fine);
+    expect(valueRampColorPixi(1.6, 1, "lanes")).toBe(LANE_BAND_COLOR.busy);
+  });
+  it("ignores referenceMax entirely — the index is the value, never divided by a scope max", () => {
+    expect(valueRampColorPixi(1.2, 1, "lanes")).toBe(valueRampColorPixi(1.2, 1000, "lanes"));
+  });
+  it("clamps a value above the top band to congested, and below zero to fine", () => {
+    expect(valueRampColorPixi(9, 1, "lanes")).toBe(LANE_BAND_COLOR.congested);
+    expect(valueRampColorPixi(-3, 1, "lanes")).toBe(LANE_BAND_COLOR.fine);
+  });
+});
+
+describe("lanesLegendStops — stepped legend for the Lanes mode", () => {
+  it("returns one stop per band, in fine/busy/congested order, matching the fill colours", () => {
+    const stops = lanesLegendStops();
+    expect(stops.map((s) => s.position)).toEqual([0, 1, 2]);
+    expect(stops[0].css).not.toBe(stops[1].css);
+    expect(stops[1].css).not.toBe(stops[2].css);
   });
 });
 

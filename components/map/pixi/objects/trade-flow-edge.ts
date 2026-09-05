@@ -1,6 +1,7 @@
 import { Container, Graphics } from "pixi.js";
 import { cumulativeLengths, pointAtFractionInto, type Point } from "../flow-arc";
 import { SIZES } from "../theme";
+import type { LaneBand } from "./lane-band";
 
 /** Gap (world units) between the arrowhead tip and the destination circle edge. */
 const ARROW_TIP_GAP = 2;
@@ -49,7 +50,7 @@ export class TradeFlowEdge {
   readonly particleCount: number;
   readonly fromSystemId: string;
   readonly toSystemId: string;
-  readonly dominantGoodId: string;
+  readonly band: LaneBand;
   private particles: Particle[] = [];
   private path: Point[];
   private cum: number[];
@@ -67,12 +68,12 @@ export class TradeFlowEdge {
     particleCount: number,
     color: number,
     style: FlowEdgeStyle,
-    identity: { fromSystemId: string; toSystemId: string; dominantGoodId: string },
+    identity: { fromSystemId: string; toSystemId: string; band: LaneBand },
   ) {
     this.particleCount = particleCount;
     this.fromSystemId = identity.fromSystemId;
     this.toSystemId = identity.toSystemId;
-    this.dominantGoodId = identity.dominantGoodId;
+    this.band = identity.band;
     this.path = path;
     const { cum, total } = cumulativeLengths(path);
     this.cum = cum;

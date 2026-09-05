@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Application, Container } from "pixi.js";
 import type { FederatedPointerEvent } from "pixi.js";
 import { Camera } from "./camera";
@@ -17,12 +17,14 @@ import { CellHighlightLayer } from "./layers/cell-highlight-layer";
 import { TradeFlowLayer, LOGISTICS_FLOW_CONFIG } from "./layers/trade-flow-layer";
 import { setupInteractions } from "./interactions";
 import { findFactionAt } from "./faction-hit-test";
-import { BG_COLOR, FACTION_SELECT_ZOOM, LANE_HIT_TOLERANCE_PX } from "./theme";
+import { findLaneAt, indexSystemsById } from "./lane-hit-test";
+import { BG_COLOR, FACTION_SELECT_ZOOM, LANE_HIT_TOLERANCE_PX, LANE_HIT_END_GAP_PX } from "./theme";
 import { buildSystemCells, type SystemCells } from "./voronoi-cache";
 import type { MapData } from "@/lib/hooks/use-map-data";
 import type { StarSystemInfo, AtlasData } from "@/lib/types/game";
 import type { ViewportBounds } from "@/lib/types/game";
 import { isValueMapMode, isFactionInteractiveMode, type MapMode } from "@/lib/types/map";
+import { laneBandIndex, type LaneBand } from "./objects/lane-band";
 
 /** Shared empty map for value-choropleth modes with no data yet (avoids a fresh Map per render). */
 const EMPTY = new Map<string, number>();
@@ -61,6 +63,10 @@ export interface PixiMapCanvasProps {
   migrationBySystem?: Map<string, number>;
   /** Per-system Provisioned (0..1, assessed systems only) for the provision choropleth, or empty when mode is off. */
   provisionBySystem?: Map<string, number>;
+  /** Worst `LaneBand` per system (`MapData.laneBandBySystem`) — feeds the Lanes mode's zoomed-out
+   *  cell tint. Always computed by `useMapData` (cheap), so this is passed unconditionally rather
+   *  than gated on `mapMode === "lanes"` the way the other value maps are gated on their own mode. */
+  laneBandBySystem?: Map<string, LaneBand>;
   /** The focused faction (from the /factions/[id] route), or null. Value modes re-normalise pop/development to it and de-emphasise the rest; stability and provision dim but do not rescale. */
   selectedFactionId?: string | null;
 }
@@ -104,6 +110,7 @@ export function PixiMapCanvas({
   developmentBySystem,
   migrationBySystem,
   provisionBySystem,
+  laneBandBySystem,
   selectedFactionId = null,
 }: PixiMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -114,9 +121,21 @@ export function PixiMapCanvas({
   const callbacksRef = useRef({ onSelectSystem, onEmptyClick, onSelectFaction, onSelectLane });
   callbacksRef.current = { onSelectSystem, onEmptyClick, onSelectFaction, onSelectLane };
 
-  // Latest mapData for the once-mounted lane hit-test closure (click only, not per-frame).
+  // Latest mapData for the once-mounted lane hit-test closures (click, and the per-frame hover).
   const mapDataRef = useRef(mapData);
   mapDataRef.current = mapData;
+
+  // The lane hit-test's own lane shape, built once per connections change rather than on every
+  // hover frame — the hover block runs `findLaneAt` every frame the pointer moves.
+  const hitTestLanes = useMemo(
+    () => mapData.connections.map((c) => ({ key: c.laneKey, aId: c.fromId, bId: c.toId })),
+    [mapData.connections],
+  );
+  const hitTestLanesRef = useRef(hitTestLanes);
+  hitTestLanesRef.current = hitTestLanes;
+  const hitTestSystemsById = useMemo(() => indexSystemsById(mapData.systems), [mapData.systems]);
+  const hitTestSystemsByIdRef = useRef(hitTestSystemsById);
+  hitTestSystemsByIdRef.current = hitTestSystemsById;
 
   // Live map mode for the once-mounted interaction closures (ticker hover + faction hit-test): faction
   // targeting is gated to modes that show factions (political + value), inert in regions/none.
@@ -125,6 +144,25 @@ export function PixiMapCanvas({
 
   const onViewportChangeRef = useRef(onViewportChange);
   onViewportChangeRef.current = onViewportChange;
+
+  // The choropleth deals only in numbers (`setValues`); the Lanes mode's cell tint carries a
+  // `LaneBand`, so it converts through `laneBandIndex` here rather than teaching the layer about
+  // a second value type.
+  const laneBandIndexBySystem = useMemo(() => {
+    if (!laneBandBySystem) return EMPTY;
+    const result = new Map<string, number>();
+    for (const [systemId, band] of laneBandBySystem) result.set(systemId, laneBandIndex(band));
+    return result;
+  }, [laneBandBySystem]);
+
+  // Per-lane band, for the logistics flow layer's particle count/colour — built from the same
+  // `ConnectionData.band` the base lane layer and the Lanes-mode choropleth read, so all three
+  // presentations of a lane's status agree.
+  const bandByLaneKey = useMemo(() => {
+    const result = new Map<string, LaneBand>();
+    for (const conn of mapData.connections) result.set(conn.laneKey, conn.band);
+    return result;
+  }, [mapData.connections]);
 
   // Store previous viewport state to skip no-op callbacks (avoids 60 setTimeout/clearTimeout per sec)
   const lastViewportRef = useRef({ minX: 0, minY: 0, maxX: 0, maxY: 0, zoom: 0 });
@@ -228,7 +266,6 @@ export function PixiMapCanvas({
       // Setup interactions
       interactionCleanup = setupInteractions({
         app,
-        systemLayer,
         getCallbacks: () => callbacksRef.current,
         getCellContext: () => ({
           cells: pixiRef.current?.cells ?? null,
@@ -239,10 +276,11 @@ export function PixiMapCanvas({
           selectActive: camera.zoom < FACTION_SELECT_ZOOM && isFactionInteractiveMode(mapModeRef.current),
         }),
         getLaneContext: () => ({
-          lanes: mapDataRef.current.connections.map((c) => ({ key: c.laneKey, aId: c.fromId, bId: c.toId })),
-          systems: mapDataRef.current.systems,
-          // `findLaneAt` measures in world units; convert the screen-pixel tolerance at the click's zoom.
+          lanes: hitTestLanesRef.current,
+          systemsById: hitTestSystemsByIdRef.current,
+          // `findLaneAt` measures in world units; convert the screen-pixel tolerance/gap at the click's zoom.
           tolerance: LANE_HIT_TOLERANCE_PX / camera.zoom,
+          endGap: LANE_HIT_END_GAP_PX / camera.zoom,
         }),
       });
 
@@ -257,6 +295,8 @@ export function PixiMapCanvas({
         hoverScreen = null;
         cellHighlightLayer.setHovered(null);
         cellHighlightLayer.setHoveredFaction(null);
+        connectionLayer.setHovered(null);
+        systemLayer.setHovered(null);
         pixi.stage.cursor = "default";
       };
       canvas.addEventListener("pointerleave", clearHover);
@@ -309,6 +349,9 @@ export function PixiMapCanvas({
 
         // Connections follow system layer alpha
         connectionLayer.updateVisibility(frustum, lod, lod.systemLayerAlpha);
+        // Congested-lane pulse (Lanes mode only, and only while any lane is congested — see
+        // ConnectionLayer.update's own early-out).
+        connectionLayer.update(dtMs);
 
         territoryLayer.updateVisibility(lod);
         politicalTerritoryLayer.updateVisibility(lod);
@@ -328,13 +371,33 @@ export function PixiMapCanvas({
             const factionId = unions ? findFactionAt(unions, wh.x, wh.y) : null;
             cellHighlightLayer.setHoveredFaction(factionId);
             cellHighlightLayer.setHovered(null);
+            connectionLayer.setHovered(null);
+            systemLayer.setHovered(null);
             pixi.stage.cursor = factionId ? "pointer" : "default";
           } else {
-            const cells = pixiRef.current?.cells;
-            const hoveredId = cells ? cells.findSystemAt(wh.x, wh.y) : null;
-            cellHighlightLayer.setHovered(hoveredId);
+            // Lane wins over the cell, mirroring the click's own precedence (`resolveMapClick`) —
+            // the pointer never lights both.
+            const laneAt = findLaneAt(
+              wh,
+              hitTestLanesRef.current,
+              hitTestSystemsByIdRef.current,
+              LANE_HIT_TOLERANCE_PX / camera.zoom,
+              LANE_HIT_END_GAP_PX / camera.zoom,
+            );
+            if (laneAt) {
+              connectionLayer.setHovered(laneAt);
+              cellHighlightLayer.setHovered(null);
+              systemLayer.setHovered(null);
+              pixi.stage.cursor = "pointer";
+            } else {
+              connectionLayer.setHovered(null);
+              const cells = pixiRef.current?.cells;
+              const hoveredId = cells ? cells.findSystemAt(wh.x, wh.y) : null;
+              cellHighlightLayer.setHovered(hoveredId);
+              systemLayer.setHovered(hoveredId);
+              pixi.stage.cursor = hoveredId ? "pointer" : "default";
+            }
             cellHighlightLayer.setHoveredFaction(null);
-            pixi.stage.cursor = hoveredId ? "pointer" : "default";
           }
           hoverScreen = null;
         }
@@ -419,8 +482,12 @@ export function PixiMapCanvas({
       p.politicalTerritoryLayer.getFactionUnions(),
       p.politicalTerritoryLayer.getFactionColors(),
     );
+    // Investor colours arrive here (the political layer just re-synced) — re-run setMode so the
+    // Lanes mode picks them up without waiting on a separate mode-toggle render.
+    p.connectionLayer.setMode(mapModeRef.current, p.politicalTerritoryLayer.getFactionColors());
     p.cellHighlightLayer.setCells(cells);
     p.cellHighlightLayer.setFactionUnions(p.politicalTerritoryLayer.getFactionUnions());
+    p.systemLayer.setCells(cells);
   }, [atlasData.systems, atlasData.factions, atlasData.meta.mapSize, pixiReady, regionInfos]);
 
   // ── Toggle which territory layer is visible ────────────────────────
@@ -436,6 +503,7 @@ export function PixiMapCanvas({
     p.politicalTerritoryLayer.setActive(mapMode === "political");
     p.valueChoroplethLayer.setActive(isValueMapMode(mapMode));
     p.systemLayer.setMode(mapMode);
+    p.connectionLayer.setMode(mapMode, p.politicalTerritoryLayer.getFactionColors());
   }, [mapMode, pixiReady]);
 
   // ── Highlight the selected cell (the open /system/[id] panel) ──
@@ -475,8 +543,15 @@ export function PixiMapCanvas({
       // Reference is passed for shape-consistency with the other setValues calls, but the ramp ignores
       // it entirely for this mode (see valueRampColorPixi) — provision's band edges are absolute.
       p.valueChoroplethLayer.setValues(provisionBySystem ?? EMPTY, provisionBySystem ?? EMPTY, "provision", populationBySystem ?? EMPTY);
+    } else if (mapMode === "lanes") {
+      // Reference is unused (the ramp steps on the band index, never referenceMax) but passed for
+      // shape-consistency, like provision above.
+      p.valueChoroplethLayer.setValues(laneBandIndexBySystem, laneBandIndexBySystem, "lanes");
     }
-  }, [mapMode, stabilityBySystem, populationBySystem, developmentBySystem, migrationBySystem, provisionBySystem, pixiReady]);
+  }, [
+    mapMode, stabilityBySystem, populationBySystem, developmentBySystem, migrationBySystem,
+    provisionBySystem, laneBandIndexBySystem, pixiReady,
+  ]);
 
   // ── Value-mode faction focus (scope) — driven by the /factions/[id] route ──
   // Separate from the per-tick value effect: scope changes only on mode/faction change, not every tick.
@@ -494,8 +569,8 @@ export function PixiMapCanvas({
     // System objects and connections driven by mapData (viewport detail)
     p.systemLayer.sync(mapData.systems, selectedSystem?.id ?? null);
     p.connectionLayer.sync(mapData.connections, mapData.systems, selectedLaneKey);
-    p.logisticsFlowLayer.sync(mapData.systems, mapData.logisticsFlowEdges);
-  }, [mapData, selectedSystem, selectedLaneKey, pixiReady]);
+    p.logisticsFlowLayer.sync(mapData.systems, mapData.logisticsFlowEdges, bandByLaneKey);
+  }, [mapData, selectedSystem, selectedLaneKey, bandByLaneKey, pixiReady]);
 
   // ── Initial fitView (only when no centerTarget) ────────────────
   useEffect(() => {

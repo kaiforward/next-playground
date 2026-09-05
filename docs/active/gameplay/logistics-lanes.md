@@ -214,17 +214,20 @@ client swap rather than a substrate change. Negotiated transit rights beyond the
 
 ## 6. Surfaces
 
-- **Map.** Every lane draws as a segment between its two systems, styled by `laneStyle`
-  (`components/map/pixi/objects/lane-style.ts`) from its fuel-cost tier (base weight/alpha,
-  unchanged from generation), its invested level (widens the line further), and its load
-  (`bookedLoad ÷ capacity`, colours grey → amber) — turning red only when `blockedVolume > 0` this
-  run, never merely "nearly full". There is no separate chord overlay any more: the Logistics
-  overlay's convoy particles ride the lane network itself, one segment per lane a haul is
+- **Map.** Every lane always draws as a quiet, uniform slate segment between its two systems (width
+  by invested level, plus a touch more for a major fuel tier) in every map mode — no colour, no
+  dashes, no load or blocked read on this base layer. The **Lanes** map mode is where a lane carries
+  meaning: the investor faction's colour (slate + dashed when no faction holds both endpoints), a
+  stronger level-driven width, a stepped fine/busy/congested brightness band, and a red pulse
+  overlay on a congested lane (`blockedVolume > 0` this run). Zoomed out, the same mode tints every
+  system's cell by the worst band among its lanes. The former Logistics overlay's convoy particles
+  fold into this mode too: they ride the lane network itself, one segment per lane a haul is
   PHYSICALLY crossing right now — a multi-hop haul's particle moves lane by lane along its route
   over time, never lighting every lane it will ever cross at once — read from the scheduled-freight
   ledger against the hop it's currently on (`getTradeFlowEdges`, `lib/services/trade-flow.ts`;
-  `currentHopIndex`, `lib/engine/freight.ts`). A lane is selectable — within a screen-pixel
-  tolerance of its segment, behind a direct star hit — and opens its route-docked card
+  `currentHopIndex`, `lib/engine/freight.ts`), with count and colour keyed to the same band. A lane
+  is selectable — within a screen-pixel tolerance of its segment, sparing a gap at each end so a
+  click at the star itself falls through to the cell — and opens its route-docked card
   (`/lane/:key`) naming level, capacity, current load vs capacity, upkeep, cargo currently in flight,
   the open upgrade project, and the invest verb. The verb has three states: present and live when
   the player invests in the lane; present but disabled, naming the one endpoint standing in the way,

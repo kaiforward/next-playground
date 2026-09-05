@@ -4,10 +4,11 @@ import type { ValueMode } from "./value-ramp";
  * Compact label for an aggregated choropleth value. Population reads as a count with SI-ish K/M
  * suffixes (1-decimal in the low-millions, whole above 10M); development is a raw tier-weighted
  * development-points score, rendered as a rounded absolute number; stability is a 0..1 score, rendered
- * as a 0–100 integer (×100); migration and provision are colour-only (no on-map numbers — see
- * `SHOWS_NUMBERS` in value-choropleth-layer.ts) but both still format, migration as a raw rounded
- * value and provision as a 0..1 fraction ×100 like stability, so the function stays honest if either
- * is ever surfaced (e.g. a future hover readout).
+ * as a 0–100 integer (×100); migration, provision and lanes are colour-only (no on-map numbers — see
+ * `SHOWS_NUMBERS` in value-choropleth-layer.ts) but all three still format — migration as a raw
+ * rounded value, provision as a 0..1 fraction ×100 like stability, and lanes (a 0/1/2 band index)
+ * falls through the same ×100 path though nothing reads it today — so the function stays honest if
+ * any of them is ever surfaced (e.g. a future hover readout).
  */
 export function formatValueNumber(value: number, mode: ValueMode): string {
   if (mode === "population") {

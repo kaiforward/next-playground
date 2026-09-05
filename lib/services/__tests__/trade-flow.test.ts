@@ -274,7 +274,6 @@ describe("getTradeFlowEdges", () => {
     expect(logisticsEdge!.fromSystemId).toBe(system.id);
     expect(logisticsEdge!.toSystemId).toBe(partnerA.id);
     expect(logisticsEdge!.totalVolume).toBe(40);
-    expect(logisticsEdge!.dominantGoodId).toBe("water");
   });
 
   it("emits an edge only on the lane a multi-hop route is CURRENTLY crossing — never both hops at once", () => {
