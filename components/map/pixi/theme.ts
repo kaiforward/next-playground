@@ -42,6 +42,20 @@ export const LANE_LOAD_COLOR = {
   blocked: 0xef4444, // red-500 — blockedVolume > 0 this run
 } as const;
 
+/** Presentation-only threshold on `bookedLoad / capacity` (unclamped) that separates the "busy"
+ *  band from "fine" (`objects/lane-band.ts`) — set by eye in the visual smoke, not a mechanic
+ *  read anywhere else. Congestion (`blockedVolume > 0`) always wins over this regardless of load. */
+export const LANE_BUSY_LOAD_FRACTION = 0.75;
+
+/** Status colours for the three lane bands (`objects/lane-band.ts`) — the design system's
+ *  green/amber/red triple (docs/active/design-system/theme.md → Status Colors), reused here rather
+ *  than duplicated as a fourth colour set alongside `LANE_LOAD_COLOR`. */
+export const LANE_BAND_COLOR: Record<"fine" | "busy" | "congested", number> = {
+  fine: 0x22c55e, // green-500
+  busy: 0xf59e0b, // amber-500
+  congested: 0xef4444, // red-500
+} as const;
+
 /** The major (crossing-priced) tier's wide soft glow underlay, drawn under the load-coloured core
  *  line — a structural "lit pathway" treatment, independent of the colour the load ramp picks. */
 export const LANE_MAJOR_GLOW = {
