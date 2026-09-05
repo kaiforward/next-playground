@@ -3,7 +3,7 @@ import { buildLaneNetwork, createRouteBooker, type LaneNetwork } from "../lane-r
 import { laneKey } from "../lanes";
 import { dijkstra } from "../pathfinding";
 import type { ConnectionInfo } from "../navigation";
-import type { WorldLane } from "@/lib/world/types";
+import type { WorldLane, WorldPendingArrival } from "@/lib/world/types";
 
 /**
  * Fixture graph: a cheap 2-hop path S → A → T (fuel 5 + 5 = 10) and a much pricier alternate
@@ -283,6 +283,280 @@ describe("RouteBooker.forHauler — shared ledger, per-hauler openEdge", () => {
     // forced onto the alternate: 100 fuel × congestion multiplier at load 3/capacity 100
     // (1 + (3-1) × 0.03 = 1.06)
     expect(priceFromT_B("S")).toBeCloseTo(106, 6);
+  });
+});
+
+// ── Windowed booking (docs/active/gameplay/logistics-lanes.md §2: "a lane is booked for the cycle
+// the cargo crosses it, not the cycle it is dispatched") ─────────────────────────────────────────
+
+function pendingArrival(over: Partial<WorldPendingArrival> & { routeEdges: string[] }): WorldPendingArrival {
+  return {
+    id: "seed",
+    factionId: null,
+    fromSystemId: "donor",
+    toSystemId: "sink",
+    goodId: "water",
+    quantity: 0,
+    dispatchTick: 0,
+    arrivalTick: 0,
+    leg: "outbound",
+    ...over,
+  };
+}
+
+describe("RouteBooker — windowed booking", () => {
+  it("(a) a 3-lane route whose later crossings start in later windows books only lane 1 in window 0", () => {
+    // Linear chain S-A-B-T, fuel 10 per hop, freightSpeed 1, windowTicks 10, now 0:
+    // hop0 (S-A) starts at offset 0 -> window 0; hop1 (A-B) at offset 10 -> window 1;
+    // hop2 (B-T) at offset 20 -> window 2. Capacities are ample so nothing saturates.
+    const lanes = [
+      buildFixtureLane("S", "A", 0),
+      buildFixtureLane("A", "B", 0),
+      buildFixtureLane("B", "T", 0),
+    ];
+    const connections: ConnectionInfo[] = [
+      { fromSystemId: "S", toSystemId: "A", fuelCost: 10 },
+      { fromSystemId: "A", toSystemId: "S", fuelCost: 10 },
+      { fromSystemId: "A", toSystemId: "B", fuelCost: 10 },
+      { fromSystemId: "B", toSystemId: "A", fuelCost: 10 },
+      { fromSystemId: "B", toSystemId: "T", fuelCost: 10 },
+      { fromSystemId: "T", toSystemId: "B", fuelCost: 10 },
+    ];
+    const network = buildLaneNetwork(connections, lanes, () => 1000);
+    const booker = createRouteBooker(network, {
+      congestionMax: CONGESTION_MAX,
+      catchUp: 1,
+      windowTicks: 10,
+      now: 0,
+      freightSpeed: 1,
+    });
+    const h = hauler(booker);
+
+    const booking = h.routeAndBook("S", "T", 50);
+    expect(booking?.placements).toEqual([
+      { quantity: 50, edges: [laneKey("S", "A"), laneKey("A", "B"), laneKey("B", "T")], perUnit: 30, fuelTotal: 30 },
+    ]);
+
+    const loads = booker.loads();
+    expect(loads.get(laneKey("S", "A"))).toEqual({ bookedLoad: 50, blockedVolume: 0 });
+    expect(loads.get(laneKey("A", "B"))).toEqual({ bookedLoad: 0, blockedVolume: 0 });
+    expect(loads.get(laneKey("B", "T"))).toEqual({ bookedLoad: 0, blockedVolume: 0 });
+
+    expect(booker.loadAt(laneKey("S", "A"), 0)).toBe(50);
+    expect(booker.loadAt(laneKey("A", "B"), 1)).toBe(50);
+    expect(booker.loadAt(laneKey("B", "T"), 2)).toBe(50);
+  });
+
+  it("(b) seeding: an in-flight ledger row filling a lane's window 0 excludes a new booking there and blocks it", () => {
+    const lanes = [buildFixtureLane("S", "T", 0)];
+    const connections: ConnectionInfo[] = [
+      { fromSystemId: "S", toSystemId: "T", fuelCost: 5 },
+      { fromSystemId: "T", toSystemId: "S", fuelCost: 5 },
+    ];
+    const network = buildLaneNetwork(connections, lanes, () => 10);
+    const seedRow = pendingArrival({
+      id: "in-flight",
+      factionId: "seed-faction",
+      routeEdges: [laneKey("S", "T")],
+      quantity: 10,
+      dispatchTick: 100,
+    });
+    const booker = createRouteBooker(network, {
+      congestionMax: CONGESTION_MAX,
+      catchUp: 1,
+      windowTicks: 10,
+      now: 100,
+      freightSpeed: 1,
+      scheduled: [seedRow],
+    });
+
+    // Seeding alone fills window 0 to capacity.
+    expect(booker.loadAt(laneKey("S", "T"), 0)).toBe(10);
+
+    const h = hauler(booker, OPEN_ALL, "hauler-faction");
+    const booking = h.routeAndBook("S", "T", 5);
+    expect(booking?.placements).toEqual([]);
+    expect(booking?.blocked).toEqual([{ laneKey: laneKey("S", "T"), quantity: 5, foreignShare: 1 }]);
+
+    // The seeded row itself is a plain data fixture — the booker never mutates it.
+    expect(seedRow.quantity).toBe(10);
+  });
+
+  it("(c) earlier outranks later: a seeded row filling a lane's future window blocks a haul reaching it in that window, not one reaching it a window earlier", () => {
+    // D1 is a short hop from M (offset 15 -> window 1); D2 is a longer hop from M (offset 25 ->
+    // window 2). The shared lane M-T (capacity 10) is seeded full in window 2 only.
+    const lanes = [
+      buildFixtureLane("D1", "M", 0),
+      buildFixtureLane("D2", "M", 0),
+      buildFixtureLane("M", "T", 0),
+    ];
+    const connections: ConnectionInfo[] = [
+      { fromSystemId: "D1", toSystemId: "M", fuelCost: 15 },
+      { fromSystemId: "M", toSystemId: "D1", fuelCost: 15 },
+      { fromSystemId: "D2", toSystemId: "M", fuelCost: 25 },
+      { fromSystemId: "M", toSystemId: "D2", fuelCost: 25 },
+      { fromSystemId: "M", toSystemId: "T", fuelCost: 5 },
+      { fromSystemId: "T", toSystemId: "M", fuelCost: 5 },
+    ];
+    const network = buildLaneNetwork(connections, lanes, (lane) => (lane.key === laneKey("M", "T") ? 10 : 100_000));
+    const seedRow = pendingArrival({
+      routeEdges: [laneKey("D2", "M"), laneKey("M", "T")],
+      quantity: 10,
+      dispatchTick: 0,
+    });
+    const booker = createRouteBooker(network, {
+      congestionMax: CONGESTION_MAX,
+      catchUp: 1,
+      windowTicks: 10,
+      now: 0,
+      freightSpeed: 1,
+      scheduled: [seedRow],
+    });
+    expect(booker.loadAt(laneKey("M", "T"), 2)).toBe(10);
+    expect(booker.loadAt(laneKey("M", "T"), 1)).toBe(0);
+
+    const h = hauler(booker);
+
+    // D2's route reaches the shared lane in window 2 — already saturated by the seed.
+    const bookingD2 = h.routeAndBook("D2", "T", 5);
+    expect(bookingD2?.placements).toEqual([]);
+    expect(bookingD2?.blocked).toEqual([{ laneKey: laneKey("M", "T"), quantity: 5, foreignShare: 0 }]);
+
+    // D1's route reaches the SAME lane in window 1 — untouched, so it places.
+    const bookingD1 = h.routeAndBook("D1", "T", 5);
+    expect(bookingD1?.placements).toHaveLength(1);
+    expect(bookingD1?.placements[0].quantity).toBe(5);
+    expect(booker.loadAt(laneKey("M", "T"), 1)).toBe(5);
+  });
+
+  it("(d) a crossing straddling a window boundary is charged to the window it STARTS in only", () => {
+    // Single edge S-T, fuel 15, freightSpeed 1, windowTicks 10: the crossing starts at offset 0
+    // (window 0) and would "end" at offset 15 (window 1's territory) — it is charged once, to
+    // window 0, never split or double-counted into window 1.
+    const lanes = [buildFixtureLane("S", "T", 0)];
+    const connections: ConnectionInfo[] = [
+      { fromSystemId: "S", toSystemId: "T", fuelCost: 15 },
+      { fromSystemId: "T", toSystemId: "S", fuelCost: 15 },
+    ];
+    const network = buildLaneNetwork(connections, lanes, () => 1000);
+    const booker = createRouteBooker(network, {
+      congestionMax: CONGESTION_MAX,
+      catchUp: 1,
+      windowTicks: 10,
+      now: 0,
+      freightSpeed: 1,
+    });
+    const h = hauler(booker);
+    h.routeAndBook("S", "T", 5);
+
+    expect(booker.loadAt(laneKey("S", "T"), 0)).toBe(5);
+    expect(booker.loadAt(laneKey("S", "T"), 1)).toBe(0);
+  });
+
+  it("(e) zero-latency equivalence: a very large freightSpeed reproduces the single-ledger booker's loads exactly", () => {
+    const network = buildFixtureNetwork();
+    const booker = createRouteBooker(network, {
+      congestionMax: CONGESTION_MAX,
+      catchUp: 1,
+      windowTicks: 24,
+      now: 100,
+      freightSpeed: 1_000_000,
+    });
+    const h = hauler(booker);
+
+    // Same scenario as the "partial fill, reroute, blocked volume" test above: 15 units over a
+    // cheap path capacity 10 and a pricey alternate capacity 100.
+    const booking = h.routeAndBook("S", "T", 15);
+    expect(booking?.placements).toHaveLength(2);
+    expect(booking?.placements[0]).toMatchObject({ quantity: 10, edges: [laneKey("S", "A"), laneKey("A", "T")] });
+    expect(booking?.placements[1]).toMatchObject({ quantity: 5, edges: [laneKey("S", "B"), laneKey("B", "T")] });
+    expect(booking?.blocked).toEqual([{ laneKey: laneKey("S", "A"), quantity: 5, foreignShare: 0 }]);
+
+    // Hand-computed expected loads — identical to the pre-windowing booker's own reading of the
+    // same scenario, since every crossing collapses into window 0 at this speed.
+    const loads = booker.loads();
+    expect(loads.get(laneKey("S", "A"))).toEqual({ bookedLoad: 10, blockedVolume: 5 });
+    expect(loads.get(laneKey("A", "T"))).toEqual({ bookedLoad: 10, blockedVolume: 0 });
+    expect(loads.get(laneKey("S", "B"))).toEqual({ bookedLoad: 5, blockedVolume: 0 });
+    expect(loads.get(laneKey("B", "T"))).toEqual({ bookedLoad: 5, blockedVolume: 0 });
+  });
+});
+
+describe("RouteBooker.routeAndBook — no live path and no saturated hop on the ideal path", () => {
+  it("charges the whole remainder to the ideal path's most-loaded hop rather than dropping it", () => {
+    // The label-setting divergence: both searches settle each node by its cheapest prefix, but the
+    // live search EXCLUDES saturated edges and so can settle a node via a different prefix — a
+    // different accumulated fuel, hence a different crossing window — than the saturation-blind one.
+    //
+    // Graph (fuel / capacity), windowTicks 1 and freightSpeed 1, so a hop's window is its
+    // accumulated raw fuel:
+    //   S-D 1/1   S-A 4/10   A-D 1/10   A-B 4/10   D-B 2/1   B-T 2/10
+    // Seeded: S-D full in window 0, D-B full in window 1, B-T full in window 7, B-T half in window 8.
+    //
+    // LIVE: S-D is excluded (window 0 full), so D is reached via S→A→D at raw fuel 5 and B via
+    // D at raw fuel 7 (cost 7, beating S→A→B's 8) — and B-T at window 7 is full, so no live path
+    // to T exists at all.
+    // IDEAL (saturation-blind): S-D is priced rather than excluded, so D settles at raw fuel 1 and
+    // its D-B edge is read at window 1, where it is full and therefore expensive — S→A→B wins
+    // instead, reaching B at raw fuel 8, and B-T at window 8 is only half full. Every hop of that
+    // path is below capacity in its own window: there is no saturated hop to name.
+    const pairs: [string, string, number, number][] = [
+      ["S", "D", 1, 1],
+      ["S", "A", 4, 10],
+      ["A", "D", 1, 10],
+      ["A", "B", 4, 10],
+      ["D", "B", 2, 1],
+      ["B", "T", 2, 10],
+    ];
+    const lanes = pairs.map(([a, b]) => buildFixtureLane(a, b, 0));
+    const connections: ConnectionInfo[] = pairs.flatMap(([a, b, fuel]): ConnectionInfo[] => [
+      { fromSystemId: a, toSystemId: b, fuelCost: fuel },
+      { fromSystemId: b, toSystemId: a, fuelCost: fuel },
+    ]);
+    const capacityByKey = new Map(pairs.map(([a, b, , capacity]) => [laneKey(a, b), capacity]));
+    const network = buildLaneNetwork(connections, lanes, (lane) => capacityByKey.get(lane.key) ?? 0);
+
+    // One single-hop ledger row per (lane, window) to seed: a row dispatched at tick w crosses its
+    // one lane in window w.
+    const seed = (a: string, b: string, window: number, quantity: number): WorldPendingArrival =>
+      pendingArrival({
+        id: `seed-${a}${b}-${window}`,
+        factionId: "seed-faction",
+        routeEdges: [laneKey(a, b)],
+        quantity,
+        dispatchTick: window,
+        arrivalTick: window + 1,
+      });
+
+    const booker = createRouteBooker(network, {
+      congestionMax: CONGESTION_MAX,
+      catchUp: 1,
+      windowTicks: 1,
+      now: 0,
+      freightSpeed: 1,
+      scheduled: [
+        seed("S", "D", 0, 1),
+        seed("D", "B", 1, 1),
+        seed("B", "T", 7, 10),
+        seed("B", "T", 8, 5),
+      ],
+    });
+
+    // The ideal path's own hops, each in the window that path reaches it in — none at capacity.
+    expect(booker.loadAt(laneKey("S", "A"), 0)).toBe(0);
+    expect(booker.loadAt(laneKey("A", "B"), 4)).toBe(0);
+    expect(booker.loadAt(laneKey("B", "T"), 8)).toBe(5);
+
+    const h = hauler(booker, OPEN_ALL, "hauler-faction");
+    const booking = h.routeAndBook("S", "T", 4);
+
+    expect(booking?.placements).toEqual([]);
+    // The whole haul is accounted for as blocked, on B-T — the most-loaded hop of the ideal path
+    // (5 of 10 in its own window; the other two hops are empty in theirs).
+    expect(booking?.blocked).toEqual([
+      { laneKey: laneKey("B", "T"), quantity: 4, foreignShare: 1 },
+    ]);
+    expect(booker.loads().get(laneKey("B", "T"))).toEqual({ bookedLoad: 0, blockedVolume: 4 });
   });
 });
 

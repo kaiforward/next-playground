@@ -2,26 +2,11 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { setWorld, clearWorld, getWorld } from "@/lib/world/store";
 import { generateWorld } from "@/lib/world/gen";
 import { claimSystem } from "@/lib/services/claims";
-import { seatWorld, playerHome } from "./seat-world";
+import { seatWorld, unclaimedNeighbour, farUnclaimedSystem } from "./seat-world";
 import { LANES } from "@/lib/constants/lanes";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 
 const COOLDOWN_TICKS = LANES.PLAYER_CLAIM_COOLDOWN * CYCLE_LENGTH;
-
-/** An unclaimed system directly connected to the homeworld — the fixture's own frontier edge. */
-function unclaimedNeighbour() {
-  const w = getWorld();
-  const home = playerHome();
-  for (const c of w.connections) {
-    let otherId: string | null = null;
-    if (c.fromId === home.id) otherId = c.toId;
-    else if (c.toId === home.id) otherId = c.fromId;
-    if (otherId === null) continue;
-    const other = w.systems.find((s) => s.id === otherId)!;
-    if (other.factionId === null) return other;
-  }
-  throw new Error("seeded galaxy has no unclaimed neighbour of the homeworld");
-}
 
 /**
  * An unclaimed neighbour of ANY system `factionId` currently owns — a genuinely adjacent,
@@ -125,19 +110,7 @@ describe("claimSystem", () => {
   });
 
   it("rejects a system that is unclaimed but not adjacent to owned territory", () => {
-    // Manufacture a genuinely non-adjacent unclaimed system: strip every connection that would
-    // otherwise make it a neighbour of any player-owned system.
-    const w = getWorld();
-    const pid = w.player!.controlledFactionId;
-    const ownedIds = new Set(w.systems.filter((s) => s.factionId === pid).map((s) => s.id));
-    const farUnclaimed = w.systems.find((s) => {
-      if (s.factionId !== null) return false;
-      return !w.connections.some((c) => {
-        const otherId = c.fromId === s.id ? c.toId : c.toId === s.id ? c.fromId : null;
-        return otherId !== null && ownedIds.has(otherId);
-      });
-    });
-    if (!farUnclaimed) return; // seeded galaxy has no such system — nothing to assert
+    const farUnclaimed = farUnclaimedSystem();
     const r = claimSystem({ systemId: farUnclaimed.id });
     expect(r).toEqual({ ok: false, error: `${farUnclaimed.name} is not adjacent to your territory.` });
   });

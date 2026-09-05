@@ -18,7 +18,7 @@
 import { useEffect } from "react";
 import { EMPTY_INTEREST, type InterestSet } from "@/lib/runtime/channel";
 
-export type InterestKind = "system" | "good";
+export type InterestKind = "system" | "good" | "lane";
 
 export interface InterestRegistry {
   /**
@@ -44,8 +44,10 @@ function sameSet(a: InterestSet, b: InterestSet): boolean {
   return (
     a.systems.length === b.systems.length &&
     a.goods.length === b.goods.length &&
+    a.lanes.length === b.lanes.length &&
     a.systems.every((id, i) => id === b.systems[i]) &&
-    a.goods.every((id, i) => id === b.goods[i])
+    a.goods.every((id, i) => id === b.goods[i]) &&
+    a.lanes.every((id, i) => id === b.lanes[i])
   );
 }
 
@@ -53,11 +55,17 @@ export function createInterestRegistry(post: (interest: InterestSet) => void): I
   const counts: Record<InterestKind, Map<string, number>> = {
     system: new Map(),
     good: new Map(),
+    lane: new Map(),
   };
   let lastPosted: InterestSet = EMPTY_INTEREST;
 
   function currentSet(): InterestSet {
-    return { systems: sortedKeys(counts.system), goods: sortedKeys(counts.good), factions: [] };
+    return {
+      systems: sortedKeys(counts.system),
+      goods: sortedKeys(counts.good),
+      lanes: sortedKeys(counts.lane),
+      factions: [],
+    };
   }
 
   function postIfChanged(): void {

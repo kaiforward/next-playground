@@ -61,6 +61,7 @@ describe("LogisticsPanel — bar cell dwell popovers", () => {
       activeGoodCount: 1,
       tradedGoodCount: 0,
       volumeHistory: [],
+      transit: { inbound: [], outbound: [] },
     };
     renderPanel();
     expect(screen.queryByText("Produces")).not.toBeInTheDocument();
@@ -76,6 +77,7 @@ describe("LogisticsPanel — bar cell dwell popovers", () => {
       activeGoodCount: 1,
       tradedGoodCount: 0,
       volumeHistory: [],
+      transit: { inbound: [], outbound: [] },
     };
     renderPanel();
 
@@ -93,6 +95,7 @@ describe("LogisticsPanel — bar cell dwell popovers", () => {
       activeGoodCount: 1,
       tradedGoodCount: 0,
       volumeHistory: [],
+      transit: { inbound: [], outbound: [] },
     };
     renderPanel();
 
@@ -121,11 +124,44 @@ describe("LogisticsPanel — bar cell dwell popovers", () => {
       activeGoodCount: 1,
       tradedGoodCount: 1,
       volumeHistory: [],
+      transit: { inbound: [], outbound: [] },
     };
     renderPanel();
 
     await openBarCell(user, "Metals", 3);
     expect(await screen.findByText("Sources")).toBeInTheDocument();
     expect(screen.getByText("Alpha")).toBeInTheDocument();
+  });
+});
+
+describe("LogisticsPanel — in-transit card", () => {
+  it("renders nothing under In transit when neither direction has a row", () => {
+    dataValue = {
+      visibility: "visible",
+      rows: [goodRow({ goodId: "metals", goodName: "Metals" })],
+      internalMax: 10, externalMax: 1, activeGoodCount: 1, tradedGoodCount: 0, volumeHistory: [],
+      transit: { inbound: [], outbound: [] },
+    };
+    renderPanel();
+    expect(screen.queryByText("In transit")).not.toBeInTheDocument();
+  });
+
+  it("lists inbound and outbound rows under their own labelled section, linking the far system", () => {
+    dataValue = {
+      visibility: "visible",
+      rows: [goodRow({ goodId: "metals", goodName: "Metals" })],
+      internalMax: 10, externalMax: 1, activeGoodCount: 1, tradedGoodCount: 0, volumeHistory: [],
+      transit: {
+        inbound: [{ goodId: "water", goodName: "Water", quantity: 18, otherSystemId: "sys-a", otherSystemName: "Halden Reach", arrivalTick: 30 }],
+        outbound: [{ goodId: "alloys", goodName: "Alloys", quantity: 8, otherSystemId: "sys-b", otherSystemName: "Sable", arrivalTick: 60 }],
+      },
+    };
+    renderPanel();
+
+    expect(screen.getByText("In transit")).toBeInTheDocument();
+    expect(screen.getByText(/Inbound/)).toHaveTextContent("Inbound · 1");
+    expect(screen.getByText(/Outbound/)).toHaveTextContent("Outbound · 1");
+    expect(screen.getByRole("link", { name: "Halden Reach" })).toHaveAttribute("href", "/system/sys-a");
+    expect(screen.getByRole("link", { name: "Sable" })).toHaveAttribute("href", "/system/sys-b");
   });
 });

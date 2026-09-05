@@ -25,19 +25,42 @@ export const TERRITORY = {
   strokeWidth: 2,
 } as const;
 
-// ── Edge colors ──────────────────────────────────────────────────
-
-// Lane colour by fuel-cost tier (`lane-style.ts`'s `LaneTier`, which owns width/alpha) — this is
-// only the colour each tier draws in. Ordinary lanes stay neutral slate, dashed; a notable lane
-// brightens toward gold; a major (crossing-priced) lane gets the full amber "lit pathway": a wide
-// soft glow under a crisp core line. Amber matches TEXT_COLORS.gateway so a galaxy's priciest lanes
-// and gateway-system labels share one identity.
-export const EDGE = {
-  default: { color: 0x94a3b8 },
-  notable: { color: 0xd4a04a },
-  major: { color: 0xf59e0b },
-  majorGlow: { color: 0xf59e0b, alpha: 0.15, width: 7.0 },
+// ── Lane style (level/load, `objects/lane-style.ts`) ─────────────
+// Base widths per fuel tier — level adds `perLevel` per invested whole level on top. Load colours a
+// lane grey → amber as bookedLoad/capacity rises; blocked (congestion turned volume away this run)
+// overrides to red regardless of load — red means "invest here", never "nearly full".
+export const LANE_WIDTH = {
+  ordinary: 1.5,
+  notable: 1.9,
+  major: 2.5,
+  perLevel: 0.35,
 } as const;
+
+export const LANE_LOAD_COLOR = {
+  idle: 0x64748b, // slate-500 — ~0 booked load
+  loaded: 0xf59e0b, // amber-500 — booked load at/near capacity
+  blocked: 0xef4444, // red-500 — blockedVolume > 0 this run
+} as const;
+
+/** The major (crossing-priced) tier's wide soft glow underlay, drawn under the load-coloured core
+ *  line — a structural "lit pathway" treatment, independent of the colour the load ramp picks. */
+export const LANE_MAJOR_GLOW = {
+  width: 7.0,
+  alpha: 0.15,
+} as const;
+
+/** The selected lane's highlight stroke (the open `/lane/:key` route) — Foundry copper, matching the
+ *  developed settlement mark. */
+export const LANE_SELECTED = {
+  color: 0xd06a42,
+  glowWidth: 9.0,
+  glowAlpha: 0.35,
+} as const;
+
+/** Screen-pixel tolerance for the lane click hit-test (`lane-hit-test.ts`'s `findLaneAt`) — divided
+ *  by the camera zoom at click time so a thin lane is as easy to hit zoomed out as zoomed in. Generous
+ *  enough to forgive a slightly-off click without swallowing nearby cell clicks. */
+export const LANE_HIT_TOLERANCE_PX = 8;
 
 // ── Point cloud (universe view) ─────────────────────────────────
 
@@ -135,16 +158,13 @@ export const ANIM = {
 // ── Flow overlay ─────────────────────────────────────────────────
 
 /**
- * Directed-logistics overlay. Arced, glowing "convoy" particles. Visual values
- * are placeholders — tune in the manual smoke (bow/glow/speed).
+ * Directed-logistics overlay. Glowing "convoy" particles travel the lane itself (a straight segment
+ * between its two endpoints) rather than an off-lane arc — a haul's route is now drawn as particles
+ * on every lane it crosses, not a chord between its origin and destination, so there is no longer a
+ * reason to bow the path off the lane it represents. Visual values are placeholders — tune in the
+ * manual smoke (glow/speed).
  */
 export const LOGISTICS_FLOW = {
-  /** Perpendicular bow as a fraction of chord length. */
-  arcBowFraction: 0.18,
-  /** Max bow in world units (clamps long hauls so they don't balloon). */
-  arcMaxBow: 600,
-  /** Polyline segments per arc. */
-  arcSegments: 24,
   particleRadius: 3.4,
   particleSpeed: 95,
   particleAlpha: 0.95,

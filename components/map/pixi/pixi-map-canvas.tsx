@@ -17,7 +17,7 @@ import { CellHighlightLayer } from "./layers/cell-highlight-layer";
 import { TradeFlowLayer, LOGISTICS_FLOW_CONFIG } from "./layers/trade-flow-layer";
 import { setupInteractions } from "./interactions";
 import { findFactionAt } from "./faction-hit-test";
-import { BG_COLOR, FACTION_SELECT_ZOOM } from "./theme";
+import { BG_COLOR, FACTION_SELECT_ZOOM, LANE_HIT_TOLERANCE_PX } from "./theme";
 import { buildSystemCells, type SystemCells } from "./voronoi-cache";
 import type { MapData } from "@/lib/hooks/use-map-data";
 import type { StarSystemInfo, AtlasData } from "@/lib/types/game";
@@ -35,6 +35,10 @@ export interface PixiMapCanvasProps {
   onEmptyClick: () => void;
   /** Zoomed-out click on a faction's territory (see `theme.ts` `FACTION_SELECT_ZOOM`) — every mode. */
   onSelectFaction: (factionId: string) => void;
+  /** A click resolved to a lane, within `LANE_HIT_TOLERANCE_PX` (screen px) of its segment (see `lane-hit-test.ts`). */
+  onSelectLane: (laneKey: string) => void;
+  /** The selected lane (the open `/lane/:key` route) — drives the copper highlight. */
+  selectedLaneKey?: string | null;
   centerTarget?: { x: number; y: number; zoom: number };
   /** Screen px to shift the centerTarget point right of screen-center (clears a left-docked drawer). Default 0. */
   centerOffsetX?: number;
@@ -87,6 +91,8 @@ export function PixiMapCanvas({
   onSelectSystem,
   onEmptyClick,
   onSelectFaction,
+  onSelectLane,
+  selectedLaneKey = null,
   centerTarget,
   centerOffsetX = 0,
   onReady,
@@ -105,8 +111,12 @@ export function PixiMapCanvas({
   const readyFired = useRef(false);
 
   // Store callbacks in refs so Pixi event handlers always see latest
-  const callbacksRef = useRef({ onSelectSystem, onEmptyClick, onSelectFaction });
-  callbacksRef.current = { onSelectSystem, onEmptyClick, onSelectFaction };
+  const callbacksRef = useRef({ onSelectSystem, onEmptyClick, onSelectFaction, onSelectLane });
+  callbacksRef.current = { onSelectSystem, onEmptyClick, onSelectFaction, onSelectLane };
+
+  // Latest mapData for the once-mounted lane hit-test closure (click only, not per-frame).
+  const mapDataRef = useRef(mapData);
+  mapDataRef.current = mapData;
 
   // Live map mode for the once-mounted interaction closures (ticker hover + faction hit-test): faction
   // targeting is gated to modes that show factions (political + value), inert in regions/none.
@@ -227,6 +237,12 @@ export function PixiMapCanvas({
         getFactionContext: () => ({
           unions: politicalTerritoryLayer.getFactionUnions(),
           selectActive: camera.zoom < FACTION_SELECT_ZOOM && isFactionInteractiveMode(mapModeRef.current),
+        }),
+        getLaneContext: () => ({
+          lanes: mapDataRef.current.connections.map((c) => ({ key: c.laneKey, aId: c.fromId, bId: c.toId })),
+          systems: mapDataRef.current.systems,
+          // `findLaneAt` measures in world units; convert the screen-pixel tolerance at the click's zoom.
+          tolerance: LANE_HIT_TOLERANCE_PX / camera.zoom,
         }),
       });
 
@@ -477,9 +493,9 @@ export function PixiMapCanvas({
 
     // System objects and connections driven by mapData (viewport detail)
     p.systemLayer.sync(mapData.systems, selectedSystem?.id ?? null);
-    p.connectionLayer.sync(mapData.connections, mapData.systems);
+    p.connectionLayer.sync(mapData.connections, mapData.systems, selectedLaneKey);
     p.logisticsFlowLayer.sync(mapData.systems, mapData.logisticsFlowEdges);
-  }, [mapData, selectedSystem, pixiReady]);
+  }, [mapData, selectedSystem, selectedLaneKey, pixiReady]);
 
   // ── Initial fitView (only when no centerTarget) ────────────────
   useEffect(() => {

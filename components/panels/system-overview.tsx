@@ -15,6 +15,7 @@ import { SUN_CLASSES } from "@/lib/constants/bodies";
 import { useSystemSubstrate } from "@/lib/hooks/use-system-substrate";
 import { useSystemVitals } from "@/lib/hooks/use-system-vitals";
 import { ColonySection } from "@/components/construction/colony-section";
+import { ClaimSection } from "@/components/construction/claim-section";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { GRADE } from "@/lib/constants/ui";
 import { VitalTile, VitalGrid, GhostVitalTile } from "@/components/ui/vital-tile";
@@ -184,6 +185,11 @@ export function SystemOverview({ systemId }: { systemId: string }) {
       {/* Colony surface — the founding entry for a controlled, not-yet-developed system. No-ops
           (renders null) once the system is developed or has nothing forming. */}
       <ColonySection systemId={systemId} />
+
+      {/* Claim surface — the counterpart entry for an unclaimed system bordering the player's
+          territory. No-ops (renders null) everywhere else, including a foreign or non-adjacent
+          unclaimed system. */}
+      <ClaimSection systemId={systemId} systemName={systemInfo?.name ?? ""} />
 
       {/* Context strip — quiet, tight 2-up. Region + Gateway already surface in the panel header. */}
       <Card variant="bordered" padding="sm" className="mb-6">

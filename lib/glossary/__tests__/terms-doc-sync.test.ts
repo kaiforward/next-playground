@@ -11,7 +11,7 @@ describe("terms.ts stays verbatim with docs/active/glossary.md", () => {
     for (const m of defs.matchAll(entryRe)) {
       docEntries.push({ term: m[1], body: m[2].replace(/\s*\n\s*/g, " ").trim() });
     }
-    expect(docEntries.length).toBe(89);
+    expect(docEntries.length).toBe(94);
     const rendered = new Map(
       Object.values(TERMS).map((d) => [
         d.term,

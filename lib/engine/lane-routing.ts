@@ -1,17 +1,18 @@
 /**
  * Route engine — edge-keyed cheapest path with congestion pricing and capacity booking
- * (docs/planned/logistics-lanes.md §2). Pure, zero I/O: callers pass in the connection/lane rows
+ * (docs/active/gameplay/logistics-lanes.md §2). Pure, zero I/O: callers pass in the connection/lane rows
  * and the policy hooks (`openEdge`, `catchUp`) this module needs; it never reads world state.
  *
  * Grows from `lib/engine/pathfinding.ts`'s Dijkstra via its `edgeCost` hook rather than
  * re-implementing the search: one path engine for every mover, per the shared-substrate decision
- * (spec §6).
+ * (spec §5).
  */
 
 import type { ConnectionInfo } from "./navigation";
 import { dijkstra, reconstructPath, type FuelAdjacency } from "./pathfinding";
 import { laneKey } from "./lanes";
-import type { WorldLane } from "@/lib/world/types";
+import { hopCrossingTicks } from "./freight";
+import type { WorldLane, WorldPendingArrival } from "@/lib/world/types";
 
 // ── Network ─────────────────────────────────────────────────────
 
@@ -27,6 +28,10 @@ export interface LaneNetwork {
   capacities: ReadonlyMap<string, number>;
   /** Every lane key, sorted — the deterministic iteration order `loads()` and network construction use. */
   laneKeys: readonly string[];
+  /** laneKey → fuel cost of crossing it — static (fuel costs never change once generated), so the
+   *  booker recomputes a scheduled ledger row's per-hop crossing ticks (`hopCrossingTicks`) from
+   *  this rather than a persisted field on `WorldPendingArrival`. */
+  fuelCosts: ReadonlyMap<string, number>;
 }
 
 /**
@@ -45,6 +50,7 @@ export function buildLaneNetwork(
   }
 
   const adjacency: FuelAdjacency = new Map();
+  const fuelCosts = new Map<string, number>();
   for (const c of connections) {
     const key = laneKey(c.fromSystemId, c.toSystemId);
     if (!lanesByKey.has(key)) continue;
@@ -54,6 +60,7 @@ export function buildLaneNetwork(
       adjacency.set(c.fromSystemId, neighbors);
     }
     neighbors.push({ toSystemId: c.toSystemId, fuelCost: c.fuelCost });
+    fuelCosts.set(key, c.fuelCost);
   }
 
   const laneKeys = [...lanesByKey.keys()].sort();
@@ -64,7 +71,7 @@ export function buildLaneNetwork(
     capacities.set(key, capacityOf(lane));
   }
 
-  return { adjacency, capacities, laneKeys };
+  return { adjacency, capacities, laneKeys, fuelCosts };
 }
 
 // ── Booker ──────────────────────────────────────────────────────
@@ -113,7 +120,7 @@ export interface LaneLoad {
  * The matcher's (and any other caller's) view of a `RouteBooker` for ONE hauler — a structural
  * subset any real booker satisfies and a test can hand-roll without constructing a lane network.
  * `priceFrom` freezes one sink's prices to every donor for that deficit's whole fan-out
- * (`docs/planned/logistics-lanes.md` §2: "prices are frozen at the moment the severity queue
+ * (`docs/active/gameplay/logistics-lanes.md` §2: "prices are frozen at the moment the severity queue
  * reaches that deficit"); `routeAndBook` is consulted inside the fill loop with the quantity being
  * drawn, and places it onto the shared network, so a later deficit's `priceFrom` reflects prior
  * bookings.
@@ -127,18 +134,27 @@ export interface RouteBookerFor {
    * currently priced out of `priceFrom` (a saturated path returns `null` there) still reads
    * reachable here: reachability is a structural question (does a path exist at all), congestion is
    * a this-run contention question, and `unservable`'s own structural test needs the former without
-   * the latter (`docs/planned/logistics-lanes.md` §2, "a blocked haul is not an unservable one").
+   * the latter (`docs/active/gameplay/logistics-lanes.md` §2, "a blocked haul is not an unservable one").
    */
   reachableFrom(sinkId: string): (donorId: string) => boolean;
   routeAndBook(from: string, to: string, quantity: number): RouteBooking | null;
 }
 
 export interface RouteBooker {
-  /** Booked and blocked totals for every lane in the network (0 for an untouched lane). */
+  /** Booked and blocked totals for every lane in the network (0 for an untouched lane).
+   *  `bookedLoad` is window 0 — this run's own window, seeded from in-flight crossings due now plus
+   *  whatever this run has placed onto it — never a cumulative or future-window figure.
+   *  `blockedVolume` is NOT windowed: it totals everything this run's routing turned away on the
+   *  lane, whichever window the choke sat in (see the `blockedVolume` map's own comment below). */
   loads(): ReadonlyMap<string, LaneLoad>;
+  /** One lane's booked load in one window (0 = this run's own window, matching `loads()`'s
+   *  `bookedLoad`; a positive window is a future run's window, seeded from the ledger or booked by
+   *  this run's own placements reaching that far out). Test-visible read of the per-window ledger —
+   *  the processor and lane decay only ever read `loads()`. */
+  loadAt(key: string, window: number): number;
   /**
    * A per-hauler view over this SAME physical ledger — `openEdge` is the per-client traversability
-   * policy (spec §6: goods route over own+unclaimed+friendly-or-allied, a future migration client
+   * policy (spec §5: goods route over own+unclaimed+friendly-or-allied, a future migration client
    * would pass a narrower predicate); a closed edge is never traversed, full stop, independent of
    * capacity. Everything else (booked/blocked load, congestion pricing) is shared, so two haulers
    * with different traversability (e.g. different factions' `laneOpenFor`) still see each other's
@@ -167,17 +183,72 @@ export interface RouteBooker {
  * cost `null`), so a live-routed edge's multiplier is always strictly below `congestionMax`; the
  * bound is reached only by the saturation-ignoring search used solely to name a choke edge (and, at
  * `reachableFrom`, to test reachability without congestion at all).
+ *
+ * **Load is kept per (lane, window)**, not per lane (`docs/active/gameplay/logistics-lanes.md` §2: "a
+ * lane is booked for the cycle the cargo crosses it, not the cycle it is dispatched"). Window 0 is
+ * this run's own interval `[now, now + windowTicks)`; window w is `[now + w·windowTicks, now +
+ * (w+1)·windowTicks)`. `routeAndBook`'s search carries the accumulated raw fuel to each node along
+ * the path (`dijkstra`'s `cumRaw`, this module's only consumer of it) and reads every edge's
+ * cost/exclusion/room at the window its OWN crossing would start in — so a haul's first hop prices
+ * against window 0 while a hop reached three windows out prices against window 3's load, which may
+ * be far less contended. `priceFrom`/`reachableFrom` deliberately do NOT do this: they keep pricing
+ * every edge at window 0 (the "frozen at the moment of the fan-out" snapshot spec §2 already
+ * promises), never projecting a future window's load — only a real booking is time-dependent.
+ *
+ * The booker seeds window occupancy from `scheduled` (the pending-arrivals ledger, both legs — a
+ * return leg physically crosses lanes too) before placing anything new: every row's per-hop
+ * crossing ticks are recomputed from its `routeEdges` and the network's own (static) per-lane
+ * `fuelCosts` — never a persisted field on `WorldPendingArrival` — via `hopCrossingTicks`, and its
+ * quantity lands on whichever window that crossing starts in, or nowhere if that window already
+ * lies in the past (`window < 0`). This is what makes an earlier reservation always outrank a later
+ * dispatch for the same lane and window: the ledger is read before the run's own fan-outs touch the
+ * ledger at all.
+ *
+ * `windowTicks`, `now` and `freightSpeed` default to values that collapse every crossing into
+ * window 0 (`freightSpeed: Infinity` ⇒ every hop starts at `now`) — the zero-latency fallback every
+ * caller not passing lane-mechanics timing (an engine fixture with no ledger, a pre-window test)
+ * gets automatically, and exactly the equivalence spec §2 calls out: "at the zero-latency freight
+ * speed every crossing falls in the dispatching window and the ledger collapses to the single
+ * per-run figure it replaces."
  */
 export function createRouteBooker(
   network: LaneNetwork,
-  opts: { congestionMax: number; catchUp: number },
+  opts: {
+    congestionMax: number;
+    catchUp: number;
+    /** Ticks per logistics-run window — the interval this run's own booking resolves on
+     *  (`cadence.logistics`, `lib/world/tick.ts`). Default 1 (immaterial when `freightSpeed`'s
+     *  default already collapses every crossing's offset to 0). */
+    windowTicks?: number;
+    /** The dispatch tick THIS run is booking at — the origin every seeded and newly-booked
+     *  crossing's window is computed relative to. Default 0. */
+    now?: number;
+    /** Fuel crossed per tick in transit (`hopCrossingTicks`, `lib/engine/freight.ts`). Default
+     *  `Infinity`: every hop's crossing starts at `now` regardless of path length, the zero-latency
+     *  fallback. */
+    freightSpeed?: number;
+    /** The scheduled-freight ledger to seed window occupancy from, both legs. Default `[]` (nothing
+     *  in flight to seed — every fixture and pre-window test that never mentions the ledger). */
+    scheduled?: readonly WorldPendingArrival[];
+  },
 ): RouteBooker {
-  const booked = new Map<string, number>();
+  const windowTicks = opts.windowTicks ?? 1;
+  const now = opts.now ?? 0;
+  const freightSpeed = opts.freightSpeed ?? Number.POSITIVE_INFINITY;
+  const scheduled = opts.scheduled ?? [];
+
+  // laneKey → window → booked quantity. Only windows actually touched (seeded or booked) get an
+  // entry; `loadAt` treats a missing window as 0.
+  const bookedByWindow = new Map<string, Map<number, number>>();
+  const bookedByFactionByWindow = new Map<string, Map<number, Map<string | null, number>>>();
+  // Blocked volume is never windowed: it is a flat per-lane total across every window this run's
+  // routing read, while `bookedLoad` is window 0 alone. Deliberate — a haul turned away by a choke
+  // three windows out is still this run's congestion signal (it is what the planner must upgrade
+  // against) and still counts as attempted use of the lane for decay, so folding it into the same
+  // per-lane figure is the reading both consumers want, not an approximation of a windowed one.
   const blockedVolume = new Map<string, number>();
-  const bookedByFaction = new Map<string, Map<string | null, number>>();
 
   for (const key of network.laneKeys) {
-    booked.set(key, 0);
     blockedVolume.set(key, 0);
   }
 
@@ -191,46 +262,93 @@ export function createRouteBooker(
     return 1 + (opts.congestionMax - 1) * ratio;
   }
 
-  /** Live route cost: excludes any edge whose booked load has reached capacity. `openEdge` is
-   *  always supplied by the caller — every real path runs through `forHauler`'s bound view. */
-  function liveEdgeCost(
-    from: string,
-    to: string,
-    fuelCost: number,
-    openEdge: (laneKey: string) => boolean,
-  ): number | null {
-    const key = laneKey(from, to);
-    if (!openEdge(key)) return null;
-    const capacity = capacityFor(key);
-    const load = booked.get(key) ?? 0;
-    if (load >= capacity) return null;
-    return fuelCost * congestionMultiplier(load, capacity);
+  function loadAt(key: string, window: number): number {
+    return bookedByWindow.get(key)?.get(window) ?? 0;
+  }
+
+  /** The window a crossing starting at `crossingTick` falls into, relative to `now`. */
+  function windowFromTick(crossingTick: number): number {
+    return Math.floor((crossingTick - now) / windowTicks);
+  }
+
+  /** The window a hop starting `cumRawAtFrom` raw fuel into a fresh (dispatched-at-`now`) journey
+   *  falls into — the special case of `windowFromTick` every live/ideal search edge reads. */
+  function windowFor(cumRawAtFrom: number): number {
+    return windowFromTick(now + Math.max(0, Math.round(cumRawAtFrom / freightSpeed)));
+  }
+
+  function addBooking(key: string, window: number, factionKey: string | null, quantity: number): void {
+    let byWindow = bookedByWindow.get(key);
+    if (!byWindow) {
+      byWindow = new Map<number, number>();
+      bookedByWindow.set(key, byWindow);
+    }
+    byWindow.set(window, (byWindow.get(window) ?? 0) + quantity);
+
+    let byFactionByWindow = bookedByFactionByWindow.get(key);
+    if (!byFactionByWindow) {
+      byFactionByWindow = new Map<number, Map<string | null, number>>();
+      bookedByFactionByWindow.set(key, byFactionByWindow);
+    }
+    let byFaction = byFactionByWindow.get(window);
+    if (!byFaction) {
+      byFaction = new Map<string | null, number>();
+      byFactionByWindow.set(window, byFaction);
+    }
+    byFaction.set(factionKey, (byFaction.get(factionKey) ?? 0) + quantity);
+  }
+
+  // Seed every in-flight ledger row's window occupancy BEFORE any new booking is placed, so an
+  // earlier reservation always outranks a later dispatch for the same lane and window.
+  for (const row of scheduled) {
+    const hopFuelCosts = row.routeEdges.map((key) => network.fuelCosts.get(key) ?? 0);
+    const crossingTicks = hopCrossingTicks(row.dispatchTick, hopFuelCosts, freightSpeed, row.arrivalTick);
+    for (let i = 0; i < row.routeEdges.length; i++) {
+      const window = windowFromTick(crossingTicks[i]);
+      if (window >= 0) addBooking(row.routeEdges[i], window, row.factionId, row.quantity);
+    }
   }
 
   /**
-   * Route cost ignoring saturation entirely (only `openEdge` can close an edge here) — used solely
-   * to name the choke edge of "the cheapest path" the spec's blocked-volume rule refers to, never
-   * to place a booking.
+   * The one edge-cost decision every search in this module makes: closed by `openEdge` (always),
+   * closed by saturation (only when `excludeSaturated`), otherwise the raw fuel priced by the
+   * congestion multiplier — all read at the window this edge's own crossing would start in.
+   *
+   * `cumRawAtFrom` is dijkstra's accumulated raw fuel to `from` at a fresh dispatch from `now`, so a
+   * haul's first hop prices against window 0 while a hop reached three windows out prices against
+   * window 3's load. The two searches that must NOT be time-dependent (`priceFrom`/`reachableFrom`'s
+   * frozen snapshot — see `createRouteBooker`'s own docstring for why) pass `cumRawAtFrom = 0`,
+   * which pins every edge to window 0.
+   *
+   * `excludeSaturated: false` is the saturation-blind reading — used to name the choke edge of "the
+   * cheapest path" the spec's blocked-volume rule refers to, and to answer `reachableFrom`'s
+   * structural question, never to place a booking.
    */
-  function edgeCostIgnoringSaturation(
+  function edgeCost(
     from: string,
     to: string,
     fuelCost: number,
+    cumRawAtFrom: number,
     openEdge: (laneKey: string) => boolean,
+    excludeSaturated: boolean,
   ): number | null {
     const key = laneKey(from, to);
     if (!openEdge(key)) return null;
     const capacity = capacityFor(key);
-    const load = booked.get(key) ?? 0;
+    const load = loadAt(key, windowFor(cumRawAtFrom));
+    if (excludeSaturated && load >= capacity) return null;
     return fuelCost * congestionMultiplier(load, capacity);
   }
 
-  function pathToLaneKeys(path: string[]): string[] {
-    const keys: string[] = [];
+  /** Every hop of `path`, paired with the window its own crossing starts in — read off `cumRaw`
+   *  (the raw fuel accumulated to reach the hop's origin node), the same value the search itself
+   *  priced that edge at. */
+  function pathHopsWithWindows(path: string[], cumRaw: Map<string, number>): { key: string; window: number }[] {
+    const hops: { key: string; window: number }[] = [];
     for (let i = 0; i < path.length - 1; i++) {
-      keys.push(laneKey(path[i], path[i + 1]));
+      hops.push({ key: laneKey(path[i], path[i + 1]), window: windowFor(cumRaw.get(path[i]) ?? 0) });
     }
-    return keys;
+    return hops;
   }
 
   function sumRawFuel(path: string[]): number {
@@ -243,26 +361,41 @@ export function createRouteBooker(
     return total;
   }
 
-  function addFactionBooking(key: string, factionKey: string | null, quantity: number): void {
-    let byFaction = bookedByFaction.get(key);
-    if (!byFaction) {
-      byFaction = new Map<string | null, number>();
-      bookedByFaction.set(key, byFaction);
-    }
-    byFaction.set(factionKey, (byFaction.get(factionKey) ?? 0) + quantity);
-  }
-
-  function foreignShareAt(key: string, factionKey: string | null): number {
-    const total = booked.get(key) ?? 0;
+  function foreignShareAt(key: string, window: number, factionKey: string | null): number {
+    const total = loadAt(key, window);
     if (total <= 0) return 0;
-    const own = bookedByFaction.get(key)?.get(factionKey) ?? 0;
+    const own = bookedByFactionByWindow.get(key)?.get(window)?.get(factionKey) ?? 0;
     return Math.max(total - own, 0) / total;
   }
 
-  function recordBlocked(entries: RouteBlocked[], key: string, quantity: number, factionKey: string | null): void {
+  /** The hop of `hops` carrying the largest share of its own window's capacity (ties → the first) —
+   *  the hop a haul that could not be routed at all is charged against when NO hop of the ideal path
+   *  reads outright saturated (see `routeAndBook`'s fallback). A zero-capacity hop reads as fully
+   *  loaded, matching the exclusion rule (`load >= capacity` closes an edge, and 0 >= 0). */
+  function mostLoadedHop(hops: readonly { key: string; window: number }[]): { key: string; window: number } | null {
+    let best: { key: string; window: number } | null = null;
+    let bestRatio = -1;
+    for (const hop of hops) {
+      const capacity = capacityFor(hop.key);
+      const ratio = capacity > 0 ? loadAt(hop.key, hop.window) / capacity : Number.POSITIVE_INFINITY;
+      if (ratio > bestRatio) {
+        bestRatio = ratio;
+        best = hop;
+      }
+    }
+    return best;
+  }
+
+  function recordBlocked(
+    entries: RouteBlocked[],
+    key: string,
+    quantity: number,
+    factionKey: string | null,
+    window: number,
+  ): void {
     if (quantity <= 0) return;
     blockedVolume.set(key, (blockedVolume.get(key) ?? 0) + quantity);
-    entries.push({ laneKey: key, quantity, foreignShare: foreignShareAt(key, factionKey) });
+    entries.push({ laneKey: key, quantity, foreignShare: foreignShareAt(key, window, factionKey) });
   }
 
   function routeAndBook(
@@ -281,45 +414,57 @@ export function createRouteBooker(
     while (remaining > 0) {
       const live = dijkstra(from, network.adjacency, {
         stopAt: to,
-        edgeCost: (f, t, fuelCost) => liveEdgeCost(f, t, fuelCost, openEdge),
+        edgeCost: (f, t, fuelCost, cumRawAtFrom) =>
+          edgeCost(f, t, fuelCost, cumRawAtFrom, openEdge, true),
       });
       const liveCost = live.dist.get(to);
 
       if (liveCost === undefined) {
-        // No path remains with any capacity left anywhere feasible. Name the choke edge from the
-        // cheapest path ignoring saturation, if one exists at all — otherwise this is a reachability
-        // gap, not congestion, and nothing is blocked.
+        // No path remains with any capacity left anywhere feasible. A genuine REACHABILITY gap is
+        // `ideal.dist.get(to) === undefined` — no path exists at any load — and nothing is blocked.
+        // Otherwise this run's congestion is what stopped the haul, and `remaining` is charged to a
+        // hop of the ideal path: the first hop that reads outright saturated in its own window, or,
+        // when none does, the most-loaded hop. That second case is real, not defensive: both
+        // searches settle each node by its cheapest prefix, and the live search's exclusions can
+        // hand it a DIFFERENT prefix (so a different accumulated fuel, so a different window) than
+        // the saturation-blind one, leaving the blind path's every hop free in its own window while
+        // the live path's is not. `remaining` must never fall out of this loop unrecorded: it would
+        // be missing from `placements`, `blocked` and `unservable` alike.
         const ideal = dijkstra(from, network.adjacency, {
           stopAt: to,
-          edgeCost: (f, t, fuelCost) => edgeCostIgnoringSaturation(f, t, fuelCost, openEdge),
+          edgeCost: (f, t, fuelCost, cumRawAtFrom) =>
+            edgeCost(f, t, fuelCost, cumRawAtFrom, openEdge, false),
         });
         if (ideal.dist.get(to) !== undefined) {
           const idealPath = reconstructPath(ideal.prev, to);
-          const idealLaneKeys = pathToLaneKeys(idealPath);
-          const choke = idealLaneKeys.find((key) => (booked.get(key) ?? 0) >= capacityFor(key));
-          if (choke) recordBlocked(blocked, choke, remaining, factionKey);
+          const idealHops = pathHopsWithWindows(idealPath, ideal.cumRaw);
+          const choke =
+            idealHops.find((h) => loadAt(h.key, h.window) >= capacityFor(h.key))
+            ?? mostLoadedHop(idealHops);
+          if (choke) recordBlocked(blocked, choke.key, remaining, factionKey, choke.window);
         }
         break;
       }
 
       const path = reconstructPath(live.prev, to);
-      const laneKeysOnPath = pathToLaneKeys(path);
+      const hops = pathHopsWithWindows(path, live.cumRaw);
 
-      // The live search already excludes any edge at capacity, so every edge on this path has
-      // strictly positive room — `placeable` is always > 0 here.
+      // The live search already excludes any edge at capacity (in its own window), so every hop on
+      // this path has strictly positive room — `placeable` is always > 0 here.
       let placeable = remaining;
-      let chokeLaneKey: string | null = null;
-      for (const key of laneKeysOnPath) {
-        const room = capacityFor(key) - (booked.get(key) ?? 0);
+      let chokeHop: { key: string; window: number } | null = null;
+      for (const hop of hops) {
+        const room = capacityFor(hop.key) - loadAt(hop.key, hop.window);
         if (room < placeable) {
           placeable = room;
-          chokeLaneKey = key;
+          chokeHop = hop;
         }
       }
 
-      // If this ever fires, `liveEdgeCost` returned a path containing an edge with zero or
-      // negative room — the exclusion it's supposed to enforce (`load >= capacity` closes an
-      // edge) is broken. Silently `break`-ing here would leave `remaining` stuck and either
+      // If this ever fires, the live (saturation-excluding) search returned a path containing an
+      // edge with zero or negative room in its own window — the exclusion it's supposed to enforce
+      // (`load >= capacity`
+      // closes an edge) is broken. Silently `break`-ing here would leave `remaining` stuck and either
       // return a wrong partial booking or, if some caller loops on a nonzero remainder, spin
       // forever with no visible fault — the OOM a broken exclusion actually produces. Throwing
       // surfaces the impossible state immediately, matching this project's convention that a
@@ -327,25 +472,24 @@ export function createRouteBooker(
       // hard-pauses the loop").
       if (placeable <= 0) {
         throw new Error(
-          `lane-routing: liveEdgeCost returned a path with a non-positive-room edge (${chokeLaneKey ?? "unknown"}) — capacity exclusion invariant broken`,
+          `lane-routing: the live edge-cost search returned a path with a non-positive-room edge (${chokeHop?.key ?? "unknown"}) — capacity exclusion invariant broken`,
         );
       }
 
-      for (const key of laneKeysOnPath) {
-        booked.set(key, (booked.get(key) ?? 0) + placeable);
-        addFactionBooking(key, factionKey, placeable);
+      for (const hop of hops) {
+        addBooking(hop.key, hop.window, factionKey, placeable);
       }
 
       placements.push({
         quantity: placeable,
-        edges: laneKeysOnPath,
+        edges: hops.map((h) => h.key),
         perUnit: liveCost,
         fuelTotal: sumRawFuel(path),
       });
 
       const shortfall = remaining - placeable;
-      if (shortfall > 0 && chokeLaneKey) {
-        recordBlocked(blocked, chokeLaneKey, shortfall, factionKey);
+      if (shortfall > 0 && chokeHop) {
+        recordBlocked(blocked, chokeHop.key, shortfall, factionKey, chokeHop.window);
       }
       remaining = shortfall;
     }
@@ -356,7 +500,7 @@ export function createRouteBooker(
   function loads(): ReadonlyMap<string, LaneLoad> {
     const result = new Map<string, LaneLoad>();
     for (const key of network.laneKeys) {
-      result.set(key, { bookedLoad: booked.get(key) ?? 0, blockedVolume: blockedVolume.get(key) ?? 0 });
+      result.set(key, { bookedLoad: loadAt(key, 0), blockedVolume: blockedVolume.get(key) ?? 0 });
     }
     return result;
   }
@@ -366,7 +510,7 @@ export function createRouteBooker(
     openEdge: (laneKey: string) => boolean,
   ): (donorId: string) => number | null {
     const { dist } = dijkstra(sinkId, network.adjacency, {
-      edgeCost: (f, t, fuelCost) => liveEdgeCost(f, t, fuelCost, openEdge),
+      edgeCost: (f, t, fuelCost) => edgeCost(f, t, fuelCost, 0, openEdge, true),
     });
     return (donorId: string) => dist.get(donorId) ?? null;
   }
@@ -378,7 +522,7 @@ export function createRouteBooker(
     openEdge: (laneKey: string) => boolean,
   ): (donorId: string) => boolean {
     const { dist } = dijkstra(sinkId, network.adjacency, {
-      edgeCost: (f, t, fuelCost) => edgeCostIgnoringSaturation(f, t, fuelCost, openEdge),
+      edgeCost: (f, t, fuelCost) => edgeCost(f, t, fuelCost, 0, openEdge, false),
     });
     return (donorId: string) => dist.has(donorId);
   }
@@ -392,5 +536,5 @@ export function createRouteBooker(
     };
   }
 
-  return { loads, forHauler };
+  return { loads, loadAt, forHauler };
 }

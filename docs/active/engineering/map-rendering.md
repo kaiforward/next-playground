@@ -34,7 +34,8 @@ A single mode toggle (`MapMode` in `lib/types/map.ts`) selects what the territor
 
 One **overlay** is additive and sits on top of whichever mode is active:
 
-- **Logistics** — directed faction hauls drawn as curved convoy arcs with travelling particles.
+- **Logistics** — directed faction hauls drawn as travelling particles over the lane network itself
+  (below), never a chord arcing between a haul's origin and destination.
 
 ## Value modes — relative, faction-scopable gradients
 
@@ -133,8 +134,9 @@ changes, not every frame.
   the set of points nearest its site, so `delaunay.find(x, y)` resolves the cell under the cursor in O(log n)
   (`voronoi-cache.ts`), routed through the existing pointer flow. Selection resolves on pointer-**up** and only
   when the pointer barely moved (< `CAMERA.clickDragThreshold`), so a quick click selects while a drag pans the
-  camera instead (see Navigation). The stage-level cell hit-test is the single selection path — it covers direct
-  star hits and clicks that miss the star alike.
+  camera instead (see Navigation).
+- **A lane click** (within `LANE_HIT_TOLERANCE_PX` screen pixels of its segment) opens `/lane/[key]` instead — see "Selection
+  precedence" below for exactly where this sits relative to the faction/system/cell checks.
 - **The one exception — zoomed out:** a faction click routes to `/factions/[id]`, opening the faction panel and
   re-scaling the value gradient (above).
 - **Selection ≠ camera.** A generic `?focus=<x>,<y>[,<zoom>]` param recentres the camera on any world coordinate
@@ -171,6 +173,55 @@ tick-scoped ownership payload the political layer reads (`OwnershipEntry.forming
 gate. Geometry and colours live in `SETTLEMENT_MARK` (`theme.ts`); the pulse clock is shared per layer so every
 forming colony pulses in phase, and marks subdue with the dot under value modes. Like all star-glyph detail the
 marks are zoomed-in only — the point cloud stays status-blind.
+
+## Lane layer
+
+Every generated jump lane (`WorldLane`, [logistics-lanes.md](../gameplay/logistics-lanes.md) §1) draws as a segment
+between its two systems, styled by `laneStyle` (`components/map/pixi/objects/lane-style.ts`) from
+four inputs — no separate chord overlay:
+
+- **Fuel-cost tier** (`ordinary`/`notable`/`major`, unchanged from the map-generation pass) sets the
+  base line weight/alpha and, for a `major` (crossing-priced) lane, a wide soft glow underlay behind
+  a crisp core line.
+- **Invested level** (`WorldLane.level`) widens the line further on top of its tier's base width — a
+  heavier corridor reads thicker regardless of how it was priced.
+- **Load** (`bookedLoad ÷ capacity`) colours the line: grey at ~0 booked load, warming toward amber
+  as load approaches capacity.
+- **Blocked** (`blockedVolume > 0` this run) overrides the colour to red — congestion that turned
+  volume away, i.e. "invest here." Red is never a "nearly full" reading; a lane can sit at high load
+  and stay amber all the way to capacity.
+
+The selected lane (the open `/lane/:key` route) gets an additional copper highlight, read from the
+router the same way the selected system's cell is.
+
+**The logistics overlay's particles ride the lane network, not a chord.** `getTradeFlowEdges`
+(`lib/services/trade-flow.ts`) reads the scheduled-freight ledger (`WorldPendingArrival`) against
+the hop each row is PHYSICALLY crossing right now (`currentHopIndex`, `lib/engine/freight.ts`) and
+produces one `TradeFlowEdgeInfo` per lane per direction currently carrying volume — a haul crossing
+three lanes lights up one edge at a time, walking lane by lane along its route as ticks pass, never
+all three at once, and never one arc between its origin and destination. `TradeFlowLayer`'s particle
+machinery (unchanged) is fed these edges and travels each lane's own straight segment; particles are
+dropped at the same zoomed-out tier the map's other overlays fade at (`LODState.logisticsAlpha`). An
+empty ledger reads as zero edges.
+
+## Selection precedence
+
+Selection resolves in one stated order (`resolveMapClick`, `components/map/pixi/lane-hit-test.ts`),
+tried on every stage pointer-up:
+
+1. **Faction** — zoomed out (below `FACTION_SELECT_ZOOM`) and the point lands on a faction's
+   territory union → `/factions/[id]`.
+2. **System, by the star's own hover radius** (`findSystemNear`, `SIZES.systemHitRadius`) — a
+   precise click on a star wins even when a lane also passes near that point.
+3. **Lane, by tolerance** (`findLaneAt`, world-unit point-to-segment distance,
+   `LANE_HIT_TOLERANCE_PX` screen pixels divided by the camera zoom) — a lane is a segment between two system points, which no cell-based
+   hit-test shape fits, hence its own hit-test module.
+4. **System, by the ordinary Voronoi cell** (`SystemCells.findSystemAt`) — a click anywhere inside a
+   system's cell, at any zoom, in every mode.
+5. **Empty** — clears the selection.
+
+Selecting a lane opens its route-docked panel (`/lane/:key`); selecting a system while that panel is
+open re-points to the system panel, the same navigation system-to-system already does.
 
 ## Rendering architecture
 

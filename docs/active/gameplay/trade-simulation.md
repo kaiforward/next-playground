@@ -51,13 +51,25 @@ Defined in `lib/constants/trade-simulation.ts`:
 
 ### Map Overlay
 
-A **Logistics** toggle on the overlay-controls cluster (default off) reveals a Pixi particle layer: edges with cumulative logistics flow above `LOGISTICS_ROUTE_FLOOR` get directional curved convoy arcs tinted by the dominant good's tier, with an arrowhead pointing at the importing system. A tier-colour legend decodes the colour story (raw → green, processed → amber, advanced → cyan); tier colours live in `lib/constants/good-colors.ts`.
+Every jump lane draws on the map at all times, styled by its fuel-cost tier, its invested level
+(width) and its current load (colour, grey → amber, red only while it is turning volume away this
+run) — see [logistics-lanes.md](./logistics-lanes.md) §1, §6 and
+[map-rendering.md](../engineering/map-rendering.md) for the lane layer detail. On top of that
+always-on layer, a **Logistics** toggle on the overlay-controls cluster (default off) reveals a Pixi
+particle layer: every lane a scheduled haul's route currently crosses carries travelling particles,
+one segment per lane the haul spans — never a chord arcing directly between its origin and
+destination — read straight from the scheduled-freight ledger, so an empty ledger shows nothing. A
+lane is selectable (within a screen-pixel tolerance of its segment, behind a direct star hit) and
+opens its route-docked card at `/lane/:key` — level, capacity, load, cargo in flight, the open
+upgrade project and the invest verb.
 
 ### Logistics Tab
 
-The system detail panel's **Logistics** tab pairs two diverging-bar charts over a full-width volume-over-time series — a legibility instrument for the per-system trade picture.
+The system detail panel's **Logistics** tab pairs two diverging-bar charts over a full-width volume-over-time series — a legibility instrument for the per-system trade picture — plus an in-transit ledger.
 
 **Internal** (left): production vs consumption for all goods, per-cycle rates, solid bars. **External** (right): imports vs exports over the rolling `FLOW_HISTORY_TICKS` window, cumulative volume; per-row hover tooltips list the top source/destination partner systems. Both columns share a single tier-grouped, net-descending row order so each good aligns across columns. Each column normalises to its own maximum (per-cycle rates vs cumulative volume are incommensurable), so the cross-column comparison is qualitative.
+
+**In transit**: below the bar table, an inbound and an outbound section list every scheduled-freight ledger row touching the system — good, other endpoint, quantity, and a duration-formatted ETA — each row disappearing the tick its arrival lands. Absent entirely, not an empty card, when nothing is in flight either way.
 
 Non-developed systems are inert, so the tab returns the empty shape for them (their services gate on `developed` control).
 

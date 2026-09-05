@@ -94,7 +94,7 @@ overlapping chips do not show each other, or the live map, through.
 
 ## The categories
 
-Thirteen, each authored into one of three tiers at design time. Instances sort only *within* their
+Fourteen, each authored into one of three tiers at design time. Instances sort only *within* their
 category, by that category's own natural measure; categories sort only by their authored tier. There
 is no computed cross-domain score anywhere in this design — it is what lets housing, which carries no
 ROI at all, sit on the same bar as an industry proposal without inventing a weight to compare them.
@@ -108,6 +108,7 @@ ROI at all, sit on the same bar as an industry proposal without inventing a weig
 | important | Unrest rising | Provision is below what the population expects, before anyone strikes. | Grievance depth. |
 | important | Survival stock falling | A world's food or water reserve is under three cycles from running out. | Time to empty (soonest first). |
 | important | Demand unservable | A shortfall no reachable supplier or local production can close. | Unserved shortfall (largest first). |
+| important | Lane congested | A lane the player faction can act on — its investor, or either endpoint held — turned volume away at capacity this run. | Blocked volume (largest first). |
 | important | Overcrowded | Population has outgrown the housing built for it. | Cap utilisation (most over first). |
 | important | No housing headroom | Overcrowded, nothing queued to fix it, and no room left to build more housing. | Population over cap. |
 | important | Build blocked | The production planner wanted to build here and couldn't. | Authored reason severity, worst first; the dropped opportunity's own value tiebreaks within one reason only. |
@@ -155,12 +156,15 @@ instances live in one place, in one order.
 
 ## What a row click does
 
-**Every row does the same thing: fly the map to the system and open the destination tab**, reusing the
-same fly-to-system-and-open-tab mechanism the Tracker's own rows use. The only per-category variation is
-which tab, authored beside the category's tier and icon. A row's click applies no action in place and
-does not close the flyout — nothing on this bar is dismissible, so a click that both acted and closed
-the list would read as a dismissal, the one gesture this design deliberately does not have. A player can
-walk a long category one instance at a time without the flyout closing between clicks.
+**Every row flies the map to its subject and opens the destination**, reusing the same fly-and-open
+mechanism the Tracker's own rows use — a system and a tab for every category but two: Maintenance
+unfunded (the player faction panel, not a system) and Lane congested (the lane card, recentred on the
+lane's own midpoint — a lane names two endpoints, not one system, so it needs its own fly-to rather
+than either endpoint's). The only per-category variation among the system-scoped ones is which tab,
+authored beside the category's tier and icon. A row's click applies no action in place and does not
+close the flyout — nothing on this bar is dismissible, so a click that both acted and closed the list
+would read as a dismissal, the one gesture this design deliberately does not have. A player can walk a
+long category one instance at a time without the flyout closing between clicks.
 
 | Category | Destination |
 |---|---|
@@ -169,6 +173,7 @@ walk a long category one instance at a time without the flyout closing between c
 | Demand unservable, Survival stock falling | system → Logistics tab |
 | Colony opportunity | system → Overview |
 | Maintenance unfunded | the player faction panel's Overview (the treasury card's home) — the row is faction-level, not a system |
+| Lane congested | the lane card, recentring the map on the lane's own midpoint — the row is lane-level, naming two endpoints rather than one system |
 
 A row's right-hand edge is left free for a later secondary action, so an opportunity row could grow a
 direct "build it" without redesigning the row.
@@ -253,6 +258,11 @@ eating the level.
 One authored lookup table completes the picture: `BUILD_DROP_SEVERITY` (`lib/constants/alerts.ts`)
 ranks Build blocked's five drop reasons worst-first — a presentation ordering, authored where two
 quantities are not otherwise comparable, rather than a value read out of the simulation.
+
+Lane congested reads a field none of the above are: **`WorldLane.blockedVolume`**, the volume a
+saturated lane turned away this run, a lane-engine field (docs/active/gameplay/logistics-lanes.md §1)
+that predates this surface and stays read by lane decay too — not one of the six above, which exist
+purely for this read surface and are read by nothing else in the tick.
 
 ## World state and saves
 

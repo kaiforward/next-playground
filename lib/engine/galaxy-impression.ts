@@ -1,5 +1,5 @@
 /**
- * Pure maths behind the galaxy-preview canvas (spec `docs/planned/logistics-lanes.md` §5): builds
+ * Pure maths behind the galaxy-preview canvas (spec `docs/active/gameplay/universe.md`): builds
  * one galaxy's density grid + star placement from structure knobs, and rasterises the density grid
  * into an RGBA byte array a canvas can paint directly. No DOM/canvas API anywhere in this module —
  * it is exercised in node tests, with `components/start/galaxy-preview.tsx` supplying the actual

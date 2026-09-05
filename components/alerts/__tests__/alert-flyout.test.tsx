@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Popover, PopoverTrigger } from "@/components/ui/popover";
+import { DWELL_MS, DWELL_OPEN_DELAY_MS, Popover, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertFlyout,
   resolveAlertTarget,
@@ -13,6 +13,8 @@ import type {
   AlertInstance,
   ControlledSystemsAlertCategory,
   FactionAlertCategory,
+  LaneAlertInstance,
+  LaneScopedAlertCategory,
   SystemScopedAlertCategory,
 } from "@/lib/types/api";
 
@@ -58,6 +60,18 @@ const maintenanceUnfunded: FactionAlertCategory = {
   instances: [instance("The Terran Compact", "$1.2M short", null)],
 };
 
+function laneInstance(name: string, measure: string, laneKey: string, sortKey = 0): LaneAlertInstance {
+  return { laneKey, name, measure, sortKey };
+}
+
+const laneCongested: LaneScopedAlertCategory = {
+  id: "lane_congested",
+  unit: "lanes",
+  count: 1,
+  denominator: 9,
+  instances: [laneInstance("Sunnyvale — Rigel", "12.0 blocked", "sys-a|sys-b")],
+};
+
 function manyInstances(n: number): AlertInstance[] {
   return Array.from({ length: n }, (_, i) => instance(`System ${i}`, `Provision ${i}%`, `sys-${i}`, i));
 }
@@ -84,7 +98,7 @@ async function renderOpenFlyout(
 
 describe("resolveAlertTarget — the row's destination, resolved off the category and the instance", () => {
   it("a system-scoped category resolves to its authored tab, using the instance's own systemId", () => {
-    expect(resolveAlertTarget(populationCollapse, populationCollapse.instances[0])).toEqual({
+    expect(resolveAlertTarget(populationCollapse, 0)).toEqual({
       kind: "system",
       systemId: "sys-a",
       tab: "population",
@@ -92,12 +106,18 @@ describe("resolveAlertTarget — the row's destination, resolved off the categor
   });
 
   it("Maintenance unfunded resolves to the player faction's Overview regardless of the instance's systemId", () => {
-    expect(resolveAlertTarget(maintenanceUnfunded, maintenanceUnfunded.instances[0])).toEqual({
+    expect(resolveAlertTarget(maintenanceUnfunded, 0)).toEqual({
       kind: "faction",
       tab: "",
     });
   });
 
+  it("Lane congested resolves to the instance's own laneKey, not a system", () => {
+    expect(resolveAlertTarget(laneCongested, 0)).toEqual({
+      kind: "lane",
+      laneKey: "sys-a|sys-b",
+    });
+  });
 });
 
 describe("alertFooterText — states the denominator for a system-scoped category, the unit otherwise, nothing for faction", () => {
@@ -111,6 +131,10 @@ describe("alertFooterText — states the denominator for a system-scoped categor
 
   it("faction returns null — a count that's always 1 by construction carries no information to state", () => {
     expect(alertFooterText(maintenanceUnfunded)).toBeNull();
+  });
+
+  it("lanes states its own denominator, not the developed-systems one", () => {
+    expect(alertFooterText(laneCongested)).toBe("1 of 9 lanes");
   });
 });
 
@@ -172,5 +196,52 @@ describe("AlertFlyout — row activation", () => {
     expect(screen.getByRole("button", { name: /Rigel/ })).toBeInTheDocument();
     // The trigger, plus Sunnyvale and Rigel's own rows.
     expect(screen.getAllByRole("button")).toHaveLength(3);
+  });
+
+  it("clicking a Lane congested row navigates with the instance's own laneKey", async () => {
+    const onNavigate = vi.fn();
+    const { user } = await renderOpenFlyout(laneCongested, onNavigate);
+
+    await user.click(screen.getByRole("button", { name: /Sunnyvale — Rigel/ }));
+
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+    expect(onNavigate).toHaveBeenCalledWith({ kind: "lane", laneKey: "sys-a|sys-b" });
+  });
+});
+
+describe("AlertFlyout — Lane congested's header term nests a dwell popover inside this click-opened flyout", () => {
+  // The consumer-level pin of the fix in components/ui/popover.tsx: `scheduleLeaveClose` used to
+  // close the whole stack (`closeFromDepth(-1)`) whenever the pointer left every `dwell` region,
+  // with no regard for what sat below the dwell chain — and this flyout is exactly that shape, a
+  // click-opened, non-`dwell` `Popover` whose header links a `TermLabel` (`components/ui/term-label
+  // .tsx`, `dwell` mode) one level deeper. Real timers throughout, per this file's own dwell-mode
+  // precedent (`components/ui/__tests__/popover.test.tsx`'s header comment) — Radix's Presence
+  // machinery is fragile under fake timers, and a locked `dwell` popover still renders through it.
+  it("opening the term and leaving it closes only the term, leaving the flyout open", async () => {
+    const { user } = await renderOpenFlyout(laneCongested);
+    const flyout = screen.getByRole("dialog", { name: "Lane congested alerts" });
+
+    const term = screen.getByRole("button", { name: "Lane congested" });
+    await user.hover(term);
+    // Past the dwell open delay and the dwell-to-lock timer, so the term's own popover is `locked`
+    // — real, fixed module constants (`DWELL_OPEN_DELAY_MS` 200, `DWELL_MS` 550), not a shortened
+    // test double.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, DWELL_OPEN_DELAY_MS + DWELL_MS + 80));
+    });
+    const termCard = screen.getByRole("dialog", { name: "Congested" });
+    expect(termCard).toBeInTheDocument();
+
+    // Off the term entirely and onto the flyout's own body — its condition line, not the term's
+    // trigger, not the term's own content, and not any other tracked dwell region — a genuine leave
+    // of the whole dwell chain while the flyout itself is still very much under the pointer.
+    await user.hover(screen.getByText(/turned hauls away at capacity/));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Congested" })).not.toBeInTheDocument();
+    });
+    // The bug this pins: the flyout used to close along with the term, via the leave grace's
+    // close-everything sentinel having no notion of a non-`dwell` ancestor beneath the dwell chain.
+    expect(flyout).toBeInTheDocument();
   });
 });

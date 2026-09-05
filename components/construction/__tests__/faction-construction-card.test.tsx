@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { FactionConstructionCard } from "@/components/construction/faction-construction-card";
 import type { FactionConstructionData, FactionTreasuryData } from "@/lib/types/api";
 import type { WorldTreasurySettlement } from "@/lib/world/types";
@@ -7,9 +8,10 @@ import type { TreasuryBands } from "@/lib/engine/treasury";
 
 // Both hooks are thin `useSuspenseQuery` wrappers, so mocking them at the module edge is enough —
 // no QueryClientProvider, and no fetch for jsdom to fail on.
-const { treasuryValue, constructionValue } = vi.hoisted(() => ({
+const { treasuryValue, constructionValue, setAutomationMutate } = vi.hoisted(() => ({
   treasuryValue: { current: null as FactionTreasuryData | null },
   constructionValue: { current: null as FactionConstructionData | null },
+  setAutomationMutate: vi.fn(),
 }));
 
 vi.mock("@/lib/hooks/use-faction-treasury", () => ({
@@ -19,7 +21,7 @@ vi.mock("@/lib/hooks/use-faction-construction", () => ({
   useFactionConstruction: () => constructionValue.current,
 }));
 vi.mock("@/lib/hooks/use-construction-orders", () => ({
-  useSetAutomation: () => ({ mutate: vi.fn() }),
+  useSetAutomation: () => ({ mutate: setAutomationMutate }),
 }));
 
 const bands = (maintenance: number, logistics: number, construction: number): TreasuryBands =>
@@ -34,10 +36,11 @@ function settlement(paid: TreasuryBands, charged?: TreasuryBands): WorldTreasury
 }
 
 /** Renders the card for one faction whose treasury is in the given state. */
-function renderCard(treasury: Partial<FactionTreasuryData>) {
+function renderCard(treasury: Partial<FactionTreasuryData>, construction?: Partial<FactionConstructionData>) {
   constructionValue.current = {
     factionId: "f1", pool: 100, poolBase: 100, poolCentres: 0, automation: null,
-    buildSystems: [], colonies: [], orderedCount: 0,
+    buildSystems: [], colonies: [], lanes: [], orderedCount: 0,
+    ...construction,
   };
   treasuryValue.current = {
     factionId: "f1", balance: 1000, taxLevel: "normal",
@@ -97,5 +100,31 @@ describe("FactionConstructionCard — the construction band's shorted tag", () =
 
     expect(screen.getByText("Construction")).toBeInTheDocument();
     expect(screen.getByText("No active construction or expansion.")).toBeInTheDocument();
+  });
+});
+
+describe("FactionConstructionCard — the third automation switch", () => {
+  it("toggles only lanes, leaving build and colonisation exactly as they were", async () => {
+    setAutomationMutate.mockClear();
+    renderCard(
+      { lastSettlement: null },
+      { automation: { build: true, colonisation: false, lanes: false } },
+    );
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Autonomic lanes" }));
+
+    expect(setAutomationMutate).toHaveBeenCalledTimes(1);
+    expect(setAutomationMutate).toHaveBeenCalledWith({ build: true, colonisation: false, lanes: true });
+  });
+
+  it("lists open lane-upgrade projects, each linking to its lane card", () => {
+    renderCard(
+      { lastSettlement: null },
+      { lanes: [{ laneKey: "sys-a|sys-b", label: "Sunnyvale ↔ Marrow", progress: 0.4 }] },
+    );
+
+    expect(screen.getByText("Lanes — 1")).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Sunnyvale ↔ Marrow" });
+    expect(link).toHaveAttribute("href", "/lane/sys-a%7Csys-b");
   });
 });

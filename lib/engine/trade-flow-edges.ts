@@ -1,97 +1,118 @@
 /**
  * Pure aggregation for the directed-logistics MAP OVERLAY. The service in
- * `lib/services/trade-flow.ts` window-sums raw flow rows and feeds them here to
- * produce the undirected edge set the Pixi layer renders.
+ * `lib/services/trade-flow.ts` reads the scheduled-freight ledger (`WorldPendingArrival`) and feeds
+ * it here to produce the per-lane directed edge set the Pixi layer renders.
  *
- * Pure: no I/O. Unit-tested against in-memory rows.
+ * Unlike the retired chord builder (one row per system PAIR, aggregated from window-summed flow
+ * events), a haul's route is a list of lane hops (`routeEdges`), but this module contributes each
+ * row to exactly ONE edge: the hop it is PHYSICALLY crossing at `tick` (`currentHopIndex`,
+ * `lib/engine/freight.ts`) — so a haul's particles travel lane by lane along its route over time,
+ * rather than lighting up every lane of the route for the haul's whole journey. Pure: no I/O.
+ * Unit-tested against in-memory rows.
  */
 
+import { laneEndpoints } from "@/lib/engine/lanes";
+import { currentHopIndex } from "@/lib/engine/freight";
 import type { TradeFlowEdgeInfo } from "@/lib/types/api";
 
-/** One window-summed flow between two systems for one good. */
-export interface RawFlowRow {
+/** The one shape this module needs from a `WorldPendingArrival` ledger row. */
+export interface LaneFlowRow {
   fromSystemId: string;
-  toSystemId: string;
   goodId: string;
-  /** Window-summed magnitude (rows with quantity <= 0 are ignored). */
+  /** In-flight magnitude (rows with quantity <= 0 are ignored). */
   quantity: number;
+  /** Ordered lane-key hops the haul crosses, `fromSystemId` → its eventual destination. */
+  routeEdges: string[];
+  dispatchTick: number;
+  arrivalTick: number;
 }
 
-interface DirectionalGoodTally {
-  /** Volume in canonical-from → canonical-to direction. */
-  forward: number;
-  /** Volume in canonical-to → canonical-from direction. */
-  reverse: number;
+interface DirectedEdgeAgg {
+  /** The lane this edge is a direction of — carried on the aggregate rather than recovered from the
+   *  composite map key by string surgery (the key packs lane + origin, and a lane key contains the
+   *  same separator). */
+  laneKey: string;
+  fromSystemId: string;
+  toSystemId: string;
+  perGood: Map<string, number>;
+  total: number;
 }
 
 /**
- * Collapse window-summed flow rows into undirected edges keyed by the sorted
- * endpoint pair, recovering net direction from the dominant good. Drops edges
- * below `floor` cumulative volume and edges with no visible endpoint.
+ * Collapse in-flight ledger rows into one edge per (lane, direction), keyed by
+ * `${laneKey}|${fromSystemId}`. For each row, the hop it's currently on is found via
+ * `currentHopIndex`; its direction is read by walking `routeEdges` in order from `fromSystemId`
+ * up to that hop (a lane key names its two endpoints — the endpoint NOT equal to the current
+ * position is the hop's destination, which becomes the current position for the next hop). A row
+ * on no hop right now (already drained), and a row whose consecutive hops do not share an endpoint
+ * (a discontiguous route — never produced by real routing), both contribute nothing. Drops edges
+ * below `floor` cumulative volume.
+ *
+ * `hopFuelCostsOf` must return one fuel cost per `routeEdges` hop, built once per call from the
+ * lane network's static fuel costs (never persisted on the row) — see `currentHopIndex`'s own
+ * build-once contract.
  */
-export function buildFlowEdges(
-  rows: ReadonlyArray<RawFlowRow>,
-  visibleSet: Set<string>,
+export function buildLaneFlowEdges(
+  rows: ReadonlyArray<LaneFlowRow>,
   floor: number,
+  tick: number,
+  hopFuelCostsOf: (row: LaneFlowRow) => readonly number[],
+  freightSpeed: number,
 ): TradeFlowEdgeInfo[] {
-  interface EdgeAgg {
-    canonicalFrom: string;
-    canonicalTo: string;
-    perGood: Map<string, DirectionalGoodTally>;
-  }
-  const byEdge = new Map<string, EdgeAgg>();
+  const byEdge = new Map<string, DirectedEdgeAgg>();
 
   for (const row of rows) {
     if (row.quantity <= 0) continue;
 
-    const isForward = row.fromSystemId < row.toSystemId;
-    const [a, b] = isForward
-      ? [row.fromSystemId, row.toSystemId]
-      : [row.toSystemId, row.fromSystemId];
+    const hop = currentHopIndex(row, tick, hopFuelCostsOf(row), freightSpeed);
+    if (hop === null) continue;
 
-    // Visibility gate: at least one endpoint must be visible.
-    if (!visibleSet.has(a) && !visibleSet.has(b)) continue;
+    // Walk the route from its origin to the current hop by explicit membership: a lane key names
+    // exactly two endpoints, so the walk's next position is whichever of them the current position
+    // is NOT. A route whose consecutive hops don't share an endpoint (malformed, never produced by
+    // real routing) leaves the walk off the lane entirely — the row contributes nothing rather than
+    // resolving to an arbitrary endpoint and emitting an edge pointing the wrong way.
+    let current: string | null = row.fromSystemId;
+    for (let i = 0; i < hop && current !== null; i++) {
+      const [a, b] = laneEndpoints(row.routeEdges[i]);
+      current = current === a ? b : current === b ? a : null;
+    }
+    if (current === null) continue;
+    const laneKey = row.routeEdges[hop];
+    const [a, b] = laneEndpoints(laneKey);
+    const next = current === a ? b : current === b ? a : null;
+    if (next === null) continue;
+    const key = `${laneKey}|${current}`;
 
-    const key = `${a}|${b}`;
     let entry = byEdge.get(key);
     if (!entry) {
-      entry = { canonicalFrom: a, canonicalTo: b, perGood: new Map() };
+      entry = { laneKey, fromSystemId: current, toSystemId: next, perGood: new Map(), total: 0 };
       byEdge.set(key, entry);
     }
-    let tally = entry.perGood.get(row.goodId);
-    if (!tally) {
-      tally = { forward: 0, reverse: 0 };
-      entry.perGood.set(row.goodId, tally);
-    }
-    if (isForward) tally.forward += row.quantity;
-    else tally.reverse += row.quantity;
+    entry.perGood.set(row.goodId, (entry.perGood.get(row.goodId) ?? 0) + row.quantity);
+    entry.total += row.quantity;
   }
 
   const edges: TradeFlowEdgeInfo[] = [];
-  for (const { canonicalFrom, canonicalTo, perGood } of byEdge.values()) {
-    let totalVolume = 0;
-    let dominantGoodId = "";
-    let dominantNet = 0;
-    let dominantMagnitude = 0;
-    const perGoodObj: Record<string, number> = {};
+  for (const agg of byEdge.values()) {
+    if (agg.total < floor) continue;
 
-    for (const [goodId, tally] of perGood) {
-      const magnitude = tally.forward + tally.reverse;
-      totalVolume += magnitude;
-      perGoodObj[goodId] = magnitude;
+    let dominantGoodId = "";
+    let dominantMagnitude = 0;
+    for (const [goodId, magnitude] of agg.perGood) {
       if (magnitude > dominantMagnitude) {
         dominantMagnitude = magnitude;
         dominantGoodId = goodId;
-        dominantNet = tally.forward - tally.reverse;
       }
     }
 
-    if (totalVolume < floor) continue;
-
-    // Net direction from the dominant good; ties fall back to canonical order.
-    const fromSystemId = dominantNet >= 0 ? canonicalFrom : canonicalTo;
-    const toSystemId = dominantNet >= 0 ? canonicalTo : canonicalFrom;
-    edges.push({ fromSystemId, toSystemId, totalVolume, dominantGoodId, perGood: perGoodObj });
+    edges.push({
+      laneKey: agg.laneKey,
+      fromSystemId: agg.fromSystemId,
+      toSystemId: agg.toSystemId,
+      totalVolume: agg.total,
+      dominantGoodId,
+    });
   }
   return edges;
 }

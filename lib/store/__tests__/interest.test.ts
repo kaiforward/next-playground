@@ -16,11 +16,24 @@ describe("createInterestRegistry", () => {
 
     const release = registry.register("system", "sys-a");
     expect(posts).toHaveLength(1);
-    expect(posts[0]).toEqual({ systems: ["sys-a"], factions: [], goods: [] });
+    expect(posts[0]).toEqual({ systems: ["sys-a"], factions: [], goods: [], lanes: [] });
 
     release();
     expect(posts).toHaveLength(2);
-    expect(posts[1]).toEqual({ systems: [], factions: [], goods: [] });
+    expect(posts[1]).toEqual({ systems: [], factions: [], goods: [], lanes: [] });
+  });
+
+  it("mounting the lane card posts a set containing its key; unmounting posts one without it", () => {
+    const { posts, post } = recorder();
+    const registry = createInterestRegistry(post);
+
+    const release = registry.register("lane", "sys-a|sys-b");
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toEqual({ systems: [], factions: [], goods: [], lanes: ["sys-a|sys-b"] });
+
+    release();
+    expect(posts).toHaveLength(2);
+    expect(posts[1]).toEqual({ systems: [], factions: [], goods: [], lanes: [] });
   });
 
   it("two registrants of one id collapse to one entry, present until both release", () => {
@@ -36,11 +49,11 @@ describe("createInterestRegistry", () => {
     releaseA();
     // One registrant remains, so the id is still held — releasing the first must not post either.
     expect(posts).toHaveLength(1);
-    expect(posts[0]).toEqual({ systems: ["sys-a"], factions: [], goods: [] });
+    expect(posts[0]).toEqual({ systems: ["sys-a"], factions: [], goods: [], lanes: [] });
 
     releaseB();
     expect(posts).toHaveLength(2);
-    expect(posts[1]).toEqual({ systems: [], factions: [], goods: [] });
+    expect(posts[1]).toEqual({ systems: [], factions: [], goods: [], lanes: [] });
   });
 
   it("an id change on a mounted panel posts a set with the new id and without the old", () => {
@@ -110,7 +123,7 @@ describe("createInterestRegistry", () => {
 
     const releaseFirst = registry.register("good", "ore");
     expect(posts).toHaveLength(1);
-    expect(posts[0]).toEqual({ systems: [], factions: [], goods: ["ore"] });
+    expect(posts[0]).toEqual({ systems: [], factions: [], goods: ["ore"], lanes: [] });
 
     const releaseSecond = registry.register("good", "ore"); // no-op: same good, already held
     expect(posts).toHaveLength(1); // must NOT post again — goods unchanged, systems still equal-empty
@@ -120,7 +133,7 @@ describe("createInterestRegistry", () => {
 
     releaseFirst();
     expect(posts).toHaveLength(2);
-    expect(posts[1]).toEqual({ systems: [], factions: [], goods: [] });
+    expect(posts[1]).toEqual({ systems: [], factions: [], goods: [], lanes: [] });
   });
 
   it("keeps the posted systems list sorted and stable when one of two concurrent ids is released and re-registered", () => {
@@ -161,6 +174,6 @@ describe("createInterestRegistry", () => {
     expect(posts.length).toBe(countBeforeResend + 1);
     const last = posts[posts.length - 1];
     expect(last).toEqual(held);
-    expect(last).toEqual({ systems: ["sys-a"], factions: [], goods: ["ore"] });
+    expect(last).toEqual({ systems: ["sys-a"], factions: [], goods: ["ore"], lanes: [] });
   });
 });

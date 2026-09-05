@@ -92,6 +92,14 @@ describe("useRoute", () => {
     );
   });
 
+  it("matches a lane route, decoding the URL-encoded '|' back into the literal laneKey", () => {
+    window.history.pushState(null, "", `/lane/${encodeURIComponent("sys-a|sys-b")}`);
+    render(<RouteProbe />);
+    expect(screen.getByTestId("route")).toHaveTextContent(
+      JSON.stringify({ name: "lane", laneKey: "sys-a|sys-b" }),
+    );
+  });
+
   it("falls back to the map route for a path no pattern matches", () => {
     window.history.pushState(null, "", "/totally/unknown/path");
     render(<RouteProbe />);

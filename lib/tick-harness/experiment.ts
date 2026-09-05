@@ -110,7 +110,7 @@ export interface ExperimentResult {
   /** The map-generation acceptance instruments — corrected flow concentration, fuel-cost spread,
    *  cross-faction lane count, beyond-crossing cohort. A candidate-generation comparison field. */
   geography: HarnessResults["geography"];
-  /** Whole-run lane-mechanics instruments (spec §8) — utilisation, congestion, blocked volume,
+  /** Whole-run lane-mechanics instruments (spec §7) — utilisation, congestion, blocked volume,
    *  foreign-transit share, per-faction contention, survival-stock census. An arm-comparable field:
    *  `freightSpeed`/`laneTraversal` arms are read against this. */
   laneMetrics: HarnessResults["laneMetrics"];

@@ -13,6 +13,26 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 ## Queued
 
+- **[M] Map presentation pass — labels, lane layering, a Lanes map mode.** Three things the lane
+  surfaces and the map designer's tight clusters showed at once, folded into one pass with an HTML
+  prototype first (Kai, 2026-09-05):
+  - **Label culling/priority — system names hide when they don't fit.** At very low star spacing and
+    high cluster tightness (far from defaults, but a deliberately interesting map type) system labels
+    overlap into illegibility. Fix in rendering, not generation: EU5/Vic3-style — a label draws only
+    when it has room, with priority (homeworlds, developed, selected always keep theirs) and zoom
+    revealing more. First customer of the label management the map needs anyway once wars, battles
+    and ship units widen what it shows at full zoom-out.
+  - **Lane layering.** One line currently carries fuel tier, invested level, load, blocked,
+    ownership and selection at once, and the cell hover shows under a lane hover. Split it: the
+    always-on lane layer stays quiet and structural (fuel-tier width, a hover highlight on the lane
+    itself, the cell highlight suppressed while the pointer is within lane tolerance — the hit-test
+    already knows which wins the click); the load colour ramp reads too subtle today.
+  - **A Lanes map mode** carries the meaning: territory dims, lanes take the investor faction's
+    colour (grey for unowned or split), width for level, brightness for load, a red pulse for
+    blocked; dashed is freed from the long-lane treatment to mean "no investor".
+  Its own sub-PR into `shared/logistics-lanes`, after the lane surfaces PR.
+  *Next step:* HTML prototype of the two layers and the mode (breadth-first), then implement on the
+  Pixi label and lane layers.
 - **[M] Good-allocation cliff — how logistics splits a scarce good across demanding systems.**
   Gate 1 of supply-response measured per-good satisfaction as violently bimodal: on worlds below
   full Provision, individual goods sit at 0 or 1 with almost nothing between. Hypothesis: greedy
@@ -69,31 +89,36 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   closes the remaining half. The concrete place it lands is the **good-allocation cliff** row above,
   which owns the allocation policy; this line exists so the pillar pass does not design that policy
   necessity-blind.
-  *Next step:* the pass is in flight — spec approved and spec-reviewed
-  (`docs/planned/logistics-lanes.md`; evidence + build plan in
-  `docs/build-plans/logistics-lanes.md`). Map-generation sub-project first (its build plan is
-  written), lane mechanics after, on `shared/logistics-lanes`.
-- **[S] Map label culling/priority — system names hide when they don't fit.** At very low star
-  spacing and high cluster tightness (far from defaults, but a deliberately interesting map type)
-  system labels overlap into illegibility. Fix in rendering, not generation: EU5/Vic3-style —
-  a label draws only when it has room, with priority (homeworlds, developed, selected always keep
-  theirs) and zoom revealing more. First customer of the label management the map needs anyway
-  once wars/battles/ship units widen what it shows at full zoom-out. Its own sub-PR into
-  `shared/logistics-lanes`, after the map-gen sub-project.
-  *Next step:* interaction design pass on the priority/culling rule, then implement on the Pixi
-  label layer.
-  *Don't:* enforce a larger generation-time min distance to protect labels — a UI legibility
-  concern must not constrain galaxy geometry, and the dense-packed maps are a feature.
+  **War interdiction is ready to call** — the interdiction query (`flowsCrossingEdge`,
+  `lib/engine/freight.ts`) ships with no caller; it answers "which scheduled flows cross edge E in
+  [t₁,t₂]" straight off the freight ledger, so war's own pass calls it rather than building a new
+  read.
+  **Deep-space crossing lane class (tech-gated)** — a void span carries no lane at all today; a
+  future tech could add a slow, expensive lane class across one (the lane-class fuel multiplier
+  already exists, `laneFuelCost`). Not built this pass.
+  **Multi-cycle survival-alert window (watch item)** — the shipped one-cycle `stockChange` baseline
+  already captures scheduled arrivals at the shipped `FREIGHT_SPEED` (0 systems tripped the census
+  on any calibration arm); revisit only if trans-void hauls lengthen under a slower freight speed.
+  **Route dictionary / per-source path cache** — not needed at 600 systems (the wall-clock share
+  held under the ~3× line); the 10,000-system read was never run (projected ~2h). Book this only if
+  that larger read fails the line.
+  *Next step:* lane mechanics and their map/panel surfaces have shipped on `shared/logistics-lanes`
+  (`docs/active/gameplay/logistics-lanes.md`) — real routing, capacity, scheduled transit,
+  investment and claiming, the lane layer and card, in-transit rows. What remains is the unbuilt
+  leanings above.
 - **[M] Map drawing tool — player paints where stars generate.** Second author of the map-gen
-  density grid (`docs/planned/logistics-lanes.md` §5): a New Game canvas writes the same 0–1 grid
+  density grid (`docs/active/gameplay/universe.md`): a New Game canvas writes the same 0–1 grid
   the procedural clusters produce, so galaxy shape becomes paintable with no second generation
   path. *Next step:* after the logistics-lanes feature ships — prototype the paint surface on the
-  Task-5 preview canvas.
+  New Game preview canvas (`GalaxyPreview`, `components/start/galaxy-preview.tsx`).
 - **[M] Faction gameplay direction — design pass only, before pop scope is committed.** Decide
   what gameplay styles factions offer and how a faction manages its pops, so the pop expansion
   below is cut to fit a chosen direction rather than guessed. Inputs: the government layer
   revisit row (Unqueued — doctrine-driven discretionary spend, the control/integration design
   space) and the reference-game reads already carried on the strata row below.
+  **Negotiated transit rights** (treaties, tolls, per-lane grants) need the relations input this
+  design pass produces — today lane transit through foreign space is open at friendly/allied
+  relation tiers only (`docs/active/gameplay/logistics-lanes.md` §2, §5).
   *Next step:* `/brainstorm`, producing a direction doc in `docs/planned/`. No implementation.
 - **[XL] Pop wealth and buying power** — pops hold wealth and must afford their basket, so demand becomes
   partly monetary. Provision survives as a ratio and stays distinct (a world can hold the wealth and still

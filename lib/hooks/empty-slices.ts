@@ -14,7 +14,7 @@
  */
 import type { AtlasData, UniverseData, ActiveEvent } from "@/lib/types/game";
 import type { FactionSummary, RelationsMatrixData } from "@/lib/services/factions";
-import type { AlertData, TrackerData, TradeFlowEdges } from "@/lib/types/api";
+import type { AlertData, TrackerData, TradeFlowEdges, LaneStateRow } from "@/lib/types/api";
 import { DEFAULT_ALERT_CATEGORIES, DEFAULT_TRACKER_SECTIONS } from "@/lib/constants/attention";
 
 export const EMPTY_EVENTS: ActiveEvent[] = [];
@@ -48,3 +48,7 @@ export const EMPTY_ALERTS: AlertData = {
   categorySettings: DEFAULT_ALERT_CATEGORIES,
 };
 export const EMPTY_TRADE_FLOW: TradeFlowEdges = { logisticsEdges: [] };
+/** The pre-boot read (no state frame has landed, so no `lanes` slice) — the same empty array a
+ *  freshly-generated, connection-less world's `getLaneStates()` returns. A live world always has one
+ *  lane row per connection. */
+export const EMPTY_LANES: LaneStateRow[] = [];

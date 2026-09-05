@@ -48,7 +48,7 @@ export interface WorldPlayer {
    *  faction; committed funding and manual orders always continue. AI factions never read this. */
   automation: { build: boolean; colonisation: boolean; lanes: boolean };
   /**
-   * Tick of the player's last successful `claimSystem` order (docs/planned/logistics-lanes.md §1) —
+   * Tick of the player's last successful `claimSystem` order (docs/active/gameplay/logistics-lanes.md §1) —
    * absent means never claimed, not tick 0. `claimSystem` refuses a new claim until `currentTick −
    * lastClaimTick ≥ PLAYER_CLAIM_COOLDOWN × CYCLE_LENGTH` (`lib/constants/lanes.ts`,
    * `lib/constants/tick-cadence.ts`). Nothing inside the tick reads this.
@@ -473,17 +473,21 @@ export interface WorldConnection {
 
 /**
  * A persistent, undirected jump lane — one row per system pair that carries a `WorldConnection`
- * (docs/planned/logistics-lanes.md §1). `aId < bId`, and `key` is exactly `${aId}|${bId}` — the same
+ * (docs/active/gameplay/logistics-lanes.md §1). `aId < bId`, and `key` is exactly `${aId}|${bId}` — the same
  * sorted-pair key `buildOpenEdges` dedupes reciprocal connection rows on
  * (`lib/tick/world/trade-flow-topology.ts`) — so a lane and its open-edge view always agree on
  * identity.
  *
  * `level` is the invested upgrade tier (float, ≥ 0; capacity rises with it, `laneCapacity` in
  * `lib/engine/lanes.ts`) — level 0 is a lane nobody has invested in, not an impassable one: every
- * generated lane carries a small baseline capacity with no investment (§1). `bookedLoad` is a
- * per-run quota the logistics processor writes and resets each logistics run; `blockedVolume` is the
- * volume a saturated edge turned away the same run; both read 0 until a logistics run has visited the
- * lane. Booked + blocked is the "attempted load" figure lane decay reads. `idleCycles` is the lane
+ * generated lane carries a small baseline capacity with no investment (§1). `bookedLoad` is the
+ * volume crossing the lane in the current logistics run's window ONLY — hauls dispatched this run
+ * and hauls from earlier runs whose crossing lands now (§2) — rewritten every logistics run.
+ * `blockedVolume` is the volume the run turned away on this lane across ALL windows it routed
+ * against, not just the current one: a haul stopped by a choke three windows out is still this
+ * run's congestion signal (it is what the planner upgrades against) and still counts as attempted
+ * use of the lane. The two are therefore on different bases by design. Both read 0 until a
+ * logistics run has visited the lane. Booked + blocked is the "attempted load" figure lane decay reads. `idleCycles` is the lane
  * analogue of `WorldBuilding.idleCycles`: a sustained-idle counter (the lane decay dead band, §1)
  * that only advances while a whole level's capacity goes unused and resets on any run that uses it;
  * it reads 0 until decay assessment runs against the lane.
@@ -499,10 +503,9 @@ export interface WorldLane {
 }
 
 /**
- * One scheduled-freight ledger row (docs/planned/logistics-lanes.md §3) — written at dispatch by
- * directed-logistics (a future pass; nothing dispatches onto this ledger yet), drained by the
- * unconditional per-tick goods-arrivals stage. `routeEdges` is the ordered `laneKey` (`lib/engine/
- * lanes.ts`) list the haul crosses — the interdiction query's substrate.
+ * One scheduled-freight ledger row (docs/active/gameplay/logistics-lanes.md §3) — written at dispatch by
+ * directed-logistics, drained by the unconditional per-tick goods-arrivals stage. `routeEdges` is the
+ * ordered `laneKey` (`lib/engine/lanes.ts`) list the haul crosses — the interdiction query's substrate.
  *
  * `leg: "outbound"` is a donor→destination haul in flight; the destination's band cap
  * (`marketBandForRow(...).maxStock`) applies at arrival, and any uncredited remainder is returned
@@ -777,7 +780,7 @@ export interface WorldTreasurySettlement {
    */
   foundingExpense: number;
   /**
-   * Lane upkeep folded into `maintenanceBill` this cycle (docs/planned/logistics-lanes.md §1: "build
+   * Lane upkeep folded into `maintenanceBill` this cycle (docs/active/gameplay/logistics-lanes.md §1: "build
    * and upkeep ride the existing purse") — `laneUpkeepWork` priced at `maintenanceRatePerWork ×
    * catchUp`, the same band, same rate, same ladder line as building upkeep; broken out here only so
    * a reader can see how much of the one maintenance bill came from lanes. Optional so a save written

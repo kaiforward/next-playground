@@ -1,5 +1,5 @@
 /**
- * Component-level proves for `GalaxyPreview` (spec `docs/planned/logistics-lanes.md` §5): jsdom has
+ * Component-level proves for `GalaxyPreview` (spec `docs/active/gameplay/universe.md`): jsdom has
  * no canvas (`getContext("2d")` returns null), so this asserts structure/text — never pixels — per
  * AGENTS Testing gotchas. The maths this renders (density-field byte array, placement parity, no-
  * crash extremes, perf ceiling) is proved separately in `lib/engine/__tests__/galaxy-impression.test.ts` (node).

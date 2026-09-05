@@ -1,11 +1,12 @@
 /**
  * Pure lane engine — the shared substrate routing and investment mechanics build on
- * (docs/planned/logistics-lanes.md §1). Zero I/O, no world reads: callers pass in exactly the rows
+ * (docs/active/gameplay/logistics-lanes.md §1). Zero I/O, no world reads: callers pass in exactly the rows
  * this module needs.
  */
 
 import type { SystemControl, WorldLane } from "@/lib/world/types";
 import { LANES } from "@/lib/constants/lanes";
+import { DEFAULT_SYSTEM_COUNT, genConfigForSystemCount } from "@/lib/constants/universe-gen";
 
 /**
  * Canonical undirected pair key — the sorted `"a|b"` pair, identical in shape to `buildOpenEdges`'s
@@ -64,6 +65,30 @@ export function laneCapacity(level: number): number {
   return LANES.BASE_LANE_CAPACITY * (1 + level);
 }
 
+/**
+ * How pricey a lane's crossing is, in three bands rather than a single threshold — the label the
+ * lane card names and the band the map's line weight and alpha start from
+ * (`laneStyle`, `components/map/pixi/objects/lane-style.ts`).
+ *
+ * Fuel is priced at generation as (distance ÷ average intra-region hop) × `INTRA_REGION_BASE_FUEL`,
+ * times `CROSSING_FUEL_MULTIPLIER` for a corridor's crossing-style lane, so an ordinary lane at
+ * typical spacing sits at the base fuel: "notable" catches a lane pricier than 1.5 typical hops,
+ * "major" one priced at or beyond a crossing at typical spacing. Neither fuel constant varies with
+ * system count, so the default config's values are the values.
+ */
+export type LaneTier = "ordinary" | "notable" | "major";
+
+const { INTRA_REGION_BASE_FUEL, CROSSING_FUEL_MULTIPLIER } = genConfigForSystemCount(DEFAULT_SYSTEM_COUNT);
+export const NOTABLE_FUEL_THRESHOLD = INTRA_REGION_BASE_FUEL * 1.5;
+export const MAJOR_FUEL_THRESHOLD = INTRA_REGION_BASE_FUEL * CROSSING_FUEL_MULTIPLIER;
+
+/** A lane's fuel-cost tier — see `LaneTier` for the bands. */
+export function laneTier(fuelCost: number): LaneTier {
+  if (fuelCost >= MAJOR_FUEL_THRESHOLD) return "major";
+  if (fuelCost >= NOTABLE_FUEL_THRESHOLD) return "notable";
+  return "ordinary";
+}
+
 /** The endpoint-ownership shape `laneInvestor` needs — deliberately narrower than `WorldSystem` so
  *  callers don't have to construct one just to check investability. */
 export interface LaneEndpointOwner {
@@ -101,7 +126,7 @@ export function laneInvestor(
 
 /**
  * Construction work owed per investing faction this settlement — Σ `level × UPGRADE_WORK_PER_LEVEL`
- * over every lane the faction is the investor of (docs/planned/logistics-lanes.md §1: "build and
+ * over every lane the faction is the investor of (docs/active/gameplay/logistics-lanes.md §1: "build and
  * upkeep ride the existing purse"). A lane with no investor (either endpoint unclaimed, split
  * between factions, or below `controlled`) contributes to nobody's bill — it still decays (see
  * `decayLanes`), it just costs nothing to leave alone. Level-0 lanes are skipped outright: they carry
@@ -139,7 +164,7 @@ export interface LaneDecayResult {
  * reference-cycles while a whole level's worth of capacity goes unused, resets the moment a run uses
  * it, and at the buffer sheds exactly one level (never below 0) and restarts the countdown.
  *
- * "Attempted load" is this run's `bookedLoad + blockedVolume` (docs/planned/logistics-lanes.md §1: a
+ * "Attempted load" is this run's `bookedLoad + blockedVolume` (docs/active/gameplay/logistics-lanes.md §1: a
  * congested run that turned volume away still counts as use). Both figures are booked by the
  * logistics processor already scaled by that run's `catchUp`, so the capacity this compares against
  * must be scaled the same way: `laneCapacity(level) × catchUp` for the compare, and `BASE_LANE_CAPACITY

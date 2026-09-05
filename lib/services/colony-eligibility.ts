@@ -28,7 +28,7 @@ import type { ColonyBlockReason } from "@/lib/types/colonisation";
 /**
  * The hop radius the tick's shared BFS uses — seed-source reach for the colony verb matches it.
  * Directed-logistics dropped out of this max when it moved off hop-counted reachability onto
- * lane-network routing (docs/planned/logistics-lanes.md §2): a haul's reach is now however far the
+ * lane-network routing (docs/active/gameplay/logistics-lanes.md §2): a haul's reach is now however far the
  * lane graph and its `laneOpenFor` traversability carry it, not a hop budget, so only directed-
  * build's own planning radius and expansion's claim reach remain.
  */

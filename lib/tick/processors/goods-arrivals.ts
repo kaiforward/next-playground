@@ -14,7 +14,7 @@ export interface GoodsArrivalsProcessorParams {
 
 /**
  * Pure processor body — the unconditional per-tick stage that drains the scheduled-freight ledger
- * (docs/planned/logistics-lanes.md §3), modelled on `runShipArrivalsProcessor`. Runs every tick,
+ * (docs/active/gameplay/logistics-lanes.md §3), modelled on `runShipArrivalsProcessor`. Runs every tick,
  * never gated on any cadence: quantising arrivals up to a logistics boundary would delay every
  * haul by up to a full interval and put the zero-latency fallback (a high `FREIGHT_SPEED`)
  * permanently out of reach.

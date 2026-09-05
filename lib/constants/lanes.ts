@@ -1,7 +1,7 @@
 import { scaleValue } from "@/lib/constants/economy-scale";
 
 /**
- * Persistent-lane tuning (docs/planned/logistics-lanes.md §1-2). First-draft, simulator-calibrated
+ * Persistent-lane tuning (docs/active/gameplay/logistics-lanes.md §1-2). First-draft, simulator-calibrated
  * — nothing here has been measured against a real haul yet; every value is a proposal carrying its
  * own rationale, only the relative shape matters until it is calibrated against actual lane traffic.
  */
@@ -26,14 +26,18 @@ export const LANES = {
   CONGESTION_MAX: 3,
 
   /**
-   * Fuel cost a haul crosses per tick in transit. Sized against a typical intra-cluster haul: a
-   * generated lane normalises to roughly one baseline hop's fuel cost (`laneFuelCost`,
-   * `lib/engine/universe-gen.ts`), and a typical single-lane cost is ~8.5 fuel. At speed 5, a 1-lane
-   * haul (~8.5 fuel) takes ~1.7 ticks and a 3-lane haul (~25.5 fuel) takes ~5.1 ticks — both inside a
-   * quarter of the 24-tick `LOGISTICS_INTERVAL` (6 ticks), so freight latency reads as "a few
-   * ticks", not a material delay against the interval it rides.
+   * Fuel cost a haul crosses per tick in transit — the freight convoy's pace, set by the fiction
+   * rather than by the logistics interval. Anchor: a bulk convoy is slower than the roster's large
+   * freighter (`hopDuration` at speed 2 ≈ 12 ticks, three days, per ordinary lane). A generated lane
+   * normalises to roughly one baseline hop's fuel (`laneFuelCost`, `lib/engine/universe-gen.ts`),
+   * ~8.5 fuel, so at 0.5 an ordinary lane takes ~17 ticks (about four days), a corridor crossing
+   * roughly ten days, and a three-lane supply run about two economic cycles. Transit is meant to be
+   * felt: goods are visibly in flight, and a shortfall waits on them (owner decision — the delay is a
+   * mechanic, not a detail). Measured at 10,000 ticks against the 5-fuel/tick baseline: survival-good
+   * deficit spells lengthen from a 1-cycle median / 4-cycle p90 to 2 / 10, no system trips the
+   * survival-stock alert, all conservation identities hold, and overshoot stays under 0.2% of volume.
    */
-  FREIGHT_SPEED: 5,
+  FREIGHT_SPEED: 0.5,
 
   /**
    * Construction work to raise a lane by one level — priced against a mid-tier building's per-level

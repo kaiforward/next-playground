@@ -40,6 +40,7 @@ describe("ALERT_CATEGORIES — destinations", () => {
     unrest_rising: "system:population",
     survival_stock_falling: "system:logistics",
     demand_unservable: "system:logistics",
+    lane_congested: "lane:",
     overcrowded: "system:population",
     no_housing_headroom: "system:population",
     build_blocked: "system:industry",

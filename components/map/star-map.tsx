@@ -17,6 +17,8 @@ import { useStaticTiles } from "@/lib/hooks/use-static-tiles";
 import { useVisibility } from "@/lib/hooks/use-visibility";
 import { useOwnership } from "@/lib/hooks/use-ownership";
 import { useTradeFlow } from "@/lib/hooks/use-trade-flow";
+import { useLanes } from "@/lib/hooks/use-lanes";
+import { laneHref, parseRoute } from "@/lib/utils/route-hrefs";
 import { useStability } from "@/lib/hooks/use-stability";
 import { usePopulation } from "@/lib/hooks/use-population";
 import { useDevelopment } from "@/lib/hooks/use-development";
@@ -68,6 +70,7 @@ export function StarMap({
   const [alertRunSettingsOpen, setAlertRunSettingsOpen] = useState(false);
   const toggleAlertRunSettings = useCallback(() => setAlertRunSettingsOpen((open) => !open), []);
   const { logisticsEdges } = useTradeFlow(overlays.logistics);
+  const laneStates = useLanes();
   const stabilityBySystem = useStability(mapMode === "stability");
   // Population is fetched for its own choropleth AND as the weights for stability's population-weighted
   // aggregation (so a faction's stability number tracks its people, not its raw system count).
@@ -204,20 +207,18 @@ export function StarMap({
     [universe.regions],
   );
 
-  // ── Selection = the open /system/[id] panel route (single source of truth) ──
+  // ── Selection = the open panel route (single source of truth) ──
+  // Parsed by the route table's own `parseRoute` (`lib/utils/route-hrefs.ts`) rather than by
+  // regexes here: one parser decodes each id, and three hand-rolled copies are three chances to
+  // disagree with it. Read from `useRouteInfo` so wouter stays out of the map tree. Faction focus is zoom-gated in the value-choropleth layer: it re-normalises
+  // pop/development to that faction and de-emphasises the rest; stability dims but never rescales
+  // (see ValueChoroplethLayer.setScope).
   const navigate = useNavigate();
   const { pathname, searchParams } = useRouteInfo();
-  const selectedSystemId = useMemo(() => {
-    const match = /^\/system\/([^/]+)/.exec(pathname);
-    return match ? decodeURIComponent(match[1]) : null;
-  }, [pathname]);
-  // ── Faction focus = the open /factions/[id] panel route ──
-  // Zoom-gated in the value-choropleth layer: re-normalises pop/development to this faction and
-  // de-emphasises the rest; stability dims but never rescales (see ValueChoroplethLayer.setScope).
-  const selectedFactionId = useMemo(() => {
-    const match = /^\/factions\/([^/]+)/.exec(pathname);
-    return match ? decodeURIComponent(match[1]) : null;
-  }, [pathname]);
+  const route = parseRoute(pathname);
+  const selectedSystemId = route.name === "system" ? route.systemId : null;
+  const selectedFactionId = route.name === "faction" ? route.factionId : null;
+  const selectedLaneKey = route.name === "lane" ? route.laneKey : null;
   const selectedSystem = useMemo(
     () =>
       selectedSystemId
@@ -236,6 +237,7 @@ export function StarMap({
     regionMap,
     ownership,
     playerFactionId: atlas.player?.controlledFactionId ?? null,
+    laneStates,
   });
 
   // ── Click handlers — navigate by id; the panel loads its own detail ──
@@ -264,6 +266,16 @@ export function StarMap({
   const onSelectFaction = useCallback(
     (factionId: string) => {
       navigate(`/factions/${factionId}`);
+    },
+    [navigate],
+  );
+
+  // A click resolved to a lane (within tolerance of its segment, see lane-hit-test.ts) — opens the
+  // lane's route-docked panel. Selecting a system while the lane panel is open re-points to the
+  // system panel like system-to-system already does (it's just a navigation).
+  const onSelectLane = useCallback(
+    (laneKey: string) => {
+      navigate(laneHref(laneKey));
     },
     [navigate],
   );
@@ -348,6 +360,8 @@ export function StarMap({
         onSelectSystem={onSelectSystem}
         onEmptyClick={onEmptyClick}
         onSelectFaction={onSelectFaction}
+        onSelectLane={onSelectLane}
+        selectedLaneKey={selectedLaneKey}
         centerTarget={centerTarget}
         centerOffsetX={centerOffsetX}
         onReady={handleReady}
