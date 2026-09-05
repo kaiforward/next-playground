@@ -332,10 +332,10 @@ export class ValueChoroplethLayer {
     if (!this.container.visible) return;
     // Lanes mode's cell tint is the zoomed-out reading, so it fades on the OPPOSITE curve to every
     // other value mode's fill: those stay legible up close (valueChoroplethAlpha), this one hands
-    // off to the lanes themselves once they're fully in.
-    const alpha = this.mode === "lanes" ? lod.lanesCellAlpha : lod.valueChoroplethAlpha;
-    this.fills.alpha = alpha;
-    this.outlines.alpha = alpha;
+    // off to the lanes themselves once they're fully in. The faction outlines keep the value-mode
+    // curve in every mode — up close, a lane's investor colour is only readable against them.
+    this.fills.alpha = this.mode === "lanes" ? lod.lanesCellAlpha : lod.valueChoroplethAlpha;
+    this.outlines.alpha = lod.valueChoroplethAlpha;
   }
 
   destroy() {
