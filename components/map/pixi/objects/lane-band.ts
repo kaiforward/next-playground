@@ -3,7 +3,7 @@ import { LANE_BAND_COLOR, LANE_BUSY_LOAD_FRACTION } from "../theme";
 
 /**
  * One band definition shared by lane brightness, convoy particle density and the Lanes-mode cell
- * choropleth (docs/planned/map-presentation.md §2) — a single rule so the three presentations never
+ * choropleth (docs/active/engineering/map-rendering.md → Lane layer) — a single rule so the three presentations never
  * drift apart. No Pixi import, so it's `.test.ts`-able from node.
  *
  * `congested` beats `busy` beats `fine`: a lane that turned volume away this run

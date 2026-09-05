@@ -62,7 +62,7 @@ export interface MapData {
   systems: SystemNodeData[];
   connections: ConnectionData[];
   /** Worst `LaneBand` across each system's connections, keyed by system id — absent for a system
-   *  with no connection. Feeds the Lanes-mode choropleth (docs/planned/map-presentation.md §2). */
+   *  with no connection. Feeds the Lanes-mode choropleth (docs/active/engineering/map-rendering.md → Lane layer). */
   laneBandBySystem: Map<string, LaneBand>;
   /**
    * Directed-logistics edges keyed by `${laneKey}|${fromSystemId}` — one entry per lane per
