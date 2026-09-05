@@ -35,15 +35,19 @@ export interface ConnectionData {
   fromId: string;
   toId: string;
   fuelCost: number;
-  /** Undirected lane identity (`lib/engine/lanes.ts`'s `laneKey`) — always present, whether or not
-   *  the world has any `WorldLane` state for it yet (a pre-lanes save, or a lane never visited by a
-   *  logistics run). Feeds both the lane-layer style and the lane-hit-test/selection route key. */
+  /** Undirected lane identity (`lib/engine/lanes.ts`'s `laneKey`) — derived from the connection
+   *  itself, so it is present whether or not the `lanes` slice has landed yet. Feeds both the
+   *  lane-layer style and the lane-hit-test/selection route key. */
   laneKey: string;
-  /** Invested upgrade level (0 when no lane state exists for this pair). */
+  /** Invested upgrade level. The `?? 0` fallbacks on these three fields cover exactly ONE state: a
+   *  PRE-BOOT frame, where the `lanes` slice has not landed but the atlas's connections have. A
+   *  live world always carries one lane row per connection (generation mints them, the save version
+   *  refuses anything older), so a connection with no lane row at runtime is an invariant break, not
+   *  a supported "lane state missing" case. */
   level: number;
-  /** `bookedLoad / capacity`, clamped to [0, 1] at the style helper — 0 when no lane state exists. */
+  /** `bookedLoad / capacity`, clamped to [0, 1] at the style helper — 0 pre-boot (see `level`). */
   load: number;
-  /** This run's `blockedVolume > 0` — false when no lane state exists. */
+  /** This run's `blockedVolume > 0` — false pre-boot (see `level`). */
   blocked: boolean;
 }
 

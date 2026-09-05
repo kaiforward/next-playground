@@ -24,16 +24,26 @@ export function freightArrivalTick(now: number, fuelTotal: number, freightSpeed:
  * consumed BEFORE each hop rather than the path total. A crossing that straddles a window boundary
  * belongs to the window it starts in (`docs/active/gameplay/logistics-lanes.md` §2), which is why
  * this returns the start tick of every hop rather than just the arrival tick of the last one.
+ *
+ * `arrivalTick`, when given, closes the route's exclusive end: every hop's start is clamped to at
+ * most `arrivalTick - 1` (only while `arrivalTick > dispatchTick` — a same-tick arrival occupies
+ * nothing at all). Without it a hop whose own fuel rounds away — a zero-fuel last hop, or one short
+ * enough to round to the previous hop's start — can start exactly AT `arrivalTick`, and its window
+ * `[start, arrivalTick)` is then empty: the lane the haul actually ends on never reads occupied
+ * anywhere, at any tick. Every caller that has the row in hand passes it.
  */
 export function hopCrossingTicks(
   dispatchTick: number,
   hopFuelCosts: readonly number[],
   freightSpeed: number,
+  arrivalTick?: number,
 ): number[] {
+  const lastStart =
+    arrivalTick !== undefined && arrivalTick > dispatchTick ? arrivalTick - 1 : Number.POSITIVE_INFINITY;
   const ticks: number[] = [];
   let cumFuelBefore = 0;
   for (const fuelCost of hopFuelCosts) {
-    ticks.push(dispatchTick + Math.max(0, Math.round(cumFuelBefore / freightSpeed)));
+    ticks.push(Math.min(dispatchTick + Math.max(0, Math.round(cumFuelBefore / freightSpeed)), lastStart));
     cumFuelBefore += fuelCost;
   }
   return ticks;
@@ -61,7 +71,7 @@ export function scheduledInbound(
  * The hop index a ledger row is PHYSICALLY crossing at `tick`, or `null` if it isn't crossing any
  * hop of its route right now — the read-time counterpart to `hopCrossingTicks`: hop i occupies the
  * half-open window `[start_i, start_{i+1})`, with the last hop's window ending at `arrivalTick`
- * (docs/active/gameplay/logistics-lanes.md §7). A row at `tick === arrivalTick` has been drained by the
+ * (docs/active/gameplay/logistics-lanes.md §6). A row at `tick === arrivalTick` has been drained by the
  * goods-arrivals stage and occupies nothing, and a row not yet dispatched (`tick < dispatchTick`,
  * never produced by a real caller reading the live ledger) likewise occupies nothing.
  *
@@ -77,7 +87,7 @@ export function currentHopIndex(
   freightSpeed: number,
 ): number | null {
   if (tick < row.dispatchTick || tick >= row.arrivalTick) return null;
-  const crossingTicks = hopCrossingTicks(row.dispatchTick, hopFuelCosts, freightSpeed);
+  const crossingTicks = hopCrossingTicks(row.dispatchTick, hopFuelCosts, freightSpeed, row.arrivalTick);
   let hop: number | null = null;
   for (let i = 0; i < crossingTicks.length; i++) {
     if (crossingTicks[i] <= tick) hop = i;

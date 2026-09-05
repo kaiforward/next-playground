@@ -1,10 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { LanePanel, laneInvestState } from "@/components/panels/lane-panel";
 import { gameStore } from "@/lib/store/use-game-store";
 import { WouterRuntimeProvider } from "@/client/wouter-link";
 import type { UniverseData, AtlasData } from "@/lib/types/game";
 import type { LaneDetailData } from "@/lib/types/api";
+import { MAX_ORDER_LEVELS } from "@/lib/schemas/construction-orders";
+
+// The order verbs run through the real hooks (`use-construction-orders.ts`) down to this one seam,
+// so a rejected command travels the path it really travels — `sendCommand` → `CommandResult` →
+// `useCommandMutation`'s onError — rather than through a stubbed mutation object.
+const commandResult = vi.hoisted(() => ({
+  current: { ok: true, data: { projectId: "p-1" } } as
+    | { ok: true; data: { projectId: string } }
+    | { ok: false; error: string },
+}));
+vi.mock("@/lib/runtime/command-client", () => ({
+  sendCommand: (envelope: { id: string }) =>
+    Promise.resolve({ type: "commandResult", id: envelope.id, result: commandResult.current }),
+}));
 
 const UNIVERSE: UniverseData = {
   regions: [],
@@ -53,6 +68,13 @@ function laneDetailFixture(overrides: Partial<LaneDetailData> = {}): LaneDetailD
   };
 }
 
+function investableLane() {
+  return laneDetailFixture({
+    b: { systemId: "sys-b", systemName: "Marrow", factionId: "f-player", unclaimed: false },
+    investorFactionId: "f-player",
+  });
+}
+
 function seed(options: { atlas?: AtlasData; laneDetail?: Record<string, LaneDetailData> } = {}) {
   act(() => {
     gameStore.applyStateFrame({
@@ -65,6 +87,7 @@ function seed(options: { atlas?: AtlasData; laneDetail?: Record<string, LaneDeta
 
 beforeEach(() => {
   Element.prototype.scrollTo = vi.fn();
+  commandResult.current = { ok: true, data: { projectId: "p-1" } };
 });
 
 afterEach(() => {
@@ -160,6 +183,38 @@ describe("LanePanel", () => {
     );
 
     expect(screen.getByRole("button", { name: /Invest/ })).toBeEnabled();
+  });
+
+  it("disables the invest verb past the order ceiling and says why", async () => {
+    const user = userEvent.setup();
+    seed({ laneDetail: { "sys-a|sys-b": investableLane() } });
+    render(
+      <WouterRuntimeProvider>
+        <LanePanel laneKey="sys-a|sys-b" />
+      </WouterRuntimeProvider>,
+    );
+
+    const levels = screen.getByRole("spinbutton", { name: "Levels" });
+    await user.clear(levels);
+    await user.type(levels, String(MAX_ORDER_LEVELS + 1));
+
+    expect(screen.getByRole("button", { name: /Invest/ })).toBeDisabled();
+    expect(screen.getByText(new RegExp(`at most ${MAX_ORDER_LEVELS} levels`))).toBeInTheDocument();
+  });
+
+  it("shows a rejected order's own reason instead of dropping it silently", async () => {
+    const user = userEvent.setup();
+    commandResult.current = { ok: false, error: "The construction pool is already committed." };
+    seed({ laneDetail: { "sys-a|sys-b": investableLane() } });
+    render(
+      <WouterRuntimeProvider>
+        <LanePanel laneKey="sys-a|sys-b" />
+      </WouterRuntimeProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Invest/ }));
+
+    expect(await screen.findByText("The construction pool is already committed.")).toBeInTheDocument();
   });
 
   it("names congestion in the Turned away hint only once volume is actually blocked", () => {

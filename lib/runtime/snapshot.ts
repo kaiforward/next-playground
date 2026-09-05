@@ -258,8 +258,7 @@ export function buildStateFrame(world: World, interest: InterestSet): StateFrame
     interest.lanes.length > 0 ? new Set(world.lanes.map((l) => l.key)) : new Set<string>();
   for (const key of interest.lanes) {
     if (!existingLaneKeys.has(key)) continue; // stale/unknown interest id — skip, never throw
-    const detail = getLaneDetail(key);
-    if (detail) laneDetail[key] = detail;
+    laneDetail[key] = getLaneDetail(key);
   }
 
   const factionVitals: Record<string, FactionVitalsData> = {};

@@ -36,7 +36,10 @@ carries:
 - **`bookedLoad`** and **`blockedVolume`** — this run's crossing load (§2: every haul crossing the
   lane in the current window, whenever it was dispatched) and the volume a saturated edge turned
   away, both written by the logistics processor and **rewritten every logistics run** (they read the
-  *attempted load* of the run just finished, never a cumulative figure).
+  *attempted load* of the run just finished, never a cumulative figure). The two are on different
+  bases deliberately: booked load is the current window alone, while blocked volume totals what the
+  run turned away on the lane in **any** window it routed against — a haul stopped by a choke three
+  windows out is still this run's congestion signal, and still counts as attempted use for decay.
 - **`idleCycles`** — the lane-decay countdown (below).
 
 **Capacity** rises linearly with level (`laneCapacity`, `lib/engine/lanes.ts`):
@@ -108,7 +111,7 @@ Every matched transfer routes over a real cheapest path, computed inside the log
   of the cheapest path a haul could not fully use — never folded into `unservedShortfall`, which
   stays a donor-stock capacity measure. A saturated corridor therefore shows full lanes, longer
   detours elsewhere, and rising blocked volume on the choke edge, read by the planner (§4) and the
-  map surfaces (§7).
+  map surfaces (§6).
 - **A lane is booked for the cycle the cargo crosses it, not the cycle it is dispatched.** Every
   reservation is still made at dispatch — a haul never leaves without room on every lane of its
   route — but each lane's reservation lands in the logistics-run window the cargo will be crossing
@@ -124,8 +127,12 @@ Every matched transfer routes over a real cheapest path, computed inside the log
   window's load. The one search that is not windowed is the frozen sink-to-donor price snapshot
   (`priceFrom`, `reachableFrom`) that orders a deficit's donors: rooted at the sink, it cannot know
   when a haul would reach each lane, so it reads current-window load — a ranking heuristic only;
-  the placement itself is always priced and booked at the true crossing window. Nothing is ever
-  turned back mid-journey: turned-away volume stays a dispatch-time reading. A lane's persisted `bookedLoad` is its current-window load — hauls crossing it this run,
+  the placement itself is always priced and booked at the true crossing window. Because the search
+  settles each system by its cheapest prefix, and the window an edge is read at depends on that
+  prefix's accumulated fuel, a haul can miss a feasible route whose dearer prefix would have reached
+  a free window — accepted: the haul is then recorded as blocked on the most-loaded hop of its ideal
+  path, never dropped. Nothing is ever turned back mid-journey: turned-away volume stays a
+  dispatch-time reading. A lane's persisted `bookedLoad` is its current-window load — hauls crossing it this run,
   whenever they were dispatched — which is what the map colour, the lane card's Booked tile and lane
   decay's "attempted load" all read; at the zero-latency freight speed every crossing falls in the
   dispatching window and the ledger collapses to the single per-run figure it replaces.
@@ -191,7 +198,7 @@ Transit is scheduled, never positionally simulated — nothing per-tick moves a 
 
 ---
 
-## 6. The substrate contract
+## 5. The substrate contract
 
 The lane layer exposes exactly: nodes, open edges with capacity/cost/time, cheapest-path queries,
 capacity booking, the scheduled-arrivals ledger, and the interdiction window query. It never reads
@@ -205,7 +212,7 @@ client swap rather than a substrate change. Negotiated transit rights beyond the
 
 ---
 
-## 7. Surfaces
+## 6. Surfaces
 
 - **Map.** Every lane draws as a segment between its two systems, styled by `laneStyle`
   (`components/map/pixi/objects/lane-style.ts`) from its fuel-cost tier (base weight/alpha,
@@ -219,9 +226,13 @@ client swap rather than a substrate change. Negotiated transit rights beyond the
   `currentHopIndex`, `lib/engine/freight.ts`). A lane is selectable — within a screen-pixel
   tolerance of its segment, behind a direct star hit — and opens its route-docked card
   (`/lane/:key`) naming level, capacity, current load vs capacity, upkeep, cargo currently in flight,
-  the open upgrade project, and the invest verb (disabled, naming the missing endpoint, unless the
-  player controls both ends). See [map-rendering.md](../engineering/map-rendering.md) for the lane
-  layer and selection-precedence detail.
+  the open upgrade project, and the invest verb. The verb has three states: present and live when
+  the player invests in the lane; present but disabled, naming the one endpoint standing in the way,
+  when the player holds one end and the other is unclaimed or foreign; and absent entirely when
+  there is no player seat at all, or when another faction already holds both ends (the card is
+  read-only — nothing there for the player to act on). See
+  [map-rendering.md](../engineering/map-rendering.md) for the lane layer and selection-precedence
+  detail.
 - **System Logistics tab.** Inbound and outbound in-transit rows list every scheduled-freight ledger
   entry touching the system, with the good, the other endpoint, quantity, and a duration-formatted
   ETA — disappearing the tick their arrival lands.
@@ -235,7 +246,7 @@ client swap rather than a substrate change. Negotiated transit rights beyond the
 
 ---
 
-## 8. Calibration
+## 7. Calibration
 
 Shipped defaults, read at equilibrium on the default 600-system galaxy against the flat lane-off
 baseline: all five conservation identities pass (including the goods-mass identity — Σ dispatch

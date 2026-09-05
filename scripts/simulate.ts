@@ -925,7 +925,7 @@ export function formatTable(results: HarnessResults): string {
     }
   }
 
-  // Lane mechanics (spec §8) — whole-run utilisation, congestion, blocked volume, foreign-transit
+  // Lane mechanics (spec §7) — whole-run utilisation, congestion, blocked volume, foreign-transit
   // share, per-faction contention, survival-stock census, plus the physical-stock spell
   // distribution and calibration-only stage wall-clock.
   {

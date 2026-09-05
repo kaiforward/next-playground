@@ -98,7 +98,7 @@ async function renderOpenFlyout(
 
 describe("resolveAlertTarget — the row's destination, resolved off the category and the instance", () => {
   it("a system-scoped category resolves to its authored tab, using the instance's own systemId", () => {
-    expect(resolveAlertTarget(populationCollapse, populationCollapse.instances[0])).toEqual({
+    expect(resolveAlertTarget(populationCollapse, 0)).toEqual({
       kind: "system",
       systemId: "sys-a",
       tab: "population",
@@ -106,14 +106,14 @@ describe("resolveAlertTarget — the row's destination, resolved off the categor
   });
 
   it("Maintenance unfunded resolves to the player faction's Overview regardless of the instance's systemId", () => {
-    expect(resolveAlertTarget(maintenanceUnfunded, maintenanceUnfunded.instances[0])).toEqual({
+    expect(resolveAlertTarget(maintenanceUnfunded, 0)).toEqual({
       kind: "faction",
       tab: "",
     });
   });
 
   it("Lane congested resolves to the instance's own laneKey, not a system", () => {
-    expect(resolveAlertTarget(laneCongested, laneCongested.instances[0])).toEqual({
+    expect(resolveAlertTarget(laneCongested, 0)).toEqual({
       kind: "lane",
       laneKey: "sys-a|sys-b",
     });

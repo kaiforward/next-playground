@@ -28,6 +28,10 @@ export interface LaneFlowRow {
 }
 
 interface DirectedEdgeAgg {
+  /** The lane this edge is a direction of — carried on the aggregate rather than recovered from the
+   *  composite map key by string surgery (the key packs lane + origin, and a lane key contains the
+   *  same separator). */
+  laneKey: string;
   fromSystemId: string;
   toSystemId: string;
   perGood: Map<string, number>;
@@ -40,8 +44,9 @@ interface DirectedEdgeAgg {
  * `currentHopIndex`; its direction is read by walking `routeEdges` in order from `fromSystemId`
  * up to that hop (a lane key names its two endpoints — the endpoint NOT equal to the current
  * position is the hop's destination, which becomes the current position for the next hop). A row
- * on no hop right now (already drained, or malformed) contributes nothing. Drops edges below
- * `floor` cumulative volume.
+ * on no hop right now (already drained), and a row whose consecutive hops do not share an endpoint
+ * (a discontiguous route — never produced by real routing), both contribute nothing. Drops edges
+ * below `floor` cumulative volume.
  *
  * `hopFuelCostsOf` must return one fuel cost per `routeEdges` hop, built once per call from the
  * lane network's static fuel costs (never persisted on the row) — see `currentHopIndex`'s own
@@ -62,19 +67,26 @@ export function buildLaneFlowEdges(
     const hop = currentHopIndex(row, tick, hopFuelCostsOf(row), freightSpeed);
     if (hop === null) continue;
 
-    let current = row.fromSystemId;
-    for (let i = 0; i < hop; i++) {
+    // Walk the route from its origin to the current hop by explicit membership: a lane key names
+    // exactly two endpoints, so the walk's next position is whichever of them the current position
+    // is NOT. A route whose consecutive hops don't share an endpoint (malformed, never produced by
+    // real routing) leaves the walk off the lane entirely — the row contributes nothing rather than
+    // resolving to an arbitrary endpoint and emitting an edge pointing the wrong way.
+    let current: string | null = row.fromSystemId;
+    for (let i = 0; i < hop && current !== null; i++) {
       const [a, b] = laneEndpoints(row.routeEdges[i]);
-      current = current === a ? b : a;
+      current = current === a ? b : current === b ? a : null;
     }
+    if (current === null) continue;
     const laneKey = row.routeEdges[hop];
     const [a, b] = laneEndpoints(laneKey);
-    const next = current === a ? b : a;
+    const next = current === a ? b : current === b ? a : null;
+    if (next === null) continue;
     const key = `${laneKey}|${current}`;
 
     let entry = byEdge.get(key);
     if (!entry) {
-      entry = { fromSystemId: current, toSystemId: next, perGood: new Map(), total: 0 };
+      entry = { laneKey, fromSystemId: current, toSystemId: next, perGood: new Map(), total: 0 };
       byEdge.set(key, entry);
     }
     entry.perGood.set(row.goodId, (entry.perGood.get(row.goodId) ?? 0) + row.quantity);
@@ -82,9 +94,8 @@ export function buildLaneFlowEdges(
   }
 
   const edges: TradeFlowEdgeInfo[] = [];
-  for (const [key, agg] of byEdge) {
+  for (const agg of byEdge.values()) {
     if (agg.total < floor) continue;
-    const laneKey = key.slice(0, key.lastIndexOf("|"));
 
     let dominantGoodId = "";
     let dominantMagnitude = 0;
@@ -96,7 +107,7 @@ export function buildLaneFlowEdges(
     }
 
     edges.push({
-      laneKey,
+      laneKey: agg.laneKey,
       fromSystemId: agg.fromSystemId,
       toSystemId: agg.toSystemId,
       totalVolume: agg.total,

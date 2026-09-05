@@ -30,7 +30,9 @@ export interface TradeFlowEdges {
 /**
  * One lane's live state for the map layer and the lane card (docs/active/gameplay/logistics-lanes.md §1) —
  * `getLaneStates` (`lib/services/lanes.ts`) joins the persisted `WorldLane` row with its derived
- * reads: `capacity` from `laneCapacity(level)`, `inFlight` summed from the arrivals ledger's rows
+ * reads: `capacity` from `laneCapacity(level)` scaled by the logistics cadence's catch-up factor
+ * (the figure `bookedLoad` was actually booked against, so the two share a denominator),
+ * `inFlight` summed from the arrivals ledger's rows
  * PHYSICALLY crossing this lane right now (`laneOccupiedAt`, `lib/engine/freight.ts` — one hop of a
  * multi-lane route at a time, not every lane the route ever touches), `investorFactionId` from
  * `laneInvestor`, and `openUpgradeLevels` from open `lane_upgrade` construction projects targeting
@@ -702,11 +704,14 @@ export interface LaneAlertInstance {
   sortKey: number;
 }
 
-interface AlertCategoryBase {
+/** Generic over the instance shape a category's rows carry: every system-scoped category uses the
+ *  default `AlertInstance`, and the one lane-scoped category (below) fills it with
+ *  `LaneAlertInstance` instead of restating every field. */
+interface AlertCategoryBase<I = AlertInstance> {
   id: AlertCategoryId;
   /** Raw instance count — extensive, not a rate; grows with the empire. */
   count: number;
-  instances: AlertInstance[];
+  instances: I[];
 }
 
 /**
@@ -746,9 +751,8 @@ export interface FactionAlertCategory extends AlertCategoryBase {
 }
 
 /**
- * Lane congested — the one category counting LANES, not systems, so it cannot extend
- * `AlertCategoryBase` (whose `instances: AlertInstance[]` a `LaneAlertInstance[]` is not assignable
- * to; TypeScript refuses an extending interface that narrows a property to an incompatible type).
+ * Lane congested — the one category counting LANES, not systems, so it fills `AlertCategoryBase`'s
+ * instance parameter with `LaneAlertInstance` rather than the default `AlertInstance`.
  * `denominator` is the player faction's own OWNABLE lane count — every lane it either invests in or
  * touches through a held endpoint — the same "this category's own population" shape
  * `ControlledSystemsAlertCategory` uses for colony opportunity's disjoint population, and for the
@@ -756,12 +760,9 @@ export interface FactionAlertCategory extends AlertCategoryBase {
  * first place, so counting it in the denominator would render a share of lanes that were never in
  * play for this row.
  */
-export interface LaneScopedAlertCategory {
-  id: AlertCategoryId;
+export interface LaneScopedAlertCategory extends AlertCategoryBase<LaneAlertInstance> {
   unit: "lanes";
-  count: number;
   denominator: number;
-  instances: LaneAlertInstance[];
 }
 
 /** One alert category's standing read: the chip's count, what that count counts (and, for the

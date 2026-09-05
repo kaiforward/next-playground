@@ -6,10 +6,10 @@ import { useSystemInfo } from "@/lib/hooks/use-system-info";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { useAtlas } from "@/lib/hooks/use-atlas";
 import { useInterest } from "@/lib/store/interest";
-import { useDetailPresent } from "@/lib/hooks/detail-read";
 import { useLaneDetail } from "@/lib/hooks/use-lane-detail";
+import { useLaneFocus } from "@/lib/hooks/use-system-focus";
 import { useOrderLaneUpgrade, useCancelOrder } from "@/lib/hooks/use-construction-orders";
-import { useNavigate, useRouteInfo, useLinkComponent } from "@/components/ui/link-provider";
+import { useLinkComponent } from "@/components/ui/link-provider";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
@@ -18,9 +18,11 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { VitalTile, VitalGrid } from "@/components/ui/vital-tile";
 import { ConstructionRow } from "@/components/construction/construction-row";
 import { NumberInput } from "@/components/form/number-input";
+import { InlineAlert } from "@/components/ui/inline-alert";
+import { MAX_ORDER_LEVELS } from "@/lib/schemas/construction-orders";
 import { TermLabel } from "@/components/ui/term-label";
 import { MapPinIcon } from "@/components/ui/icons";
-import { laneTier } from "@/components/map/pixi/objects/lane-style";
+import { laneTier } from "@/lib/engine/lanes";
 import { LANES } from "@/lib/constants/lanes";
 import { formatDuration } from "@/lib/utils/calendar";
 import type { LaneDetailData } from "@/lib/types/api";
@@ -193,6 +195,12 @@ function ConstructionCard({
   const orderLaneUpgrade = useOrderLaneUpgrade(laneKey);
   const cancel = useCancelOrder();
   const [levels, setLevels] = useState(1);
+  const [orderError, setOrderError] = useState<string | null>(null);
+
+  // The order schema refuses anything past MAX_ORDER_LEVELS (`lib/schemas/construction-orders.ts`),
+  // so past it the verb is disabled and says so — the same treatment `BuildDialog`'s space ceiling
+  // gets, rather than dispatching an order the command will reject silently.
+  const overCeiling = levels > MAX_ORDER_LEVELS;
 
   return (
     <Card variant="bordered" padding="md" className="mt-4">
@@ -214,8 +222,11 @@ function ConstructionCard({
                 variant="action"
                 color="accent"
                 size="sm"
-                disabled={orderLaneUpgrade.isPending}
-                onClick={() => orderLaneUpgrade.mutate({ levels })}
+                disabled={orderLaneUpgrade.isPending || overCeiling}
+                onClick={() => {
+                  setOrderError(null);
+                  orderLaneUpgrade.mutate({ levels }, { onError: setOrderError });
+                }}
               >
                 ◆ Invest
               </Button>
@@ -224,11 +235,22 @@ function ConstructionCard({
                 size="sm"
                 className="w-16"
                 min={1}
+                max={MAX_ORDER_LEVELS}
                 value={levels}
                 onChange={(e) => setLevels(Math.max(1, Number(e.target.value) || 1))}
               />
               <span className="text-xs text-text-secondary">level{levels === 1 ? "" : "s"}</span>
             </div>
+            {overCeiling && (
+              <InlineAlert variant="error" className="mt-3">
+                One order can add at most {MAX_ORDER_LEVELS} levels.
+              </InlineAlert>
+            )}
+            {orderError !== null && (
+              <InlineAlert variant="error" className="mt-3">
+                {orderError}
+              </InlineAlert>
+            )}
             <p className="mt-2 text-xs text-text-secondary">
               adds <span className="font-mono text-text-primary">{LANES.BASE_LANE_CAPACITY}</span>/cyc capacity per
               level · <span className="font-mono text-text-primary">{LANES.UPGRADE_WORK_PER_LEVEL}</span> work per
@@ -281,11 +303,12 @@ export function LanePanel({ laneKey }: { laneKey: string }) {
 
   useInterest("lane", laneKey);
   const detail = useLaneDetail(laneKey);
-  const detailPresent = useDetailPresent("laneDetail", laneKey);
   const { data: universeData } = useUniverse();
   const { atlas } = useAtlas();
-  const { pathname, searchParams } = useRouteInfo();
-  const navigate = useNavigate();
+  // Recentres the map on this lane's midpoint without leaving the card — the same focus URL an
+  // alert row's activation builds, on the current path (`replace`), so the button is a camera move
+  // rather than a navigation.
+  const focusLane = useLaneFocus({ replace: true });
 
   if (!booted) return null;
 
@@ -297,15 +320,8 @@ export function LanePanel({ laneKey }: { laneKey: string }) {
     );
   }
 
-  const showOnMap = () => {
-    const loc = Number(searchParams.get("loc") ?? 0) + 1;
-    const x = (aSystem.x + bSystem.x) / 2;
-    const y = (aSystem.y + bSystem.y) / 2;
-    navigate(`${pathname}?focus=${x},${y}&loc=${loc}`, { replace: true });
-  };
-
   const headerAction = (
-    <Button variant="ghost" size="xs" onClick={showOnMap} aria-label="Show on map">
+    <Button variant="ghost" size="xs" onClick={() => focusLane(laneKey)} aria-label="Show on map">
       <MapPinIcon />
       <span className="ml-1">Show on Map</span>
     </Button>
@@ -331,7 +347,7 @@ export function LanePanel({ laneKey }: { laneKey: string }) {
       headerAction={headerAction}
       scrollResetKey={laneKey}
     >
-      {detailPresent && detail && (
+      {detail && (
         <>
           <LaneVitals detail={detail} />
           <CargoInFlightCard detail={detail} currentTick={currentTick} />

@@ -39,7 +39,7 @@ import { formatDuration } from "@/lib/utils/calendar";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { DEFAULT_ALERT_CATEGORIES } from "@/lib/constants/attention";
 import type { WorldSystem, World } from "@/lib/world/types";
-import { buildingsBySystem, marketsBySystem } from "@/lib/services/world-index";
+import { buildingsBySystem, marketsBySystem, systemById } from "@/lib/services/world-index";
 import { depositCountsOf } from "@/lib/engine/resources";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import {
@@ -281,9 +281,9 @@ export function getAlertData(): AlertData {
   // Every system, not only the developed set above — Lane congested's lanes can carry a controlled
   // (not yet developed) or even foreign endpoint, and `laneInvestor`/the endpoint-ownership check
   // below need to resolve every lane's two endpoints regardless of their control tier.
-  const systemById = new Map(world.systems.map((s) => [s.id, s]));
+  const systems = systemById();
   const laneEndpointOwner = (systemId: string): LaneEndpointOwner => {
-    const system = systemById.get(systemId);
+    const system = systems.get(systemId);
     return system ? { factionId: system.factionId, control: system.control } : { factionId: null, control: "unclaimed" };
   };
 
@@ -526,8 +526,8 @@ export function getAlertData(): AlertData {
     if (!canAct) continue;
     actionableLaneCount += 1;
     if (lane.blockedVolume <= 0) continue;
-    const aName = systemById.get(lane.aId)?.name ?? "Unknown System";
-    const bName = systemById.get(lane.bId)?.name ?? "Unknown System";
+    const aName = systems.get(lane.aId)?.name ?? "Unknown System";
+    const bName = systems.get(lane.bId)?.name ?? "Unknown System";
     laneCongested.push({
       laneKey: lane.key,
       name: `${aName} — ${bName}`,

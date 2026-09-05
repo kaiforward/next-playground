@@ -67,7 +67,11 @@ export function ColonySection({ systemId }: { systemId: string }) {
           <ConstructionRow
             row={forming}
             showSystem={false}
-            onCancel={buildSurface.mode !== "none" ? (projectId) => cancel.mutate({ projectId }) : undefined}
+            onCancel={
+              buildSurface.mode === "colony" || buildSurface.mode === "build"
+                ? (projectId) => cancel.mutate({ projectId })
+                : undefined
+            }
           />
         ) : colony?.state === "eligible" ? (
           <>

@@ -53,7 +53,7 @@ Defined in `lib/constants/trade-simulation.ts`:
 
 Every jump lane draws on the map at all times, styled by its fuel-cost tier, its invested level
 (width) and its current load (colour, grey → amber, red only while it is turning volume away this
-run) — see [logistics-lanes.md](./logistics-lanes.md) §1, §7 and
+run) — see [logistics-lanes.md](./logistics-lanes.md) §1, §6 and
 [map-rendering.md](../engineering/map-rendering.md) for the lane layer detail. On top of that
 always-on layer, a **Logistics** toggle on the overlay-controls cluster (default off) reveals a Pixi
 particle layer: every lane a scheduled haul's route currently crosses carries travelling particles,

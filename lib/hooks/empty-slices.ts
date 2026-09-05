@@ -48,6 +48,7 @@ export const EMPTY_ALERTS: AlertData = {
   categorySettings: DEFAULT_ALERT_CATEGORIES,
 };
 export const EMPTY_TRADE_FLOW: TradeFlowEdges = { logisticsEdges: [] };
-/** A world with no lanes (a pre-lanes save, or a frame that hasn't landed the
- *  `lanes` slice yet) reads the same empty array a real lane-less world's `getLaneStates()` returns. */
+/** The pre-boot read (no state frame has landed, so no `lanes` slice) — the same empty array a
+ *  freshly-generated, connection-less world's `getLaneStates()` returns. A live world always has one
+ *  lane row per connection. */
 export const EMPTY_LANES: LaneStateRow[] = [];

@@ -50,7 +50,7 @@ export function FactionConstructionCard({ factionId }: { factionId: string }) {
       />
       <CardContent>
         {data.automation && (
-          <div className="mb-4 flex gap-2">
+          <div className="mb-4 flex flex-wrap gap-2">
             <CheckboxInput
               label="Autonomic build"
               checked={data.automation.build}

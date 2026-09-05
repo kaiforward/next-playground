@@ -6,6 +6,7 @@
 
 import type { SystemControl, WorldLane } from "@/lib/world/types";
 import { LANES } from "@/lib/constants/lanes";
+import { DEFAULT_SYSTEM_COUNT, genConfigForSystemCount } from "@/lib/constants/universe-gen";
 
 /**
  * Canonical undirected pair key — the sorted `"a|b"` pair, identical in shape to `buildOpenEdges`'s
@@ -62,6 +63,30 @@ export function applyLaneLevelIncreases(
  */
 export function laneCapacity(level: number): number {
   return LANES.BASE_LANE_CAPACITY * (1 + level);
+}
+
+/**
+ * How pricey a lane's crossing is, in three bands rather than a single threshold — the label the
+ * lane card names and the band the map's line weight and alpha start from
+ * (`laneStyle`, `components/map/pixi/objects/lane-style.ts`).
+ *
+ * Fuel is priced at generation as (distance ÷ average intra-region hop) × `INTRA_REGION_BASE_FUEL`,
+ * times `CROSSING_FUEL_MULTIPLIER` for a corridor's crossing-style lane, so an ordinary lane at
+ * typical spacing sits at the base fuel: "notable" catches a lane pricier than 1.5 typical hops,
+ * "major" one priced at or beyond a crossing at typical spacing. Neither fuel constant varies with
+ * system count, so the default config's values are the values.
+ */
+export type LaneTier = "ordinary" | "notable" | "major";
+
+const { INTRA_REGION_BASE_FUEL, CROSSING_FUEL_MULTIPLIER } = genConfigForSystemCount(DEFAULT_SYSTEM_COUNT);
+export const NOTABLE_FUEL_THRESHOLD = INTRA_REGION_BASE_FUEL * 1.5;
+export const MAJOR_FUEL_THRESHOLD = INTRA_REGION_BASE_FUEL * CROSSING_FUEL_MULTIPLIER;
+
+/** A lane's fuel-cost tier — see `LaneTier` for the bands. */
+export function laneTier(fuelCost: number): LaneTier {
+  if (fuelCost >= MAJOR_FUEL_THRESHOLD) return "major";
+  if (fuelCost >= NOTABLE_FUEL_THRESHOLD) return "notable";
+  return "ordinary";
 }
 
 /** The endpoint-ownership shape `laneInvestor` needs — deliberately narrower than `WorldSystem` so

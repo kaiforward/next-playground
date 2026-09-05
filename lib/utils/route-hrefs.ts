@@ -15,6 +15,39 @@
  * than beside `useRoute`.
  */
 
+/** The route table's discriminated union — what every route-aware consumer switches on instead of a
+ *  raw pathname. `tab: ""` is the Overview tab (no path segment), matching the href builders below. */
+export type Route =
+  | { name: "map" }
+  | { name: "start" }
+  | { name: "system"; systemId: string; tab: string }
+  | { name: "faction"; factionId: string; tab: string }
+  | { name: "lane"; laneKey: string }
+  | { name: "styleguide" };
+
+const SYSTEM_ROUTE = /^\/system\/([^/]+)(?:\/([^/]+))?\/?$/;
+const FACTION_ROUTE = /^\/factions\/([^/]+)(?:\/([^/]+))?\/?$/;
+const LANE_ROUTE = /^\/lane\/([^/]+)\/?$/;
+
+/**
+ * Parse a pathname into the route table's union — the inverse of the href builders below, and the
+ * one parser both the router seam (`client/routes.ts`'s `useRoute`) and router-agnostic components
+ * (the map reads `useRouteInfo().pathname`) share, so no component re-derives an id with its own
+ * regex. Pure: no router dependency. Params are percent-decoded here exactly once (a lane key's
+ * `|` travels as `%7C`, see `laneHref`). An unrecognised path is the map root.
+ */
+export function parseRoute(pathname: string): Route {
+  const system = SYSTEM_ROUTE.exec(pathname);
+  if (system) return { name: "system", systemId: decodeURIComponent(system[1]), tab: system[2] ? decodeURIComponent(system[2]) : "" };
+  const faction = FACTION_ROUTE.exec(pathname);
+  if (faction) return { name: "faction", factionId: decodeURIComponent(faction[1]), tab: faction[2] ? decodeURIComponent(faction[2]) : "" };
+  const lane = LANE_ROUTE.exec(pathname);
+  if (lane) return { name: "lane", laneKey: decodeURIComponent(lane[1]) };
+  if (pathname === "/start" || pathname === "/start/") return { name: "start" };
+  if (pathname === "/styleguide" || pathname === "/styleguide/") return { name: "styleguide" };
+  return { name: "map" };
+}
+
 export const mapHref = (): string => "/";
 export const startHref = (): string => "/start";
 export const styleguideHref = (): string => "/styleguide";

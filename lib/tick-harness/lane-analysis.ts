@@ -1,5 +1,5 @@
 /**
- * Lane-mechanics analysis for the calibration harness (spec §8): whole-run lane utilisation,
+ * Lane-mechanics analysis for the calibration harness (spec §7): whole-run lane utilisation,
  * congestion, blocked volume, foreign-transit share, per-faction contention and survival-stock
  * census. Sampled per logistics-boundary tick from `world.lanes` and the freshly-dispatched
  * pendingArrival ledger rows, folded here rather than read off the final world — `lane.bookedLoad`
@@ -234,10 +234,11 @@ export interface LaneMetricsSummary {
   /** Share of Σ booked (real, not projected) carried by the top 10% of lanes by Σ booked. */
   topDecileShare: number;
   /** `mean`/`max` are the network-wide total sampled once per tick (`sampleInTransitVolume`) — every
-   *  in-flight row counted once, regardless of how many lanes its route crosses. `topLanes` is the
-   *  same physically-crossing read broken out per lane (`sampleLaneOccupancy`) — the harness-side
-   *  reading of the lane card's `inFlight`, so Σ `topLanes` (over ALL sampled lanes, not just the
-   *  top few listed) reconciles with `mean` × ticks sampled. */
+   *  in-flight row counted once, regardless of how many lanes its route crosses — OUTBOUND legs
+   *  only. `topLanes` is the per-lane physically-crossing read (`sampleLaneOccupancy`) — the
+   *  harness-side reading of the lane card's `inFlight`, which counts BOTH legs, since a return
+   *  haul occupies the lane it is on just as an outbound one does. The two are therefore different
+   *  populations and do not sum to each other. */
   inTransitVolume: { mean: number; max: number; topLanes: LaneTopInTransitEntry[] };
   blockedVolume: LaneBlockedVolumeSummary;
   queuedVsRealised: LaneQueuedVsRealisedSummary;

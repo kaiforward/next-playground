@@ -245,6 +245,13 @@ describe("getTradeFlowEdges", () => {
     const key = laneKey(system.id, partnerA.id);
     setWorld({
       ...world,
+      // The hop's own connection row: a lane key with no connection is a desync the read path
+      // throws on, never a free lane.
+      connections: [
+        ...world.connections,
+        { fromId: system.id, toId: partnerA.id, fuelCost: 10 },
+        { fromId: partnerA.id, toId: system.id, fuelCost: 10 },
+      ],
       pendingArrivals: [
         {
           id: "arrival-1",

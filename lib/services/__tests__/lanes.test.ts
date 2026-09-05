@@ -3,6 +3,7 @@ import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld } from "@/lib/world/store";
 import { getLaneStates, getLaneDetail } from "@/lib/services/lanes";
 import { laneCapacity } from "@/lib/engine/lanes";
+import { ServiceError } from "@/lib/services/errors";
 import type { World, WorldSystem, WorldLane, WorldLaneUpgradeProject, WorldPendingArrival } from "@/lib/world/types";
 
 let world: World;
@@ -29,6 +30,13 @@ beforeEach(() => {
     ...generated,
     systems: [a, b, ...generated.systems.slice(2)],
     lanes: [lane],
+    // Every lane row travels with the connection it was minted from — the read path treats a lane
+    // with no connection as an invariant break and throws, so the fixture has to be coherent.
+    connections: [
+      ...generated.connections,
+      { fromId: "sys-a", toId: "sys-b", fuelCost: 10 },
+      { fromId: "sys-b", toId: "sys-a", fuelCost: 10 },
+    ],
     constructionProjects: [],
     pendingArrivals: [],
   };
@@ -174,8 +182,19 @@ describe("getLaneStates", () => {
 });
 
 describe("getLaneDetail", () => {
-  it("returns null for a key naming no lane in the current world", () => {
-    expect(getLaneDetail("nope|nope")).toBeNull();
+  it("throws not_found for a key naming no lane in the current world", () => {
+    let kind: string | null = null;
+    try {
+      getLaneDetail("nope|nope");
+    } catch (error) {
+      kind = error instanceof ServiceError ? error.kind : "not-a-service-error";
+    }
+    expect(kind).toBe("not_found");
+  });
+
+  it("throws when a lane has no connection row — a desync, never a free lane", () => {
+    setWorld({ ...world, connections: [] });
+    expect(() => getLaneDetail(LANE_KEY)).toThrow(/no connection row/);
   });
 
   it("joins endpoint ownership, fuel cost, and the derived reads getLaneStates already computes", () => {
@@ -188,15 +207,14 @@ describe("getLaneDetail", () => {
       ],
     });
     const detail = getLaneDetail(LANE_KEY);
-    expect(detail).not.toBeNull();
-    expect(detail!.fuelCost).toBe(8.6);
-    expect(detail!.level).toBe(2);
-    expect(detail!.capacity).toBe(laneCapacity(2));
-    expect(detail!.investorFactionId).toBe("f1");
-    expect(detail!.a).toEqual({
+    expect(detail.fuelCost).toBe(8.6);
+    expect(detail.level).toBe(2);
+    expect(detail.capacity).toBe(laneCapacity(2));
+    expect(detail.investorFactionId).toBe("f1");
+    expect(detail.a).toEqual({
       systemId: "sys-a", systemName: a.name, factionId: "f1", unclaimed: false,
     });
-    expect(detail!.b).toEqual({
+    expect(detail.b).toEqual({
       systemId: "sys-b", systemName: b.name, factionId: "f1", unclaimed: false,
     });
   });
@@ -206,7 +224,7 @@ describe("getLaneDetail", () => {
       ...world,
       systems: world.systems.map((s) => (s.id === "sys-b" ? { ...s, factionId: null, control: "unclaimed" } : s)),
     });
-    const detail = getLaneDetail(LANE_KEY)!;
+    const detail = getLaneDetail(LANE_KEY);
     expect(detail.b.unclaimed).toBe(true);
     expect(detail.b.factionId).toBeNull();
     expect(detail.investorFactionId).toBeNull();
@@ -222,7 +240,7 @@ describe("getLaneDetail", () => {
         },
       ],
     });
-    const detail = getLaneDetail(LANE_KEY)!;
+    const detail = getLaneDetail(LANE_KEY);
     expect(detail.cargo).toHaveLength(1);
     expect(detail.cargo[0]).toEqual({
       goodId: "water", goodName: "Water", quantity: 18,
@@ -257,16 +275,16 @@ describe("getLaneDetail", () => {
     };
 
     setWorld({ ...baseWorld, meta: { ...world.meta, currentTick: 10 } });
-    let detail = getLaneDetail(LANE_KEY)!;
+    let detail = getLaneDetail(LANE_KEY);
     expect(detail.cargo).toHaveLength(1);
     expect(detail.inFlight).toBe(9);
-    expect(getLaneDetail("sys-b|sys-c")!.cargo).toHaveLength(0);
+    expect(getLaneDetail("sys-b|sys-c").cargo).toHaveLength(0);
 
     setWorld({ ...baseWorld, meta: { ...world.meta, currentTick: 25 } });
-    detail = getLaneDetail(LANE_KEY)!;
+    detail = getLaneDetail(LANE_KEY);
     expect(detail.cargo).toHaveLength(0);
     expect(detail.inFlight).toBe(0);
-    expect(getLaneDetail("sys-b|sys-c")!.cargo).toHaveLength(1);
+    expect(getLaneDetail("sys-b|sys-c").cargo).toHaveLength(1);
   });
 
   it("enriches an open lane-upgrade project into the same row shape ConstructionRow renders", () => {
@@ -281,7 +299,7 @@ describe("getLaneDetail", () => {
         { id: "proj-1", kind: "lane_upgrade", factionId, origin: "player", workTotal: 20, workDone: 5, laneKey: LANE_KEY, levels: 1 },
       ],
     });
-    const detail = getLaneDetail(LANE_KEY)!;
+    const detail = getLaneDetail(LANE_KEY);
     expect(detail.openProjects).toHaveLength(1);
     expect(detail.openProjects[0].id).toBe("proj-1");
     expect(detail.openProjects[0].laneKey).toBe(LANE_KEY);

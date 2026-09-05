@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { laneStyle, laneTier } from "../lane-style";
+import { laneStyle } from "../lane-style";
+import { laneTier } from "@/lib/engine/lanes";
 import { LANE_LOAD_COLOR } from "../../theme";
 
 function style(overrides: Partial<Parameters<typeof laneStyle>[0]> = {}) {

@@ -482,6 +482,84 @@ describe("RouteBooker — windowed booking", () => {
   });
 });
 
+describe("RouteBooker.routeAndBook — no live path and no saturated hop on the ideal path", () => {
+  it("charges the whole remainder to the ideal path's most-loaded hop rather than dropping it", () => {
+    // The label-setting divergence: both searches settle each node by its cheapest prefix, but the
+    // live search EXCLUDES saturated edges and so can settle a node via a different prefix — a
+    // different accumulated fuel, hence a different crossing window — than the saturation-blind one.
+    //
+    // Graph (fuel / capacity), windowTicks 1 and freightSpeed 1, so a hop's window is its
+    // accumulated raw fuel:
+    //   S-D 1/1   S-A 4/10   A-D 1/10   A-B 4/10   D-B 2/1   B-T 2/10
+    // Seeded: S-D full in window 0, D-B full in window 1, B-T full in window 7, B-T half in window 8.
+    //
+    // LIVE: S-D is excluded (window 0 full), so D is reached via S→A→D at raw fuel 5 and B via
+    // D at raw fuel 7 (cost 7, beating S→A→B's 8) — and B-T at window 7 is full, so no live path
+    // to T exists at all.
+    // IDEAL (saturation-blind): S-D is priced rather than excluded, so D settles at raw fuel 1 and
+    // its D-B edge is read at window 1, where it is full and therefore expensive — S→A→B wins
+    // instead, reaching B at raw fuel 8, and B-T at window 8 is only half full. Every hop of that
+    // path is below capacity in its own window: there is no saturated hop to name.
+    const pairs: [string, string, number, number][] = [
+      ["S", "D", 1, 1],
+      ["S", "A", 4, 10],
+      ["A", "D", 1, 10],
+      ["A", "B", 4, 10],
+      ["D", "B", 2, 1],
+      ["B", "T", 2, 10],
+    ];
+    const lanes = pairs.map(([a, b]) => buildFixtureLane(a, b, 0));
+    const connections: ConnectionInfo[] = pairs.flatMap(([a, b, fuel]): ConnectionInfo[] => [
+      { fromSystemId: a, toSystemId: b, fuelCost: fuel },
+      { fromSystemId: b, toSystemId: a, fuelCost: fuel },
+    ]);
+    const capacityByKey = new Map(pairs.map(([a, b, , capacity]) => [laneKey(a, b), capacity]));
+    const network = buildLaneNetwork(connections, lanes, (lane) => capacityByKey.get(lane.key) ?? 0);
+
+    // One single-hop ledger row per (lane, window) to seed: a row dispatched at tick w crosses its
+    // one lane in window w.
+    const seed = (a: string, b: string, window: number, quantity: number): WorldPendingArrival =>
+      pendingArrival({
+        id: `seed-${a}${b}-${window}`,
+        factionId: "seed-faction",
+        routeEdges: [laneKey(a, b)],
+        quantity,
+        dispatchTick: window,
+        arrivalTick: window + 1,
+      });
+
+    const booker = createRouteBooker(network, {
+      congestionMax: CONGESTION_MAX,
+      catchUp: 1,
+      windowTicks: 1,
+      now: 0,
+      freightSpeed: 1,
+      scheduled: [
+        seed("S", "D", 0, 1),
+        seed("D", "B", 1, 1),
+        seed("B", "T", 7, 10),
+        seed("B", "T", 8, 5),
+      ],
+    });
+
+    // The ideal path's own hops, each in the window that path reaches it in — none at capacity.
+    expect(booker.loadAt(laneKey("S", "A"), 0)).toBe(0);
+    expect(booker.loadAt(laneKey("A", "B"), 4)).toBe(0);
+    expect(booker.loadAt(laneKey("B", "T"), 8)).toBe(5);
+
+    const h = hauler(booker, OPEN_ALL, "hauler-faction");
+    const booking = h.routeAndBook("S", "T", 4);
+
+    expect(booking?.placements).toEqual([]);
+    // The whole haul is accounted for as blocked, on B-T — the most-loaded hop of the ideal path
+    // (5 of 10 in its own window; the other two hops are empty in theirs).
+    expect(booking?.blocked).toEqual([
+      { laneKey: laneKey("B", "T"), quantity: 4, foreignShare: 1 },
+    ]);
+    expect(booker.loads().get(laneKey("B", "T"))).toEqual({ bookedLoad: 0, blockedVolume: 4 });
+  });
+});
+
 // ── Dijkstra edge-cost hook — vacuity check on the pathfinding.ts refactor ──────────────────
 
 describe("dijkstra edgeCost hook", () => {

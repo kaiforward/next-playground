@@ -714,13 +714,13 @@ export interface HarnessResults {
   /** The map-generation acceptance instruments (spec §5): corrected flow concentration, fuel-cost
    *  spread over both cohorts, cross-faction lane count, the beyond-crossing migration cohort. */
   geography: GeographySummary;
-  /** Whole-run lane-mechanics instruments (spec §8): utilisation, congestion, blocked volume,
+  /** Whole-run lane-mechanics instruments (spec §7): utilisation, congestion, blocked volume,
    *  foreign-transit share, per-faction contention, survival-stock census. */
   laneMetrics: LaneMetricsSummary;
   /** Distribution of how long a developed system's water/food deficit spell runs before it clears —
    *  the physical-stock companion to `demandHunting`'s honest-use-figure `flipRate`. */
   survivalSpellDistribution: SpellDistributionSummary;
-  /** Whole-run wall-clock: the tick as a whole, and the two stages spec §8's gate names
+  /** Whole-run wall-clock: the tick as a whole, and the two stages spec §7's gate names
    *  (directed-logistics, goods-arrivals), each as a median over sampled boundary ticks plus that
    *  stage's share of Σ tick time. Calibration-only — never derived from a broadcast frame. */
   stageTiming: StageTimingSummary;

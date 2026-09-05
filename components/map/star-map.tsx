@@ -18,7 +18,7 @@ import { useVisibility } from "@/lib/hooks/use-visibility";
 import { useOwnership } from "@/lib/hooks/use-ownership";
 import { useTradeFlow } from "@/lib/hooks/use-trade-flow";
 import { useLanes } from "@/lib/hooks/use-lanes";
-import { laneHref } from "@/lib/utils/route-hrefs";
+import { laneHref, parseRoute } from "@/lib/utils/route-hrefs";
 import { useStability } from "@/lib/hooks/use-stability";
 import { usePopulation } from "@/lib/hooks/use-population";
 import { useDevelopment } from "@/lib/hooks/use-development";
@@ -207,20 +207,18 @@ export function StarMap({
     [universe.regions],
   );
 
-  // ── Selection = the open /system/[id] panel route (single source of truth) ──
+  // ── Selection = the open panel route (single source of truth) ──
+  // Parsed by the route table's own `parseRoute` (`lib/utils/route-hrefs.ts`) rather than by
+  // regexes here: one parser decodes each id, and three hand-rolled copies are three chances to
+  // disagree with it. Read from `useRouteInfo` so wouter stays out of the map tree. Faction focus is zoom-gated in the value-choropleth layer: it re-normalises
+  // pop/development to that faction and de-emphasises the rest; stability dims but never rescales
+  // (see ValueChoroplethLayer.setScope).
   const navigate = useNavigate();
   const { pathname, searchParams } = useRouteInfo();
-  const selectedSystemId = useMemo(() => {
-    const match = /^\/system\/([^/]+)/.exec(pathname);
-    return match ? decodeURIComponent(match[1]) : null;
-  }, [pathname]);
-  // ── Faction focus = the open /factions/[id] panel route ──
-  // Zoom-gated in the value-choropleth layer: re-normalises pop/development to this faction and
-  // de-emphasises the rest; stability dims but never rescales (see ValueChoroplethLayer.setScope).
-  const selectedFactionId = useMemo(() => {
-    const match = /^\/factions\/([^/]+)/.exec(pathname);
-    return match ? decodeURIComponent(match[1]) : null;
-  }, [pathname]);
+  const route = parseRoute(pathname);
+  const selectedSystemId = route.name === "system" ? route.systemId : null;
+  const selectedFactionId = route.name === "faction" ? route.factionId : null;
+  const selectedLaneKey = route.name === "lane" ? route.laneKey : null;
   const selectedSystem = useMemo(
     () =>
       selectedSystemId
@@ -228,11 +226,6 @@ export function StarMap({
         : null,
     [selectedSystemId, universe.systems],
   );
-  // ── Selected lane = the open /lane/:key panel route ──
-  const selectedLaneKey = useMemo(() => {
-    const match = /^\/lane\/([^/]+)/.exec(pathname);
-    return match ? decodeURIComponent(match[1]) : null;
-  }, [pathname]);
 
   // ── Derived map data ────────────────────────────────────────────
   const mapData = useMapData({

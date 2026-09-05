@@ -9,7 +9,7 @@ import { TIER_COLOR } from "@/components/alerts/alert-chip";
 import { CHIP_HEIGHT, RAIL_INSET } from "@/lib/constants/layout";
 import type { AlertDestinationTab } from "@/lib/types/alerts";
 import type { FactionTabSegment } from "@/lib/constants/faction-tabs";
-import type { AlertCategory, AlertInstance, LaneAlertInstance } from "@/lib/types/api";
+import type { AlertCategory } from "@/lib/types/api";
 
 /** The flyout's own 5px clearance below its chip — passed to `PopoverContent` as `sideOffset`
  *  (overriding its own 8px default) and reused below so the `maxHeight` derivation reads as three
@@ -62,40 +62,44 @@ export type AlertNavigateTarget =
   | { kind: "none" };
 
 /**
- * Resolves a row's destination off `ALERT_CATEGORIES[category.id].destination` and the specific
- * instance's own subject — a `systemId` for the per-instance decision the destination table
+ * Resolves a row's destination off `ALERT_CATEGORIES[category.id].destination` and the subject of
+ * the instance at `index` (the row's position in `category.instances`, which is what keeps the
+ * instance's type tied to the category's own union arm) — a `systemId` for the per-instance decision the destination table
  * (docs/active/gameplay/alert-bar.md → "What a row click does") reserves, degenerately, for
  * Maintenance unfunded (always the faction panel, whatever `systemId` says); a `laneKey` for Lane
  * congested, the one category whose instances are `LaneAlertInstance` rather than `AlertInstance`
  * (see that type's own docstring for why a lane can't reuse `systemId`).
+ *
+ * The switch is on `category.unit`, not on the instance's own shape: the `AlertCategory` union
+ * already correlates the two (only the `lanes` arm carries `LaneAlertInstance` rows), so switching
+ * on it types each arm's instance instead of re-probing a widened parameter with `in`.
  *
  * Pure and exported so the branching itself is directly testable without a router or an atlas
  * fetch in the loop. `components/alerts/alert-run.tsx`'s `ActiveAlertFlyout` is the one place that
  * turns a resolved target into an actual navigation, and only once a flyout is open — seeing this
  * file's own docstring on `AlertFlyout` for why the hook calls that need cannot live any higher.
  */
-export function resolveAlertTarget(
-  category: AlertCategory, instance: AlertInstance | LaneAlertInstance,
-): AlertNavigateTarget {
-  const destination = ALERT_CATEGORIES[category.id].destination;
-  switch (destination.kind) {
-    case "system":
-      // Every system-scoped category's instances carry a systemId by construction; the null branch
-      // is unreachable in practice, not a real case to route somewhere plausible-looking.
-      return "systemId" in instance && instance.systemId
-        ? { kind: "system", systemId: instance.systemId, tab: destination.tab }
-        : { kind: "none" };
-    case "faction":
-      // Maintenance unfunded — the player faction's Overview (where the treasury card lives),
-      // whatever the instance's own systemId says (it is always null for this category: the row is
-      // faction-level, not per-system).
-      return { kind: "faction", tab: "" };
-    case "lane":
-      // Lane congested's own instances always carry a laneKey by construction (LaneAlertInstance has
-      // no other shape); the "not a lane instance" branch is unreachable in practice, same posture
-      // as the system case's own null branch above.
-      return "laneKey" in instance ? { kind: "lane", laneKey: instance.laneKey } : { kind: "none" };
+export function resolveAlertTarget(category: AlertCategory, index: number): AlertNavigateTarget {
+  if (category.unit === "lanes") {
+    const instance = category.instances[index];
+    return instance ? { kind: "lane", laneKey: instance.laneKey } : { kind: "none" };
   }
+  const destination = ALERT_CATEGORIES[category.id].destination;
+  if (destination.kind === "faction") {
+    // Maintenance unfunded — the player faction's Overview (where the treasury card lives),
+    // whatever the instance's own systemId says (it is always null for this category: the row is
+    // faction-level, not per-system).
+    return { kind: "faction", tab: "" };
+  }
+  if (destination.kind === "lane") {
+    // A `lane` destination on a non-lane-scoped category would be a table/type mismatch, not game
+    // state — there is no instance here carrying a laneKey to route to.
+    return { kind: "none" };
+  }
+  // Every system-scoped category's instances carry a systemId by construction; the null branch is
+  // unreachable in practice, not a real case to route somewhere plausible-looking.
+  const systemId = category.instances[index]?.systemId;
+  return systemId ? { kind: "system", systemId, tab: destination.tab } : { kind: "none" };
 }
 
 export interface AlertFlyoutProps {
@@ -156,8 +160,8 @@ export function AlertFlyout({ category, onNavigate, runRef }: AlertFlyoutProps) 
   const Icon = def.icon;
   const tier = TIER_COLOR[def.tier];
 
-  function activate(instance: AlertInstance | LaneAlertInstance) {
-    onNavigate(resolveAlertTarget(category, instance));
+  function activate(index: number) {
+    onNavigate(resolveAlertTarget(category, index));
   }
 
   const footerText = alertFooterText(category);
@@ -192,19 +196,27 @@ export function AlertFlyout({ category, onNavigate, runRef }: AlertFlyoutProps) 
         {def.conditionLine}
       </p>
       <ul className="min-h-0 flex-1 overflow-y-auto">
-        {category.instances.map((instance, index) => {
-          // A lane instance's own key (a lane names two endpoints, no single systemId to key off);
-          // every other category keys off systemId (or "none" for the one faction-level category).
-          const rowKey = "laneKey" in instance ? instance.laneKey : (instance.systemId ?? "none");
-          return (
-            <AlertRow
-              key={`${rowKey}-${instance.name}-${index}`}
-              name={instance.name}
-              measure={instance.measure}
-              onActivate={() => activate(instance)}
-            />
-          );
-        })}
+        {/* A lane instance's own key (a lane names two endpoints, no single systemId to key off);
+            every other category keys off systemId (or "none" for the one faction-level category).
+            The two arms are separate maps so each one's instance type is the union arm's own,
+            rather than a re-probe of a widened row. */}
+        {category.unit === "lanes"
+          ? category.instances.map((instance, index) => (
+              <AlertRow
+                key={`${instance.laneKey}-${instance.name}-${index}`}
+                name={instance.name}
+                measure={instance.measure}
+                onActivate={() => activate(index)}
+              />
+            ))
+          : category.instances.map((instance, index) => (
+              <AlertRow
+                key={`${instance.systemId ?? "none"}-${instance.name}-${index}`}
+                name={instance.name}
+                measure={instance.measure}
+                onActivate={() => activate(index)}
+              />
+            ))}
       </ul>
       {footerText != null && (
         <footer className="shrink-0 border-t border-border px-2.5 py-1.5 text-xs text-text-tertiary">

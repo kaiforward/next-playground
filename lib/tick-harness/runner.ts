@@ -270,7 +270,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   // populationSnapshots, so computeTrailingProvisionVariance can read a trailing window off it at
   // the end of the run.
   const provisionSnapshots: Array<Map<string, number>> = [];
-  // Lane-mechanics (spec §8) and survival-spell accumulators — see their own modules' docstrings for
+  // Lane-mechanics (spec §7) and survival-spell accumulators — see their own modules' docstrings for
   // why these are folded per tick/cycle rather than read off the final world.
   const laneAcc = newLaneRunAccumulator();
   // Fuel costs are static (never change once generated), so this lookup — the same shape
@@ -341,7 +341,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       }
     }
 
-    // Lane mechanics (spec §8) and the fifth conservation identity. The dispatch/applied-credit
+    // Lane mechanics (spec §7) and the fifth conservation identity. The dispatch/applied-credit
     // totals just below run unconditionally, not gated to LOGISTICS_WARMUP_TICKS — the identity
     // reconciles dispatched-vs-arrived over the whole run, so a founding-era contribution has to be
     // counted, not windowed out. Every fold after them IS gated to LOGISTICS_WARMUP_TICKS, like the
@@ -370,7 +370,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       }
       if (world.meta.currentTick % logisticsInterval === 0) {
         sampleLaneUtilisation(laneAcc, world.lanes, catchUpFactor(logisticsInterval));
-        // Spec §8 measures spells as "consecutive-logistics-run deficit spells" (premise 3's own
+        // Spec §7 measures spells as "consecutive-logistics-run deficit spells" (premise 3's own
         // cadence) — sampled on the logistics boundary, not the economy cycle, even though the two
         // intervals default equal.
         sampleSurvivalSpells(spellAcc, currentMarkets, world.meta.currentTick, LOGISTICS_WARMUP_TICKS);

@@ -1,11 +1,10 @@
 import { getWorld } from "@/lib/world/store";
-import { buildingsBySystem, flowEventsBySystem, marketsBySystem, systemNameById } from "@/lib/services/world-index";
+import { buildingsBySystem, flowEventsBySystem, laneFuelCost, marketsBySystem, systemNameById } from "@/lib/services/world-index";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { bucketVolumeHistory } from "@/lib/engine/system-trade-flow";
 import { buildLaneFlowEdges, type LaneFlowRow } from "@/lib/engine/trade-flow-edges";
 import { isEconomicallyActive } from "@/lib/engine/control";
-import { laneKey as laneKeyOf } from "@/lib/engine/lanes";
 import { LANES } from "@/lib/constants/lanes";
 import { GOODS } from "@/lib/constants/goods";
 import type {
@@ -27,15 +26,11 @@ import {
  * carrying freight right now, read straight from the scheduled-freight ledger (`WorldPendingArrival`)
  * — a haul contributes to the one hop it's currently crossing, not a window-summed chord between its
  * origin and destination, and not every lane its route will ever touch. A ledger with nothing in
- * flight (including a world with no lanes at all) reads as zero edges.
+ * flight reads as zero edges.
  */
 export function getTradeFlowEdges(): TradeFlowEdges {
   const world = getWorld();
-  const fuelCosts = new Map<string, number>();
-  for (const c of world.connections) {
-    fuelCosts.set(laneKeyOf(c.fromId, c.toId), c.fuelCost);
-  }
-  const hopFuelCostsOf = (row: LaneFlowRow): number[] => row.routeEdges.map((key) => fuelCosts.get(key) ?? 0);
+  const hopFuelCostsOf = (row: LaneFlowRow): number[] => row.routeEdges.map(laneFuelCost);
   const logisticsEdges = buildLaneFlowEdges(
     world.pendingArrivals,
     TRADE_SIMULATION.LOGISTICS_ROUTE_FLOOR,
@@ -48,7 +43,7 @@ export function getTradeFlowEdges(): TradeFlowEdges {
 
 /**
  * Freight in flight to/from `systemId` right now, split by direction — present only while
- * `arrivalTick > currentTick` (docs/active/gameplay/logistics-lanes.md §7): a row disappears the tick the
+ * `arrivalTick > currentTick` (docs/active/gameplay/logistics-lanes.md §6): a row disappears the tick the
  * goods-arrivals stage credits it, never filtered by this function's caller. Read straight off the
  * scheduled-freight ledger (`WorldPendingArrival`), not a window sum.
  */

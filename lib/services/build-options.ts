@@ -16,7 +16,7 @@ import { foundingCommitmentCost } from "@/lib/engine/founding-cost";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { foundingReadoutInputs } from "@/lib/services/construction";
 import { sizeColonyEstablish, queuedBuildLevelsAt } from "@/lib/engine/directed-build";
-import { buildingsBySystem } from "@/lib/services/world-index";
+import { buildingsBySystem, connectionsBySystem, systemById } from "@/lib/services/world-index";
 import { CONSTRUCTION } from "@/lib/constants/construction";
 import { LANES } from "@/lib/constants/lanes";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
@@ -30,12 +30,13 @@ import type { World, WorldConstructionProject, WorldPlayer, WorldSystem } from "
  */
 function claimOptions(world: World, player: WorldPlayer, system: WorldSystem): SystemBuildOptionsData {
   const adjacentOwned: ClaimAdjacentSystem[] = [];
-  for (const c of world.connections) {
+  const systems = systemById();
+  for (const c of connectionsBySystem().get(system.id) ?? []) {
     let otherId: string | null = null;
     if (c.fromId === system.id) otherId = c.toId;
     else if (c.toId === system.id) otherId = c.fromId;
     if (otherId === null) continue;
-    const other = world.systems.find((s) => s.id === otherId);
+    const other = systems.get(otherId);
     if (other && other.factionId === player.controlledFactionId) {
       adjacentOwned.push({ systemId: other.id, systemName: other.name });
     }
@@ -56,7 +57,7 @@ function claimOptions(world: World, player: WorldPlayer, system: WorldSystem): S
 export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData {
   if (!hasWorld()) throw new ServiceError("No world loaded", "no_world");
   const world = getWorld();
-  const system = world.systems.find((s) => s.id === systemId);
+  const system = systemById().get(systemId);
   if (!system) throw new ServiceError(`System ${systemId} not found.`, "not_found");
 
   const player = world.player;
@@ -76,7 +77,7 @@ export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData 
         : {
             sourceSystemId: priced.sourceSystemId,
             sourceSystemName:
-              world.systems.find((s) => s.id === priced.sourceSystemId)?.name ?? priced.sourceSystemId,
+              systemById().get(priced.sourceSystemId)?.name ?? priced.sourceSystemId,
             seedPop: sizing.seedPop, housingLevels: sizing.housingLevels,
             charter: priced.charter, projectedBill: priced.projectedBill,
             commitment: foundingCommitmentCost(

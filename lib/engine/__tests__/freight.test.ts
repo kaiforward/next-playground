@@ -58,6 +58,20 @@ describe("hopCrossingTicks", () => {
   it("returns one entry per hop, empty for an empty route", () => {
     expect(hopCrossingTicks(100, [], 5)).toEqual([]);
   });
+
+  it("clamps a hop that would start AT arrivalTick back to arrivalTick - 1, so its window is never empty", () => {
+    // Hops of fuel 10 then 0 at speed 5: arrival is round(10/5) = tick 102, and hop 1's own start
+    // rounds to 102 as well — the same tick the row is drained on. Unclamped, hop 1's half-open
+    // window [102, 102) is empty and the last lane is occupied nowhere.
+    expect(hopCrossingTicks(100, [10, 0], 5, 102)).toEqual([100, 101]);
+    // A last hop short enough to round away does the same: 2 fuel at speed 10 adds nothing to
+    // either the arrival tick or the hop start.
+    expect(hopCrossingTicks(100, [20, 2], 10, 102)).toEqual([100, 101]);
+  });
+
+  it("leaves the starts alone when arrivalTick is not after dispatchTick — a same-tick arrival occupies nothing", () => {
+    expect(hopCrossingTicks(100, [10, 0], 1_000_000, 100)).toEqual([100, 100]);
+  });
 });
 
 describe("currentHopIndex / laneOccupiedAt", () => {
@@ -88,6 +102,22 @@ describe("currentHopIndex / laneOccupiedAt", () => {
 
   it("occupies nothing before dispatch", () => {
     expect(currentHopIndex(row, -1, hopFuelCosts, 5)).toBeNull();
+  });
+
+  it("occupies its final lane for at least one tick when that hop's fuel rounds away", () => {
+    // Zero-fuel last hop: arrival is round(10/5) = 2, and hop 1's unclamped start is 2 as well.
+    const zeroFuelLast = arrival({
+      id: "zero-fuel-last", dispatchTick: 0, arrivalTick: 2, routeEdges: ["a|b", "b|c"],
+    });
+    expect(currentHopIndex(zeroFuelLast, 1, [10, 0], 5)).toBe(1);
+    expect(laneOccupiedAt(zeroFuelLast, "b|c", 1, [10, 0], 5)).toBe(true);
+
+    // Same shape from rounding rather than a zero cost: 2 fuel at speed 10 rounds away.
+    const roundedAwayLast = arrival({
+      id: "rounded-away-last", dispatchTick: 0, arrivalTick: 2, routeEdges: ["a|b", "b|c"],
+    });
+    expect(currentHopIndex(roundedAwayLast, 1, [20, 2], 10)).toBe(1);
+    expect(laneOccupiedAt(roundedAwayLast, "b|c", 1, [20, 2], 10)).toBe(true);
   });
 
   it("at a huge freight speed every hop collapses to dispatchTick, which equals arrivalTick — occupies no lane", () => {

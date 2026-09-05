@@ -363,6 +363,9 @@ describe("AlertRunContent — a flyout row click navigates to the row's own dest
     expect(push).toHaveBeenCalledTimes(1);
     expect(push).toHaveBeenCalledWith(
       expect.stringMatching(/^\/lane\/sys-1%7Csys-2\?focus=16,11&loc=\d+$/),
+      // An alert row opens the lane's card as a real navigation — only the card's own
+      // "Show on Map" replaces (`useLaneFocus({ replace: true })`).
+      { replace: false },
     );
   });
 });

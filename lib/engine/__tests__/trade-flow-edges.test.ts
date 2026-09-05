@@ -99,6 +99,22 @@ describe("buildLaneFlowEdges", () => {
     expect(edges[0].totalVolume).toBe(10);
   });
 
+  it("emits nothing for a discontiguous route rather than an edge pointing the wrong way", () => {
+    // Hops A|B then C|D share no endpoint: after crossing A|B the haul stands at B, which is
+    // neither end of C|D. The walk falls off the route, so the row contributes nothing — it must
+    // never resolve to C and emit a C -> D edge for a haul that is nowhere near it.
+    const haul = row({
+      fromSystemId: "A", routeEdges: ["A|B", "C|D"], quantity: 10, dispatchTick: 0, arrivalTick: 20,
+    });
+    expect(buildLaneFlowEdges([haul], 1, 12, () => [10, 10], 1)).toHaveLength(0);
+  });
+
+  it("emits nothing when the CURRENT hop does not touch the walked-to position", () => {
+    // A single-hop route the row does not start on: `fromSystemId` X is neither end of A|B.
+    const haul = row({ fromSystemId: "X", routeEdges: ["A|B"], quantity: 10 });
+    expect(build([haul], 1)).toHaveLength(0);
+  });
+
   it("at a huge freight speed a fresh row arrives immediately and reads on no lane", () => {
     const haul = row({ fromSystemId: "A", routeEdges: ["A|B", "B|C"], quantity: 10, dispatchTick: 0, arrivalTick: 0 });
     expect(buildLaneFlowEdges([haul], 1, 0, () => [10, 10], 1_000_000)).toHaveLength(0);
