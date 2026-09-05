@@ -262,8 +262,8 @@ open re-points to the system panel, the same navigation system-to-system already
 A system's name (`SystemObject`) draws screen-constant — `SIZES.systemLabelSize` px whatever the zoom, the way the
 choropleth's system-tier numbers already are — lifted below the glyph by `GLYPH.coreRadius × dotScale +
 LABEL.offsetY / zoom`, the choropleth's own lift formula. It draws only when its padded label box fits entirely
-inside the system's own Voronoi cell (`labelFitsCell`, `components/map/pixi/label-fit.ts`): a Voronoi cell clipped
-to a disc is convex, so containment of all four box corners in the cell's exterior ring is a valid fit test; a
+inside the system's own Voronoi cell (`labelFitsCell`, `components/map/pixi/label-fit.ts`): a Voronoi cell is
+convex, so containment of all four box corners in the cell's exterior ring is a valid fit test; a
 corner exactly on the boundary counts as inside (a snug fit still shows). The fit pass re-runs only when the zoom
 has moved past `LABEL.fitZoomStep` (a relative step, mirroring the choropleth's own outline-zoom gate) or the
 system just entered the frustum, and caches each system's answer against the zoom it was computed at
@@ -277,11 +277,13 @@ way the number-aggregation labels do (see Deferred).
 
 ## Rendering architecture
 
-- **Compute the Voronoi once.** `buildSystemCells(systems, mapSize)` builds the map's only Delaunay/Voronoi from
-  the system point set, clips every cell once, and hands the result to every consumer: per-system cells
-  (`Map<systemId, MultiPolygon>`), centroids, analytic hit-testing, and `groupBy(key)`. The region and political
-  layers union their territories out of those cached cells rather than triangulating for themselves — a layer that
-  builds its own is the regression, since the per-cell disc clip, not the triangulation, is where the cost sits.
+- **Compute the Voronoi once.** `buildSystemCells(systems, mapSize)` builds the map's only Delaunay/Voronoi — over
+  the real systems plus invisible ghost sites (`ghostSites`, `components/map/pixi/territory-utils.ts`) that give
+  every real cell a genuine straight bisector at the rim and across interior gaps — and hands the result to every
+  consumer: per-system cells (`Map<systemId, MultiPolygon>`), centroids, analytic hit-testing, and `groupBy(key)`.
+  The region and political layers union their territories out of those cached cells rather than triangulating for
+  themselves — a layer that builds its own is the regression, since the polygon union, not the
+  triangulation or the ghost-site pass (a few milliseconds for 600 systems), is where the cost sits.
 - **One generic value-choropleth layer.** `ValueChoroplethLayer` is parameterised by (value map, reference map,
   mode); it draws per-cell fills, hosts the pooled number sublayer, applies scope re-normalisation + de-emphasis,
   and strokes the faction-union outline. It replaced three near-identical stability/population/development layers.

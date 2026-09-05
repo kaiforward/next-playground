@@ -18,16 +18,6 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   `MapData.laneBandBySystem`. Tight clusters hide most names until zoomed well in (cell-fit rule,
   no priority scheme) — decide after play whether a priority tier is wanted.
   *Next step:* play with both for a few sessions, then decide.
-- **[S] Voronoi cells bounded by ghost sites instead of a disc clip.** A hull cell, or any cell that
-  balloons across a sparse gap, is today cut to a 24-gon disc around its site
-  (`territory-utils.ts`), which reads as a circle against the straight Voronoi edges. Replace the
-  clip with invisible ghost sites — hull systems mirrored across their hull edge, plus a ghost at
-  the circumcentre of any Delaunay triangle whose circumradius exceeds the same spacing threshold,
-  so interior gaps close the same way as the rim — then discard ghost cells after the diagram is
-  built. Every cell then ends in a genuine straight bisector. Hit-testing and `voronoi-cache.ts`
-  index by system, so a ghost index must never surface as a system. Lands on
-  `shared/logistics-lanes` before its merge to main.
-  *Next step:* implement on the shared branch; smoke at the rim and over the widest interior gap.
 - **[M] Good-allocation cliff — how logistics splits a scarce good across demanding systems.**
   Gate 1 of supply-response measured per-good satisfaction as violently bimodal: on worlds below
   full Provision, individual goods sit at 0 or 1 with almost nothing between. Hypothesis: greedy

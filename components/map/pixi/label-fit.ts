@@ -1,8 +1,8 @@
 /**
  * Pure cell-fit test for a system's name label — no Pixi import, `.test.ts`-able from node. A
- * Voronoi cell clipped to a disc (`territory-utils.ts`) is convex, so a label box fits inside it
- * exactly when all four of the box's corners lie inside the cell's exterior ring; there is no
- * concave case to trip up corner-only containment.
+ * Voronoi cell is convex regardless of where its bisectors land (`territory-utils.ts`), so a label
+ * box fits inside it exactly when all four of the box's corners lie inside the cell's exterior
+ * ring; there is no concave case to trip up corner-only containment.
  */
 
 import type { Point } from "./lane-hit-test";
