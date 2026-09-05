@@ -13,15 +13,11 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 ## Queued
 
-- **[M] Map presentation pass — lane layering, a Lanes map mode, cell-fit labels.** Spec approved
-  (Kai, 2026-09-05): [map-presentation.md](./planned/map-presentation.md). The always-on lane layer
-  goes quiet (uniform line, width for level, no colour or dashes); a Lanes map mode carries investor
-  colour, level, a stepped fine/busy/congested band and absorbs the logistics overlay, with particle
-  density reading load; zoomed out it tints cells by the worst lane band; system selection is the
-  cell alone (star ring removed); a system name draws only when it fits inside its own cell.
-  Its own sub-PR into `shared/logistics-lanes`, before the shared → main PR.
-  *Next step:* HTML prototype of the base layer, the mode at both zoom tiers and the legend, then
-  `/build-plan`.
+- **[S] Lanes mode and cell-fit labels — after-play follow-ups.** The Lanes-mode cell tint currently
+  colours every system's cell; restricting it to owned/friendly systems is a filter over
+  `MapData.laneBandBySystem`. Tight clusters hide most names until zoomed well in (cell-fit rule,
+  no priority scheme) — decide after play whether a priority tier is wanted.
+  *Next step:* play with both for a few sessions, then decide.
 - **[M] Good-allocation cliff — how logistics splits a scarce good across demanding systems.**
   Gate 1 of supply-response measured per-good satisfaction as violently bimodal: on worlds below
   full Provision, individual goods sit at 0 or 1 with almost nothing between. Hypothesis: greedy

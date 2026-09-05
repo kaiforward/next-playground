@@ -2,9 +2,10 @@
 
 > **Status:** **P1 shipped** — Migration mode + the population two-pole red→green ramp; the map's price + event
 > **pills/overlays removed**. Current reality lives in the map spec ([map-rendering.md](../active/engineering/map-rendering.md)).
-> **The Price mode was built in P1 then CUT as premature** (see the Price section + decisions log). **P2 (flow-viz)
-> remains planned** — this doc stays in `docs/planned/` until P2 ships. Part of the map/system-detail overhaul
-> ([ui-overhaul.md](./ui-overhaul.md)).
+> **The Price mode was built in P1 then CUT as premature** (see the Price section + decisions log). **P2's
+> logistics half shipped** as the Lanes map mode (map-rendering.md → Lane layer) — the former Logistics overlay
+> folded into it, convoy particles included. **P2's migration-arrows half remains planned** — this doc stays in
+> `docs/planned/` until it ships. Part of the map/system-detail overhaul ([ui-overhaul.md](./ui-overhaul.md)).
 
 ## Headline
 
@@ -122,10 +123,15 @@ pill loses no precision in the meantime: exact prices remain reachable via the *
 "Show all prices" panel, kept and reattached to the price mode) and any system's full detail via **click → the
 docked detail panel**. Colour carries the at-a-glance read; precise numbers live one click away.
 
-## P2 — Flow visualisation (deferred; dedicated design + prototype)
+## P2 — Flow visualisation (logistics half shipped; migration arrows remain planned)
 
 The hard, novel visual craft — kept out of P1 so P1 can ship, and given its own design pass + HTML prototype
 because directed arcs fight map density (the exact problem the logistics overlay hit).
+
+**The logistics half of this section shipped** as the Lanes map mode
+([map-rendering.md](../active/engineering/map-rendering.md) → Lane layer): the former Logistics overlay's convoy
+particles fold into the Lanes mode, drawn only there, with count and colour keyed to the lane's fine/busy/congested
+band rather than the good being hauled. Migration movement arrows are the remaining open half, described below.
 
 - **Migration movement arrows, built *inside* the Migration mode.** Not a cross-mode overlay — the EU4 Trade-map
   precedent: flow arrows live in a *dedicated mode* that quiets its own base (the attraction fill drops to a
@@ -137,9 +143,8 @@ because directed arcs fight map density (the exact problem the logistics overlay
   it as a windowed log — a **sibling of `WorldFlowEvent`** (`flowEvents`) — from which arrows render directly and
   per-system **net** numbers fall out as a free aggregation if wanted. Note the process is a **bursty cycle
   start** (sharded), so the window must span enough ticks not to flicker.
-- **Logistics settled holistically here.** It is the last remaining overlay and the same flow-viz problem; the
-  choices (keep as overlay / rework the rendering / fold into an "economic lens") are decided in this pass, not
-  piecemeal.
+- **Logistics settled** — it folded into the Lanes map mode rather than staying its own overlay (above); the
+  remaining open question here is migration arrows only.
 
 ## Bookmarked (not WS2)
 
@@ -178,8 +183,8 @@ because directed arcs fight map density (the exact problem the logistics overlay
 
 - **Mode label** — "Migration" vs "Attraction" for the attractiveness mode's toggle name.
 - **Price default good** on mode entry.
-- **P2** — arrow density + colour vs logistics (they share lanes; distinct hues + rarely-both-on), window width
-  for the bursty cycle start, and logistics' final fate.
+- **P2** — arrow density + colour vs the shipped Lanes-mode convoy particles (distinct hues + rarely-both-on, since
+  arrows live in the Migration mode and particles in the Lanes mode), and window width for the bursty cycle start.
 
 ## Sequence
 
