@@ -12,6 +12,7 @@ import type { TradeFlowEdgeInfo, LaneStateRow } from "@/lib/types/api";
 import { settlementMarkFor, type SettlementMark } from "@/lib/types/map";
 import type { SystemOwnership } from "@/lib/hooks/use-ownership";
 import { laneKey as buildLaneKey } from "@/lib/engine/lanes";
+import { laneBand, worstLaneBand, type LaneBand } from "@/components/map/pixi/objects/lane-band";
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -39,21 +40,30 @@ export interface ConnectionData {
    *  itself, so it is present whether or not the `lanes` slice has landed yet. Feeds both the
    *  lane-layer style and the lane-hit-test/selection route key. */
   laneKey: string;
-  /** Invested upgrade level. The `?? 0` fallbacks on these three fields cover exactly ONE state: a
-   *  PRE-BOOT frame, where the `lanes` slice has not landed but the atlas's connections have. A
-   *  live world always carries one lane row per connection (generation mints them, the save version
-   *  refuses anything older), so a connection with no lane row at runtime is an invariant break, not
-   *  a supported "lane state missing" case. */
+  /** Invested upgrade level. The fallbacks on `level`, `load`, `blocked`, `investorFactionId` and
+   *  `band` cover exactly ONE state: a PRE-BOOT frame, where the `lanes` slice has not landed but
+   *  the atlas's connections have. A live world always carries one lane row per connection
+   *  (generation mints them, the save version refuses anything older), so a connection with no lane
+   *  row at runtime is an invariant break, not a supported "lane state missing" case. */
   level: number;
   /** `bookedLoad / capacity`, clamped to [0, 1] at the style helper — 0 pre-boot (see `level`). */
   load: number;
   /** This run's `blockedVolume > 0` — false pre-boot (see `level`). */
   blocked: boolean;
+  /** The faction holding BOTH endpoints — the one that may invest in the lane and pays its upkeep
+   *  (`laneInvestor`, `lib/engine/lanes.ts`); null when an endpoint is unclaimed or the two ends are
+   *  split between factions, and null pre-boot (see `level`). */
+  investorFactionId: string | null;
+  /** `laneBand({ load, blocked })` — "fine" pre-boot (see `level`). */
+  band: LaneBand;
 }
 
 export interface MapData {
   systems: SystemNodeData[];
   connections: ConnectionData[];
+  /** Worst `LaneBand` across each system's connections, keyed by system id — absent for a system
+   *  with no connection. Feeds the Lanes-mode choropleth (docs/planned/map-presentation.md §2). */
+  laneBandBySystem: Map<string, LaneBand>;
   /**
    * Directed-logistics edges keyed by `${laneKey}|${fromSystemId}` — one entry per lane per
    * direction, never per canonical system pair (a lane can carry traffic both ways at once). Empty
@@ -70,7 +80,7 @@ export interface MapData {
 
 // ── Options ─────────────────────────────────────────────────────
 
-interface UseMapDataOptions {
+export interface UseMapDataOptions {
   universe: UniverseData;
   visibleSystemIds: Set<string>;
   logisticsEdges: TradeFlowEdgeInfo[];
@@ -154,6 +164,8 @@ export function useMapData({
 
       const key = buildLaneKey(conn.fromSystemId, conn.toSystemId);
       const lane = laneStateByKey.get(key);
+      const load = lane && lane.capacity > 0 ? lane.bookedLoad / lane.capacity : 0;
+      const blocked = (lane?.blockedVolume ?? 0) > 0;
       result.push({
         id: conn.id,
         fromId: conn.fromSystemId,
@@ -161,13 +173,33 @@ export function useMapData({
         fuelCost: conn.fuelCost,
         laneKey: key,
         level: lane?.level ?? 0,
-        load: lane && lane.capacity > 0 ? lane.bookedLoad / lane.capacity : 0,
-        blocked: (lane?.blockedVolume ?? 0) > 0,
+        load,
+        blocked,
+        investorFactionId: lane?.investorFactionId ?? null,
+        band: laneBand({ load, blocked }),
       });
     }
 
     return result;
   }, [universe.connections, laneStateByKey]);
+
+  // ── Worst lane band per system ────────────────────────────────
+  const laneBandBySystem = useMemo(() => {
+    const bandsBySystem = new Map<string, LaneBand[]>();
+    for (const conn of connections) {
+      for (const systemId of [conn.fromId, conn.toId]) {
+        const bands = bandsBySystem.get(systemId);
+        if (bands) bands.push(conn.band);
+        else bandsBySystem.set(systemId, [conn.band]);
+      }
+    }
+    const result = new Map<string, LaneBand>();
+    for (const [systemId, bands] of bandsBySystem) {
+      const worst = worstLaneBand(bands);
+      if (worst !== null) result.set(systemId, worst);
+    }
+    return result;
+  }, [connections]);
 
   // ── Gateway target regions ────────────────────────────────────
   const selectedGatewayTargets = useMemo(() => {
@@ -224,6 +256,7 @@ export function useMapData({
   return {
     systems,
     connections,
+    laneBandBySystem,
     logisticsFlowEdges,
     selectedGatewayTargets,
     selectedRegionName,
