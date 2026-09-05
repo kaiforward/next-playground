@@ -3,9 +3,9 @@ import { SystemLayer } from "../system-layer";
 import { SystemObject } from "../../objects/system-object";
 import { Frustum } from "../../frustum";
 import { computeLOD } from "../../lod";
-import type { SystemNodeData } from "@/lib/hooks/use-map-data";
 import type { SystemCells } from "../../voronoi-cache";
 import type { MultiPolygon } from "../../territory-utils";
+import { systemNode as sys } from "../../__tests__/system-node-fixture";
 
 // jsdom has no real canvas backend (`getContext("2d")` returns null without the `canvas` npm
 // package, and it doesn't even define the `CanvasRenderingContext2D` global Pixi feature-detects
@@ -43,12 +43,6 @@ afterAll(() => {
   if (originalGetContext) Object.defineProperty(HTMLCanvasElement.prototype, "getContext", originalGetContext);
 });
 
-function sys(id: string, x: number, y: number): SystemNodeData {
-  return {
-    id, x, y, name: id, economyType: "agricultural", sunClass: "yellow",
-    settlementMark: null, regionId: "r1", isGateway: false, visibility: "visible",
-  };
-}
 
 /** A `SystemCells` whose one cell (tiny, centred on the system) can never fit a label box. */
 function tinyCell(id: string, x: number, y: number): SystemCells {

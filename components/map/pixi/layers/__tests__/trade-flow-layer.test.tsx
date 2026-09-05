@@ -2,15 +2,9 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { TradeFlowLayer, type FlowLayerConfig } from "../trade-flow-layer";
 import { TradeFlowEdge } from "../../objects/trade-flow-edge";
 import type { LaneBand } from "../../objects/lane-band";
-import type { SystemNodeData } from "@/lib/hooks/use-map-data";
 import type { TradeFlowEdgeInfo } from "@/lib/types/api";
 
-function sys(id: string, x: number, y: number): SystemNodeData {
-  return {
-    id, x, y, name: id, economyType: "agricultural", sunClass: "yellow",
-    settlementMark: null, regionId: "r1", isGateway: false, visibility: "visible",
-  };
-}
+import { systemNode as sys } from "../../__tests__/system-node-fixture";
 
 function edge(overrides: Partial<TradeFlowEdgeInfo> & Pick<TradeFlowEdgeInfo, "laneKey" | "fromSystemId" | "toSystemId">): TradeFlowEdgeInfo {
   return { totalVolume: 10, ...overrides };

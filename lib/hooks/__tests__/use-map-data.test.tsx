@@ -37,8 +37,7 @@ function universe(): UniverseData {
   };
 }
 
-function baseOptions(): UseMapDataOptions {
-  const u = universe();
+function baseOptions(u = universe()): UseMapDataOptions {
   return {
     universe: u,
     visibleSystemIds: new Set(u.systems.map((s) => s.id)),
@@ -198,16 +197,8 @@ describe("useMapData — laneBandBySystem", () => {
   }
 
   function hubOptions(): UseMapDataOptions {
-    const u = hubUniverse();
     return {
-      universe: u,
-      visibleSystemIds: new Set(u.systems.map((s) => s.id)),
-      logisticsEdges: [],
-      selectedSystem: null,
-      systemRegionMap: buildSystemRegionMap(u.systems),
-      regionMap: new Map(u.regions.map((r) => [r.id, r])),
-      ownership: new Map(),
-      playerFactionId: null,
+      ...baseOptions(hubUniverse()),
       laneStates: [
         {
           key: "congested-partner|hub",
