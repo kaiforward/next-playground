@@ -16,8 +16,9 @@ export interface TradeFlowEdgeInfo {
   laneKey: string;
   fromSystemId: string;
   toSystemId: string;
-  /** Sum of in-flight quantity crossing this lane in this direction, across every good and every
-   *  ledger row (outbound and return legs alike). */
+  /** Sum of quantity PHYSICALLY crossing this lane in this direction right now, across every good
+   *  and every ledger row (outbound and return legs alike) — a multi-hop haul contributes only
+   *  while it's on this particular hop, not for its whole journey. */
   totalVolume: number;
   /** The good with the largest share of `totalVolume` — carries the particle colour. */
   dominantGoodId: string;
@@ -29,9 +30,11 @@ export interface TradeFlowEdges {
 /**
  * One lane's live state for the map layer and the lane card (docs/active/gameplay/logistics-lanes.md §1) —
  * `getLaneStates` (`lib/services/lanes.ts`) joins the persisted `WorldLane` row with its derived
- * reads: `capacity` from `laneCapacity(level)`, `inFlight` summed from the arrivals ledger's
- * `routeEdges`, `investorFactionId` from `laneInvestor`, and `openUpgradeLevels` from open
- * `lane_upgrade` construction projects targeting this lane.
+ * reads: `capacity` from `laneCapacity(level)`, `inFlight` summed from the arrivals ledger's rows
+ * PHYSICALLY crossing this lane right now (`laneOccupiedAt`, `lib/engine/freight.ts` — one hop of a
+ * multi-lane route at a time, not every lane the route ever touches), `investorFactionId` from
+ * `laneInvestor`, and `openUpgradeLevels` from open `lane_upgrade` construction projects targeting
+ * this lane.
  */
 export interface LaneStateRow {
   key: string;
@@ -55,8 +58,10 @@ export interface LaneEndpointDetail {
   /** Below `controlled` (i.e. unclaimed). */
   unclaimed: boolean;
 }
-/** One good in flight on a lane right now, read straight off the scheduled-freight ledger
- *  (`WorldPendingArrival`) rather than a window sum — the lane card's "cargo in flight" table. */
+/** One good PHYSICALLY crossing a lane right now, read straight off the scheduled-freight ledger
+ *  (`WorldPendingArrival`) rather than a window sum or a whole-route membership test — the lane
+ *  card's "cargo in flight" table. A multi-hop haul appears here only while this lane is the hop
+ *  it's currently on. */
 export interface LaneCargoRow {
   goodId: string;
   goodName: string;

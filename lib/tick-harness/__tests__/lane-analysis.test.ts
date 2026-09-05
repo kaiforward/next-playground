@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  newLaneRunAccumulator, sampleLaneUtilisation, sampleInTransitVolume, sampleLaneDispatch,
+  newLaneRunAccumulator, sampleLaneUtilisation, sampleInTransitVolume, sampleLaneOccupancy, sampleLaneDispatch,
   recordLogisticsBlocked, recordOvershootVolume, recordBudgetSkipped, summariseLanes,
 } from "../lane-analysis";
 import { laneCapacity } from "@/lib/engine/lanes";
@@ -26,7 +26,7 @@ describe("summariseLanes", () => {
     const summary = summariseLanes(acc, [], new Set(), []);
     expect(summary.utilisation).toEqual({ p50: 0, p90: 0, max: 0, saturatedShare: 0 });
     expect(summary.topDecileShare).toBe(0);
-    expect(summary.inTransitVolume).toEqual({ mean: 0, max: 0 });
+    expect(summary.inTransitVolume).toEqual({ mean: 0, max: 0, topLanes: [] });
     expect(summary.blockedVolume).toEqual({ total: 0, topLanes: [] });
     expect(summary.foreignTransitShare).toBe(0);
     expect(summary.queuedVsRealised).toEqual({ laneCount: 0, meanQueuedLevels: 0, meanUtilisation: 0 });
@@ -150,5 +150,45 @@ describe("summariseLanes", () => {
     ];
     const summary = summariseLanes(newLaneRunAccumulator(), [], developed, markets);
     expect(summary.survivalStockFalling).toEqual({ count: 1, share: 0.5 });
+  });
+});
+
+describe("sampleLaneOccupancy", () => {
+  it("attributes a multi-hop haul to the lane it is PHYSICALLY crossing at the sample tick, not every lane of its route", () => {
+    // Two hops of fuel 10 each at speed 1: hop0 (a|b) starts at dispatch (0), hop1 (b|c) starts at 10.
+    const row = outboundRow({
+      factionId: "f1", quantity: 7, dispatchTick: 0, arrivalTick: 20, routeEdges: ["a|b", "b|c"],
+    });
+    const hopFuelCostsOf = () => [10, 10];
+
+    const acc = newLaneRunAccumulator();
+    sampleLaneOccupancy(acc, [row], 5, hopFuelCostsOf, 1);
+    let summary = summariseLanes(acc, [], new Set(), []);
+    expect(summary.inTransitVolume.topLanes).toEqual([{ laneKey: "a|b", inTransit: 7 }]);
+
+    const acc2 = newLaneRunAccumulator();
+    sampleLaneOccupancy(acc2, [row], 15, hopFuelCostsOf, 1);
+    summary = summariseLanes(acc2, [], new Set(), []);
+    expect(summary.inTransitVolume.topLanes).toEqual([{ laneKey: "b|c", inTransit: 7 }]);
+  });
+
+  it("counts a row on no lane once it has arrived", () => {
+    const row = outboundRow({
+      factionId: "f1", quantity: 7, dispatchTick: 0, arrivalTick: 20, routeEdges: ["a|b", "b|c"],
+    });
+    const acc = newLaneRunAccumulator();
+    sampleLaneOccupancy(acc, [row], 20, () => [10, 10], 1);
+    const summary = summariseLanes(acc, [], new Set(), []);
+    expect(summary.inTransitVolume.topLanes).toEqual([]);
+  });
+
+  it("at a huge freight speed a fresh row reads on no lane — the zero-latency fallback", () => {
+    const row = outboundRow({
+      factionId: "f1", quantity: 7, dispatchTick: 10, arrivalTick: 10, routeEdges: ["a|b", "b|c"],
+    });
+    const acc = newLaneRunAccumulator();
+    sampleLaneOccupancy(acc, [row], 10, () => [10, 10], 1_000_000);
+    const summary = summariseLanes(acc, [], new Set(), []);
+    expect(summary.inTransitVolume.topLanes).toEqual([]);
   });
 });

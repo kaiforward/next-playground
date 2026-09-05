@@ -1,17 +1,26 @@
 import { describe, it, expect } from "vitest";
 import { buildLaneFlowEdges, type LaneFlowRow } from "@/lib/engine/trade-flow-edges";
 
-function row(p: Partial<LaneFlowRow> & Pick<LaneFlowRow, "fromSystemId" | "routeEdges">): LaneFlowRow {
-  return { goodId: "food", quantity: 10, ...p };
+function row(
+  p: Partial<LaneFlowRow> & Pick<LaneFlowRow, "fromSystemId" | "routeEdges">,
+): LaneFlowRow {
+  return { goodId: "food", quantity: 10, dispatchTick: 0, arrivalTick: 100, ...p };
+}
+
+/** Every fixture row above dispatches at 0 and arrives at 100 — at `tick: 0` with zero fuel cost
+ *  per hop, `currentHopIndex` reports hop 0 for any route, so a single call to this helper is
+ *  the right "read it now" point for every existing-behaviour test below. */
+function build(rows: ReadonlyArray<LaneFlowRow>, floor: number, tick = 0) {
+  return buildLaneFlowEdges(rows, floor, tick, (r) => r.routeEdges.map(() => 0), 1);
 }
 
 describe("buildLaneFlowEdges", () => {
   it("reads zero edges from an empty ledger", () => {
-    expect(buildLaneFlowEdges([], 1)).toHaveLength(0);
+    expect(build([], 1)).toHaveLength(0);
   });
 
   it("emits one directed edge per lane crossed by a single-hop haul", () => {
-    const edges = buildLaneFlowEdges(
+    const edges = build(
       [row({ fromSystemId: "A", routeEdges: ["A|B"], quantity: 12 })],
       5,
     );
@@ -19,22 +28,33 @@ describe("buildLaneFlowEdges", () => {
     expect(edges[0]).toMatchObject({ laneKey: "A|B", fromSystemId: "A", toSystemId: "B", totalVolume: 12 });
   });
 
-  it("emits one edge PER LANE for a multi-hop route — no chord between origin and destination", () => {
-    // A -> B -> C, over lanes A|B and B|C.
-    const edges = buildLaneFlowEdges(
-      [row({ fromSystemId: "A", routeEdges: ["A|B", "B|C"], quantity: 10 })],
-      1,
-    );
-    expect(edges).toHaveLength(2);
-    const byLane = new Map(edges.map((e) => [e.laneKey, e]));
-    expect(byLane.get("A|B")).toMatchObject({ fromSystemId: "A", toSystemId: "B", totalVolume: 10 });
-    expect(byLane.get("B|C")).toMatchObject({ fromSystemId: "B", toSystemId: "C", totalVolume: 10 });
-    // Never a chord A->C.
-    expect(byLane.has("A|C")).toBe(false);
+  it("emits an edge only on the CURRENT hop of a multi-hop route — never every lane it will cross", () => {
+    // A -> B -> C, over lanes A|B and B|C, each hop costing 10 fuel at speed 1: hop0 starts at
+    // dispatch (tick 0), hop1 starts at tick 10, arrival at tick 20.
+    const haul = row({
+      fromSystemId: "A", routeEdges: ["A|B", "B|C"], quantity: 10, dispatchTick: 0, arrivalTick: 20,
+    });
+    const hopFuelCostsOf = () => [10, 10];
+
+    const beforeSecondHop = buildLaneFlowEdges([haul], 1, 5, hopFuelCostsOf, 1);
+    expect(beforeSecondHop).toHaveLength(1);
+    expect(beforeSecondHop[0]).toMatchObject({ laneKey: "A|B", fromSystemId: "A", toSystemId: "B", totalVolume: 10 });
+
+    const onSecondHop = buildLaneFlowEdges([haul], 1, 12, hopFuelCostsOf, 1);
+    expect(onSecondHop).toHaveLength(1);
+    expect(onSecondHop[0]).toMatchObject({ laneKey: "B|C", fromSystemId: "B", toSystemId: "C", totalVolume: 10 });
+
+    // Never a chord A->C, and never both hops lit at once.
+    expect(onSecondHop.some((e) => e.laneKey === "A|C")).toBe(false);
+  });
+
+  it("emits nothing for a row that has already been drained (tick at or past arrivalTick)", () => {
+    const haul = row({ fromSystemId: "A", routeEdges: ["A|B", "B|C"], quantity: 10, arrivalTick: 20 });
+    expect(buildLaneFlowEdges([haul], 1, 20, () => [10, 10], 10)).toHaveLength(0);
   });
 
   it("sums multiple hauls crossing the same lane in the same direction", () => {
-    const edges = buildLaneFlowEdges(
+    const edges = build(
       [
         row({ fromSystemId: "A", routeEdges: ["A|B"], goodId: "food", quantity: 12 }),
         row({ fromSystemId: "A", routeEdges: ["A|B"], goodId: "alloys", quantity: 20 }),
@@ -47,7 +67,7 @@ describe("buildLaneFlowEdges", () => {
   });
 
   it("keeps opposite directions over the same lane as separate edges", () => {
-    const edges = buildLaneFlowEdges(
+    const edges = build(
       [
         row({ fromSystemId: "A", routeEdges: ["A|B"], quantity: 10 }),
         row({ fromSystemId: "B", routeEdges: ["A|B"], quantity: 4 }),
@@ -62,12 +82,12 @@ describe("buildLaneFlowEdges", () => {
   });
 
   it("drops an edge below the render floor and keeps one at or above it", () => {
-    expect(buildLaneFlowEdges([row({ fromSystemId: "A", routeEdges: ["A|B"], quantity: 2 })], 5)).toHaveLength(0);
-    expect(buildLaneFlowEdges([row({ fromSystemId: "A", routeEdges: ["A|B"], quantity: 6 })], 5)).toHaveLength(1);
+    expect(build([row({ fromSystemId: "A", routeEdges: ["A|B"], quantity: 2 })], 5)).toHaveLength(0);
+    expect(build([row({ fromSystemId: "A", routeEdges: ["A|B"], quantity: 6 })], 5)).toHaveLength(1);
   });
 
   it("ignores rows with non-positive quantity", () => {
-    const edges = buildLaneFlowEdges(
+    const edges = build(
       [
         row({ fromSystemId: "A", routeEdges: ["A|B"], quantity: 0 }),
         row({ fromSystemId: "A", routeEdges: ["A|B"], quantity: -5 }),
@@ -77,5 +97,10 @@ describe("buildLaneFlowEdges", () => {
     );
     expect(edges).toHaveLength(1);
     expect(edges[0].totalVolume).toBe(10);
+  });
+
+  it("at a huge freight speed a fresh row arrives immediately and reads on no lane", () => {
+    const haul = row({ fromSystemId: "A", routeEdges: ["A|B", "B|C"], quantity: 10, dispatchTick: 0, arrivalTick: 0 });
+    expect(buildLaneFlowEdges([haul], 1, 0, () => [10, 10], 1_000_000)).toHaveLength(0);
   });
 });

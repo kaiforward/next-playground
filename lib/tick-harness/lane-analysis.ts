@@ -14,6 +14,7 @@
  * whole run's lane health.
  */
 import { laneCapacity } from "@/lib/engine/lanes";
+import { currentHopIndex } from "@/lib/engine/freight";
 import { survivalCyclesToEmpty, SURVIVAL_STOCK_CYCLES_THRESHOLD } from "@/lib/engine/survival-stock";
 import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import type { LogisticsBlockedEntry } from "@/lib/engine/lane-routing";
@@ -27,6 +28,10 @@ interface PerLane {
   blockedSum: number;
   utilSum: number;
   utilCount: number;
+  /** Running sum of quantity sampled PHYSICALLY crossing this lane, one sample per tick
+   *  (`sampleLaneOccupancy`) — the harness-side reading of what the lane card's `inFlight` shows at
+   *  any one instant, accumulated across the run the same way `bookedSum`/`blockedSum` are. */
+  inTransitSum: number;
 }
 
 export interface LaneRunAccumulator {
@@ -61,7 +66,7 @@ export function newLaneRunAccumulator(): LaneRunAccumulator {
 function perLaneEntry(acc: LaneRunAccumulator, key: string): PerLane {
   let entry = acc.perLane.get(key);
   if (!entry) {
-    entry = { bookedSum: 0, blockedSum: 0, utilSum: 0, utilCount: 0 };
+    entry = { bookedSum: 0, blockedSum: 0, utilSum: 0, utilCount: 0, inTransitSum: 0 };
     acc.perLane.set(key, entry);
   }
   return entry;
@@ -103,11 +108,38 @@ export function sampleInTransitVolume(
   acc.inTransitSamples.push(sum);
 }
 
+/** Fold one tick's live ledger into per-lane occupancy: each row's quantity is attributed to
+ *  whichever lane it is PHYSICALLY crossing at `tick` (`currentHopIndex`, `lib/engine/freight.ts`)
+ *  — the same read the lane card's `inFlight` performs — never every lane its route ever touches. A
+ *  row on no hop right now (already drained) contributes nothing.
+ *
+ *  `hopFuelCostsOf` must return one fuel cost per `routeEdges` hop, built once per call from the
+ *  lane network's static fuel costs (never persisted on the row) — see `currentHopIndex`'s own
+ *  build-once contract. */
+export function sampleLaneOccupancy(
+  acc: LaneRunAccumulator,
+  pendingArrivals: ReadonlyArray<WorldPendingArrival>,
+  tick: number,
+  hopFuelCostsOf: (row: WorldPendingArrival) => readonly number[],
+  freightSpeed: number,
+): void {
+  for (const row of pendingArrivals) {
+    const hop = currentHopIndex(row, tick, hopFuelCostsOf(row), freightSpeed);
+    if (hop === null) continue;
+    perLaneEntry(acc, row.routeEdges[hop]).inTransitSum += row.quantity;
+  }
+}
+
 /** Fold one tick's freshly-dispatched outbound rows (`dispatchTick === tick`) into the
  *  foreign-transit share: a haul is foreign-transit when any lane it crosses has an endpoint owned
  *  by a faction other than the hauler and other than nobody — ANY non-hauler owner, not gated by
  *  relation tier (unlike `laneOpenFor`, which only OPENS a lane at friendly/allied; this measures
- *  whether the crossing happened at all). `ownerAt` reads ownership AT DISPATCH TICK. */
+ *  whether the crossing happened at all). `ownerAt` reads ownership AT DISPATCH TICK.
+ *
+ *  Deliberately ROUTE-WIDE, unlike `sampleLaneOccupancy` above: this is a one-shot classification
+ *  made once at dispatch (this haul WILL cross foreign territory somewhere on its route), not a
+ *  live per-tick "physically on this lane now" read — the same route-wide reasoning
+ *  `flowsCrossingEdge` (`lib/engine/freight.ts`) uses for war's interdiction query. */
 export function sampleLaneDispatch(
   acc: LaneRunAccumulator,
   dispatchedThisTick: ReadonlyArray<WorldPendingArrival>,
@@ -173,6 +205,11 @@ export interface LaneBlockedVolumeSummary {
   topLanes: LaneTopEntry[];
 }
 
+export interface LaneTopInTransitEntry {
+  laneKey: string;
+  inTransit: number;
+}
+
 export interface LaneQueuedVsRealisedSummary {
   /** Lanes carrying an open `lane_upgrade` project at run end — this row's own denominator. */
   laneCount: number;
@@ -196,7 +233,12 @@ export interface LaneMetricsSummary {
   utilisation: LaneUtilisationSummary;
   /** Share of Σ booked (real, not projected) carried by the top 10% of lanes by Σ booked. */
   topDecileShare: number;
-  inTransitVolume: { mean: number; max: number };
+  /** `mean`/`max` are the network-wide total sampled once per tick (`sampleInTransitVolume`) — every
+   *  in-flight row counted once, regardless of how many lanes its route crosses. `topLanes` is the
+   *  same physically-crossing read broken out per lane (`sampleLaneOccupancy`) — the harness-side
+   *  reading of the lane card's `inFlight`, so Σ `topLanes` (over ALL sampled lanes, not just the
+   *  top few listed) reconciles with `mean` × ticks sampled. */
+  inTransitVolume: { mean: number; max: number; topLanes: LaneTopInTransitEntry[] };
   blockedVolume: LaneBlockedVolumeSummary;
   queuedVsRealised: LaneQueuedVsRealisedSummary;
   foreignTransitShare: number;
@@ -288,6 +330,11 @@ export function summariseLanes(
   }));
   const blockedTotal = blockedEntries.reduce((a, e) => a + e.blocked, 0);
   const topLanes = [...blockedEntries].sort((a, b) => b.blocked - a.blocked).slice(0, 5);
+  const inTransitEntries: LaneTopInTransitEntry[] = [...acc.perLane.entries()].map(([laneKey, v]) => ({
+    laneKey,
+    inTransit: v.inTransitSum,
+  }));
+  const topInTransitLanes = [...inTransitEntries].sort((a, b) => b.inTransit - a.inTransit).slice(0, 5);
 
   return {
     utilisation: {
@@ -300,6 +347,7 @@ export function summariseLanes(
     inTransitVolume: {
       mean: inTransit.length > 0 ? inTransit.reduce((a, b) => a + b, 0) / inTransit.length : 0,
       max: maxOf(inTransit),
+      topLanes: topInTransitLanes,
     },
     blockedVolume: { total: blockedTotal, topLanes },
     queuedVsRealised: summariseQueuedVsRealised(acc.perLane, constructionProjects),

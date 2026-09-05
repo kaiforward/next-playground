@@ -3,8 +3,10 @@ import { buildingsBySystem, flowEventsBySystem, marketsBySystem, systemNameById 
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { bucketVolumeHistory } from "@/lib/engine/system-trade-flow";
-import { buildLaneFlowEdges } from "@/lib/engine/trade-flow-edges";
+import { buildLaneFlowEdges, type LaneFlowRow } from "@/lib/engine/trade-flow-edges";
 import { isEconomicallyActive } from "@/lib/engine/control";
+import { laneKey as laneKeyOf } from "@/lib/engine/lanes";
+import { LANES } from "@/lib/constants/lanes";
 import { GOODS } from "@/lib/constants/goods";
 import type {
   TradeFlowEdges,
@@ -21,14 +23,26 @@ import {
 } from "@/lib/engine/logistics-readout";
 
 /**
- * Returns the directed-logistics map-overlay edge set: one edge per (lane, direction) currently
- * carrying in-flight freight, read straight from the scheduled-freight ledger's `routeEdges`
- * (`WorldPendingArrival`) — not a window-summed chord between a haul's origin and destination. A
- * ledger with nothing in flight (including a world with no lanes at all) reads as zero edges.
+ * Returns the directed-logistics map-overlay edge set: one edge per (lane, direction) PHYSICALLY
+ * carrying freight right now, read straight from the scheduled-freight ledger (`WorldPendingArrival`)
+ * — a haul contributes to the one hop it's currently crossing, not a window-summed chord between its
+ * origin and destination, and not every lane its route will ever touch. A ledger with nothing in
+ * flight (including a world with no lanes at all) reads as zero edges.
  */
 export function getTradeFlowEdges(): TradeFlowEdges {
   const world = getWorld();
-  const logisticsEdges = buildLaneFlowEdges(world.pendingArrivals, TRADE_SIMULATION.LOGISTICS_ROUTE_FLOOR);
+  const fuelCosts = new Map<string, number>();
+  for (const c of world.connections) {
+    fuelCosts.set(laneKeyOf(c.fromId, c.toId), c.fuelCost);
+  }
+  const hopFuelCostsOf = (row: LaneFlowRow): number[] => row.routeEdges.map((key) => fuelCosts.get(key) ?? 0);
+  const logisticsEdges = buildLaneFlowEdges(
+    world.pendingArrivals,
+    TRADE_SIMULATION.LOGISTICS_ROUTE_FLOOR,
+    world.meta.currentTick,
+    hopFuelCostsOf,
+    LANES.FREIGHT_SPEED,
+  );
   return { logisticsEdges };
 }
 

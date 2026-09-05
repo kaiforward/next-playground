@@ -195,12 +195,14 @@ The selected lane (the open `/lane/:key` route) gets an additional copper highli
 router the same way the selected system's cell is.
 
 **The logistics overlay's particles ride the lane network, not a chord.** `getTradeFlowEdges`
-(`lib/services/trade-flow.ts`) reads the scheduled-freight ledger's `routeEdges`
-(`WorldPendingArrival`) and produces one `TradeFlowEdgeInfo` per lane per direction currently
-carrying volume — a haul crossing three lanes lights up three edges, not one arc between its origin
-and destination. `TradeFlowLayer`'s particle machinery (unchanged) is fed these edges and travels
-each lane's own straight segment; particles are dropped at the same zoomed-out tier the map's other
-overlays fade at (`LODState.logisticsAlpha`). An empty ledger reads as zero edges.
+(`lib/services/trade-flow.ts`) reads the scheduled-freight ledger (`WorldPendingArrival`) against
+the hop each row is PHYSICALLY crossing right now (`currentHopIndex`, `lib/engine/freight.ts`) and
+produces one `TradeFlowEdgeInfo` per lane per direction currently carrying volume — a haul crossing
+three lanes lights up one edge at a time, walking lane by lane along its route as ticks pass, never
+all three at once, and never one arc between its origin and destination. `TradeFlowLayer`'s particle
+machinery (unchanged) is fed these edges and travels each lane's own straight segment; particles are
+dropped at the same zoomed-out tier the map's other overlays fade at (`LODState.logisticsAlpha`). An
+empty ledger reads as zero edges.
 
 ## Selection precedence
 

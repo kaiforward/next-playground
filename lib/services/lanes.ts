@@ -1,22 +1,49 @@
 import { getWorld } from "@/lib/world/store";
-import { laneCapacity, laneInvestor, type LaneEndpointOwner } from "@/lib/engine/lanes";
+import { laneCapacity, laneInvestor, laneKey as laneKeyOf, type LaneEndpointOwner } from "@/lib/engine/lanes";
+import { currentHopIndex, laneOccupiedAt } from "@/lib/engine/freight";
 import { readoutForFaction } from "@/lib/services/construction";
 import { GOODS } from "@/lib/constants/goods";
+import { LANES } from "@/lib/constants/lanes";
 import type { ConstructionProjectLaneRow, FactionConstructionReadout } from "@/lib/engine/construction-readout";
 import type { LaneStateRow, LaneDetailData, LaneCargoRow, LaneEndpointDetail } from "@/lib/types/api";
-import type { World } from "@/lib/world/types";
+import type { World, WorldPendingArrival } from "@/lib/world/types";
+
+/**
+ * laneKey → fuel cost of crossing it, read straight off `world.connections` — the same static
+ * lookup the booker builds (`buildLaneNetwork`, `lib/engine/lane-routing.ts`), rebuilt here rather
+ * than shared because a route service has no `LaneNetwork` of its own to reuse. Fuel costs never
+ * change once generated, so callers build this once per read, never once per ledger row.
+ */
+function fuelCostLookup(world: World): ReadonlyMap<string, number> {
+  const costs = new Map<string, number>();
+  for (const c of world.connections) {
+    costs.set(laneKeyOf(c.fromId, c.toId), c.fuelCost);
+  }
+  return costs;
+}
+
+/** The hop-fuel-cost array `laneOccupiedAt` needs for one ledger row, from the fuel-cost lookup
+ *  built once per call. A hop with no matching connection reads as 0 fuel — matches the booker's
+ *  own `?? 0` fallback (`lane-routing.ts:299`). */
+function hopFuelCostsOf(row: Pick<WorldPendingArrival, "routeEdges">, fuelCosts: ReadonlyMap<string, number>): number[] {
+  return row.routeEdges.map((key) => fuelCosts.get(key) ?? 0);
+}
 
 /**
  * Every persisted lane's live state (docs/active/gameplay/logistics-lanes.md §1) — the map layer's lane
  * slice and the lane card's substrate. `capacity` and `investorFactionId` are derived exactly as the
  * tick body derives them (`laneCapacity`, `laneInvestor`, `lib/engine/lanes.ts`); `inFlight` sums the
- * scheduled-freight ledger's `routeEdges` (both legs — a haul in flight either direction still
- * occupies the lane); `openUpgradeLevels` sums whole levels still queued on open `lane_upgrade`
- * construction projects targeting this lane, across every faction.
+ * scheduled-freight ledger's quantity for rows PHYSICALLY crossing this lane right now (both legs —
+ * a haul in flight either direction still occupies the lane it's on), one hop of a multi-lane route
+ * at a time (`laneOccupiedAt`, `lib/engine/freight.ts`) rather than every lane the route ever
+ * touches; `openUpgradeLevels` sums whole levels still queued on open `lane_upgrade` construction
+ * projects targeting this lane, across every faction.
  */
 export function getLaneStates(): LaneStateRow[] {
   const world = getWorld();
   const systemById = new Map(world.systems.map((s) => [s.id, s]));
+  const tick = world.meta.currentTick;
+  const fuelCosts = fuelCostLookup(world);
 
   const openLevelsByLane = new Map<string, number>();
   for (const project of world.constructionProjects) {
@@ -26,9 +53,10 @@ export function getLaneStates(): LaneStateRow[] {
 
   const inFlightByLane = new Map<string, number>();
   for (const arrival of world.pendingArrivals) {
-    for (const laneKey of arrival.routeEdges) {
-      inFlightByLane.set(laneKey, (inFlightByLane.get(laneKey) ?? 0) + arrival.quantity);
-    }
+    const hop = currentHopIndex(arrival, tick, hopFuelCostsOf(arrival, fuelCosts), LANES.FREIGHT_SPEED);
+    if (hop === null) continue;
+    const laneKey = arrival.routeEdges[hop];
+    inFlightByLane.set(laneKey, (inFlightByLane.get(laneKey) ?? 0) + arrival.quantity);
   }
 
   const ownerOf = (systemId: string): LaneEndpointOwner => {
@@ -61,12 +89,12 @@ function endpointDetail(system: World["systems"][number] | undefined, systemId: 
 
 /**
  * One lane's full detail for the lane card (docs/active/gameplay/logistics-lanes.md §7) — everything
- * `LaneStateRow` doesn't carry: endpoint ownership for the invest verb's states, cargo in flight
- * (one row per ledger entry crossing this lane, not a window sum), and the open `lane_upgrade`
- * projects targeting it, enriched through the same faction readout the construction surfaces use.
- * Null when `key` names no lane in the current world — the caller (`buildStateFrame`) only invokes
- * this for keys the interest set and the world both agree exist, so null is a defensive read, not
- * an expected path.
+ * `LaneStateRow` doesn't carry: endpoint ownership for the invest verb's states, cargo PHYSICALLY
+ * crossing this lane right now (one row per ledger entry currently on this hop, not every ledger
+ * entry whose route ever touches it), and the open `lane_upgrade` projects targeting it, enriched
+ * through the same faction readout the construction surfaces use. Null when `key` names no lane in
+ * the current world — the caller (`buildStateFrame`) only invokes this for keys the interest set
+ * and the world both agree exist, so null is a defensive read, not an expected path.
  */
 export function getLaneDetail(key: string): LaneDetailData | null {
   const world = getWorld();
@@ -76,6 +104,8 @@ export function getLaneDetail(key: string): LaneDetailData | null {
   const systemById = new Map(world.systems.map((s) => [s.id, s]));
   const aSystem = systemById.get(lane.aId);
   const bSystem = systemById.get(lane.bId);
+  const tick = world.meta.currentTick;
+  const fuelCosts = fuelCostLookup(world);
 
   const ownerOf = (systemId: string): LaneEndpointOwner => {
     const system = systemById.get(systemId);
@@ -87,7 +117,9 @@ export function getLaneDetail(key: string): LaneDetailData | null {
   );
 
   const nameOf = (systemId: string): string => systemById.get(systemId)?.name ?? "Unknown System";
-  const arrivals = world.pendingArrivals.filter((a) => a.routeEdges.includes(key));
+  const arrivals = world.pendingArrivals.filter((a) =>
+    laneOccupiedAt(a, key, tick, hopFuelCostsOf(a, fuelCosts), LANES.FREIGHT_SPEED),
+  );
   const cargo: LaneCargoRow[] = arrivals.map((a) => ({
     goodId: a.goodId,
     goodName: GOODS[a.goodId]?.name ?? a.goodId,

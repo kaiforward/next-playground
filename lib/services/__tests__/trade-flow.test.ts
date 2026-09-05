@@ -270,11 +270,20 @@ describe("getTradeFlowEdges", () => {
     expect(logisticsEdge!.dominantGoodId).toBe("water");
   });
 
-  it("emits one edge per lane crossed by a multi-hop route — no chord between origin and destination", () => {
+  it("emits an edge only on the lane a multi-hop route is CURRENTLY crossing — never both hops at once", () => {
     const hop1 = laneKey(system.id, partnerA.id);
     const hop2 = laneKey(partnerA.id, partnerB.id);
-    setWorld({
+    // Fuel 10 per hop at the live LANES.FREIGHT_SPEED (0.5): hop1 starts at dispatch (tick 9), hop2
+    // starts at 9 + round(10/0.5) = 29.
+    const baseWorld: World = {
       ...world,
+      connections: [
+        ...world.connections,
+        { fromId: system.id, toId: partnerA.id, fuelCost: 10 },
+        { fromId: partnerA.id, toId: system.id, fuelCost: 10 },
+        { fromId: partnerA.id, toId: partnerB.id, fuelCost: 10 },
+        { fromId: partnerB.id, toId: partnerA.id, fuelCost: 10 },
+      ],
       pendingArrivals: [
         {
           id: "arrival-2",
@@ -284,17 +293,23 @@ describe("getTradeFlowEdges", () => {
           goodId: "food",
           quantity: 10,
           dispatchTick: 9,
-          arrivalTick: 14,
+          arrivalTick: 49,
           routeEdges: [hop1, hop2],
           leg: "outbound",
         },
       ],
-    });
-    const edges = getTradeFlowEdges();
+    };
 
-    expect(edges.logisticsEdges).toHaveLength(2);
-    expect(edges.logisticsEdges.some((e) => e.laneKey === hop1)).toBe(true);
-    expect(edges.logisticsEdges.some((e) => e.laneKey === hop2)).toBe(true);
+    setWorld({ ...baseWorld, meta: { ...baseWorld.meta, currentTick: 15 } });
+    let edges = getTradeFlowEdges();
+    expect(edges.logisticsEdges).toHaveLength(1);
+    expect(edges.logisticsEdges[0]).toMatchObject({ laneKey: hop1, fromSystemId: system.id, toSystemId: partnerA.id });
+
+    setWorld({ ...baseWorld, meta: { ...baseWorld.meta, currentTick: 35 } });
+    edges = getTradeFlowEdges();
+    expect(edges.logisticsEdges).toHaveLength(1);
+    expect(edges.logisticsEdges[0]).toMatchObject({ laneKey: hop2, fromSystemId: partnerA.id, toSystemId: partnerB.id });
+
     // Never a chord directly from system to partnerB.
     expect(
       edges.logisticsEdges.some(

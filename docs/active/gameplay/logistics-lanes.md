@@ -212,9 +212,11 @@ client swap rather than a substrate change. Negotiated transit rights beyond the
   unchanged from generation), its invested level (widens the line further), and its load
   (`bookedLoad ÷ capacity`, colours grey → amber) — turning red only when `blockedVolume > 0` this
   run, never merely "nearly full". There is no separate chord overlay any more: the Logistics
-  overlay's convoy particles ride the lane network itself, one segment per lane a haul's route
-  crosses, fed straight from the scheduled-freight ledger's `routeEdges`
-  (`getTradeFlowEdges`, `lib/services/trade-flow.ts`). A lane is selectable — within a screen-pixel
+  overlay's convoy particles ride the lane network itself, one segment per lane a haul is
+  PHYSICALLY crossing right now — a multi-hop haul's particle moves lane by lane along its route
+  over time, never lighting every lane it will ever cross at once — read from the scheduled-freight
+  ledger against the hop it's currently on (`getTradeFlowEdges`, `lib/services/trade-flow.ts`;
+  `currentHopIndex`, `lib/engine/freight.ts`). A lane is selectable — within a screen-pixel
   tolerance of its segment, behind a direct star hit — and opens its route-docked card
   (`/lane/:key`) naming level, capacity, current load vs capacity, upkeep, cargo currently in flight,
   the open upgrade project, and the invest verb (disabled, naming the missing endpoint, unless the

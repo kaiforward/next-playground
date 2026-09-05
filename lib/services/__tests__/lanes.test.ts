@@ -120,6 +120,57 @@ describe("getLaneStates", () => {
     setWorld({ ...world, lanes: [] });
     expect(getLaneStates()).toEqual([]);
   });
+
+  it("reads a zero-latency row (arrivalTick === dispatchTick) as on no lane — already drained", () => {
+    setWorld({
+      ...world,
+      meta: { ...world.meta, currentTick: 0 },
+      pendingArrivals: [
+        {
+          id: "arrival-1", factionId: "f1", fromSystemId: "sys-a", toSystemId: "sys-b",
+          goodId: "water", quantity: 7, dispatchTick: 0, arrivalTick: 0, routeEdges: [LANE_KEY], leg: "outbound",
+        },
+      ],
+    });
+    expect(getLaneStates()[0].inFlight).toBe(0);
+  });
+
+  it("counts a multi-hop haul on only the lane it is physically crossing right now", () => {
+    const laneB: WorldLane = {
+      key: "sys-b|sys-c", aId: "sys-b", bId: "sys-c", level: 1, bookedLoad: 0, blockedVolume: 0, idleCycles: 0,
+    };
+    const c = { ...world.systems[0], id: "sys-c", factionId: "f1", control: "developed" as const };
+    // Two hops of fuel 10 each at the live LANES.FREIGHT_SPEED (0.5): hop0 (sys-a|sys-b) starts at
+    // dispatch, hop1 (sys-b|sys-c) starts at round(10/0.5)=20.
+    const row: WorldPendingArrival = {
+      id: "arrival-1", factionId: "f1", fromSystemId: "sys-a", toSystemId: "sys-c",
+      goodId: "water", quantity: 9, dispatchTick: 0, arrivalTick: 40,
+      routeEdges: [LANE_KEY, "sys-b|sys-c"], leg: "outbound",
+    };
+    const baseWorld: World = {
+      ...world,
+      systems: [...world.systems, c],
+      lanes: [...world.lanes, laneB],
+      connections: [
+        ...world.connections,
+        { fromId: "sys-a", toId: "sys-b", fuelCost: 10 },
+        { fromId: "sys-b", toId: "sys-a", fuelCost: 10 },
+        { fromId: "sys-b", toId: "sys-c", fuelCost: 10 },
+        { fromId: "sys-c", toId: "sys-b", fuelCost: 10 },
+      ],
+      pendingArrivals: [row],
+    };
+
+    setWorld({ ...baseWorld, meta: { ...world.meta, currentTick: 10 } });
+    let states = getLaneStates();
+    expect(states.find((s) => s.key === LANE_KEY)!.inFlight).toBe(9);
+    expect(states.find((s) => s.key === "sys-b|sys-c")!.inFlight).toBe(0);
+
+    setWorld({ ...baseWorld, meta: { ...world.meta, currentTick: 25 } });
+    states = getLaneStates();
+    expect(states.find((s) => s.key === LANE_KEY)!.inFlight).toBe(0);
+    expect(states.find((s) => s.key === "sys-b|sys-c")!.inFlight).toBe(9);
+  });
 });
 
 describe("getLaneDetail", () => {
@@ -179,6 +230,43 @@ describe("getLaneDetail", () => {
       arrivalTick: 12,
     });
     expect(detail.inFlight).toBe(18);
+  });
+
+  it("lists a multi-hop haul's cargo on a lane only while it is physically crossing that lane", () => {
+    const laneB: WorldLane = {
+      key: "sys-b|sys-c", aId: "sys-b", bId: "sys-c", level: 1, bookedLoad: 0, blockedVolume: 0, idleCycles: 0,
+    };
+    const c = { ...world.systems[0], id: "sys-c", factionId: "f1", control: "developed" as const };
+    const row: WorldPendingArrival = {
+      id: "arrival-1", factionId: "f1", fromSystemId: "sys-a", toSystemId: "sys-c",
+      goodId: "water", quantity: 9, dispatchTick: 0, arrivalTick: 40,
+      routeEdges: [LANE_KEY, "sys-b|sys-c"], leg: "outbound",
+    };
+    const baseWorld: World = {
+      ...world,
+      systems: [...world.systems, c],
+      lanes: [...world.lanes, laneB],
+      connections: [
+        ...world.connections,
+        { fromId: "sys-a", toId: "sys-b", fuelCost: 10 },
+        { fromId: "sys-b", toId: "sys-a", fuelCost: 10 },
+        { fromId: "sys-b", toId: "sys-c", fuelCost: 10 },
+        { fromId: "sys-c", toId: "sys-b", fuelCost: 10 },
+      ],
+      pendingArrivals: [row],
+    };
+
+    setWorld({ ...baseWorld, meta: { ...world.meta, currentTick: 10 } });
+    let detail = getLaneDetail(LANE_KEY)!;
+    expect(detail.cargo).toHaveLength(1);
+    expect(detail.inFlight).toBe(9);
+    expect(getLaneDetail("sys-b|sys-c")!.cargo).toHaveLength(0);
+
+    setWorld({ ...baseWorld, meta: { ...world.meta, currentTick: 25 } });
+    detail = getLaneDetail(LANE_KEY)!;
+    expect(detail.cargo).toHaveLength(0);
+    expect(detail.inFlight).toBe(0);
+    expect(getLaneDetail("sys-b|sys-c")!.cargo).toHaveLength(1);
   });
 
   it("enriches an open lane-upgrade project into the same row shape ConstructionRow renders", () => {

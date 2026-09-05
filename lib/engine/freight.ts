@@ -58,9 +58,57 @@ export function scheduledInbound(
 }
 
 /**
+ * The hop index a ledger row is PHYSICALLY crossing at `tick`, or `null` if it isn't crossing any
+ * hop of its route right now — the read-time counterpart to `hopCrossingTicks`: hop i occupies the
+ * half-open window `[start_i, start_{i+1})`, with the last hop's window ending at `arrivalTick`
+ * (docs/active/gameplay/logistics-lanes.md §7). A row at `tick === arrivalTick` has been drained by the
+ * goods-arrivals stage and occupies nothing, and a row not yet dispatched (`tick < dispatchTick`,
+ * never produced by a real caller reading the live ledger) likewise occupies nothing.
+ *
+ * `hopFuelCosts` — one entry per `routeEdges` hop, in order — is never read off the row itself
+ * (fuel costs aren't persisted on `WorldPendingArrival`); the caller recomputes it from the lane
+ * network's static per-lane fuel costs, exactly as the booker does at `lane-routing.ts`'s own
+ * booking-seed loop. Build that lookup once per call site, not once per row.
+ */
+export function currentHopIndex(
+  row: Pick<WorldPendingArrival, "dispatchTick" | "arrivalTick" | "routeEdges">,
+  tick: number,
+  hopFuelCosts: readonly number[],
+  freightSpeed: number,
+): number | null {
+  if (tick < row.dispatchTick || tick >= row.arrivalTick) return null;
+  const crossingTicks = hopCrossingTicks(row.dispatchTick, hopFuelCosts, freightSpeed);
+  let hop: number | null = null;
+  for (let i = 0; i < crossingTicks.length; i++) {
+    if (crossingTicks[i] <= tick) hop = i;
+    else break;
+  }
+  return hop;
+}
+
+/**
+ * Whether a ledger row is physically crossing `laneKey` at `tick` right now — `currentHopIndex`
+ * narrowed to a single lane, the read every per-lane "in flight"/"cargo on this lane" surface
+ * (the lane card, the map's flow particles) performs. See `currentHopIndex` for the half-open
+ * window and the `hopFuelCosts` build-once contract.
+ */
+export function laneOccupiedAt(
+  row: Pick<WorldPendingArrival, "dispatchTick" | "arrivalTick" | "routeEdges">,
+  laneKey: string,
+  tick: number,
+  hopFuelCosts: readonly number[],
+  freightSpeed: number,
+): boolean {
+  const hop = currentHopIndex(row, tick, hopFuelCosts, freightSpeed);
+  return hop !== null && row.routeEdges[hop] === laneKey;
+}
+
+/**
  * The interdiction query (war's future verb, §3): every ledger row whose transit window
  * `[dispatchTick, arrivalTick]` overlaps `[fromTick, toTick]` AND whose `routeEdges` holds
- * `laneKey`. Read-only — new, emitted by the lane substrate; consumed by nothing this pass.
+ * `laneKey` — deliberately ROUTE-WIDE, unlike `laneOccupiedAt`/`currentHopIndex` above: war wants
+ * every haul that WILL cross the edge over the window, not only the ones physically on it at one
+ * instant. Read-only — new, emitted by the lane substrate; consumed by nothing this pass.
  */
 export function flowsCrossingEdge(
   ledger: readonly WorldPendingArrival[],

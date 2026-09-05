@@ -24,10 +24,12 @@ import type { LogisticsBudgetTotals } from "./logistics-analysis";
 import { summariseGeography, ownershipAt, type OwnershipSnapshot } from "./geography-analysis";
 import { pairKey } from "@/lib/tick/world/relations-world";
 import {
-  newLaneRunAccumulator, sampleLaneUtilisation, sampleInTransitVolume, sampleLaneDispatch,
+  newLaneRunAccumulator, sampleLaneUtilisation, sampleInTransitVolume, sampleLaneOccupancy, sampleLaneDispatch,
   recordLogisticsBlocked, recordOvershootVolume, recordBudgetSkipped, summariseLanes,
 } from "./lane-analysis";
 import { catchUpFactor } from "@/lib/tick/shard";
+import { laneKey as laneKeyOf } from "@/lib/engine/lanes";
+import { LANES } from "@/lib/constants/lanes";
 import { LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
 import { median } from "@/lib/utils/math";
 import {
@@ -63,7 +65,7 @@ import type { EpisodeCostTotals } from "./population-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
 import type { GovernmentType } from "@/lib/types/game";
-import type { WorldFlowEvent, WorldMarket, WorldRegion } from "@/lib/world/types";
+import type { WorldFlowEvent, WorldMarket, WorldPendingArrival, WorldRegion } from "@/lib/world/types";
 import type {
   HarnessConfig,
   HarnessResults,
@@ -271,6 +273,15 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   // Lane-mechanics (spec §8) and survival-spell accumulators — see their own modules' docstrings for
   // why these are folded per tick/cycle rather than read off the final world.
   const laneAcc = newLaneRunAccumulator();
+  // Fuel costs are static (never change once generated), so this lookup — the same shape
+  // `sampleLaneOccupancy`'s `hopFuelCostsOf` needs — is built once for the whole run, not once per
+  // tick or per row.
+  const laneFuelCosts = new Map<string, number>();
+  for (const c of world.connections) {
+    laneFuelCosts.set(laneKeyOf(c.fromId, c.toId), c.fuelCost);
+  }
+  const hopFuelCostsOf = (row: WorldPendingArrival): number[] =>
+    row.routeEdges.map((k) => laneFuelCosts.get(k) ?? 0);
   const spellAcc = newSpellAccumulator();
   const dispatchDrain: DispatchDrainCensus = newDispatchDrainCensus();
   const logisticsInterval = config.cadence?.logistics ?? LOGISTICS_INTERVAL;
@@ -344,6 +355,10 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
         recordLogisticsBlocked(laneAcc, result.instrumentation.logisticsBlocked);
       }
       sampleInTransitVolume(laneAcc, world.pendingArrivals);
+      sampleLaneOccupancy(
+        laneAcc, world.pendingArrivals, world.meta.currentTick, hopFuelCostsOf,
+        config.freightSpeed ?? LANES.FREIGHT_SPEED,
+      );
       const dispatchedThisTick = world.pendingArrivals.filter(
         (a) => a.leg === "outbound" && a.dispatchTick === world.meta.currentTick,
       );

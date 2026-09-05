@@ -954,6 +954,10 @@ export function formatTable(results: HarnessResults): string {
       const top = lm.blockedVolume.topLanes.map((l) => `${l.laneKey} ${fmtNum(l.blocked)}`).join(", ");
       lines.push(`  top blocked lanes: ${top}`);
     }
+    if (lm.inTransitVolume.topLanes.length > 0) {
+      const top = lm.inTransitVolume.topLanes.map((l) => `${l.laneKey} ${fmtNum(l.inTransit)}`).join(", ");
+      lines.push(`  top in-transit lanes: ${top}`);
+    }
     if (lm.contentionShortfallByFaction.length > 0) {
       lines.push("  contention shortfall by faction (Σ blocked × foreignShare):");
       for (const c of lm.contentionShortfallByFaction.slice(0, 5)) {
