@@ -90,6 +90,13 @@ export const LANE_MODE = {
  *  enough to forgive a slightly-off click without swallowing nearby cell clicks. */
 export const LANE_HIT_TOLERANCE_PX = 8;
 
+/** World-unit gap `findLaneAt` shortens each end of a lane segment by before testing distance —
+ *  every lane ends on a star, so without this a click at the star's centre could resolve to the
+ *  lane instead of the cell (`docs/active/engineering/map-rendering.md` → Selection precedence).
+ *  Roughly the star's core radius on screen at zoom 1; a presentation knob, not a mechanic. Divided
+ *  by zoom at the call site like `LANE_HIT_TOLERANCE_PX`. */
+export const LANE_HIT_END_GAP_PX = 14;
+
 // ── Point cloud (universe view) ─────────────────────────────────
 
 export const POINT_CLOUD = {
@@ -114,7 +121,6 @@ export const FACTION_SELECT_ZOOM = 0.285;
 export const SIZES = {
   systemCoreRadius:   12,
   systemGlowRadius:   40,
-  systemHitRadius:    20,
   systemLabelSize:    14,
   regionWidth:       180,
   regionHeight:      100,
@@ -127,14 +133,12 @@ export const SIZES = {
 } as const;
 
 // ── Glyph radial budget (world units, glyph-local) ───────────────
-// Each concentric element owns a fixed radius band so the star bloom, hover
-// ring, and selection ring never collide.
+// Each concentric element owns a fixed radius band so the star bloom and core
+// never collide. Selection and hover are the cell outline now (`CellHighlightLayer`),
+// not a ring on the glyph.
 export const GLYPH = {
-  coreRadius:        12,   // star-type dot core (matches SIZES.systemCoreRadius)
-  bloomRadius:       20,   // dim same-hue under-disc — a soft star bloom, no halo
-  hoverRingRadius:   19,   // star-coloured ring shown on hover
-  navRingRadius:     34,   // outermost, dashed
-  selectedRingWidth: 4,    // selection ring — bright white dashed focus ring
+  coreRadius:  12,   // star-type dot core (matches SIZES.systemCoreRadius)
+  bloomRadius: 20,   // dim same-hue under-disc — a soft star bloom, no halo
 } as const;
 
 // ── Settlement mark (player systems: controlled / forming / developed) ──
@@ -161,15 +165,15 @@ export const SETTLEMENT_MARK = {
 } as const;
 
 // ── System label backing (name) ──────────────────────────────────
-// The name label sits below the glyph and can fall behind the nav ring /
-// halo, so it gets a semi-transparent black backing for legibility.
+// The name label sits below the glyph over the bloom and the territory fill,
+// so it gets a semi-transparent black backing for legibility.
 export const LABEL = {
   bgFill:   0x000000,
   bgAlpha:  0.55,
   bgPadX:   4,
   bgPadY:   1.5,
   bgCorner: 3,
-  offsetY:  38, // px below glyph centre, clear of the nav/selection ring
+  offsetY:  38, // px below glyph centre, clear of the bloom/core
 } as const;
 
 // ── Animation ────────────────────────────────────────────────────
@@ -180,7 +184,6 @@ export const ANIM = {
   viewTransitionMs:   200,   // layer fade in/out
   twinkleMinPeriod:  3000,   // ms
   twinkleMaxPeriod:  8000,
-  hoverScale:         1.05,
 } as const;
 
 // ── Flow overlay ─────────────────────────────────────────────────

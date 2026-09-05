@@ -18,7 +18,6 @@ export class SystemLayer {
   // Active map mode — stored so objects created later inherit it (they subdue
   // the star dot under value modes). Pushed to live objects via setMode.
   private currentMode: MapMode = "none";
-  onObjectCreated?: (obj: SystemObject) => void;
 
   /** Toggle active state. Hides container when inactive — objects are preserved. */
   setActive(active: boolean) {
@@ -65,7 +64,6 @@ export class SystemLayer {
     // Remove objects whose systems no longer exist in data
     for (const [id, obj] of this.objects) {
       if (!newData.has(id)) {
-        obj.removeAllListeners();
         this.container.removeChild(obj);
         obj.destroy({ children: true });
         this.objects.delete(id);
@@ -94,7 +92,6 @@ export class SystemLayer {
         obj = new SystemObject();
         this.objects.set(id, obj);
         this.container.addChild(obj);
-        this.onObjectCreated?.(obj);
         obj.setMode(this.currentMode);
         obj.update(data, id === this.selectedId);
         createdThisFrame++;
@@ -112,10 +109,6 @@ export class SystemLayer {
 
   getObject(systemId: string): SystemObject | undefined {
     return this.objects.get(systemId);
-  }
-
-  getAllObjects(): IterableIterator<SystemObject> {
-    return this.objects.values();
   }
 
   destroy() {

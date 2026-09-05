@@ -17,7 +17,8 @@ import { CellHighlightLayer } from "./layers/cell-highlight-layer";
 import { TradeFlowLayer, LOGISTICS_FLOW_CONFIG } from "./layers/trade-flow-layer";
 import { setupInteractions } from "./interactions";
 import { findFactionAt } from "./faction-hit-test";
-import { BG_COLOR, FACTION_SELECT_ZOOM, LANE_HIT_TOLERANCE_PX } from "./theme";
+import { findLaneAt, indexSystemsById } from "./lane-hit-test";
+import { BG_COLOR, FACTION_SELECT_ZOOM, LANE_HIT_TOLERANCE_PX, LANE_HIT_END_GAP_PX } from "./theme";
 import { buildSystemCells, type SystemCells } from "./voronoi-cache";
 import type { MapData } from "@/lib/hooks/use-map-data";
 import type { StarSystemInfo, AtlasData } from "@/lib/types/game";
@@ -120,9 +121,21 @@ export function PixiMapCanvas({
   const callbacksRef = useRef({ onSelectSystem, onEmptyClick, onSelectFaction, onSelectLane });
   callbacksRef.current = { onSelectSystem, onEmptyClick, onSelectFaction, onSelectLane };
 
-  // Latest mapData for the once-mounted lane hit-test closure (click only, not per-frame).
+  // Latest mapData for the once-mounted lane hit-test closures (click, and the per-frame hover).
   const mapDataRef = useRef(mapData);
   mapDataRef.current = mapData;
+
+  // The lane hit-test's own lane shape, built once per connections change rather than on every
+  // hover frame — the hover block runs `findLaneAt` every frame the pointer moves.
+  const hitTestLanes = useMemo(
+    () => mapData.connections.map((c) => ({ key: c.laneKey, aId: c.fromId, bId: c.toId })),
+    [mapData.connections],
+  );
+  const hitTestLanesRef = useRef(hitTestLanes);
+  hitTestLanesRef.current = hitTestLanes;
+  const hitTestSystemsById = useMemo(() => indexSystemsById(mapData.systems), [mapData.systems]);
+  const hitTestSystemsByIdRef = useRef(hitTestSystemsById);
+  hitTestSystemsByIdRef.current = hitTestSystemsById;
 
   // Live map mode for the once-mounted interaction closures (ticker hover + faction hit-test): faction
   // targeting is gated to modes that show factions (political + value), inert in regions/none.
@@ -253,7 +266,6 @@ export function PixiMapCanvas({
       // Setup interactions
       interactionCleanup = setupInteractions({
         app,
-        systemLayer,
         getCallbacks: () => callbacksRef.current,
         getCellContext: () => ({
           cells: pixiRef.current?.cells ?? null,
@@ -264,10 +276,11 @@ export function PixiMapCanvas({
           selectActive: camera.zoom < FACTION_SELECT_ZOOM && isFactionInteractiveMode(mapModeRef.current),
         }),
         getLaneContext: () => ({
-          lanes: mapDataRef.current.connections.map((c) => ({ key: c.laneKey, aId: c.fromId, bId: c.toId })),
-          systems: mapDataRef.current.systems,
-          // `findLaneAt` measures in world units; convert the screen-pixel tolerance at the click's zoom.
+          lanes: hitTestLanesRef.current,
+          systemsById: hitTestSystemsByIdRef.current,
+          // `findLaneAt` measures in world units; convert the screen-pixel tolerance/gap at the click's zoom.
           tolerance: LANE_HIT_TOLERANCE_PX / camera.zoom,
+          endGap: LANE_HIT_END_GAP_PX / camera.zoom,
         }),
       });
 
@@ -282,6 +295,7 @@ export function PixiMapCanvas({
         hoverScreen = null;
         cellHighlightLayer.setHovered(null);
         cellHighlightLayer.setHoveredFaction(null);
+        connectionLayer.setHovered(null);
         pixi.stage.cursor = "default";
       };
       canvas.addEventListener("pointerleave", clearHover);
@@ -356,13 +370,30 @@ export function PixiMapCanvas({
             const factionId = unions ? findFactionAt(unions, wh.x, wh.y) : null;
             cellHighlightLayer.setHoveredFaction(factionId);
             cellHighlightLayer.setHovered(null);
+            connectionLayer.setHovered(null);
             pixi.stage.cursor = factionId ? "pointer" : "default";
           } else {
-            const cells = pixiRef.current?.cells;
-            const hoveredId = cells ? cells.findSystemAt(wh.x, wh.y) : null;
-            cellHighlightLayer.setHovered(hoveredId);
+            // Lane wins over the cell, mirroring the click's own precedence (`resolveMapClick`) —
+            // the pointer never lights both.
+            const laneAt = findLaneAt(
+              wh,
+              hitTestLanesRef.current,
+              hitTestSystemsByIdRef.current,
+              LANE_HIT_TOLERANCE_PX / camera.zoom,
+              LANE_HIT_END_GAP_PX / camera.zoom,
+            );
+            if (laneAt) {
+              connectionLayer.setHovered(laneAt);
+              cellHighlightLayer.setHovered(null);
+              pixi.stage.cursor = "pointer";
+            } else {
+              connectionLayer.setHovered(null);
+              const cells = pixiRef.current?.cells;
+              const hoveredId = cells ? cells.findSystemAt(wh.x, wh.y) : null;
+              cellHighlightLayer.setHovered(hoveredId);
+              pixi.stage.cursor = hoveredId ? "pointer" : "default";
+            }
             cellHighlightLayer.setHoveredFaction(null);
-            pixi.stage.cursor = hoveredId ? "pointer" : "default";
           }
           hoverScreen = null;
         }

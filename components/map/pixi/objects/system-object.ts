@@ -34,27 +34,22 @@ export class SystemObject extends Container {
 
   private bloom: Sprite;          // soft radial glow under the core (shared gradient texture)
   private core: Graphics;         // crisp bright core disc
-  private hoverRing: Graphics;    // star-coloured ring, shown only on hover
-  private selectionRing: Graphics;
   private markRoot: Container;    // settlement mark (badge + pulse) — scaled as one by LOD
   private markBadge: Graphics;
   private markPulse: Sprite;      // the forming ping — glow texture expanding from the badge centre
   private nameBg: Graphics;
   private nameLabel: Text;
 
-  // For hit testing
-  private hitCircle: Graphics;
-
   // Track state for update diffing
   private currentName = "";
   private currentSunClass: SunClass = "yellow";
   private currentMode: MapMode = "none";
   private currentVisibility: SystemVisibility = "unknown";
+  // Selection is the cell (`CellHighlightLayer`), not a ring on the glyph — the glyph draws nothing
+  // for it; the flag is kept because the selected system's name always shows whatever the label
+  // fit says.
   private currentSelected = false;
   private currentMark: SettlementMark | null = null;
-
-  // Hover state — drives the hover ring (see drawStar / setLOD).
-  private isHovered = false;
 
   // setLOD runs every frame for every visible system; its output depends only
   // on the incoming LODState plus the tracked state above (all mutated in
@@ -66,10 +61,6 @@ export class SystemObject extends Container {
   constructor() {
     super();
 
-    // Selection focus ring (behind the dot)
-    this.selectionRing = new Graphics();
-    this.addChild(this.selectionRing);
-
     // Soft radial bloom (shared gradient texture, tinted per star colour) — sits
     // under the core so the dot has a glow that actually fades to transparent.
     this.bloom = new Sprite(getGlowTexture());
@@ -79,11 +70,6 @@ export class SystemObject extends Container {
     // Star-type dot: a crisp bright core disc over the bloom.
     this.core = new Graphics();
     this.addChild(this.core);
-
-    // Hover ring — star-coloured, above the dot, toggled on hover.
-    this.hoverRing = new Graphics();
-    this.hoverRing.visible = false;
-    this.addChild(this.hoverRing);
 
     // Settlement mark — badge at the star's NE shoulder, pulse behind it. One
     // sub-container so LOD scales badge + pulse together while the pulse's own
@@ -104,7 +90,7 @@ export class SystemObject extends Container {
     this.addChild(this.markRoot);
 
     // Name label, over a semi-transparent backing for legibility against the
-    // ring/halo behind it. Backing is added first so it sits behind the text.
+    // bloom/halo behind it. Backing is added first so it sits behind the text.
     this.nameBg = new Graphics();
     this.addChild(this.nameBg);
     this.nameLabel = new Text({ text: "", style: NAME_STYLE, resolution: TEXT_RESOLUTION });
@@ -114,14 +100,9 @@ export class SystemObject extends Container {
     this.nameLabel.position.set(0, LABEL.offsetY);
     this.nameBg.position.set(0, LABEL.offsetY);
 
-    // Hit area (invisible, for pointer events)
-    this.hitCircle = new Graphics();
-    this.hitCircle.circle(0, 0, SIZES.systemHitRadius);
-    this.hitCircle.fill({ color: 0xffffff, alpha: 0.001 });
-    this.addChild(this.hitCircle);
-
-    this.eventMode = "static";
-    this.cursor = "pointer";
+    // Selection is the cell/lane (`CellHighlightLayer`/`ConnectionLayer`), never the star — the
+    // stage resolves every click and hover, so the glyph takes no pointer events at all.
+    this.eventMode = "none";
   }
 
   update(data: SystemNodeData, isSelected: boolean) {
@@ -146,9 +127,8 @@ export class SystemObject extends Container {
       this.drawSettlementMark();
     }
 
-    if (selectedChanged || visibilityChanged) {
+    if (selectedChanged) {
       this.currentSelected = isSelected;
-      this.updateSelectionRing(isSelected);
     }
 
     // Name — only update text + backing when changed (avoids Pixi texture
@@ -164,10 +144,10 @@ export class SystemObject extends Container {
     this.lodDirty = true;
   }
 
-  /** Draw the star-type dot (+ hover ring) from tracked sunClass / visibility /
-   *  mode. A dim same-hue bloom under a bright core disc — no gradient fill
-   *  (regresses at max zoom). Value modes subdue the dot so the Voronoi cell
-   *  carries the value; unknown systems dim. */
+  /** Draw the star-type dot from tracked sunClass / visibility / mode. A dim
+   *  same-hue bloom under a bright core disc — no gradient fill (regresses at
+   *  max zoom). Value modes subdue the dot so the Voronoi cell carries the
+   *  value; unknown systems dim. */
   private drawStar() {
     const color = SUN_CLASS_COLORS_PIXI[this.currentSunClass];
     const isUnknown = this.currentVisibility === "unknown";
@@ -182,9 +162,6 @@ export class SystemObject extends Container {
     // and strength. Subdued under value modes so the Voronoi cell reads.
     this.bloom.tint = color;
     this.bloom.alpha = isUnknown ? 0.2 : subdued ? 0.18 : 0.5;
-
-    this.hoverRing.clear();
-    this.hoverRing.circle(0, 0, GLYPH.hoverRingRadius).stroke({ color, width: 2, alpha: 0.9 });
   }
 
   /** Set the active map mode (subdues the dot under value modes). Marks LOD
@@ -238,13 +215,6 @@ export class SystemObject extends Container {
     this.markPulse.visible = true;
   }
 
-  /** Hovering shows the hover ring (see drawStar / setLOD). Marks LOD dirty. */
-  setHovered(hovered: boolean) {
-    if (this.isHovered === hovered) return;
-    this.isHovered = hovered;
-    this.lodDirty = true;
-  }
-
   /** Size a label's backing rect to the (already-set) text, centred under its
    *  top-centre anchor with a little padding. Redrawn only when the text
    *  changes — position is set per-frame in update(). */
@@ -275,41 +245,9 @@ export class SystemObject extends Container {
     this.nameBg.visible = lod.showSystemNames;
     this.nameBg.alpha = nameAlpha;
 
-    // Scale the dot + rings by LOD; the hover ring shows only while hovered.
+    // Scale the dot by LOD.
     this.core.scale.set(lod.systemDotScale);
-    this.selectionRing.scale.set(lod.systemDotScale);
-    this.hoverRing.scale.set(lod.systemDotScale);
-    this.hoverRing.visible = this.isHovered;
     this.bloom.scale.set(BLOOM_BASE_SCALE * lod.systemDotScale);
     this.markRoot.scale.set(lod.systemDotScale);
-  }
-
-  /** Stroke a dashed ring as a series of short arcs (Pixi v12 has no native
-   *  dashed stroke on circle()). Each dash is its own subpath so no chords
-   *  connect them. */
-  private strokeDashedRing(g: Graphics, radius: number, color: number, width: number, alpha = 1) {
-    // Target dash/gap (radians). They're rescaled to a whole number of dashes so
-    // the pattern tiles the circle exactly — otherwise the leftover at the
-    // 0-radian seam is a short gap and the first/last dashes nearly collide.
-    const targetDash = 0.5;
-    const targetGap = 0.32;
-    const count = Math.max(1, Math.round((Math.PI * 2) / (targetDash + targetGap)));
-    const period = (Math.PI * 2) / count;
-    const dash = period * (targetDash / (targetDash + targetGap));
-    for (let i = 0; i < count; i++) {
-      const a = i * period;
-      g.moveTo(Math.cos(a) * radius, Math.sin(a) * radius);
-      g.arc(0, 0, radius, a, a + dash);
-    }
-    g.stroke({ color, width, alpha });
-  }
-
-  private updateSelectionRing(isSelected: boolean) {
-    this.selectionRing.clear();
-    if (isSelected) {
-      // Selected system — bright white dashed focus ring so the selection
-      // reads clearly at a glance.
-      this.strokeDashedRing(this.selectionRing, GLYPH.navRingRadius, 0xffffff, GLYPH.selectedRingWidth, 1);
-    }
   }
 }
