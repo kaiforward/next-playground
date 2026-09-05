@@ -51,17 +51,18 @@ Defined in `lib/constants/trade-simulation.ts`:
 
 ### Map Overlay
 
-Every jump lane draws on the map at all times, styled by its fuel-cost tier, its invested level
-(width) and its current load (colour, grey → amber, red only while it is turning volume away this
-run) — see [logistics-lanes.md](./logistics-lanes.md) §1, §6 and
-[map-rendering.md](../engineering/map-rendering.md) for the lane layer detail. On top of that
-always-on layer, a **Logistics** toggle on the overlay-controls cluster (default off) reveals a Pixi
-particle layer: every lane a scheduled haul's route currently crosses carries travelling particles,
-one segment per lane the haul spans — never a chord arcing directly between its origin and
-destination — read straight from the scheduled-freight ledger, so an empty ledger shows nothing. A
-lane is selectable (within a screen-pixel tolerance of its segment, behind a direct star hit) and
-opens its route-docked card at `/lane/:key` — level, capacity, load, cargo in flight, the open
-upgrade project and the invest verb.
+Every jump lane draws on the map at all times as a quiet slate line, styled only by its invested
+level (width) and, slightly, a major fuel tier — no colour, no load or blocked read on this base
+layer; see [logistics-lanes.md](./logistics-lanes.md) §1, §6 and
+[map-rendering.md](../engineering/map-rendering.md) for the lane layer detail. The **Lanes** map
+mode carries the load/investor meaning and, in it only, a Pixi particle layer: every lane a
+scheduled haul's route currently crosses carries travelling particles, one segment per lane the
+haul spans — never a chord arcing directly between its origin and destination — read straight from
+the scheduled-freight ledger, so an empty ledger shows nothing, with particle count and colour keyed
+to the lane's fine/busy/congested band. A lane is selectable (within a screen-pixel tolerance of its
+segment, sparing a gap at each end so a click at the star falls through to the cell) and opens its
+route-docked card at `/lane/:key` — level, capacity, load, cargo in flight, the open upgrade project
+and the invest verb.
 
 ### Logistics Tab
 

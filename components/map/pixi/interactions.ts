@@ -1,10 +1,8 @@
 import type { Application, FederatedPointerEvent } from "pixi.js";
-import type { SystemLayer } from "./layers/system-layer";
 import type { SystemCells } from "./voronoi-cache";
-import { SystemObject } from "./objects/system-object";
-import { ANIM, CAMERA, SIZES } from "./theme";
+import { CAMERA } from "./theme";
 import { findFactionAt } from "./faction-hit-test";
-import { findLaneAt, findSystemNear, resolveMapClick, type LaneHitTestLane, type LaneHitTestSystem } from "./lane-hit-test";
+import { findLaneAt, resolveMapClick, type LaneHitTestLane, type LaneHitTestSystem } from "./lane-hit-test";
 import { movedBeyond } from "./camera";
 import type { MultiPolygon } from "./territory-utils";
 
@@ -32,13 +30,15 @@ interface FactionContext {
  *  two system points, which no existing hit-test shape fits. */
 interface LaneContext {
   lanes: LaneHitTestLane[];
-  systems: LaneHitTestSystem[];
+  systemsById: ReadonlyMap<string, LaneHitTestSystem>;
   tolerance: number;
+  /** World-unit gap shortened off each end of a lane's segment before the distance test — see
+   *  `LANE_HIT_END_GAP_PX` (theme.ts). */
+  endGap: number;
 }
 
 interface InteractionOptions {
   app: Application;
-  systemLayer: SystemLayer;
   getCallbacks: () => InteractionCallbacks;
   getCellContext: () => CellContext;
   getFactionContext: () => FactionContext;
@@ -46,41 +46,17 @@ interface InteractionOptions {
 }
 
 /**
- * Sets up interaction event handlers for the map.
- * Configures onObjectCreated callbacks on layers so new objects
- * get events bound automatically during sync().
- * Returns a cleanup function.
+ * Sets up stage-level interaction handlers for the map — click resolution and (elsewhere, in the
+ * ticker) hover. Selection is the cell/lane, never the star: `SystemObject` takes no pointer events
+ * at all, so there is nothing here to bind per-object. Returns a cleanup function.
  */
 export function setupInteractions({
   app,
-  systemLayer,
   getCallbacks,
   getCellContext,
   getFactionContext,
   getLaneContext,
 }: InteractionOptions): () => void {
-  // ── System binding ────────────────────────────────────────────
-  // Selection is resolved centrally on the stage's pointer-up (below) via the Voronoi cell hit-test —
-  // a star always sits inside its own cell, so the object only owns hover.
-  function bindSystem(obj: SystemObject) {
-    obj.on("pointerover", () => {
-      // Hover reveals overlay-gated pills.
-      obj.setHovered(true);
-      obj.scale.set(ANIM.hoverScale);
-    });
-
-    obj.on("pointerout", () => {
-      obj.setHovered(false);
-      obj.scale.set(1);
-    });
-  }
-
-  // Bind existing objects
-  for (const obj of systemLayer.getAllObjects()) bindSystem(obj);
-
-  // Auto-bind new objects created during sync
-  systemLayer.onObjectCreated = bindSystem;
-
   // ── Stage selection (pointer-up, click vs drag) ───────────────
   app.stage.eventMode = "static";
   app.stage.hitArea = app.screen;
@@ -110,22 +86,20 @@ export function setupInteractions({
     const { cells, toWorld } = getCellContext();
     const w = toWorld(e.global.x, e.global.y);
 
-    // Precedence (docs/active/engineering/map-rendering.md → Selection):
+    // Precedence (docs/active/engineering/map-rendering.md → Selection precedence):
     //   1. faction (zoomed out, on a faction's territory)
-    //   2. system, when the point is within the star's own hover radius — a precise star click wins
-    //      over a nearby lane even though both can be geometrically close
-    //   3. lane, when the point is within tolerance of a lane segment
-    //   4. system, via the ordinary Voronoi cell hit-test
-    //   5. empty
+    //   2. lane, when the point is within tolerance of a lane segment (its own end gap already
+    //      spares the star, so no separate star-radius step is needed)
+    //   3. system, via the ordinary Voronoi cell hit-test
+    //   4. empty
     const { unions, selectActive } = getFactionContext();
     const factionHit = selectActive && unions ? findFactionAt(unions, w.x, w.y) : null;
 
-    const { lanes, systems, tolerance } = getLaneContext();
-    const systemNear = findSystemNear(w, systems, SIZES.systemHitRadius);
-    const laneAt = findLaneAt(w, lanes, systems, tolerance);
+    const { lanes, systemsById, tolerance, endGap } = getLaneContext();
+    const laneAt = findLaneAt(w, lanes, systemsById, tolerance, endGap);
     const cellSystemId = cells ? cells.findSystemAt(w.x, w.y) : null;
 
-    const result = resolveMapClick({ factionHit, systemNear, laneAt, cellSystemId });
+    const result = resolveMapClick({ factionHit, laneAt, cellSystemId });
     switch (result.kind) {
       case "faction":
         onSelectFaction(result.factionId);
@@ -146,8 +120,6 @@ export function setupInteractions({
 
   // ── Cleanup ───────────────────────────────────────────────────
   return () => {
-    for (const obj of systemLayer.getAllObjects()) obj.removeAllListeners();
-    systemLayer.onObjectCreated = undefined;
     app.stage.off("pointerdown", onStageDown);
     app.stage.off("pointerup", onStageUp);
   };

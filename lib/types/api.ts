@@ -20,8 +20,6 @@ export interface TradeFlowEdgeInfo {
    *  and every ledger row (outbound and return legs alike) — a multi-hop haul contributes only
    *  while it's on this particular hop, not for its whole journey. */
   totalVolume: number;
-  /** The good with the largest share of `totalVolume` — carries the particle colour. */
-  dominantGoodId: string;
 }
 /** The directed-logistics overlay edge set the map renders. */
 export interface TradeFlowEdges {

@@ -6,6 +6,9 @@ import {
   laneInvestor,
   laneUpkeepWork,
   decayLanes,
+  laneTier,
+  NOTABLE_FUEL_THRESHOLD,
+  MAJOR_FUEL_THRESHOLD,
   type LaneEndpointOwner,
 } from "@/lib/engine/lanes";
 import { LANES } from "@/lib/constants/lanes";
@@ -29,6 +32,24 @@ describe("laneEndpoints", () => {
 
   it("throws on a malformed key with no \"|\"", () => {
     expect(() => laneEndpoints("system-1")).toThrow(/malformed lane key/);
+  });
+});
+
+describe("laneTier", () => {
+  it("classes a lane below the notable threshold as ordinary", () => {
+    expect(laneTier(NOTABLE_FUEL_THRESHOLD - 0.1)).toBe("ordinary");
+  });
+
+  it("classes a lane at the notable threshold as notable", () => {
+    expect(laneTier(NOTABLE_FUEL_THRESHOLD)).toBe("notable");
+  });
+
+  it("classes a lane just under the major threshold as notable", () => {
+    expect(laneTier(MAJOR_FUEL_THRESHOLD - 0.1)).toBe("notable");
+  });
+
+  it("classes a lane at the major threshold as major", () => {
+    expect(laneTier(MAJOR_FUEL_THRESHOLD)).toBe("major");
   });
 });
 

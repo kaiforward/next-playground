@@ -50,9 +50,6 @@ vi.mock("@/lib/hooks/use-ownership", () => ({ useOwnership: () => new Map() }));
 vi.mock("@/lib/hooks/use-map-mode", () => ({
   useMapMode: () => ({ mode: "political", setMode: vi.fn() }),
 }));
-vi.mock("@/lib/hooks/use-map-overlays", () => ({
-  useMapOverlays: () => ({ overlays: { logistics: false }, toggle: vi.fn() }),
-}));
 vi.mock("@/lib/hooks/use-trade-flow", () => ({ useTradeFlow: () => ({ logisticsEdges: [] }) }));
 vi.mock("@/lib/hooks/use-stability", () => ({ useStability: () => new Map() }));
 vi.mock("@/lib/hooks/use-population", () => ({ usePopulation: () => new Map() }));

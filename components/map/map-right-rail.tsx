@@ -3,7 +3,6 @@
 import { memo } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import type { MapMode } from "@/lib/types/map";
-import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
 import { renderErrorFallback } from "@/components/ui/error-fallback";
 import { TrackerPanel } from "@/components/tracker/tracker-panel";
 import { TrackerSettingsPanel } from "@/components/tracker/tracker-settings";
@@ -12,10 +11,8 @@ import { MapControlsDock } from "@/components/map/map-controls-dock";
 interface MapRightRailProps {
   mode: MapMode;
   setMode: (mode: MapMode) => void;
-  overlays: MapOverlays;
-  toggle: (key: MapOverlayKey) => void;
   /** Whether the Tracker's settings panel is open — lifted to `star-map.tsx`, the same pattern as
-   *  `mode`/`overlays` above: `AlertRun` (`components/alerts/alert-run.tsx`) needs this too, for its
+   *  `mode` above: `AlertRun` (`components/alerts/alert-run.tsx`) needs this too, for its
    *  own right inset, which widens by the settings panel's width while it's open. A single source of
    *  truth in the parent is what lets both siblings read it without either reaching into the other's
    *  internals or the parent syncing two independent `useState`s via an effect. */
@@ -68,15 +65,13 @@ interface MapRightRailProps {
  * Wrapped in `React.memo`: `StarMap` re-renders this on every throttled pan/zoom tick
  * (`THROTTLE_MS` in `lib/hooks/use-static-tiles.ts`), and without the memo boundary that drags the
  * whole Tracker subtree — one stateful `Popover` per row — along for a viewport change that never
- * touches this component's own props. All six props are stable across those re-renders (`setMode`,
- * `toggle` and `onToggleSettings` are `useCallback`s with empty deps in `star-map.tsx`; `overlays`,
- * `mode` and `settingsOpen` are plain state), so the memo boundary holds.
+ * touches this component's own props. All four props are stable across those re-renders (`setMode`
+ * and `onToggleSettings` are `useCallback`s with empty deps in `star-map.tsx`; `mode` and
+ * `settingsOpen` are plain state), so the memo boundary holds.
  */
 export const MapRightRail = memo(function MapRightRail({
   mode,
   setMode,
-  overlays,
-  toggle,
   settingsOpen,
   onToggleSettings,
 }: MapRightRailProps) {
@@ -90,7 +85,7 @@ export const MapRightRail = memo(function MapRightRail({
         )}
         <TrackerPanel settingsOpen={settingsOpen} onToggleSettings={onToggleSettings} />
       </div>
-      <MapControlsDock mode={mode} setMode={setMode} overlays={overlays} toggle={toggle} />
+      <MapControlsDock mode={mode} setMode={setMode} />
     </div>
   );
 });

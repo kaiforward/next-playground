@@ -79,7 +79,7 @@ The map uses a WebGL canvas (Pixi.js) with two rendering tiers that crossfade ba
 - Tile-based viewport loading — only systems in visible tiles are fetched from the API
 - Full SystemObject rendering — layered glyph with economy core, overlay halo, rings, and corner pills (see [System Glyph Anatomy](#system-glyph-anatomy))
 - System names and economy badges
-- Connection lines between systems — styled by fuel-cost tier, not by any lane class: dashed slate for an ordinary lane, dashed gold for one pricier than about one and a half typical hops, and a glowing amber line for one priced at or beyond a crossing at typical spacing (so a corridor's crossing lane reads amber because of its cost, and a long intra-cluster lane reads the same way) — with fuel cost labels
+- Connection lines between systems — one uniform slate line, no colour and no dashes on this base layer, a little wider per invested level and wider again for a lane priced at or beyond a crossing at typical spacing (so a corridor's crossing lane reads slightly heavier because of its cost, and a long intra-cluster lane priced the same way reads the same); a **Lanes** map mode (see [map-rendering.md](../engineering/map-rendering.md)) carries the investor/level/load meaning instead
 
 **Crossfade (0.3–0.4)**: Smooth alpha transition between tiers using cubic smoothstep. SystemObject creation begins slightly before the crossfade (zoom 0.28) so objects are ready when they fade in.
 
@@ -95,7 +95,7 @@ Each system renders as a layered glyph with a fixed radial budget so indicators 
 
 - **Core (r ≤ 12)** — solid economy colour; the system's intrinsic identity, with a small highlight dot.
 - **Halo (r ≈ 20) — the overlay lens.** A translucent disc carrying the *active overlay*: a faint economy tint by default, recoloured to the price ramp when the Price overlay is on. Overlap-forgiving; the halo channel is designed to host future per-system lenses (danger, stability).
-- **Navigation ring (r ≈ 34, outermost, dashed)** — drawn only during routing, on the origin/destination, plus a subtle dashed focus ring on the selected system. `reachable` nodes keep a thin solid ring; `unreachable` dim to ~0.3 alpha.
+- **No ring on the glyph.** The cell outline (`CellHighlightLayer`) is the sole selected/hovered state, and the star itself takes no pointer events. A navigation ring (origin/destination, reachable/unreachable shading) belongs to the planned player-fleet routing layer and is not drawn today.
 
 There is no per-glyph gateway ring — gateway status now reads through the amber colour it shares with the priciest lanes (a corridor-endpoint system is where a crossing lane, or a band chain, actually terminates), a larger dot in the universe-zoom point cloud, and an amber "Gateway" badge in the system side panel.
 
@@ -141,7 +141,7 @@ When a system is selected on the map, the side panel shows:
 
 ### Route Planning (planned)
 
-There is no interactive route planning — only the selection focus ring on a glyph. Route planning (origin/destination navigation rings, reachable/unreachable fuel shading, a route preview with fuel + travel-duration estimate) is part of the planned player-fleet layer; the underlying travel model (fuel range, `speed` → transit ticks, the ship-arrivals processor) is in the backend.
+There is no interactive route planning — only the cell outline selection. Route planning (origin/destination navigation rings, reachable/unreachable fuel shading, a route preview with fuel + travel-duration estimate) is part of the planned player-fleet layer; the underlying travel model (fuel range, `speed` → transit ticks, the ship-arrivals processor) is in the backend.
 
 ### State Persistence
 - Selected system and camera position stored in session

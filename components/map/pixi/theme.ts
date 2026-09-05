@@ -1,4 +1,5 @@
 import type { SunClass } from "@/lib/types/game";
+import type { LaneBand } from "./objects/lane-band";
 
 // Neutral tint for the far-zoom point cloud. The zoomed-in system dot is coloured
 // by star type (SUN_CLASS_COLORS_PIXI); distant points stay neutral.
@@ -25,28 +26,32 @@ export const TERRITORY = {
   strokeWidth: 2,
 } as const;
 
-// ── Lane style (level/load, `objects/lane-style.ts`) ─────────────
-// Base widths per fuel tier — level adds `perLevel` per invested whole level on top. Load colours a
-// lane grey → amber as bookedLoad/capacity rises; blocked (congestion turned volume away this run)
-// overrides to red regardless of load — red means "invest here", never "nearly full".
+// ── Lane style (level, `objects/lane-style.ts`) ───────────────────
+// The base lane layer says only "where the lanes are": one uniform width, widened a little per
+// invested level and a bit more for a major (crossing-priced) fuel tier — no colour, no dashes.
+// Load/blocked meaning belongs to the Lanes map mode, not this layer.
 export const LANE_WIDTH = {
-  ordinary: 1.5,
-  notable: 1.9,
-  major: 2.5,
+  base: 1.5,
+  majorExtra: 1.0,
   perLevel: 0.35,
 } as const;
 
-export const LANE_LOAD_COLOR = {
-  idle: 0x64748b, // slate-500 — ~0 booked load
-  loaded: 0xf59e0b, // amber-500 — booked load at/near capacity
-  blocked: 0xef4444, // red-500 — blockedVolume > 0 this run
-} as const;
+/** The base lane layer's one colour and alpha — slate, always, regardless of tier/level/load. */
+export const LANE_BASE_COLOR = 0x64748b; // slate-500
+export const LANE_BASE_ALPHA = 0.5;
 
-/** The major (crossing-priced) tier's wide soft glow underlay, drawn under the load-coloured core
- *  line — a structural "lit pathway" treatment, independent of the colour the load ramp picks. */
-export const LANE_MAJOR_GLOW = {
-  width: 7.0,
-  alpha: 0.15,
+/** Presentation-only threshold on `bookedLoad / capacity` (unclamped) that separates the "busy"
+ *  band from "fine" (`objects/lane-band.ts`) — set by eye in the visual smoke, not a mechanic
+ *  read anywhere else. Congestion (`blockedVolume > 0`) always wins over this regardless of load. */
+export const LANE_BUSY_LOAD_FRACTION = 0.75;
+
+/** Status colours for the three lane bands (`objects/lane-band.ts`) — the design system's
+ *  green/amber/red triple (docs/active/design-system/theme.md → Status Colors), reused here rather
+ *  than a bespoke colour set of its own. */
+export const LANE_BAND_COLOR: Record<"fine" | "busy" | "congested", number> = {
+  fine: 0x22c55e, // green-500
+  busy: 0xf59e0b, // amber-500
+  congested: 0xef4444, // red-500
 } as const;
 
 /** The selected lane's highlight stroke (the open `/lane/:key` route) — Foundry copper, matching the
@@ -57,10 +62,40 @@ export const LANE_SELECTED = {
   glowAlpha: 0.35,
 } as const;
 
+/** The hovered lane's highlight stroke — a white/slate-100 glow, narrower and fainter than the
+ *  selection glow (`LANE_SELECTED`) so the two never read as the same state. */
+export const LANE_HOVERED = {
+  color: 0xf1f5f9, // slate-100
+  glowWidth: 5.0,
+  glowAlpha: 0.25,
+} as const;
+
+/**
+ * The Lanes map mode's lane style (`objects/lane-style.ts`'s `laneModeStyle`) — a stronger width
+ * ramp than the base layer's, since this mode carries meaning rather than mere position. `fineAlpha`
+ * dims an uncongested/unbusy lane so a busy or congested one (`busyAlpha`, full) stands out;
+ * `pulsePeriodMs`/`pulseColor` drive the congested overlay stroke (`ConnectionLayer.update`).
+ */
+export const LANE_MODE = {
+  baseWidth: 1.2,
+  perLevel: 0.6,
+  fineAlpha: 0.45,
+  busyAlpha: 0.95,
+  pulsePeriodMs: 1400,
+  pulseColor: 0xef4444, // red-500, matches LANE_BAND_COLOR.congested
+} as const;
+
 /** Screen-pixel tolerance for the lane click hit-test (`lane-hit-test.ts`'s `findLaneAt`) — divided
  *  by the camera zoom at click time so a thin lane is as easy to hit zoomed out as zoomed in. Generous
  *  enough to forgive a slightly-off click without swallowing nearby cell clicks. */
 export const LANE_HIT_TOLERANCE_PX = 8;
+
+/** World-unit gap `findLaneAt` shortens each end of a lane segment by before testing distance —
+ *  every lane ends on a star, so without this a click at the star's centre could resolve to the
+ *  lane instead of the cell (`docs/active/engineering/map-rendering.md` → Selection precedence).
+ *  Roughly the star's core radius on screen at zoom 1; a presentation knob, not a mechanic. Divided
+ *  by zoom at the call site like `LANE_HIT_TOLERANCE_PX`. */
+export const LANE_HIT_END_GAP_PX = 14;
 
 // ── Point cloud (universe view) ─────────────────────────────────
 
@@ -86,7 +121,6 @@ export const FACTION_SELECT_ZOOM = 0.285;
 export const SIZES = {
   systemCoreRadius:   12,
   systemGlowRadius:   40,
-  systemHitRadius:    20,
   systemLabelSize:    14,
   regionWidth:       180,
   regionHeight:      100,
@@ -99,14 +133,12 @@ export const SIZES = {
 } as const;
 
 // ── Glyph radial budget (world units, glyph-local) ───────────────
-// Each concentric element owns a fixed radius band so the star bloom, hover
-// ring, and selection ring never collide.
+// Each concentric element owns a fixed radius band so the star bloom and core
+// never collide. Selection and hover are the cell outline now (`CellHighlightLayer`),
+// not a ring on the glyph.
 export const GLYPH = {
-  coreRadius:        12,   // star-type dot core (matches SIZES.systemCoreRadius)
-  bloomRadius:       20,   // dim same-hue under-disc — a soft star bloom, no halo
-  hoverRingRadius:   19,   // star-coloured ring shown on hover
-  navRingRadius:     34,   // outermost, dashed
-  selectedRingWidth: 4,    // selection ring — bright white dashed focus ring
+  coreRadius:  12,   // star-type dot core (matches SIZES.systemCoreRadius)
+  bloomRadius: 20,   // dim same-hue under-disc — a soft star bloom, no halo
 } as const;
 
 // ── Settlement mark (player systems: controlled / forming / developed) ──
@@ -133,15 +165,22 @@ export const SETTLEMENT_MARK = {
 } as const;
 
 // ── System label backing (name) ──────────────────────────────────
-// The name label sits below the glyph and can fall behind the nav ring /
-// halo, so it gets a semi-transparent black backing for legibility.
+// The name label sits below the glyph over the bloom and the territory fill,
+// so it gets a semi-transparent black backing for legibility. The name draws
+// screen-constant (SIZES.systemLabelSize px whatever the zoom, like the value
+// choropleth's system-tier numbers) rather than world-scaled — see
+// SystemObject.setLOD and value-choropleth-layer.ts's own lift formula.
 export const LABEL = {
   bgFill:   0x000000,
   bgAlpha:  0.55,
   bgPadX:   4,
   bgPadY:   1.5,
   bgCorner: 3,
-  offsetY:  38, // px below glyph centre, clear of the nav/selection ring
+  offsetY:  6, // screen-px gap below the glyph core; lift = GLYPH.coreRadius × dotScale + offsetY / zoom
+  /** Relative zoom-change gate for the cell-fit label pass (`SystemLayer.updateVisibility`) —
+   *  mirrors `updateOutlineZoom`'s 3% band (`value-choropleth-layer.ts`) so a continuous zoom
+   *  gesture re-evaluates fit a bounded number of times rather than every frame. */
+  fitZoomStep: 0.03,
 } as const;
 
 // ── Animation ────────────────────────────────────────────────────
@@ -152,17 +191,18 @@ export const ANIM = {
   viewTransitionMs:   200,   // layer fade in/out
   twinkleMinPeriod:  3000,   // ms
   twinkleMaxPeriod:  8000,
-  hoverScale:         1.05,
 } as const;
 
 // ── Flow overlay ─────────────────────────────────────────────────
 
 /**
- * Directed-logistics overlay. Glowing "convoy" particles travel the lane itself (a straight segment
- * between its two endpoints) rather than an off-lane arc — a haul's route is now drawn as particles
- * on every lane it crosses, not a chord between its origin and destination, so there is no longer a
- * reason to bow the path off the lane it represents. Visual values are placeholders — tune in the
- * manual smoke (glow/speed).
+ * Directed-logistics overlay, shown in the Lanes map mode. Glowing "convoy" particles travel the
+ * lane itself (a straight segment between its two endpoints) rather than an off-lane arc — a haul's
+ * route is drawn as particles on every lane it crosses, not a chord between its origin and
+ * destination. Particle count and colour are keyed by the lane's `LaneBand` (`objects/lane-band.ts`)
+ * — the same band the base lane brightness and the Lanes-mode choropleth read — so a congested lane
+ * reads busier than a fine one regardless of the raw volume crossing it. Visual values are
+ * placeholders — tune in the manual smoke (glow/speed).
  */
 export const LOGISTICS_FLOW = {
   particleRadius: 3.4,
@@ -174,9 +214,13 @@ export const LOGISTICS_FLOW = {
   pathAlpha: 0.18,
   /** Arrowhead size at the importing (destination) system. */
   arrowSize: 6,
-  minParticlesPerEdge: 2,
-  volumePerExtraParticle: 6,
-  maxParticlesPerEdge: 10,
+  /** Particle count per edge, by the lane's `LaneBand` — presentation knobs, not a mechanic read
+   *  anywhere else. */
+  particlesPerBand: {
+    fine: 2,
+    busy: 5,
+    congested: 9,
+  } satisfies Record<LaneBand, number>,
   /** Smaller global budget than market — logistics is sparse. */
   maxTotalParticles: 800,
 } as const;
