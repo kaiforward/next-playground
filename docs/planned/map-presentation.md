@@ -28,8 +28,8 @@ a star competes with the cell outline. This pass splits that into two layers wit
   particles fold into this mode, with particle density reading load rather than cargo. Zoomed out,
   where the map already hides lanes, the mode tints every system's cell by the worst state among
   its lanes in three fixed bands — fine, busy, congested — the way EU5 reads a province.
-- **Selection is the cell.** The star's own selection ring and marks go; the cell outline is the
-  one selection state, and clicking the star is just clicking its cell.
+- **Selection is the cell.** The star's own selection ring, hover ring and hover scale go; the cell
+  outline is the one selection and hover state, and clicking the star is just clicking its cell.
 - **A system name draws only when its text box fits inside the system's own cell.** No priority
   ordering is needed because cells never overlap, so neither can the names; zooming in grows cells
   on screen and reveals more. Selected and hovered systems always keep their name.
@@ -77,8 +77,9 @@ dims the territory fill (political colours drop to a quiet backing) and replaces
 **Zoomed out (universe tier, lanes hidden):**
 
 - Every system's cell tints by the **worst state among the lanes touching it**: congested > busy
-  > fine. A system with no lane in a bad state takes no tint. All systems, owned or not, like the
-  other modes; restricting to owned/friendly is a later filter over the same data.
+  > fine, so a system whose lanes are all fine reads green. A system with no lanes at all is absent
+  (black, like an unassessed cell in the provision mode). All systems, owned or not, like the other
+  modes; restricting to owned/friendly is a later filter over the same data.
 - Three fixed bands, stepped like the provision mode, with the same banded legend shape.
 
 **Bands** (one definition, used by lane brightness, particle density and cell tint):
@@ -94,17 +95,22 @@ settled on the prototype against `theme.md`.
 
 ## 3. Selection is the cell
 
-- The star's selection ring and any other per-star selection mark are removed; the cell outline
-  (`CellHighlightLayer`) is the sole selected/hovered state.
+- The star's selection ring, hover ring and hover scale-up are removed; the cell outline
+  (`CellHighlightLayer`) is the sole selected/hovered state. The star stops taking pointer events
+  at all — the stage resolves every click and hover.
 - Click resolution drops the star-radius step: faction (zoomed out) → lane → cell. Because every
   lane ends on a star, the lane hit-test ignores a short stretch at each end of the segment so a
   click at the star lands on the cell, not on one of its lanes.
 
 ## 4. Cell-fit labels
 
-- A system name draws when its label box, in world units at the current zoom, lies inside the
-  system's Voronoi cell polygon; otherwise it is hidden. The cell polygons already exist from the
-  territory build.
+- A system name draws when its label box lies inside the system's Voronoi cell polygon; otherwise
+  it is hidden. The cell polygons already exist from the territory build.
+- **Names become screen-constant** (drawn at `systemLabelSize` pixels whatever the zoom, the way
+  the choropleth numbers already are) instead of world-scaled. This is what makes the fit test
+  zoom-dependent: a world-scaled name has a fixed world-unit box, so its fit would never change
+  with zoom and a tight cluster would never reveal a name. The label sits a screen-constant gap
+  below the glyph, the same lift formula the system-tier numbers use.
 - Evaluated once per zoom-band change and on frustum entry, never per frame; a system's answer is
   cached with the zoom it was computed at.
 - The selected system and the hovered system always draw their name.
