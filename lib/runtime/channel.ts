@@ -65,9 +65,11 @@ export interface InterestSet {
   systems: string[];
   factions: string[];
   goods: string[];
+  /** Lane keys with an open lane card (`buildStateFrame`'s `laneDetail` family). */
+  lanes: string[];
 }
 
 /** The empty interest set — every panel closed, coarse slices only. Frozen so it can be shared as a
  *  single constant (the worker's initial held set, a client's "nothing open" post) without a caller
  *  accidentally mutating the shared instance. */
-export const EMPTY_INTEREST: InterestSet = Object.freeze({ systems: [], factions: [], goods: [] });
+export const EMPTY_INTEREST: InterestSet = Object.freeze({ systems: [], factions: [], goods: [], lanes: [] });

@@ -90,7 +90,7 @@ export function toGoodMarketStates(
     /** Goods already dispatched toward this system for this good, not yet arrived
      *  (`GoodMarketState.scheduledInbound`) — read ONLY at the directed-logistics matcher's call
      *  site (`toLogisticsState`), so the sink test sees `stock + scheduledInbound`
-     *  (docs/planned/logistics-lanes.md §3). The build planner's call site omits this hook
+     *  (docs/active/gameplay/logistics-lanes.md §3). The build planner's call site omits this hook
      *  entirely, keeping physical stock alone for its own structural-deficit reads. */
     scheduledInboundFor?: (goodId: string) => number;
   },

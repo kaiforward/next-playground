@@ -30,6 +30,41 @@ export function playerHome(): WorldSystem {
   return world.systems.find((s) => s.id === faction.homeworldId)!;
 }
 
+/** An unclaimed system directly connected to the homeworld — the seated galaxy's own frontier edge. */
+export function unclaimedNeighbour(): WorldSystem {
+  const w = getWorld();
+  const home = playerHome();
+  for (const c of w.connections) {
+    let otherId: string | null = null;
+    if (c.fromId === home.id) otherId = c.toId;
+    else if (c.toId === home.id) otherId = c.fromId;
+    if (otherId === null) continue;
+    const other = w.systems.find((s) => s.id === otherId)!;
+    if (other.factionId === null) return other;
+  }
+  throw new Error("fixture: seeded galaxy has no unclaimed neighbour of the homeworld");
+}
+
+/**
+ * An unclaimed system with NO lane into player-held territory — the claim verb's "not adjacent"
+ * case. Throws when the seeded galaxy has none, so a test that needs one fails loudly rather than
+ * returning early and passing on nothing.
+ */
+export function farUnclaimedSystem(): WorldSystem {
+  const w = getWorld();
+  const pid = playerFactionId();
+  const ownedIds = new Set(w.systems.filter((s) => s.factionId === pid).map((s) => s.id));
+  const far = w.systems.find((s) => {
+    if (s.factionId !== null) return false;
+    return !w.connections.some((c) => {
+      const otherId = c.fromId === s.id ? c.toId : c.toId === s.id ? c.fromId : null;
+      return otherId !== null && ownedIds.has(otherId);
+    });
+  });
+  if (!far) throw new Error("fixture: seeded galaxy has no unclaimed system away from player territory");
+  return far;
+}
+
 /** The faction the seat controls. Throws rather than reading `undefined` into a fixture. */
 function playerFactionId(): string {
   const player = getWorld().player;
@@ -58,7 +93,7 @@ export function controlledNeighbour(peopleLand: number): { target: WorldSystem; 
 /**
  * A second controlled, amply-landed player system distinct from `excludeId` — reachable from the
  * homeworld within the colony verb's own seed-source search radius (`COLONY_REACH_HOPS`), not
- * necessarily a direct connection: corridor topology (spec `docs/planned/logistics-lanes.md` §5)
+ * necessarily a direct connection: corridor topology (spec `docs/active/gameplay/universe.md`)
  * does not guarantee the homeworld has two direct neighbours the way `controlledNeighbour` alone
  * assumes. Throws with a clear message rather than a bare `undefined!` crash if the seeded galaxy
  * doesn't offer one.

@@ -1,11 +1,11 @@
 /**
  * The route table over wouter (client-runtime spec §3, build plan Task 6) — five routes: the map
- * root, `/start`, a system panel, a faction panel, and `/styleguide`. `useRoute()` is the one seam
+ * root, `/start`, a system panel, a faction panel, and `/styleguide`. `useRoute()` is the router seam
  * every route-aware component reads: a discriminated union, never a raw pathname string, so a
- * consumer switches on `route.name` instead of re-parsing the URL. An unrecognised path (including
- * `/`, which no pattern below matches explicitly) falls through every `useWouterRoute` check and
- * lands on `{ name: "map" }` — the map root is the fallback BY FALLING THROUGH, not by a separate
- * "/" pattern, so there is exactly one code path for "nothing more specific matched".
+ * consumer switches on `route.name` instead of re-parsing the URL. The parsing itself is the pure
+ * `parseRoute` in `lib/utils/route-hrefs.ts`, so router-agnostic components can parse the pathname
+ * `useRouteInfo()` already gives them without importing wouter through this file. An unrecognised
+ * path (including `/`) is the map root — the fallback BY FALLING THROUGH, not a separate "/" pattern.
  *
  * **The tab segment is optional, matching today's live URL shapes exactly**: the Overview tab has
  * no path segment at all — `/system/<id>` and `/factions/<id>` bare, not `/system/<id>/overview`
@@ -17,37 +17,16 @@
  * `SystemTabSegment`/`FactionTabSegment` already use, which is what Task 9's tab-strip consumers
  * (`resolvePanelTabs`, `components/ui/tabs-helpers.ts`) are written against.
  */
-import { useRoute as useWouterRoute } from "wouter";
+import { useLocation } from "wouter";
+import { parseRoute, type Route } from "@/lib/utils/route-hrefs";
 
-export type Route =
-  | { name: "map" }
-  | { name: "start" }
-  | { name: "system"; systemId: string; tab: string }
-  | { name: "faction"; factionId: string; tab: string }
-  | { name: "styleguide" };
+export type { Route } from "@/lib/utils/route-hrefs";
 
-const PATTERNS = {
-  system: "/system/:id/:tab?",
-  faction: "/factions/:id/:tab?",
-  start: "/start",
-  styleguide: "/styleguide",
-} as const;
-
+/** The current route, read from wouter's location and parsed by the one shared parser
+ *  (`parseRoute`, `lib/utils/route-hrefs.ts`) — this file is the only place wouter is consulted. */
 export function useRoute(): Route {
-  const [matchSystem, systemParams] = useWouterRoute(PATTERNS.system);
-  const [matchFaction, factionParams] = useWouterRoute(PATTERNS.faction);
-  const [matchStart] = useWouterRoute(PATTERNS.start);
-  const [matchStyleguide] = useWouterRoute(PATTERNS.styleguide);
-
-  if (matchSystem && systemParams) {
-    return { name: "system", systemId: systemParams.id, tab: systemParams.tab ?? "" };
-  }
-  if (matchFaction && factionParams) {
-    return { name: "faction", factionId: factionParams.id, tab: factionParams.tab ?? "" };
-  }
-  if (matchStart) return { name: "start" };
-  if (matchStyleguide) return { name: "styleguide" };
-  return { name: "map" };
+  const [location] = useLocation();
+  return parseRoute(location);
 }
 
 // href builders (`mapHref`, `startHref`, `systemHref`, etc.) moved to `lib/utils/route-hrefs.ts` —

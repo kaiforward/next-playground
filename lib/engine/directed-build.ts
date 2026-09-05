@@ -816,7 +816,7 @@ export interface BuildProposal {
 /**
  * A lane-upgrade proposal — a single-item member of the `Proposal` union carrying the congested
  * lane's `blockedVolume` as its ROI numerator and a flat `UPGRADE_WORK_PER_LEVEL` as the
- * denominator (docs/planned/logistics-lanes.md §4, Autonomic planner bullet). It interleaves with
+ * denominator (docs/active/gameplay/logistics-lanes.md §4, Autonomic planner bullet). It interleaves with
  * build and colony proposals by ROI in `orderProposals`; the processor expands a funded one into a
  * `lane_upgrade` project.
  */

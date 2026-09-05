@@ -98,7 +98,7 @@ export interface DirectedLogisticsWorld {
   /** All systems (with markets) belonging to the given faction keys. */
   getSystemsForFactions(factionKeys: Array<string | null>): Promise<SystemLogisticsRow[]>;
   /** Bulk absolute stock writes (already clamped) — donor debits only; dispatch never credits a
-   *  destination (docs/planned/logistics-lanes.md §3: the arrivals stage credits on delivery). */
+   *  destination (docs/active/gameplay/logistics-lanes.md §3: the arrivals stage credits on delivery). */
   applyMarketUpdates(updates: LogisticsMarketUpdate[]): Promise<void>;
   /** Apply changed wanted-but-unfunded assessments without rewriting stock. */
   applyFundingBoundUpdates(updates: LogisticsFundingBoundUpdate[]): Promise<void>;

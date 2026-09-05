@@ -63,13 +63,26 @@ vi.mock("@/components/ui/link-provider", () => ({
 // coordinates and silently no-ops on an id it cannot find — an empty atlas would make the row-click
 // test pass with the navigation never happening.
 const ATLAS: AtlasData = {
-  meta: { mapSize: 100, systemCount: 1, seed: 1 },
+  meta: { mapSize: 100, systemCount: 2, seed: 1 },
   regions: [],
   systems: [
     {
       id: "sys-1",
       x: 12,
       y: 7,
+      regionId: "region-1",
+      factionId: null,
+      economyType: "agricultural",
+      isGateway: false,
+      developed: true,
+      sunClass: "yellow",
+    },
+    // A second system so a lane instance's midpoint has two real coordinates to average — Lane
+    // congested's own `useLaneFocus()` resolves both a lane's endpoints against the atlas, not one.
+    {
+      id: "sys-2",
+      x: 20,
+      y: 15,
       regionId: "region-1",
       factionId: null,
       economyType: "agricultural",
@@ -322,6 +335,38 @@ describe("AlertRunContent — a flyout row click navigates to the row's own dest
     // whatever this process has already handed out — the assertion is on everything else.
     expect(push).toHaveBeenCalledTimes(1);
     expect(push).toHaveBeenCalledWith(expect.stringMatching(/^\/system\/sys-1\/population\?focus=12,7&loc=\d+$/));
+  });
+
+  it("flies the map to a lane's midpoint and opens its own card for Lane congested", async () => {
+    const user = userEvent.setup();
+    // Lane congested's authored destination is `{ kind: "lane" }` (lib/constants/alerts.ts), so this
+    // exercises the real `resolveAlertTarget` → `useLaneFocus` wiring, not a spy standing in for it —
+    // the row has to carry a laneKey whose two endpoints the atlas above actually knows.
+    alertsData = {
+      categories: [
+        {
+          id: "lane_congested",
+          unit: "lanes",
+          count: 1,
+          denominator: 9,
+          instances: [{ laneKey: "sys-1|sys-2", name: "sys-1 — sys-2", measure: "12.0 blocked", sortKey: -12 }],
+        },
+      ],
+    };
+    render(<AlertRunContent availableWidth={ROOMY} />);
+
+    await user.click(screen.getByRole("button", { name: /^Lane congested/ }));
+    await user.click(screen.getByRole("button", { name: /sys-1 — sys-2/ }));
+
+    // Midpoint of (12,7) and (20,15) is (16,11); `loc` is the shared monotonic nonce, per the
+    // Dying-worlds case above.
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/lane\/sys-1%7Csys-2\?focus=16,11&loc=\d+$/),
+      // An alert row opens the lane's card as a real navigation — only the card's own
+      // "Show on Map" replaces (`useLaneFocus({ replace: true })`).
+      { replace: false },
+    );
   });
 });
 

@@ -4,7 +4,7 @@
  * concentrated traffic, cost-differentiated lanes, and a real cost to settling beyond a crossing.
  *
  * The concentration read is the premise-1 instrument. Its reachability mirrors the shipped router's
- * own rule (docs/planned/logistics-lanes.md §2, `world/tick.ts`'s `bookerFor`): a haul is reachable
+ * own rule (docs/active/gameplay/logistics-lanes.md §2, `world/tick.ts`'s `bookerFor`): a haul is reachable
  * iff a path exists over the LANE NETWORK (`buildLaneNetwork`, `lib/engine/lane-routing.ts` — a
  * connection with no matching `WorldLane` row is not part of it) from donor to sink where every lane
  * crossed is open to the hauling faction (`laneOpenFor`, `lib/engine/lane-access.ts`:

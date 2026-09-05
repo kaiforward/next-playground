@@ -568,7 +568,8 @@ export function createGameWorker(scope: RawWorkerScope<InboundMessage, OutboundM
   function interestGrew(previous: InterestSet, next: InterestSet): boolean {
     return (
       next.systems.some((id) => !previous.systems.includes(id)) ||
-      next.goods.some((id) => !previous.goods.includes(id))
+      next.goods.some((id) => !previous.goods.includes(id)) ||
+      next.lanes.some((id) => !previous.lanes.includes(id))
     );
   }
 

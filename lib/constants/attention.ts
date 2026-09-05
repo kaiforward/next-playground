@@ -14,11 +14,12 @@ import type { TrackerSections } from "@/lib/types/tracker";
  * `docs/active/gameplay/alert-bar.md` → "The categories", and the single authority for them. Written
  * out key by key rather than folded from `ALERT_CATEGORY_IDS` because a fold widens the result's
  * keys back to `string`, which would need an `as` cast to satisfy `AlertCategorySettings`; spelled
- * out, the compiler requires all thirteen.
+ * out, the compiler requires all fourteen.
  *
  * Three important-tier categories are authored OFF — the alert bar is a surface the design chose not
  * to fill by default. Every critical category is `true`, since the tier cannot be turned off anyway
- * (`AlertCategoryDef.hideable`).
+ * (`AlertCategoryDef.hideable`). Lane congested defaults ON, like every other important category that
+ * isn't one of those three.
  *
  * Also the read fallback for a world with no player seat (`lib/services/alerts.ts`): there is no
  * seat to hold a preference for, and the bar has nothing to show either way.
@@ -33,6 +34,7 @@ export const DEFAULT_ALERT_CATEGORIES: AlertCategorySettings = {
   unrest_rising: false,
   survival_stock_falling: true,
   demand_unservable: true,
+  lane_congested: true,
   overcrowded: true,
   no_housing_headroom: true,
   build_blocked: false,

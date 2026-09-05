@@ -26,7 +26,7 @@ import type { MarketSlice, MarketComparisonSlice } from "@/lib/runtime/snapshot"
 import type { UniverseData } from "@/lib/types/game";
 import type {
   SystemVitalsData, SystemPopulationData, SystemIndustryData, SystemLogisticsData,
-  SystemConstructionData, SystemBuildOptionsData, SystemSubstrateData,
+  SystemConstructionData, SystemBuildOptionsData, SystemSubstrateData, LaneDetailData,
 } from "@/lib/types/api";
 
 /** Which id space a detail hook's `id` is drawn from — determines what "exists" means for the
@@ -34,8 +34,9 @@ import type {
  *  slice's system list (the eight system-keyed families); `"good"` ids are checked against the
  *  static goods catalog (`marketComparison`, the one good-keyed family) — a goodId is never a
  *  member of `universe.systems`, so treating every family as system-keyed would make the warning
- *  structurally unable to fire for `marketComparison`. */
-export type DetailIdSpace = "system" | "good";
+ *  structurally unable to fire for `marketComparison`. `"lane"` opts a family out of the warning
+ *  entirely (below): a lane key has no cheap galaxy-wide membership set to check it against. */
+export type DetailIdSpace = "system" | "good" | "lane";
 
 /** The interest-keyed detail families a per-id hook can read (frame-architecture spec) — every
  *  `SnapshotSlices` key backed by the current interest set rather than pushed coarse. Typing
@@ -50,7 +51,8 @@ export type DetailFamily =
   | "systemBuildOptions"
   | "systemSubstrate"
   | "market"
-  | "marketComparison";
+  | "marketComparison"
+  | "laneDetail";
 
 /** Maps each `DetailFamily` to its per-id entry type — the same mapping `SnapshotSlices` (each
  *  family's `Record<string, ...>` value type) already encodes, restated here as a plain interface so
@@ -70,6 +72,7 @@ interface DetailFamilyValueMap {
   systemSubstrate: SystemSubstrateData;
   market: MarketSlice;
   marketComparison: MarketComparisonSlice;
+  laneDetail: LaneDetailData;
 }
 
 const warnedPairs = new Set<string>();
@@ -167,6 +170,9 @@ export function useDetailEntry(
   family: "marketComparison", id: string, idSpace: DetailIdSpace,
 ): MarketComparisonSlice | undefined;
 export function useDetailEntry(
+  family: "laneDetail", id: string, idSpace: DetailIdSpace,
+): LaneDetailData | undefined;
+export function useDetailEntry(
   family: DetailFamily,
   id: string,
   idSpace: DetailIdSpace,
@@ -176,7 +182,7 @@ export function useDetailEntry(
   );
   const universeIds = useUniverseIdsDev();
 
-  if (import.meta.env.DEV && entry === undefined) {
+  if (import.meta.env.DEV && entry === undefined && idSpace !== "lane") {
     const existsInIdSpace = idSpace === "good" ? Object.hasOwn(GOODS, id) : (universeIds?.has(id) ?? false);
     if (existsInIdSpace) warnUnsubscribedRead(family, id);
   }

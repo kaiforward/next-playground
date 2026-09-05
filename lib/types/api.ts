@@ -2,21 +2,98 @@ import type { StarSystemInfo, SunClass, GoodTier, BodyArchetypeId, ResourceVecto
 import type { SubstrateGoodRate, ConsumptionBreakdown } from "@/lib/engine/physical-economy";
 import type { SupplyRegime } from "@/lib/engine/population";
 import type { FillOrderRow, PotentialYieldRowView } from "@/lib/utils/substrate";
+import type { ConstructionProjectLaneRow } from "@/lib/engine/construction-readout";
 
+/**
+ * One directed hop of in-flight freight over a single lane — the map overlay's edge unit. Unlike
+ * the retired chord builder (one row per system PAIR, aggregated across every lane a route crossed),
+ * this is one row per (lane, direction): a haul crossing three lanes contributes to three of these,
+ * not one chord between its origin and destination. `laneKey` identifies the lane
+ * (`lib/engine/lanes.ts`); `fromSystemId`/`toSystemId` are this hop's directed endpoints (particles
+ * spawn at `fromSystemId`, arrive at `toSystemId`).
+ */
 export interface TradeFlowEdgeInfo {
-  /** Net source system for the dominant good (where particles spawn). */
+  laneKey: string;
   fromSystemId: string;
-  /** Net destination system for the dominant good (where particles terminate). */
   toSystemId: string;
-  /** Sum of magnitudes across both directions and all goods. */
+  /** Sum of quantity PHYSICALLY crossing this lane in this direction right now, across every good
+   *  and every ledger row (outbound and return legs alike) — a multi-hop haul contributes only
+   *  while it's on this particular hop, not for its whole journey. */
   totalVolume: number;
+  /** The good with the largest share of `totalVolume` — carries the particle colour. */
   dominantGoodId: string;
-  /** Per-good magnitude (both directions summed). */
-  perGood: Record<string, number>;
 }
 /** The directed-logistics overlay edge set the map renders. */
 export interface TradeFlowEdges {
   logisticsEdges: TradeFlowEdgeInfo[];
+}
+/**
+ * One lane's live state for the map layer and the lane card (docs/active/gameplay/logistics-lanes.md §1) —
+ * `getLaneStates` (`lib/services/lanes.ts`) joins the persisted `WorldLane` row with its derived
+ * reads: `capacity` from `laneCapacity(level)` scaled by the logistics cadence's catch-up factor
+ * (the figure `bookedLoad` was actually booked against, so the two share a denominator),
+ * `inFlight` summed from the arrivals ledger's rows
+ * PHYSICALLY crossing this lane right now (`laneOccupiedAt`, `lib/engine/freight.ts` — one hop of a
+ * multi-lane route at a time, not every lane the route ever touches), `investorFactionId` from
+ * `laneInvestor`, and `openUpgradeLevels` from open `lane_upgrade` construction projects targeting
+ * this lane.
+ */
+export interface LaneStateRow {
+  key: string;
+  aId: string;
+  bId: string;
+  level: number;
+  capacity: number;
+  bookedLoad: number;
+  blockedVolume: number;
+  inFlight: number;
+  investorFactionId: string | null;
+  openUpgradeLevels: number;
+}
+/** One endpoint's ownership as the lane card's invest verb needs it — enough to name who blocks
+ *  investing, and in what state. Faction names are resolved client-side from the universe slice,
+ *  not carried here. */
+export interface LaneEndpointDetail {
+  systemId: string;
+  systemName: string;
+  factionId: string | null;
+  /** Below `controlled` (i.e. unclaimed). */
+  unclaimed: boolean;
+}
+/** One good PHYSICALLY crossing a lane right now, read straight off the scheduled-freight ledger
+ *  (`WorldPendingArrival`) rather than a window sum or a whole-route membership test — the lane
+ *  card's "cargo in flight" table. A multi-hop haul appears here only while this lane is the hop
+ *  it's currently on. */
+export interface LaneCargoRow {
+  goodId: string;
+  goodName: string;
+  quantity: number;
+  fromSystemId: string;
+  fromSystemName: string;
+  toSystemId: string;
+  toSystemName: string;
+  arrivalTick: number;
+}
+/**
+ * One lane's full detail — the lane card's substrate beyond the coarse `LaneStateRow` (map layer):
+ * endpoint ownership for the invest verb's states, everything in flight, and the open
+ * `lane_upgrade` projects targeting it. Interest-keyed (`useInterest("lane", key)`), computed only
+ * for the open lane card rather than pushed for every lane every frame.
+ */
+export interface LaneDetailData {
+  key: string;
+  fuelCost: number;
+  a: LaneEndpointDetail;
+  b: LaneEndpointDetail;
+  level: number;
+  capacity: number;
+  bookedLoad: number;
+  blockedVolume: number;
+  inFlight: number;
+  idleCycles: number;
+  investorFactionId: string | null;
+  cargo: LaneCargoRow[];
+  openProjects: ConstructionProjectLaneRow[];
 }
 /** Aggregate trading partner for a single good (top-N source or destination). */
 export interface TradeFlowPartner {
@@ -29,6 +106,18 @@ export interface TradeFlowVolumeBucket {
   tick: number;
   importVolume: number;
   exportVolume: number;
+}
+/** One good travelling to or from this system right now, read off the scheduled-freight ledger
+ *  (`WorldPendingArrival`) — present only while `arrivalTick > currentTick` (the row disappears the
+ *  tick the goods-arrivals stage credits it). `otherSystemId`/`otherSystemName` name the far end:
+ *  the origin for an inbound row, the destination for an outbound one. */
+export interface TransitRow {
+  goodId: string;
+  goodName: string;
+  quantity: number;
+  otherSystemId: string;
+  otherSystemName: string;
+  arrivalTick: number;
 }
 // ── System logistics (production/consumption + imports/exports dashboard) ─────
 /**
@@ -76,6 +165,8 @@ export type SystemLogisticsData =
       /** Goods with any cross-border flow. */
       tradedGoodCount: number;
       volumeHistory: TradeFlowVolumeBucket[];
+      /** Freight in flight on the ledger right now, split by direction. */
+      transit: { inbound: TransitRow[]; outbound: TransitRow[] };
     }
   | { visibility: "unknown" };
 
@@ -375,6 +466,9 @@ export interface FactionConstructionData {
     systemName: string;
     progress: number;
   }>;
+  /** Open lane-upgrade projects — progress desc, then label asc. A lane carries no single
+   *  `systemId`, so it gets its own list rather than folding into `buildSystems`. */
+  lanes: Array<{ laneKey: string; label: string; progress: number }>;
   /** Player-originated open projects across the faction. */
   orderedCount: number;
 }
@@ -479,9 +573,19 @@ export interface ColonyPreviewData {
    *  is accepted; only the charter is actually spent at the click. */
   commitment: number;
 }
+/** One system adjacent to the claim target that the player already holds — the claim quote names
+ *  it, and the lane(s) claiming would bring under control run between it and the target. */
+export interface ClaimAdjacentSystem {
+  systemId: string;
+  systemName: string;
+}
+/** The claim verb's feasibility for an unclaimed system adjacent to the player's territory. */
+export type ClaimOptionData =
+  | { state: "eligible"; adjacentOwned: ClaimAdjacentSystem[] }
+  | { state: "cooldown"; adjacentOwned: ClaimAdjacentSystem[]; remainingTicks: number };
 /** Per-system verb surface: which construction verb applies here and its feasibility. */
 export type SystemBuildOptionsData =
-  | { mode: "none" } // not the player's system (or no seat)
+  | { mode: "none" } // not the player's system, not adjacent-unclaimed, or no seat
   | {
       mode: "colony";
       colony:
@@ -495,7 +599,10 @@ export type SystemBuildOptionsData =
             preview: ColonyPreviewData | null;
           };
     }
-  | { mode: "build"; options: BuildOptionData[] };
+  | { mode: "build"; options: BuildOptionData[] }
+  /** An unclaimed system bordering territory the player controls — the claim verb's home. Never
+   *  set for a system with no player-owned neighbour (nothing to act on, same as a foreign system). */
+  | { mode: "claim"; claim: ClaimOptionData };
 
 // ── Faction vitals (Overview aggregate tiles: territory / population / stability / development) ──
 /**
@@ -581,11 +688,30 @@ export interface AlertInstance {
   sortKey: number;
 }
 
-interface AlertCategoryBase {
+/**
+ * One `lane_congested` instance — the flyout row for a single congested lane. Carries a `laneKey`
+ * rather than an `AlertInstance.systemId`: a lane names two endpoints, not one system, so reusing
+ * `systemId` (picking one endpoint, or smuggling the key into it) would either be an arbitrary choice
+ * or overload that field with two different meanings for one reader to disambiguate. A sibling type
+ * instead, used only by `LaneScopedAlertCategory` below, so the destination the row resolves to
+ * (`{ kind: "lane" }`, `lib/types/alerts.ts`) always has the key it needs and nothing has to guess
+ * which shape an `AlertInstance` is carrying.
+ */
+export interface LaneAlertInstance {
+  laneKey: string;
+  name: string;
+  measure: string;
+  sortKey: number;
+}
+
+/** Generic over the instance shape a category's rows carry: every system-scoped category uses the
+ *  default `AlertInstance`, and the one lane-scoped category (below) fills it with
+ *  `LaneAlertInstance` instead of restating every field. */
+interface AlertCategoryBase<I = AlertInstance> {
   id: AlertCategoryId;
   /** Raw instance count — extensive, not a rate; grows with the empire. */
   count: number;
-  instances: AlertInstance[];
+  instances: I[];
 }
 
 /**
@@ -624,15 +750,31 @@ export interface FactionAlertCategory extends AlertCategoryBase {
   unit: "faction";
 }
 
+/**
+ * Lane congested — the one category counting LANES, not systems, so it fills `AlertCategoryBase`'s
+ * instance parameter with `LaneAlertInstance` rather than the default `AlertInstance`.
+ * `denominator` is the player faction's own OWNABLE lane count — every lane it either invests in or
+ * touches through a held endpoint — the same "this category's own population" shape
+ * `ControlledSystemsAlertCategory` uses for colony opportunity's disjoint population, and for the
+ * identical reason: a lane the player cannot act on is never a candidate for this category in the
+ * first place, so counting it in the denominator would render a share of lanes that were never in
+ * play for this row.
+ */
+export interface LaneScopedAlertCategory extends AlertCategoryBase<LaneAlertInstance> {
+  unit: "lanes";
+  denominator: number;
+}
+
 /** One alert category's standing read: the chip's count, what that count counts (and, for the
  *  system-scoped categories, its denominator — which population it is a share OF depends on `unit`),
  *  and the instance rows in the category's own sort order. */
 export type AlertCategory =
   | SystemScopedAlertCategory
   | ControlledSystemsAlertCategory
-  | FactionAlertCategory;
+  | FactionAlertCategory
+  | LaneScopedAlertCategory;
 
-/** The alert bar's whole read — all thirteen categories, one endpoint rather than one per category.
+/** The alert bar's whole read — all fourteen categories, one endpoint rather than one per category.
  *  With a player seat, `getAlertData()` (lib/services/alerts.ts) always emits every category id,
  *  tier-then-order sorted; a category with nothing to say still appears, with `count: 0` and an empty
  *  `instances` array — the chip run is what decides whether an empty category renders anything. A

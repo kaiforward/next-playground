@@ -1,7 +1,8 @@
 import { getWorld, getWorldVersion } from "@/lib/world/store";
-import type { World, WorldBody, WorldFlowEvent, WorldMarket } from "@/lib/world/types";
+import type { World, WorldBody, WorldConnection, WorldFlowEvent, WorldMarket, WorldSystem } from "@/lib/world/types";
 import type { GovernmentType, RegionInfo } from "@/lib/types/game";
 import { deriveRegionDominantFaction } from "@/lib/utils/region";
+import { laneKey } from "@/lib/engine/lanes";
 
 /**
  * Lazy per-version indexes over the world store, shared by the read services.
@@ -82,6 +83,54 @@ export const governmentByFactionId = versionCached(
 export const systemNameById = versionCached(
   (world) => new Map(world.systems.map((s) => [s.id, s.name])),
 );
+
+/** Whole system rows by id — what a read service needs when a name alone won't do (endpoint
+ *  ownership, control tier). Every lane-facing service resolves endpoints through this rather than
+ *  rebuilding the same map per call. */
+export const systemById = versionCached(
+  (world): ReadonlyMap<string, WorldSystem> => new Map(world.systems.map((s) => [s.id, s])),
+);
+
+/** `laneKey` → the fuel cost of crossing that lane, off `world.connections` — the same static
+ *  lookup the booker builds for itself (`buildLaneNetwork`, `lib/engine/lane-routing.ts`, which
+ *  stays engine-pure and takes its rows as arguments). Fuel costs never change once generated, so
+ *  this is a per-version index, never a per-call rebuild. */
+export const laneFuelCostByKey = versionCached((world): ReadonlyMap<string, number> => {
+  const costs = new Map<string, number>();
+  for (const c of world.connections) costs.set(laneKey(c.fromId, c.toId), c.fuelCost);
+  return costs;
+});
+
+/**
+ * One lane's fuel cost. A key with no connection row is an INVARIANT BREAK, not game state: every
+ * lane is minted from a connection at generation and both sides travel in the same save, so a
+ * missing cost would otherwise read as a free lane (`?? 0`) and silently mis-price transit and
+ * crossing times. Throws for the same reason `laneEndpoints` (`lib/engine/lanes.ts`) does.
+ */
+export function laneFuelCost(key: string): number {
+  const cost = laneFuelCostByKey().get(key);
+  if (cost === undefined) {
+    throw new Error(`laneFuelCost: lane "${key}" has no connection row — lane/connection desync`);
+  }
+  return cost;
+}
+
+/** Connection rows touching each system, by system id (both directions appear under both
+ *  endpoints) — so an adjacency read is O(neighbours) instead of a full connection scan per
+ *  system. */
+export const connectionsBySystem = versionCached((world): ReadonlyMap<string, WorldConnection[]> => {
+  const map = new Map<string, WorldConnection[]>();
+  const push = (systemId: string, c: WorldConnection): void => {
+    const list = map.get(systemId);
+    if (list) list.push(c);
+    else map.set(systemId, [c]);
+  };
+  for (const c of world.connections) {
+    push(c.fromId, c);
+    if (c.toId !== c.fromId) push(c.toId, c);
+  }
+  return map;
+});
 
 /**
  * Every region with its dominant owning faction and that faction's government — derived, never

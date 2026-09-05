@@ -14,6 +14,7 @@ import {
   TrendingUp,
   Hourglass,
   RouteOff,
+  TrafficCone,
   BedDouble,
   HardHat,
   Factory,
@@ -24,7 +25,7 @@ import type { BuildDropReason } from "@/lib/engine/directed-build";
 
 /**
  * Tier, icon and destination per alert category — the authored table from the alert bar spec's tier
- * list, keyed so the compiler requires all thirteen. `order` is unique within a tier: the authored
+ * list, keyed so the compiler requires all fourteen. `order` is unique within a tier: the authored
  * order is total, so a chip cannot move once ranking runs. Each category's default on/off state is
  * `DEFAULT_ALERT_CATEGORIES` (`lib/constants/attention.ts`) — see this file's header.
  */
@@ -101,6 +102,16 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     hideable: true,
     order: 3,
   },
+  lane_congested: {
+    tier: "important",
+    icon: TrafficCone,
+    faulted: false,
+    label: "Lane congested",
+    conditionLine: "A lane turned hauls away at capacity this cycle; goods behind it are late, not missing.",
+    destination: { kind: "lane" },
+    hideable: true,
+    order: 4,
+  },
   overcrowded: {
     tier: "important",
     icon: BedDouble,
@@ -109,7 +120,7 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     conditionLine: "Population has outgrown the housing built for it.",
     destination: { kind: "system", tab: "population" },
     hideable: true,
-    order: 4,
+    order: 5,
   },
   no_housing_headroom: {
     tier: "important",
@@ -119,7 +130,7 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     conditionLine: "Overcrowded, and there's no room left to build more housing.",
     destination: { kind: "system", tab: "population" },
     hideable: true,
-    order: 5,
+    order: 6,
   },
   build_blocked: {
     tier: "important",
@@ -129,7 +140,7 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     conditionLine: "The planner wanted to build production here and couldn't.",
     destination: { kind: "system", tab: "industry" },
     hideable: true,
-    order: 6,
+    order: 7,
   },
   industry_idle: {
     tier: "important",
@@ -139,7 +150,7 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     conditionLine: "Built capacity that isn't running.",
     destination: { kind: "system", tab: "industry" },
     hideable: true,
-    order: 7,
+    order: 8,
   },
 
   // ── info — opportunities ──────────────────────────────────────

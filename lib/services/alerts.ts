@@ -1,8 +1,8 @@
 /**
- * Alert bar read service — all thirteen categories: the six state-derived ones (Dying worlds, Deprived
+ * Alert bar read service — all fourteen categories: the six state-derived ones (Dying worlds, Deprived
  * worlds, Strike, Unrest rising, Overcrowded, No housing headroom), Survival stock falling, Demand
- * unservable, Build blocked, Industry idle, the faction-level Maintenance unfunded, and the two
- * automation-gated opportunity categories (Build opportunity, Colony opportunity).
+ * unservable, Lane congested, Build blocked, Industry idle, the faction-level Maintenance unfunded,
+ * and the two automation-gated opportunity categories (Build opportunity, Colony opportunity).
  *
  * The system-scoped categories are scoped to the player faction's DEVELOPED systems, which is also
  * their `denominator` — the flyout footer's "N of D developed systems". A world with no player seat
@@ -39,7 +39,7 @@ import { formatDuration } from "@/lib/utils/calendar";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { DEFAULT_ALERT_CATEGORIES } from "@/lib/constants/attention";
 import type { WorldSystem, World } from "@/lib/world/types";
-import { buildingsBySystem, marketsBySystem } from "@/lib/services/world-index";
+import { buildingsBySystem, marketsBySystem, systemById } from "@/lib/services/world-index";
 import { depositCountsOf } from "@/lib/engine/resources";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import {
@@ -59,9 +59,10 @@ import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { survivalCyclesToEmpty, SURVIVAL_STOCK_CYCLES_THRESHOLD } from "@/lib/engine/survival-stock";
 import { ALERT_CATEGORIES, BUILD_DROP_SEVERITY } from "@/lib/constants/alerts";
 import type { AlertTier, AlertCategoryId } from "@/lib/types/alerts";
+import { laneInvestor, type LaneEndpointOwner } from "@/lib/engine/lanes";
 import type {
-  AlertData, AlertCategory, AlertInstance, SystemScopedAlertCategory,
-  ControlledSystemsAlertCategory, FactionAlertCategory,
+  AlertData, AlertCategory, AlertInstance, LaneAlertInstance, SystemScopedAlertCategory,
+  ControlledSystemsAlertCategory, FactionAlertCategory, LaneScopedAlertCategory,
 } from "@/lib/types/api";
 
 // No seat means no stored preference to read; the bar has nothing to show either way.
@@ -71,7 +72,7 @@ const EMPTY_ALERT_DATA: AlertData = {
 };
 
 /** Band order, worst first, for the final categories array — critical chips lead, then important,
- *  then info. Ranks the thirteen alert CATEGORIES against each other by their authored `AlertTier`. */
+ *  then info. Ranks the fourteen alert CATEGORIES against each other by their authored `AlertTier`. */
 const TIER_RANK: Record<AlertTier, number> = { critical: 0, important: 1, info: 2 };
 
 /**
@@ -222,7 +223,7 @@ function industryIdleForSystem(system: WorldSystem): { idleShare: number } | nul
   return { idleShare: idleLevelsTotal / builtLevelsTotal };
 }
 
-function sortedInstances(instances: AlertInstance[]): AlertInstance[] {
+function sortedInstances<T extends { sortKey: number }>(instances: T[]): T[] {
   return [...instances].sort((a, b) => a.sortKey - b.sortKey);
 }
 
@@ -248,6 +249,15 @@ function toFactionCategory(id: AlertCategoryId, instances: AlertInstance[]): Fac
   return { id, unit: "faction", count: instances.length, instances: sortedInstances(instances) };
 }
 
+/** Lane congested — the one category counting LANES, out of the player faction's own OWNABLE lane
+ *  total (`denominator`, see `LaneScopedAlertCategory`'s own docstring for why that population, not
+ *  the developed-systems total, is what this is a share of). */
+function toLaneCategory(
+  id: AlertCategoryId, instances: LaneAlertInstance[], denominator: number,
+): LaneScopedAlertCategory {
+  return { id, unit: "lanes", count: instances.length, denominator, instances: sortedInstances(instances) };
+}
+
 export function getAlertData(): AlertData {
   const world: World = getWorld();
   const player = world.player;
@@ -267,6 +277,15 @@ export function getAlertData(): AlertData {
   // below — the per-system fold would otherwise rescan every construction project in the galaxy for
   // each overcrowded system.
   const queuedBuildLevels = queuedBuildLevelsBySystem(world.constructionProjects);
+
+  // Every system, not only the developed set above — Lane congested's lanes can carry a controlled
+  // (not yet developed) or even foreign endpoint, and `laneInvestor`/the endpoint-ownership check
+  // below need to resolve every lane's two endpoints regardless of their control tier.
+  const systems = systemById();
+  const laneEndpointOwner = (systemId: string): LaneEndpointOwner => {
+    const system = systems.get(systemId);
+    return system ? { factionId: system.factionId, control: system.control } : { factionId: null, control: "unclaimed" };
+  };
 
   const populationCollapse: AlertInstance[] = [];
   const strike: AlertInstance[] = [];
@@ -485,6 +504,38 @@ export function getAlertData(): AlertData {
     }
   }
 
+  // ── Lane congested: every persisted lane (`world.lanes`, not scoped to `developed` — a lane's
+  // endpoint can be controlled-but-undeveloped, or foreign) the player faction can ACT on: it is the
+  // lane's investor (`laneInvestor`, both endpoints controlled ≥ `controlled` by the same faction), OR
+  // either endpoint belongs to the player outright — a foreign-investor lane still touching one of the
+  // player's own systems is still the player's business, even though it cannot invest in it. A lane
+  // both of whose endpoints are foreign is never a candidate, whatever it turned away. One instance
+  // per lane (a lane is never split across two rows); `denominator` is this same actionable-lane
+  // count, not the galaxy's total lane count, for the same disjoint-population reason
+  // `ControlledSystemsAlertCategory` carries its own denominator (`LaneScopedAlertCategory`'s own
+  // docstring). Sorts by blocked volume descending (negated, biggest turned-away volume first). ──
+  const laneCongested: LaneAlertInstance[] = [];
+  let actionableLaneCount = 0;
+  for (const lane of world.lanes) {
+    const investor = laneInvestor(lane, laneEndpointOwner);
+    const aFactionId = laneEndpointOwner(lane.aId).factionId;
+    const bFactionId = laneEndpointOwner(lane.bId).factionId;
+    const canAct = investor === player.controlledFactionId
+      || aFactionId === player.controlledFactionId
+      || bFactionId === player.controlledFactionId;
+    if (!canAct) continue;
+    actionableLaneCount += 1;
+    if (lane.blockedVolume <= 0) continue;
+    const aName = systems.get(lane.aId)?.name ?? "Unknown System";
+    const bName = systems.get(lane.bId)?.name ?? "Unknown System";
+    laneCongested.push({
+      laneKey: lane.key,
+      name: `${aName} — ${bName}`,
+      measure: `${lane.blockedVolume.toFixed(1)} blocked`,
+      sortKey: -lane.blockedVolume,
+    });
+  }
+
   // ── Maintenance unfunded: one faction-level row (systemId: null), present only when the last
   // settlement could not pay the maintenance band it was ASKED to pay. `bandShortfall` owns that
   // test and its reasoning (both terms frozen at the settlement, never against the live slider; a
@@ -594,6 +645,7 @@ export function getAlertData(): AlertData {
     toSystemCategory("unrest_rising", unrestRising, denominator),
     toSystemCategory("survival_stock_falling", survivalStockFalling, denominator),
     toSystemCategory("demand_unservable", demandUnservable, denominator),
+    toLaneCategory("lane_congested", laneCongested, actionableLaneCount),
     toSystemCategory("overcrowded", overcrowded, denominator),
     toSystemCategory("no_housing_headroom", noHousingHeadroom, denominator),
     toSystemCategory("build_blocked", buildBlocked, denominator),

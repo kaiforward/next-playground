@@ -35,14 +35,20 @@ import type {
 } from "../types";
 import { laneKey } from "@/lib/engine/lanes";
 
-async function runTicks(world: World, count: number, cadence?: TickCadence) {
+async function runTicks(world: World, count: number, cadence?: TickCadence, freightSpeed?: number) {
   let w = world;
   for (let i = 0; i < count; i++) {
-    const result = await runWorldTick(w, cadence ? { cadence } : undefined);
+    const result = await runWorldTick(w, cadence ? { cadence, freightSpeed } : undefined);
     w = result.world;
   }
   return w;
 }
+
+/** The zero-latency freight arm: a haul dispatched on tick N is on the ledger with arrival N, so the
+ *  unconditional goods-arrivals stage drains it at the start of tick N+1. Tests that pin STAGE ORDERING
+ *  (dispatch this tick, credit next tick) run on it; transit length at the shipped `FREIGHT_SPEED` is
+ *  pinned by `tick-logistics-reach.test.ts` and the goods-arrivals tests, not here. */
+const NEXT_TICK_FREIGHT = 1e6;
 
 /** Runs `count` ticks and returns the LAST tick's full result (world + instrumentation) — unlike
  *  `runTicks` above, which only carries the world forward. Shared by every "poisoning the input
@@ -410,7 +416,7 @@ describe("runWorldTick", () => {
     // 120 ticks was enough while random spawning also minted "event-" ids; with only relations
     // creating events, this seed's first faction pair crosses into border conflict at tick 380 —
     // border friction is driven by the cross-faction connection COUNT (`getBorderLengthsBetween`,
-    // spec `docs/planned/logistics-lanes.md` §5), which this seed's generated lane graph puts on
+    // spec `docs/active/gameplay/universe.md`), which this seed's generated lane graph puts on
     // this timeline; run well past it.
     const after = await runTicks(world, 450);
 
@@ -607,7 +613,7 @@ describe("runWorldTick — per-stage wiring", () => {
         { fromId: b, toId: a, fuelCost: 1 },
       ],
       // The connection above needs a matching lane row — directed-logistics routes over the lane
-      // network, not the raw connection graph (docs/planned/logistics-lanes.md §2).
+      // network, not the raw connection graph (docs/active/gameplay/logistics-lanes.md §2).
       lanes: [
         ...base.lanes,
         {
@@ -651,7 +657,7 @@ describe("runWorldTick — per-stage wiring", () => {
         { fromId: b, toId: a, fuelCost: 1 },
       ],
       // The connection above needs a matching lane row — directed-logistics routes over the lane
-      // network, not the raw connection graph (docs/planned/logistics-lanes.md §2).
+      // network, not the raw connection graph (docs/active/gameplay/logistics-lanes.md §2).
       lanes: [
         ...base.lanes,
         {
@@ -828,7 +834,7 @@ function twoSystemWaterGradient(prepareRecipientWater: (market: WorldMarket) => 
       { fromId: b, toId: a, fuelCost: 1 },
     ],
     // The connection above needs a matching lane row — directed-logistics routes over the lane
-    // network, not the raw connection graph (docs/planned/logistics-lanes.md §2), and a connection
+    // network, not the raw connection graph (docs/active/gameplay/logistics-lanes.md §2), and a connection
     // with no lane row carries no capacity or key at all (`buildLaneNetwork`). Level is set high
     // (ample capacity) rather than the generated default of 0: this fixture's callers assert
     // dispatch/delivery TIMING, not congestion, and a level-0 lane's tiny per-tick capacity
@@ -851,9 +857,9 @@ function twoSystemWaterGradient(prepareRecipientWater: (market: WorldMarket) => 
 describe("runWorldTick — logistics/assessment ordering", () => {
   it("dispatches on the cycle start, then delivers and recovers on the following tick", async () => {
     // Directed-logistics dispatches onto the scheduled-freight ledger rather than crediting the
-    // destination same-tick (docs/planned/logistics-lanes.md §3) — the unconditional goods-arrivals
+    // destination same-tick (docs/active/gameplay/logistics-lanes.md §3) — the unconditional goods-arrivals
     // stage that drains it runs at the START of a tick, before that tick's own dispatch, so a haul
-    // dispatched on tick N is never visible before tick N+1.
+    // dispatched on tick N is never visible before tick N+1 (zero-latency arm: ordering, not transit).
     const { b, world } = twoSystemWaterGradient((market) => market);
     const bWater = (w: World) => w.markets.find((m) => m.systemId === b && m.goodId === "water")!;
     const bSystem = (w: World) => w.systems.find((s) => s.id === b)!;
@@ -861,7 +867,7 @@ describe("runWorldTick — logistics/assessment ordering", () => {
     // Coincident cycle start: economy (on CYCLE_LENGTH) AND logistics both resolve every tick.
     // Construction stays off so directed-build contributes no noise.
     const cadence = { cycle: 1, logistics: 1, construction: 999 };
-    const afterDispatch = (await runWorldTick(world, { cadence })).world;
+    const afterDispatch = (await runWorldTick(world, { cadence, freightSpeed: NEXT_TICK_FREIGHT })).world;
 
     // Tick 1: dispatched, not yet delivered — no flow event, no stock change, and the economy's
     // assessment reflects the still-empty market: satisfaction measured zero delivery, the squeeze
@@ -875,7 +881,7 @@ describe("runWorldTick — logistics/assessment ordering", () => {
     // Tick 2: goods-arrivals drains the ledger (flow event + credited stock) BEFORE this tick's own
     // economy stage runs, so the recovery is visible in the very same tick the import lands —
     // there is no long-since-superseded third "next cycle" tick needed to observe it.
-    const afterImport = (await runWorldTick(afterDispatch, { cadence })).world;
+    const afterImport = (await runWorldTick(afterDispatch, { cadence, freightSpeed: NEXT_TICK_FREIGHT })).world;
     expect(afterImport.flowEvents.some((f) => f.toSystemId === b && f.goodId === "water")).toBe(true);
     expect(bWater(afterImport).stock).toBeGreaterThan(0);
     const dispatchSatisfaction = bWater(afterDispatch).satisfaction ?? 1;
@@ -898,14 +904,14 @@ describe("runWorldTick — logistics/assessment ordering", () => {
 
     // Logistics resolves every tick; economy and construction never do.
     const cadence = { cycle: 999, logistics: 1, construction: 999 };
-    const afterDispatch = (await runWorldTick(world, { cadence })).world;
+    const afterDispatch = (await runWorldTick(world, { cadence, freightSpeed: NEXT_TICK_FREIGHT })).world;
     // Tick 1: dispatched only — the ledger row hasn't been drained yet.
     expect(afterDispatch.flowEvents.some((f) => f.toSystemId === b && f.goodId === "water")).toBe(false);
     expect(bWater(afterDispatch).stock).toBe(0);
 
     // Tick 2: goods-arrivals is unconditional (never gated by any cadence), so the import lands
     // even though economy's own cadence (999) never resolves.
-    const afterLogistics = (await runWorldTick(afterDispatch, { cadence })).world;
+    const afterLogistics = (await runWorldTick(afterDispatch, { cadence, freightSpeed: NEXT_TICK_FREIGHT })).world;
     expect(afterLogistics.flowEvents.some((f) => f.toSystemId === b && f.goodId === "water")).toBe(true);
     expect(bWater(afterLogistics).stock).toBeGreaterThan(0);
 
@@ -934,6 +940,74 @@ describe("runWorldTick — logistics/assessment ordering", () => {
     const afterSecondRun = (await runWorldTick(afterFirstRun, { cadence })).world;
     const idleLane = afterSecondRun.lanes.find((l) => l.key === key);
     expect(idleLane?.bookedLoad).toBe(0);
+  });
+
+  it("books a two-hop haul's far lane into a LATER window: bookedLoad is 0 there at dispatch, nonzero once that window arrives", async () => {
+    // a → mid → b, at the shipped FREIGHT_SPEED (no override). `mid` is a synthetic relay id that
+    // never appears in `systems` — `laneOpenFor` reads an absent id as unclaimed (open to every
+    // hauler), so it needs no market/ownership fixture of its own, only lane graph edges.
+    // Each hop's fuel is 1: the near hop (a-mid) starts at offset 0 (window 0), and the far hop
+    // (mid-b) starts at round(1 / 0.5) = 2 ticks out — window 2 at this run's windowTicks (1, since
+    // logistics resolves every tick here) — landing in window 0 only two runs later.
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const a = base.factions[0].homeworldId;
+    const b = base.factions[1].homeworldId;
+    const factionId = base.factions[0].id;
+    const mid = "synthetic-relay";
+    const nearKey = laneKey(a, mid);
+    const farKey = laneKey(mid, b);
+    const world: World = {
+      ...base,
+      systems: base.systems.map((system) =>
+        system.id === b ? { ...system, factionId, unrest: 0 } : system,
+      ),
+      buildings: base.buildings.filter(
+        (building) => !(building.systemId === b && building.buildingType === "water"),
+      ),
+      markets: base.markets.map((market) => {
+        if (market.systemId === a && market.goodId === "water") return { ...market, stock: 1_000_000 };
+        if (market.systemId === b && market.goodId === "water") return { ...market, stock: 0 };
+        return market;
+      }),
+      connections: [
+        ...base.connections,
+        { fromId: a, toId: mid, fuelCost: 1 },
+        { fromId: mid, toId: a, fuelCost: 1 },
+        { fromId: mid, toId: b, fuelCost: 1 },
+        { fromId: b, toId: mid, fuelCost: 1 },
+      ],
+      // Ample capacity (high level) — this test isolates window placement, not congestion (same
+      // reasoning as `twoSystemWaterGradient`'s own lane fixture above).
+      lanes: [
+        ...base.lanes,
+        {
+          key: nearKey,
+          aId: a < mid ? a : mid,
+          bId: a < mid ? mid : a,
+          level: 10_000, bookedLoad: 0, blockedVolume: 0, idleCycles: 0,
+        },
+        {
+          key: farKey,
+          aId: mid < b ? mid : b,
+          bId: mid < b ? b : mid,
+          level: 10_000, bookedLoad: 0, blockedVolume: 0, idleCycles: 0,
+        },
+      ],
+    };
+    const cadence = { cycle: 1, logistics: 1, construction: 999 };
+
+    const afterDispatch = (await runWorldTick(world, { cadence })).world;
+    expect(afterDispatch.lanes.find((l) => l.key === nearKey)?.bookedLoad ?? 0).toBeGreaterThan(0);
+    expect(afterDispatch.lanes.find((l) => l.key === farKey)?.bookedLoad ?? 0).toBe(0);
+
+    // One tick later the far crossing is window 1, still not this run's window 0.
+    const afterOne = (await runWorldTick(afterDispatch, { cadence })).world;
+    expect(afterOne.lanes.find((l) => l.key === farKey)?.bookedLoad ?? 0).toBe(0);
+
+    // Two ticks after dispatch, the far crossing's own window (originally window 2) IS this run's
+    // window 0 — the ledger seeding now places it where `bookedLoad` reads it.
+    const afterTwo = (await runWorldTick(afterOne, { cadence })).world;
+    expect(afterTwo.lanes.find((l) => l.key === farKey)?.bookedLoad ?? 0).toBeGreaterThan(0);
   });
 });
 
@@ -2125,12 +2199,12 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
     const seeded = await seedStockBaseline(world, NO_LOGISTICS_CADENCE);
 
     // Directed-logistics dispatches onto the scheduled-freight ledger rather than crediting the
-    // destination same-tick (docs/planned/logistics-lanes.md §3), so the import is only visible in
-    // the SECOND tick's window — the one goods-arrivals actually drains it on, still well before
+    // destination same-tick (docs/active/gameplay/logistics-lanes.md §3), so the import is only visible in
+    // the SECOND tick's window on the zero-latency arm — the one goods-arrivals drains it on, still well before
     // that tick's own economy write. Two ticks of each cadence keeps the tick count, and so the
     // boundary-reset window width, identical between the two branches.
     const localOnlyAfter = await runTicks(seeded, 2, NO_LOGISTICS_CADENCE);
-    const withHaulAfter = await runTicks(seeded, 2, STOCK_CADENCE);
+    const withHaulAfter = await runTicks(seeded, 2, STOCK_CADENCE, NEXT_TICK_FREIGHT);
 
     const localOnly = requireStockChange(localOnlyAfter, b, "water");
     const withHaul = requireStockChange(withHaulAfter, b, "water");
@@ -2664,7 +2738,7 @@ describe("runWorldTick — the unserved shortfall level end to end", () => {
         { fromId: b, toId: a, fuelCost: 1 },
       ],
       // The connection above needs a matching lane row — directed-logistics routes over the lane
-      // network, not the raw connection graph (docs/planned/logistics-lanes.md §2). Ample level so
+      // network, not the raw connection graph (docs/active/gameplay/logistics-lanes.md §2). Ample level so
       // the whole shortfall clears in this one tick, matching the test's "cleared" premise.
       lanes: [
         ...unservable.lanes,

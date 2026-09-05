@@ -110,7 +110,7 @@ export function minimalHarnessResults(): HarnessResults {
     laneMetrics: {
       utilisation: { p50: 0, p90: 0, max: 0, saturatedShare: 0 },
       topDecileShare: 0,
-      inTransitVolume: { mean: 0, max: 0 },
+      inTransitVolume: { mean: 0, max: 0, topLanes: [] },
       blockedVolume: { total: 0, topLanes: [] },
       queuedVsRealised: { laneCount: 0, meanQueuedLevels: 0, meanUtilisation: 0 },
       foreignTransitShare: 0,

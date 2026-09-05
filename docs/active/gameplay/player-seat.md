@@ -194,10 +194,13 @@ actually land, not an isolated forecast.
   only on the player's own systems; a rival's developed system renders the same tab read-only, ghosts
   visible, no verbs.
 - **Faction construction command card** is a command summary, not a per-project roll-up: the automation
-  switch pair (player faction only), the pool with its base + Construction Centre composition, and two
-  compact link lists — systems building (by project count) and colonies forming — every link landing on
-  the system's Industry tab. Detail lives where the thing is built. AI faction pages show the pool + link
-  lists with no switches.
+  switch trio (player faction only), the pool with its base + Construction Centre composition, and three
+  compact link lists — systems building (by project count), colonies forming, and lanes — every link
+  landing on the system's Industry tab or the lane's own card. Detail lives where the thing is built. AI
+  faction pages show the pool + link lists with no switches.
+- **Territory card** (`ClaimSection`, on the system Overview) is the `ColonySection` counterpart for an
+  unclaimed system bordering the player's own territory: names which owned system it borders and the
+  claim verb, disabled with the remaining cooldown while one is running.
 - **The system/faction detail panel persists across selection** — switching which system or faction is
   open no longer remounts the drawer (no re-animation) and, for the system panel, the currently open
   sub-tab carries over onto the newly selected system where that tab still applies (Astrography always;

@@ -21,6 +21,7 @@ import { AxeAccessibility } from "@/components/dev-tools/axe-accessibility";
 import { StarMap } from "@/components/map/star-map";
 import { SystemPanel } from "@/components/panels/system-panel";
 import { FactionPanel } from "@/components/panels/faction-panel";
+import { LanePanel } from "@/components/panels/lane-panel";
 import { StyleguidePage } from "@/components/styleguide/styleguide-page";
 import { StartScreen } from "@/components/start/start-screen";
 import { renderErrorFallback } from "@/components/ui/error-fallback";
@@ -230,6 +231,12 @@ function RouteBody() {
     case "faction":
       return (
         <GameShell panel={<FactionPanel factionId={route.factionId} tab={route.tab} />}>
+          <MapRoot />
+        </GameShell>
+      );
+    case "lane":
+      return (
+        <GameShell panel={<LanePanel laneKey={route.laneKey} />}>
           <MapRoot />
         </GameShell>
       );

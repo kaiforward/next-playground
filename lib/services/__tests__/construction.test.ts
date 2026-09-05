@@ -11,6 +11,7 @@ import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import { marketRowsBySystem } from "@/lib/world/tick";
 import { buildingsBySystem } from "@/lib/services/world-index";
 import { yieldsOf, effOf } from "@/lib/engine/resources";
+import { laneKey, laneEndpoints } from "@/lib/engine/lanes";
 import type { World, WorldSystem } from "@/lib/world/types";
 
 let world: World;
@@ -91,6 +92,27 @@ describe("getFactionConstruction", () => {
     // …and nothing of the rival's is in either list.
     expect(data.buildSystems.some((s) => s.systemId === rival.id)).toBe(false);
     expect(getFactionConstruction(rival.factionId).buildSystems.map((s) => s.systemId)).toEqual([rival.id]);
+  });
+
+  it("lists an open lane-upgrade project under its own key, never bucketed into buildSystems/colonies", () => {
+    const key = laneKey(dev.id, ctrlWithColony.id);
+    setWorld({
+      ...world,
+      constructionProjects: [
+        ...world.constructionProjects,
+        { kind: "lane_upgrade", id: "lu1", origin: "player", factionId, laneKey: key, levels: 1, workTotal: 20, workDone: 5 },
+      ],
+    });
+
+    const data = getFactionConstruction(factionId);
+    expect(data.lanes).toHaveLength(1);
+    expect(data.lanes[0].laneKey).toBe(key);
+    const [aId, bId] = laneEndpoints(key);
+    const nameOf = (id: string): string => world.systems.find((s) => s.id === id)!.name;
+    expect(data.lanes[0].label).toBe(`${nameOf(aId)} ↔ ${nameOf(bId)}`);
+    expect(data.buildSystems.some((s) => s.systemId === dev.id && s.count > 1)).toBe(false);
+    // The lane row still counts toward orderedCount (it is player-origin) — no separate counter drifts.
+    expect(data.orderedCount).toBeGreaterThanOrEqual(1);
   });
 
   it("orders colonies by progress first, breaking only a tie to the name — never by name alone", () => {

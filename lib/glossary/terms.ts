@@ -101,6 +101,11 @@ export type TermId =
   | "jumpLane"
   | "crossingLane"
   | "fuelCost"
+  | "laneLevel"
+  | "laneCapacity"
+  | "inTransit"
+  | "congested"
+  | "blockedVolume"
   | "gateway"
   // The player's layer
   | "automationSwitch"
@@ -1092,7 +1097,13 @@ export const TERMS: Readonly<Record<TermId, TermDefinition>> = {
     term: "Jump lane",
     body: [
       text(
-        "A connection between two systems. Goods, people and ships all move along lanes and nowhere else. Most lanes sit inside one ",
+        "A connection between two systems, carrying its own invested ",
+      ),
+      ref("laneLevel", "lane level"),
+      text(" and "),
+      ref("laneCapacity", "capacity"),
+      text(
+        ". Goods, people and ships all move along lanes and nowhere else. Most lanes sit inside one ",
       ),
       ref("region", "region"),
       text("; a lane crossing between two regions exists only where the galaxy's generated corridors put one."),
@@ -1104,11 +1115,13 @@ export const TERMS: Readonly<Record<TermId, TermDefinition>> = {
     body: [
       text("A "),
       ref("jumpLane", "jump lane"),
-      text(" the galaxy generator marks as a corridor's single long-haul link directly between two "),
-      ref("region", "regions"),
-      text("' anchor systems. Styled distinctly on the map (a glowing amber line, against the ordinary dashed line every other lane draws) and priced at a "),
+      text(" priced at a "),
       ref("fuelCost", "fuel-cost"),
-      text(" multiplier above every other lane."),
+      text(
+        " multiplier for crossing directly between two ",
+      ),
+      ref("region", "regions"),
+      text("' anchor systems, drawn on the map by its fuel-cost tier like any other lane."),
     ],
   },
   fuelCost: {
@@ -1124,6 +1137,65 @@ export const TERMS: Readonly<Record<TermId, TermDefinition>> = {
       text(" reach, and "),
       ref("crossingLane", "crossing lanes"),
       text(" cost the most."),
+    ],
+  },
+  laneLevel: {
+    id: "laneLevel",
+    term: "Lane level",
+    body: [
+      text("A "),
+      ref("jumpLane", "jump lane"),
+      text(
+        "'s invested tier, raised one step at a time by an upgrade project and eroded gradually if the lane sits unused for a long stretch. A lane with no investment sits at level 0.",
+      ),
+    ],
+  },
+  laneCapacity: {
+    id: "laneCapacity",
+    term: "Lane capacity",
+    body: [
+      text("How much volume the logistics infrastructure on a "),
+      ref("jumpLane", "jump lane"),
+      text(" can book per cycle. "),
+      ref("haul", "Hauls"),
+      text(" past it are turned away; nothing limits what is already travelling. Rises with "),
+      ref("laneLevel", "lane level"),
+      text("."),
+    ],
+  },
+  inTransit: {
+    id: "inTransit",
+    term: "In transit",
+    body: [
+      text(
+        "Goods already dispatched and travelling a lane, counted at neither system until they arrive.",
+      ),
+    ],
+  },
+  congested: {
+    id: "congested",
+    term: "Congested",
+    body: [
+      text("A "),
+      ref("jumpLane", "jump lane"),
+      text(" that turned volume away this run because it was already at "),
+      ref("laneCapacity", "capacity"),
+      text(" — see "),
+      ref("blockedVolume", "blocked volume"),
+      text(". Investing in the lane raises the ceiling; the state fades on its own once demand does."),
+    ],
+  },
+  blockedVolume: {
+    id: "blockedVolume",
+    term: "Blocked volume",
+    body: [
+      text("How much a "),
+      ref("jumpLane", "jump lane"),
+      text(" turned away this run because it was already at "),
+      ref("laneCapacity", "capacity"),
+      text(" — the measure "),
+      ref("congested", "congested"),
+      text(" names."),
     ],
   },
   gateway: {

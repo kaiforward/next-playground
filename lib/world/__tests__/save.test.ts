@@ -197,8 +197,8 @@ describe("serialiseWorld / deserialiseWorld", () => {
   // NOT throw: every market would silently price against nameplate capacity instead of realised
   // output. Nothing but this constant stands between the two, which is why the number is pinned
   // rather than left to drift.
-  it("is at save format version 18 (world.lanes added)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(18);
+  it("is at save format version 19 (alertCategories gains lane_congested)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(19);
   });
 
   it("rejects a v17 (pre-lanes) save with the clean version error", () => {

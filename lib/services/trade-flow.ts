@@ -1,14 +1,18 @@
 import { getWorld } from "@/lib/world/store";
-import { buildingsBySystem, flowEventsBySystem, marketsBySystem, systemNameById } from "@/lib/services/world-index";
+import { buildingsBySystem, flowEventsBySystem, laneFuelCost, marketsBySystem, systemNameById } from "@/lib/services/world-index";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { bucketVolumeHistory } from "@/lib/engine/system-trade-flow";
-import { buildFlowEdges, type RawFlowRow } from "@/lib/engine/trade-flow-edges";
+import { buildLaneFlowEdges, type LaneFlowRow } from "@/lib/engine/trade-flow-edges";
 import { isEconomicallyActive } from "@/lib/engine/control";
+import { LANES } from "@/lib/constants/lanes";
+import { GOODS } from "@/lib/constants/goods";
 import type {
   TradeFlowEdges,
   SystemLogisticsData,
+  TransitRow,
 } from "@/lib/types/api";
+import type { World } from "@/lib/world/types";
 import { yieldsOf, effOf } from "@/lib/engine/resources";
 import { capacityGoodRates } from "@/lib/engine/industry";
 import { useRatesByGood } from "@/lib/engine/honest-demand";
@@ -18,38 +22,62 @@ import {
 } from "@/lib/engine/logistics-readout";
 
 /**
- * Returns the directed-logistics map-overlay edge set, aggregated over the last
- * `FLOW_HISTORY_TICKS`.
+ * Returns the directed-logistics map-overlay edge set: one edge per (lane, direction) PHYSICALLY
+ * carrying freight right now, read straight from the scheduled-freight ledger (`WorldPendingArrival`)
+ * — a haul contributes to the one hop it's currently crossing, not a window-summed chord between its
+ * origin and destination, and not every lane its route will ever touch. A ledger with nothing in
+ * flight reads as zero edges.
  */
 export function getTradeFlowEdges(): TradeFlowEdges {
   const world = getWorld();
-  const minTick = world.meta.currentTick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
+  const hopFuelCostsOf = (row: LaneFlowRow): number[] => row.routeEdges.map(laneFuelCost);
+  const logisticsEdges = buildLaneFlowEdges(
+    world.pendingArrivals,
+    TRADE_SIMULATION.LOGISTICS_ROUTE_FLOOR,
+    world.meta.currentTick,
+    hopFuelCostsOf,
+    LANES.FREIGHT_SPEED,
+  );
+  return { logisticsEdges };
+}
 
-  // Group by (from, to, good) summing quantity over the window.
-  const grouped = new Map<string, RawFlowRow>();
-  for (const f of world.flowEvents) {
-    if (f.tick <= minTick || f.quantity <= 0) continue;
-    const key = `${f.fromSystemId}|${f.toSystemId}|${f.goodId}`;
-    const existing = grouped.get(key);
-    if (existing) {
-      existing.quantity += f.quantity;
-    } else {
-      grouped.set(key, {
-        fromSystemId: f.fromSystemId,
-        toSystemId: f.toSystemId,
-        goodId: f.goodId,
-        quantity: f.quantity,
+/**
+ * Freight in flight to/from `systemId` right now, split by direction — present only while
+ * `arrivalTick > currentTick` (docs/active/gameplay/logistics-lanes.md §6): a row disappears the tick the
+ * goods-arrivals stage credits it, never filtered by this function's caller. Read straight off the
+ * scheduled-freight ledger (`WorldPendingArrival`), not a window sum.
+ */
+function buildTransitRows(
+  world: World,
+  systemId: string,
+  currentTick: number,
+  resolveName: (id: string) => string,
+): { inbound: TransitRow[]; outbound: TransitRow[] } {
+  const inbound: TransitRow[] = [];
+  const outbound: TransitRow[] = [];
+  for (const arrival of world.pendingArrivals) {
+    if (arrival.arrivalTick <= currentTick) continue;
+    if (arrival.toSystemId === systemId) {
+      inbound.push({
+        goodId: arrival.goodId,
+        goodName: GOODS[arrival.goodId]?.name ?? arrival.goodId,
+        quantity: arrival.quantity,
+        otherSystemId: arrival.fromSystemId,
+        otherSystemName: resolveName(arrival.fromSystemId),
+        arrivalTick: arrival.arrivalTick,
+      });
+    } else if (arrival.fromSystemId === systemId) {
+      outbound.push({
+        goodId: arrival.goodId,
+        goodName: GOODS[arrival.goodId]?.name ?? arrival.goodId,
+        quantity: arrival.quantity,
+        otherSystemId: arrival.toSystemId,
+        otherSystemName: resolveName(arrival.toSystemId),
+        arrivalTick: arrival.arrivalTick,
       });
     }
   }
-
-  const allSystemIds = new Set(world.systems.map((s) => s.id));
-  const logisticsEdges = buildFlowEdges(
-    [...grouped.values()],
-    allSystemIds,
-    TRADE_SIMULATION.LOGISTICS_ROUTE_FLOOR,
-  );
-  return { logisticsEdges };
+  return { inbound, outbound };
 }
 
 /**
@@ -112,5 +140,6 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
     activeGoodCount: model.activeGoodCount,
     tradedGoodCount: model.tradedGoodCount,
     volumeHistory: bucketVolumeHistory(flows, systemId, currentTick),
+    transit: buildTransitRows(world, systemId, currentTick, resolveName),
   };
 }

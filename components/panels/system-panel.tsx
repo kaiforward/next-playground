@@ -18,6 +18,7 @@ import { MapPinIcon } from "@/components/ui/icons";
 import { SystemCadenceCountdown } from "@/components/system/system-cadence-countdown";
 import { PinToggle } from "@/components/system/pin-toggle";
 import { useNavigate, useRouteInfo } from "@/components/ui/link-provider";
+import { nextLocSeq } from "@/lib/hooks/use-system-focus";
 import { SystemOverview } from "@/components/panels/system-overview";
 import { SystemAstrography } from "@/components/panels/system-astrography";
 import { SystemPopulation } from "@/components/panels/system-population";
@@ -90,7 +91,7 @@ export function SystemPanel({ systemId, tab }: { systemId: string; tab: string }
   const { systemInfo, regionInfo } = useSystemInfo(systemId);
   const ownership = useOwnership();
   const navigate = useNavigate();
-  const { pathname, searchParams } = useRouteInfo();
+  const { pathname } = useRouteInfo();
   // Pre-boot guard: `worldVersion` is null until the worker's first state frame lands, and every
   // hook above reads its slice's empty default until then — indistinguishable at this point from a
   // genuinely absent id. Render nothing rather than flashing not-found for an entity that is really
@@ -135,11 +136,12 @@ export function SystemPanel({ systemId, tab }: { systemId: string; tab: string }
   // Recenter the live map behind the docked drawer without closing it: drive the map's `?focus=`
   // channel on the CURRENT panel path (keeps the drawer route mounted + applies the clear-offset)
   // rather than navigating to "/", which would unmount the drawer. `loc` is a monotonic click-nonce
-  // so re-locating to the same system (unchanged `?focus`) still re-fires the recentre. `replace`
-  // keeps repeated locates out of the history stack.
+  // so re-locating to the same system (unchanged `?focus`) still re-fires the recentre — drawn from
+  // the ONE counter every focus URL shares (`nextLocSeq`, `lib/hooks/use-system-focus.ts`), never
+  // from the URL's current value, which collides with whatever an alert row or the Tracker last
+  // wrote. `replace` keeps repeated locates out of the history stack.
   const showOnMap = () => {
-    const loc = Number(searchParams.get("loc") ?? 0) + 1;
-    navigate(`${pathname}?focus=${systemInfo.x},${systemInfo.y}&loc=${loc}`, { replace: true });
+    navigate(`${pathname}?focus=${systemInfo.x},${systemInfo.y}&loc=${nextLocSeq()}`, { replace: true });
   };
 
   const headerAction = (

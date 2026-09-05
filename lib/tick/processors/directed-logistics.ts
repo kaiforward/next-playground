@@ -102,7 +102,7 @@ function orderedFactionKeys(keys: Iterable<string | null>): Array<string | null>
  * A matched placement is DISPATCHED, not delivered: the donor is debited immediately (this run's
  * absolute stock write), but the destination is credited only when the unconditional per-tick
  * goods-arrivals stage drains the `WorldPendingArrival` row this run appends
- * (docs/planned/logistics-lanes.md §3). No flow row is written here — the flow log records goods
+ * (docs/active/gameplay/logistics-lanes.md §3). No flow row is written here — the flow log records goods
  * actually delivered, which goods-arrivals writes on credit.
  *
  * Catch-up scaling is split down the middle of the mechanic:
@@ -275,7 +275,7 @@ export async function runDirectedLogisticsProcessor(
   if (pendingArrivals.length > 0) await world.appendPendingArrivals(pendingArrivals);
 
   // Lane load write-back: every lane in the network, zero for one nothing booked this run — the
-  // reset a lane loaded on a prior run needs (docs/planned/logistics-lanes.md §1's decay reads
+  // reset a lane loaded on a prior run needs (docs/active/gameplay/logistics-lanes.md §1's decay reads
   // "attempted load", so a stale nonzero figure would misread as still-loaded).
   const laneLoadUpdates: LaneLoadUpdate[] = [...params.laneLoads().entries()].map(
     ([key, { bookedLoad, blockedVolume }]) => ({ key, bookedLoad, blockedVolume }),

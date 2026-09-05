@@ -925,7 +925,7 @@ export function formatTable(results: HarnessResults): string {
     }
   }
 
-  // Lane mechanics (spec §8) — whole-run utilisation, congestion, blocked volume, foreign-transit
+  // Lane mechanics (spec §7) — whole-run utilisation, congestion, blocked volume, foreign-transit
   // share, per-faction contention, survival-stock census, plus the physical-stock spell
   // distribution and calibration-only stage wall-clock.
   {
@@ -953,6 +953,10 @@ export function formatTable(results: HarnessResults): string {
     if (lm.blockedVolume.topLanes.length > 0) {
       const top = lm.blockedVolume.topLanes.map((l) => `${l.laneKey} ${fmtNum(l.blocked)}`).join(", ");
       lines.push(`  top blocked lanes: ${top}`);
+    }
+    if (lm.inTransitVolume.topLanes.length > 0) {
+      const top = lm.inTransitVolume.topLanes.map((l) => `${l.laneKey} ${fmtNum(l.inTransit)}`).join(", ");
+      lines.push(`  top in-transit lanes: ${top}`);
     }
     if (lm.contentionShortfallByFaction.length > 0) {
       lines.push("  contention shortfall by faction (Σ blocked × foreignShare):");

@@ -609,7 +609,7 @@ describe("mutation-acceptance premises — when one of these fails, re-sweep the
   it("the shared BFS radius is directed-build's own hop cap — else world/tick.ts's reach providers see a narrower map than they should", () => {
     // runWorldTick's hop map is bounded by max(build, expansion reach) now that directed-logistics
     // no longer contributes a hop-counted radius at all (it routes over the lane network instead,
-    // docs/planned/logistics-lanes.md §2 — no MAX_HOPS, no hop-BFS cutoff). While that max IS
+    // docs/active/gameplay/logistics-lanes.md §2 — no MAX_HOPS, no hop-BFS cutoff). While that max IS
     // directed-build's own cap, no hop beyond it exists and a narrower expansion reach is the one
     // ever binding. Raise expansion reach past it: re-sweep lib/world/tick.ts's reach/develop
     // providers.
@@ -619,7 +619,7 @@ describe("mutation-acceptance premises — when one of these fails, re-sweep the
   it("directed-logistics' GENERATION_PER_POP is scaled by the stated ×8.5 over its pre-lane value", () => {
     // The budget was re-scaled ×8.5 alongside route cost's move from hops×1.0 (old typical cost ~2)
     // to Σ fuel×congestion (new typical cost ~17) so aggregate spend keeps the same small fraction
-    // of budget it held before (docs/planned/logistics-lanes.md §2 — see the constant's own
+    // of budget it held before (docs/active/gameplay/logistics-lanes.md §2 — see the constant's own
     // docstring for the arithmetic). This is the anti-drift guard on that literal: a fixture-level
     // vacuity check (the funding-bound census staying at its pre-change level under new costs)
     // lives in the processor test, which needs a full matcher run to construct.

@@ -14,6 +14,7 @@ const NOT_FOUND: FactionConstructionData = {
   automation: null,
   buildSystems: [],
   colonies: [],
+  lanes: [],
   orderedCount: 0,
 };
 

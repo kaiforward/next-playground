@@ -1,6 +1,6 @@
 /**
  * GoodsArrivalsWorld — data interface for the goods-arrivals processor: the unconditional per-tick
- * stage that drains the scheduled-freight ledger (docs/planned/logistics-lanes.md §3), modelled on
+ * stage that drains the scheduled-freight ledger (docs/active/gameplay/logistics-lanes.md §3), modelled on
  * `ShipArrivalsWorld` (`lib/tick/world/ship-arrivals-world.ts`).
  *
  * Implemented by `InMemoryGoodsArrivalsWorld` (`lib/tick/adapters/memory/goods-arrivals.ts`), which
@@ -13,7 +13,7 @@ import type { WorldPendingArrival } from "@/lib/world/types";
  *  destination — the flow log's own record of goods actually delivered (a return leg writes none).
  *  Named for its writer: moved here from `directed-logistics-world.ts` once that module stopped
  *  writing flow rows itself (dispatch no longer credits a destination; see
- *  `docs/planned/logistics-lanes.md` §3). */
+ *  `docs/active/gameplay/logistics-lanes.md` §3). */
 export interface ArrivalFlowInsert {
   tick: number;
   fromSystemId: string;

@@ -1,6 +1,6 @@
 /**
  * Player claim verb — the free, rate-limited land grab a player uses to push a border forward
- * (docs/planned/logistics-lanes.md §1). Unlike `orderBuild`/`orderColony`, this is not funded
+ * (docs/active/gameplay/logistics-lanes.md §1). Unlike `orderBuild`/`orderColony`, this is not funded
  * through the construction pool: it costs nothing but time, gated by `PLAYER_CLAIM_COOLDOWN`.
  */
 import { setWorld } from "@/lib/world/store";

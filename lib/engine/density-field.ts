@@ -1,5 +1,5 @@
 /**
- * Galaxy-shape authoring engine (spec `docs/planned/logistics-lanes.md` §5): a coarse density grid
+ * Galaxy-shape authoring engine (spec `docs/active/gameplay/universe.md`): a coarse density grid
  * over the map, the cluster seeds that author it, and the corridor plan connecting those seeds.
  * Pure — no fs/process.env/Date.now/Math.random, and no import that reaches
  * `lib/constants/economy-scale` (the preview surface renders this on the main thread,

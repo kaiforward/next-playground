@@ -97,8 +97,7 @@ export function ConstructionRow({
             ) : row.kind === "build" ? (
               row.detail
             ) : (
-              // Placeholder wording until the lane surfaces get their copy pass.
-              "lane · raises freight capacity between the two systems"
+              "adds capacity to the lane, and raises its upkeep with it"
             )}
           </span>
           {row.origin === "player" && onCancel && (

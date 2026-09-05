@@ -8,9 +8,10 @@ import type {
   SunClass,
   SystemVisibility,
 } from "@/lib/types/game";
-import type { TradeFlowEdgeInfo } from "@/lib/types/api";
+import type { TradeFlowEdgeInfo, LaneStateRow } from "@/lib/types/api";
 import { settlementMarkFor, type SettlementMark } from "@/lib/types/map";
 import type { SystemOwnership } from "@/lib/hooks/use-ownership";
+import { laneKey as buildLaneKey } from "@/lib/engine/lanes";
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -34,14 +35,29 @@ export interface ConnectionData {
   fromId: string;
   toId: string;
   fuelCost: number;
+  /** Undirected lane identity (`lib/engine/lanes.ts`'s `laneKey`) — derived from the connection
+   *  itself, so it is present whether or not the `lanes` slice has landed yet. Feeds both the
+   *  lane-layer style and the lane-hit-test/selection route key. */
+  laneKey: string;
+  /** Invested upgrade level. The `?? 0` fallbacks on these three fields cover exactly ONE state: a
+   *  PRE-BOOT frame, where the `lanes` slice has not landed but the atlas's connections have. A
+   *  live world always carries one lane row per connection (generation mints them, the save version
+   *  refuses anything older), so a connection with no lane row at runtime is an invariant break, not
+   *  a supported "lane state missing" case. */
+  level: number;
+  /** `bookedLoad / capacity`, clamped to [0, 1] at the style helper — 0 pre-boot (see `level`). */
+  load: number;
+  /** This run's `blockedVolume > 0` — false pre-boot (see `level`). */
+  blocked: boolean;
 }
 
 export interface MapData {
   systems: SystemNodeData[];
   connections: ConnectionData[];
   /**
-   * Directed-logistics edges keyed by canonical edge id `${fromId}|${toId}`
-   * (sorted). Empty when the Logistics overlay is off — the Pixi layer renders nothing.
+   * Directed-logistics edges keyed by `${laneKey}|${fromSystemId}` — one entry per lane per
+   * direction, never per canonical system pair (a lane can carry traffic both ways at once). Empty
+   * when the Logistics overlay is off — the Pixi layer renders nothing.
    */
   logisticsFlowEdges: Map<string, TradeFlowEdgeInfo>;
   // Detail panel data
@@ -64,21 +80,23 @@ interface UseMapDataOptions {
   /** Live per-system ownership — feeds the settlement marks. */
   ownership: Map<string, SystemOwnership>;
   playerFactionId: string | null;
+  /** Every lane's live state (`useLanes()`) — joined onto `ConnectionData` by `laneKey`. */
+  laneStates: LaneStateRow[];
 }
 
 // ── Helpers ─────────────────────────────────────────────────────
 
-/** Key edges by canonical (sorted) endpoint pair for O(1) Pixi lookup. */
-function keyByCanonicalPair(
+/**
+ * Key edges by (lane, direction) for O(1) Pixi lookup — NOT by canonical endpoint pair: a lane can
+ * carry in-flight volume in both directions at once (two `TradeFlowEdgeInfo` rows sharing one
+ * `laneKey`), and keying by the sorted pair alone would silently collide one into the other.
+ */
+function keyByLaneAndDirection(
   edges: TradeFlowEdgeInfo[],
 ): Map<string, TradeFlowEdgeInfo> {
   const map = new Map<string, TradeFlowEdgeInfo>();
   for (const edge of edges) {
-    const [a, b] =
-      edge.fromSystemId < edge.toSystemId
-        ? [edge.fromSystemId, edge.toSystemId]
-        : [edge.toSystemId, edge.fromSystemId];
-    map.set(`${a}|${b}`, edge);
+    map.set(`${edge.laneKey}|${edge.fromSystemId}`, edge);
   }
   return map;
 }
@@ -94,6 +112,7 @@ export function useMapData({
   regionMap,
   ownership,
   playerFactionId,
+  laneStates,
 }: UseMapDataOptions): MapData {
   // ── System nodes (all systems) ────────────────────────────────
   const systems = useMemo((): SystemNodeData[] => {
@@ -116,6 +135,13 @@ export function useMapData({
     });
   }, [universe.systems, visibleSystemIds, ownership, playerFactionId]);
 
+  // ── Lane state, keyed for the connections join ─────────────────
+  const laneStateByKey = useMemo(() => {
+    const map = new Map<string, LaneStateRow>();
+    for (const lane of laneStates) map.set(lane.key, lane);
+    return map;
+  }, [laneStates]);
+
   // ── Connections (all, deduplicated) ───────────────────────────
   const connections = useMemo((): ConnectionData[] => {
     const seen = new Set<string>();
@@ -126,16 +152,22 @@ export function useMapData({
       if (seen.has(pairKey)) continue;
       seen.add(pairKey);
 
+      const key = buildLaneKey(conn.fromSystemId, conn.toSystemId);
+      const lane = laneStateByKey.get(key);
       result.push({
         id: conn.id,
         fromId: conn.fromSystemId,
         toId: conn.toSystemId,
         fuelCost: conn.fuelCost,
+        laneKey: key,
+        level: lane?.level ?? 0,
+        load: lane && lane.capacity > 0 ? lane.bookedLoad / lane.capacity : 0,
+        blocked: (lane?.blockedVolume ?? 0) > 0,
       });
     }
 
     return result;
-  }, [universe.connections]);
+  }, [universe.connections, laneStateByKey]);
 
   // ── Gateway target regions ────────────────────────────────────
   const selectedGatewayTargets = useMemo(() => {
@@ -185,10 +217,9 @@ export function useMapData({
     : "unknown";
 
   // ── Trade-flow edges keyed for O(1) lookup by the Pixi layers ─────
-  // `fromSystemId`/`toSystemId` reflect net flow direction (not sort order),
-  // so we key by canonical pair `${min}|${max}`. The renderer uses each value's
-  // from/to as-is for direction.
-  const logisticsFlowEdges = useMemo(() => keyByCanonicalPair(logisticsEdges), [logisticsEdges]);
+  // One entry per (lane, direction): the key carries the lane's canonical pair plus the hop's
+  // origin, so a lane carrying freight both ways yields two entries.
+  const logisticsFlowEdges = useMemo(() => keyByLaneAndDirection(logisticsEdges), [logisticsEdges]);
 
   return {
     systems,

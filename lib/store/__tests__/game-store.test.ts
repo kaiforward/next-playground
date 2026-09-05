@@ -5,11 +5,11 @@ import type { PacingFrame } from "@/lib/runtime/channel";
 
 function edge(totalVolume: number) {
   return {
+    laneKey: "sys-a|sys-b",
     fromSystemId: "sys-a",
     toSystemId: "sys-b",
     totalVolume,
     dominantGoodId: "ore",
-    perGood: { ore: totalVolume },
   };
 }
 

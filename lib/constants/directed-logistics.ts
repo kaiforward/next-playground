@@ -13,7 +13,7 @@ export const DIRECTED_LOGISTICS = {
    * economic constraint is a separate, open design question; until it is answered this stays high
    * enough that funding-bound outcomes are rare, deliberate signals rather than an ambient brake.
    *
-   * Re-denominated for lane-priced routing (docs/planned/logistics-lanes.md §2): route cost used to
+   * Re-denominated for lane-priced routing (docs/active/gameplay/logistics-lanes.md §2): route cost used to
    * be hops × HOP_WEIGHT (1.0), typically ~2 hops at the median haul; it is now Σ per-lane fuel cost
    * × congestion, typically ~2 lanes × ~8.5 fuel/lane ≈ 17 — roughly ×8.5 the old figure. Scaling
    * the base value by the same ×8.5 keeps aggregate spend at the same small fraction of budget it

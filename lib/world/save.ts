@@ -51,7 +51,14 @@ import { effColumns, yieldColumns } from "@/lib/engine/resources";
 // pre-existing state to lose (nothing dispatches onto the ledger yet), but an undefined array would
 // still crash the stage's first read rather than reading as "empty" — riding the same bump as lanes
 // rather than earning its own means one refusal covers both new arrays instead of two.
-export const SAVE_FORMAT_VERSION = 18;
+//
+// v19 grows `world.player.alertCategories`'s key set again, the same shape change v17 bumped for in
+// the other direction: a fourteenth category (`lane_congested`, Lane congested) joins the required
+// `AlertCategorySettings` record. A pre-bump save's stored record has no such key at all — not a
+// false `0`/`false`, an absent one — which would violate the alert bar's own "every key is always
+// present" contract (docs/active/gameplay/alert-bar.md → "World state and saves") rather than merely
+// reading as never-assessed the way the six additive OPTIONAL signals do.
+export const SAVE_FORMAT_VERSION = 19;
 
 /** Reserved save name the tick loop autosaves to; the start screen's "Continue" loads it. */
 export const AUTOSAVE_NAME = "autosave";

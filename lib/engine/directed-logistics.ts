@@ -39,7 +39,7 @@ export interface MarketClassification {
  * fully drawable there.
  *
  * `stock` is whatever the caller passes, not necessarily physical stock — the matcher's sink test
- * feeds `stock + scheduledInbound` here (`docs/planned/logistics-lanes.md` §2/§3: a system with
+ * feeds `stock + scheduledInbound` here (`docs/active/gameplay/logistics-lanes.md` §2/§3: a system with
  * enough goods in flight to clear the deficit line is not a deficit, the oscillation guard the
  * premise-3 falsification demands) while the donor test and every other reader
  * (`market-analysis.ts`, `computeCoverLevels`) keep passing physical stock alone, deliberately —
@@ -167,7 +167,7 @@ export interface GoodMarketState {
   /** Goods already dispatched toward this system for this good, not yet arrived — the outbound leg
    *  of the pending-arrivals ledger (`scheduledInbound`, `lib/engine/freight.ts`). Absent ⇒ 0. Read
    *  by the sink test only, as `stock + scheduledInbound` against `logisticsTarget`
-   *  (`docs/planned/logistics-lanes.md` §3, "Deficit classification counts inbound") — the donor
+   *  (`docs/active/gameplay/logistics-lanes.md` §3, "Deficit classification counts inbound") — the donor
    *  test and every other reader of this good's stock stay on physical stock alone, so a shipment
    *  in flight is counted exactly once and a world still lacking goods still reads as needing them
    *  for welfare purposes. */
@@ -185,7 +185,7 @@ export interface SystemLogisticsState {
  * One booked placement of a draw. A haul the booker splits across multiple paths under congestion
  * yields several `PlannedTransfer` rows for the same donor→sink draw, one per placement, whose
  * quantities sum to what was actually placed — never the whole draw when part of it was blocked
- * (`docs/planned/logistics-lanes.md` §2).
+ * (`docs/active/gameplay/logistics-lanes.md` §2).
  */
 export interface PlannedTransfer {
   goodId: string;
@@ -248,7 +248,7 @@ export interface TransferMatchResult {
   fundingBound: FundingBoundMatch[];
   unservable: UnservableDeficit[];
   /** Deficits whose fill ended early because a draw was unaffordable — the per-deficit skip
-   *  (`docs/planned/logistics-lanes.md` §2) that replaced the old run-terminating budget clamp.
+   *  (`docs/active/gameplay/logistics-lanes.md` §2) that replaced the old run-terminating budget clamp.
    *  Counts deficits, not draws: a deficit with several donors contributes at most 1, at the donor
    *  whose draw the budget stopped. Independent of `fundingBound`, which additionally requires the
    *  residual left standing to be material (`FUNDING_BOUND_RESIDUAL_FRACTION`). */
@@ -276,7 +276,7 @@ interface Surplus {
  * drawable surplus, in ascending `priceFrom`-order (frozen for that deficit's whole fan-out), until
  * its shortfall is met, donors are exhausted, or an unaffordable draw ends this deficit's fill —
  * the **per-deficit skip** that replaces the old run-terminating budget clamp
- * (`docs/planned/logistics-lanes.md` §2): the remaining budget carries forward to the next
+ * (`docs/active/gameplay/logistics-lanes.md` §2): the remaining budget carries forward to the next
  * deficit rather than zeroing for the whole run, so one dear draw no longer starves every deficit
  * behind it. A haul the booker splits across multiple paths under congestion yields one
  * `PlannedTransfer` per placement, its quantities summing to what the booker actually placed — the
@@ -298,7 +298,7 @@ export function matchFactionTransfers(
     const s = systems[systemOrder];
     for (const g of s.goods) {
       // Sink test: stock plus what is already in flight toward this good, so a delivery already
-      // dispatched does not order a second one (docs/planned/logistics-lanes.md §3). The donor
+      // dispatched does not order a second one (docs/active/gameplay/logistics-lanes.md §3). The donor
       // test below stays on physical stock alone.
       const c = classifyMarketState(g.stock + (g.scheduledInbound ?? 0), g.logisticsTarget);
       // Self-supply gate: a system that produces at least its own demand is never a deficit
@@ -377,7 +377,7 @@ export function matchFactionTransfers(
     // structurally-reachable donor's LIVE drawable, i.e. what it still holds after the deficits ahead
     // of it in the queue took their share. Reachability is `reachableFor`, NOT `priceFor`: a donor
     // whose only path is currently saturated (`priceFor` returns null, congestion) still counts here
-    // — congestion is not the same as "does not exist" (`docs/planned/logistics-lanes.md` §2, "a
+    // — congestion is not the same as "does not exist" (`docs/active/gameplay/logistics-lanes.md` §2, "a
     // blocked haul is not an unservable one"). A donor `reachableFor` returns false for (no open path
     // at all, traversability-closed) is not reachable for this test, exactly as an out-of-radius donor
     // was not before the hop cap was deleted. The structural test asks whether the shortfall is
@@ -451,7 +451,7 @@ export function matchFactionTransfers(
         // The booker may place less than `quantity` under congestion (RouteBooking.blocked) — the
         // unplaced part is neither drawn from the donor nor billed, and it is not this function's
         // concern: the booker records it as blocked volume on the lane, not as `unservable` or
-        // `fundingBound` (docs/planned/logistics-lanes.md §2, "capacity-blocked volume is its own
+        // `fundingBound` (docs/active/gameplay/logistics-lanes.md §2, "capacity-blocked volume is its own
         // signal").
         source.drawable -= placedTotal;
         remaining -= placedTotal;

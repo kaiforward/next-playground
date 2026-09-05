@@ -2,6 +2,7 @@
 
 import { Fragment, useMemo } from "react";
 import { useSystemLogistics } from "@/lib/hooks/use-system-logistics";
+import { useGameSlice } from "@/lib/store/use-game-store";
 import {
   DivergingBarTrack,
   BAR_FILL,
@@ -14,8 +15,10 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TermLabel } from "@/components/ui/term-label";
 import { TIER_COLOR, TIER_LABEL, pixiHexToCss } from "@/lib/constants/good-colors";
+import { useLinkComponent } from "@/components/ui/link-provider";
+import { formatDuration } from "@/lib/utils/calendar";
 import type { GoodTier } from "@/lib/types/game";
-import type { LogisticsGoodRow, TradeFlowPartner } from "@/lib/types/api";
+import type { LogisticsGoodRow, TradeFlowPartner, TransitRow } from "@/lib/types/api";
 
 const TIERS: GoodTier[] = [0, 1, 2];
 
@@ -205,6 +208,96 @@ function GoodRow({
   );
 }
 
+/** One direction's rows under a divider matching the tier-divider row style the main table already
+ *  uses — omitted entirely when empty, so an importer with nothing outbound shows only "Inbound". */
+function TransitSection({
+  label,
+  rows,
+  currentTick,
+}: {
+  label: string;
+  rows: TransitRow[];
+  currentTick: number;
+}) {
+  const LinkComponent = useLinkComponent();
+  if (rows.length === 0) return null;
+  return (
+    <>
+      <tr>
+        <td colSpan={4} className="px-1.5 pb-1 pt-3">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs uppercase tracking-widest text-text-secondary">
+              {label} &middot; {rows.length}
+            </span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+        </td>
+      </tr>
+      {rows.map((row, i) => (
+        <tr key={`${row.goodId}-${row.otherSystemId}-${i}`} className="hover:bg-surface-hover">
+          <td className="truncate px-1.5 py-1 text-xs text-text-secondary">{row.goodName}</td>
+          <td className="truncate px-1.5 py-1 text-xs">
+            <LinkComponent
+              href={`/system/${row.otherSystemId}`}
+              className="text-text-accent transition-colors hover:text-text-accent-hover"
+            >
+              {row.otherSystemName}
+            </LinkComponent>
+          </td>
+          <td className="px-1 py-1 text-right font-mono text-xs text-text-primary">
+            {row.quantity.toFixed(1)}
+          </td>
+          <td className="px-1 py-1 text-right font-mono text-xs text-text-secondary">
+            {formatDuration(Math.max(0, row.arrivalTick - currentTick))}
+          </td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
+/** What is on its way here and what has left, one row per scheduled-freight ledger entry — absent
+ *  entirely (not an empty card) when nothing is in flight either way. */
+function TransitCard({ inbound, outbound }: { inbound: TransitRow[]; outbound: TransitRow[] }) {
+  const currentTick = useGameSlice((state) => state.pacing?.currentTick ?? 0);
+  if (inbound.length === 0 && outbound.length === 0) return null;
+  return (
+    <Card variant="bordered" padding="xs">
+      <h4 className="mb-1 font-display text-xs font-semibold uppercase tracking-wider text-text-primary">
+        In transit
+      </h4>
+      <table className="w-full table-fixed border-collapse">
+        <colgroup>
+          <col className="w-[84px]" />
+          <col />
+          <col className="w-[60px]" />
+          <col className="w-[72px]" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th className="border-b border-border-strong px-1.5 py-1 text-left font-display text-xs font-normal uppercase tracking-wider text-text-tertiary">
+              Good
+            </th>
+            <th className="border-b border-border-strong px-1.5 py-1 text-left font-display text-xs font-normal uppercase tracking-wider text-text-tertiary">
+              From / to
+            </th>
+            <th className="border-b border-border-strong px-1 py-1 text-right font-display text-xs font-normal uppercase tracking-wider text-text-tertiary">
+              Units
+            </th>
+            <th className="border-b border-border-strong px-1 py-1 text-right font-display text-xs font-normal uppercase tracking-wider text-text-tertiary">
+              Arrives
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <TransitSection label="Inbound" rows={inbound} currentTick={currentTick} />
+          <TransitSection label="Outbound" rows={outbound} currentTick={currentTick} />
+        </tbody>
+      </table>
+    </Card>
+  );
+}
+
 export function LogisticsPanel({ systemId }: { systemId: string }) {
   const data = useSystemLogistics(systemId);
 
@@ -316,6 +409,8 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
           </tbody>
         </table>
       </Card>
+
+      <TransitCard inbound={data.transit.inbound} outbound={data.transit.outbound} />
 
       <Card variant="bordered" padding="xs">
         <h4 className="mb-1 font-display text-xs font-semibold uppercase tracking-wider text-text-primary">

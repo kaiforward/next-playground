@@ -95,6 +95,11 @@ const EXPECTED_TERM_IDS: readonly TermId[] = [
   "jumpLane",
   "crossingLane",
   "fuelCost",
+  "laneLevel",
+  "laneCapacity",
+  "inTransit",
+  "congested",
+  "blockedVolume",
   "gateway",
   // The player's layer
   "automationSwitch",

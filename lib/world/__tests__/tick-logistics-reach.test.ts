@@ -3,13 +3,14 @@ import { generateWorld } from "../gen";
 import { runWorldTick } from "../tick";
 import type { World } from "../types";
 import { laneKey } from "@/lib/engine/lanes";
+import { LANES } from "@/lib/constants/lanes";
 import type { TickCadence } from "@/lib/constants/tick-cadence";
 
 /**
  * How far a directed-logistics haul may reach.
  *
  * Directed-logistics dropped its own hop cap when it moved onto lane-network routing
- * (docs/planned/logistics-lanes.md §2): there is no longer a MAX_HOPS to test a haul against.
+ * (docs/active/gameplay/logistics-lanes.md §2): there is no longer a MAX_HOPS to test a haul against.
  * Reach is now whatever the lane graph and `laneOpenFor` traversability carry a placement over —
  * arbitrarily far, so long as every edge on some path carries an open lane row. `OLD_MAX_HOPS`
  * below is the retired directed-logistics hop cap's value, kept only as a distance comfortably
@@ -80,7 +81,7 @@ function corridorWorld(hops: number, dropLaneAt?: number): { world: World; donor
 }
 
 /** Runs `n` sequential ticks — dispatch and credit are two different stages a tick apart
- *  (docs/planned/logistics-lanes.md §3: a dispatched haul is drained by the NEXT tick's
+ *  (docs/active/gameplay/logistics-lanes.md §3: a dispatched haul is drained by the NEXT tick's
  *  unconditional goods-arrivals stage at the earliest, never the tick that dispatched it). */
 async function runTicks(world: World, n: number): Promise<World> {
   let w = world;
@@ -98,9 +99,9 @@ async function haulCredited(world: World, donorId: string, sinkId: string, ticks
 }
 
 // Generous upper bound on the dispatch-to-credit delay for the corridor lengths below (fuel cost 1
-// per hop, FREIGHT_SPEED default — see `lib/constants/lanes.ts`), plus one tick for the dispatch
-// itself to land on a cycle boundary.
-const AMPLE_TICKS = 10;
+// per hop at the shipped `FREIGHT_SPEED`), plus slack for the dispatch itself to land on a cycle
+// boundary and the arrivals stage to drain it the tick after.
+const AMPLE_TICKS = Math.ceil((OLD_MAX_HOPS + 3) / LANES.FREIGHT_SPEED) + 3;
 
 describe("runWorldTick — the reach of a directed-logistics haul", () => {
   it("serves a same-faction partner well beyond the retired hop-cap radius, over an unbroken lane path", async () => {

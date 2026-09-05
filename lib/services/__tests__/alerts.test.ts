@@ -10,10 +10,14 @@ import { strikeMultiplier } from "@/lib/engine/population";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import type {
-  World, WorldSystem, WorldBuildProject, WorldMarket,
+  World, WorldSystem, WorldBuildProject, WorldMarket, WorldLane,
   WorldFactionTreasury, WorldTreasurySettlement,
 } from "@/lib/world/types";
-import type { AlertCategory } from "@/lib/types/api";
+import { laneKey } from "@/lib/engine/lanes";
+import type {
+  AlertCategory, SystemScopedAlertCategory, ControlledSystemsAlertCategory, FactionAlertCategory,
+  LaneScopedAlertCategory,
+} from "@/lib/types/api";
 import { planFactionProposals, type BuildSystemState, type BuildGoodState } from "@/lib/engine/directed-build";
 import { emptyResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import type { DevelopmentRefs } from "@/lib/engine/development";
@@ -55,6 +59,15 @@ function candidatePatch(pid: string, extra: Partial<WorldSystem> = {}): Partial<
   return { factionId: pid, control: "controlled", ...extra };
 }
 
+// Overloaded so every existing call site — which never touches Lane congested — keeps narrowing to
+// the pre-existing `AlertInstance`-carrying variants without a single one of them having to assert
+// or check `unit` itself; only a `category("lane_congested")` call narrows to `LaneScopedAlertCategory`,
+// whose instances are `LaneAlertInstance[]`, not `AlertInstance[]` (see that type's own docstring for
+// why a lane can't share the system-scoped shape).
+function category(
+  id: Exclude<AlertCategory["id"], "lane_congested">,
+): SystemScopedAlertCategory | ControlledSystemsAlertCategory | FactionAlertCategory;
+function category(id: "lane_congested"): LaneScopedAlertCategory;
 function category(id: AlertCategory["id"]): AlertCategory {
   const found = getAlertData().categories.find((c) => c.id === id);
   if (!found) throw new Error(`category ${id} missing from getAlertData()`);
@@ -69,6 +82,21 @@ function withMarketRows(world: World, rows: WorldMarket[]): World {
     (m) => !rows.some((r) => r.systemId === m.systemId && r.goodId === m.goodId),
   );
   return { ...world, markets: [...keep, ...rows] };
+}
+
+/** A `WorldLane` fixture row — the alerts service reads `world.lanes` directly, with no dependency
+ *  on `world.connections` actually carrying the pair, so a synthetic lane between two arbitrary
+ *  system ids is a legitimate fixture regardless of whether the seeded galaxy really connects them.
+ *  Sorts its own endpoints, matching the real invariant (`aId < bId`, `lib/world/types.ts`). */
+function lane(x: string, y: string, overrides: Partial<WorldLane> = {}): WorldLane {
+  const [aId, bId] = x < y ? [x, y] : [y, x];
+  return { key: laneKey(aId, bId), aId, bId, level: 1, bookedLoad: 0, blockedVolume: 0, idleCycles: 0, ...overrides };
+}
+
+/** Replaces `world.lanes` with the given rows — every Lane congested fixture starts from an empty
+ *  lane set rather than the seeded galaxy's own (irrelevant, and would pollute `denominator`). */
+function withLanes(world: World, lanes: WorldLane[]): World {
+  return { ...world, lanes };
 }
 
 function marketRow(systemId: string, goodId: string, overrides: Partial<WorldMarket> = {}): WorldMarket {
@@ -178,7 +206,9 @@ describe("getAlertData", () => {
 
     const data = getAlertData();
     for (const c of data.categories) {
-      expect(c.instances.map((i) => i.systemId)).not.toContain(target);
+      // Lane congested's own instances carry a `laneKey`, not a `systemId` (see `LaneAlertInstance`'s
+      // own docstring) — harmless here as long as they don't spuriously equal `target`.
+      expect(c.instances.map((i) => ("systemId" in i ? i.systemId : null))).not.toContain(target);
     }
   });
 
@@ -830,6 +860,104 @@ describe("getAlertData", () => {
     });
   });
 
+  describe("Lane congested", () => {
+    it("counts a lane the player can act on, sorted by blocked volume descending", () => {
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [a, b, c, d] = spareSystemIds(world, 4);
+      const withTargets = withSystems(
+        world,
+        new Map([
+          [a, developedPatch(pid)],
+          [b, developedPatch(pid)],
+          [c, developedPatch(pid)],
+          [d, developedPatch(pid)],
+        ]),
+      );
+      setWorld(
+        withLanes(withTargets, [
+          lane(a, b, { blockedVolume: 3 }),
+          lane(c, d, { blockedVolume: 12 }),
+        ]),
+      );
+
+      const laneCongested = category("lane_congested");
+      expect(laneCongested.count).toBe(2);
+      // Biggest blocked volume first — the smaller lane (a|b, 3) sorts behind the bigger (c|d, 12).
+      expect(laneCongested.instances.map((i) => i.laneKey)).toEqual([laneKey(c, d), laneKey(a, b)]);
+      expect(laneCongested.instances[0].measure).toBe("12.0 blocked");
+    });
+
+    it("names an instance '<A name> — <B name>'", () => {
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [a, b] = spareSystemIds(world, 2);
+      const withTargets = withSystems(
+        world,
+        new Map([[a, developedPatch(pid)], [b, developedPatch(pid)]]),
+      );
+      const fixture = withLanes(withTargets, [lane(a, b, { blockedVolume: 5 })]);
+      setWorld(fixture);
+
+      const [aId, bId] = a < b ? [a, b] : [b, a];
+      const aName = fixture.systems.find((s) => s.id === aId)!.name;
+      const bName = fixture.systems.find((s) => s.id === bId)!.name;
+      expect(category("lane_congested").instances[0].name).toBe(`${aName} — ${bName}`);
+    });
+
+    it("excludes a lane with no blocked volume", () => {
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [a, b] = spareSystemIds(world, 2);
+      const withTargets = withSystems(
+        world,
+        new Map([[a, developedPatch(pid)], [b, developedPatch(pid)]]),
+      );
+      setWorld(withLanes(withTargets, [lane(a, b, { blockedVolume: 0 })]));
+
+      expect(category("lane_congested").instances).toHaveLength(0);
+    });
+
+    it("excludes a lane the player cannot act on — both endpoints foreign, not the investor", () => {
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [a, b] = spareSystemIds(world, 2);
+      const otherFaction = `not-${pid}`;
+      const withTargets = withSystems(
+        world,
+        new Map([
+          [a, { factionId: otherFaction, control: "developed" }],
+          [b, { factionId: otherFaction, control: "developed" }],
+        ]),
+      );
+      setWorld(withLanes(withTargets, [lane(a, b, { blockedVolume: 20 })]));
+
+      const laneCongested = category("lane_congested");
+      expect(laneCongested.instances).toHaveLength(0);
+      // A lane the player has no stake in is never a candidate for this category's own denominator
+      // either — see `LaneScopedAlertCategory`'s own docstring for why it counts only ACTIONABLE lanes.
+      expect(laneCongested.denominator).toBe(0);
+    });
+
+    it("includes a lane through one held endpoint alone, even with a foreign other endpoint and no investor", () => {
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [a, b] = spareSystemIds(world, 2);
+      const withTargets = withSystems(
+        world,
+        new Map([
+          [a, developedPatch(pid)],
+          [b, { factionId: `not-${pid}`, control: "developed" }],
+        ]),
+      );
+      setWorld(withLanes(withTargets, [lane(a, b, { blockedVolume: 5 })]));
+
+      const laneCongested = category("lane_congested");
+      expect(laneCongested.instances.map((i) => i.laneKey)).toEqual([laneKey(a, b)]);
+      expect(laneCongested.denominator).toBe(1);
+    });
+  });
+
   describe("Build blocked", () => {
     it("sorts by authored reason severity, not by droppedRoi — a worse reason with a lower ROI still sorts first", () => {
       const world = seatWorld();
@@ -1478,7 +1606,7 @@ describe("getAlertData", () => {
   });
 
   describe("Category order", () => {
-    it("emits all thirteen categories, in registry tier + order", () => {
+    it("emits all fourteen categories, in registry tier + order", () => {
       const world = seatWorld();
       setWorld(world);
 
@@ -1486,7 +1614,7 @@ describe("getAlertData", () => {
       expect(ids).toEqual([
         "population_collapse", "strike", "maintenance_unfunded",
         "deprived_worlds", "unrest_rising", "survival_stock_falling", "demand_unservable",
-        "overcrowded", "no_housing_headroom", "build_blocked", "industry_idle",
+        "lane_congested", "overcrowded", "no_housing_headroom", "build_blocked", "industry_idle",
         "build_opportunity", "colony_opportunity",
       ]);
     });
@@ -1494,7 +1622,7 @@ describe("getAlertData", () => {
     // The three event alert categories (crisis / disruption / windfall) are gone
     // with no replacement, so an active event — including the one type that still touches the
     // player's own economy — builds no event category at all, even while it is live.
-    it("still emits exactly the thirteen categories with an active border_conflict in play — no event category is built", () => {
+    it("still emits exactly the fourteen categories with an active border_conflict in play — no event category is built", () => {
       const world = seatWorld();
       const pid = world.player!.controlledFactionId;
       const otherFaction = world.factions.find((f) => f.id !== pid)!.id;
@@ -1511,7 +1639,7 @@ describe("getAlertData", () => {
       setWorld(withFixture);
 
       const ids = getAlertData().categories.map((c) => c.id);
-      expect(ids).toHaveLength(13);
+      expect(ids).toHaveLength(14);
       for (const removed of ["crisis", "disruption", "windfall"]) {
         expect(ids).not.toContain(removed);
       }

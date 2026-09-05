@@ -2,7 +2,7 @@ import { Container } from "pixi.js";
 import { TradeFlowEdge, type FlowEdgeStyle } from "../objects/trade-flow-edge";
 import { getGoodColor } from "@/lib/constants/good-colors";
 import { LOGISTICS_FLOW } from "../theme";
-import { arcPolyline, type Point } from "../flow-arc";
+import type { Point } from "../flow-arc";
 import type { Frustum } from "../frustum";
 import type { LODState } from "../lod";
 import type { SystemNodeData } from "@/lib/hooks/use-map-data";
@@ -20,10 +20,9 @@ export interface FlowLayerConfig {
   maxTotalParticles: number;
 }
 
-/** Directed logistics: arced path, larger glowing convoys, route line + arrow. */
+/** Directed logistics: particles travel the lane itself (straight segment), one edge per lane. */
 export const LOGISTICS_FLOW_CONFIG: FlowLayerConfig = {
-  buildPath: (from, to) =>
-    arcPolyline(from, to, LOGISTICS_FLOW.arcBowFraction, LOGISTICS_FLOW.arcMaxBow, LOGISTICS_FLOW.arcSegments),
+  buildPath: (from, to) => [from, to],
   style: {
     particleRadius: LOGISTICS_FLOW.particleRadius,
     particleAlpha: LOGISTICS_FLOW.particleAlpha,

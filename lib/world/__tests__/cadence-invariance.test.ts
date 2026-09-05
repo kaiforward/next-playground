@@ -88,7 +88,7 @@ const TREASURY_TOL = 6e-2; // cycle12 arm only — honest baseline 2.0e-3–3.4e
  * build12 diff drifts up to 3.96e-2 and the broken one to 9.72e-2 — the gap does not open with more
  * ticks, so widening the window buys nothing.
  *
- * The map-generation rework (spec `docs/planned/logistics-lanes.md` §5: authored density grid +
+ * The map-generation rework (spec `docs/active/gameplay/universe.md`: authored density grid +
  * neighbourhood-graph lane selection replacing uniform placement) moves this fixture's honest
  * reading again — colony founding timing rides the new lane/cluster topology, exactly the
  * "colony timing" AGENTS names as expected to move with that rework. Re-measured on this fixture:

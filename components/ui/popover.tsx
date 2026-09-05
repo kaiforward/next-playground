@@ -111,10 +111,14 @@ interface Measurable {
  *   it. Depth 0 is excluded: `closeFromDepth(-1)` is the close-everything sentinel, and leaving the
  *   outermost popover belongs to the leave grace below, which is the one that knows whether the
  *   pointer reached anything else in the stack. The pointer resting
- *   on neither a trigger nor a live `dwell` popover anywhere in the stack closes the whole stack
- *   after `LEAVE_GRACE_MS`. Both timers are module-level, like `openStack` itself: they govern the
- *   whole stack, not any one popover's own lifecycle, and a `dwell` popover never runs the plain
- *   `CLOSE_GRACE_MS` pointer-leave close at all — only the five existing non-`dwell` consumers do.
+ *   on neither a trigger nor a live `dwell` popover anywhere in the stack closes the dwell chain —
+ *   from the shallowest open `dwell` entry downward — leaving any click-opened ancestor it hangs
+ *   off (a non-`dwell` popover below the shallowest dwell entry, such as the alert flyout a
+ *   `TermLabel` opens inside) untouched, after `LEAVE_GRACE_MS`. A stack with no `dwell` entry open
+ *   at all schedules nothing to close. Both timers are module-level, like `openStack` itself: they
+ *   govern the whole stack, not any one popover's own lifecycle, and a `dwell` popover never runs
+ *   the plain `CLOSE_GRACE_MS` pointer-leave close at all — only the five existing non-`dwell`
+ *   consumers do.
  * - The depth cue: `PopoverContent` renders at `opacityForDepth` (`components/ui/depth-opacity.ts`)
  *   of its distance from the top of the stack, recomputed whenever the registry changes via
  *   a small module-level subscription (`subscribeRegistryChange`) — `openStack` itself is
@@ -287,8 +291,9 @@ export const DWELL_MS = 550;
  *  prop: the owner's call, "Let's just leave it fixed for now" — a player setting would expose a
  *  workaround for a mechanical artifact as though it were a tunable preference. */
 export const RETURN_GRACE_MS = 140;
-/** How long the whole open stack survives once the pointer rests on neither a trigger nor a live
- *  `dwell` popover anywhere in it. */
+/** How long the dwell chain (the shallowest open `dwell` entry and everything deeper) survives once
+ *  the pointer rests on neither a trigger nor a live `dwell` popover anywhere in it. A click-opened
+ *  ancestor below the shallowest `dwell` entry is not part of this chain and outlives it. */
 export const LEAVE_GRACE_MS = 90;
 /** Vertical clearance between the cursor and a cursor-anchored `dwell` popover's near edge — only
  *  for a pointer-driven open (`cursorAnchored`; a keyboard-opened one anchors to the trigger
@@ -315,6 +320,12 @@ interface StackEntry {
   closeSelf: () => void;
   markPinned: () => void;
   unmarkPinned: () => void;
+  /** Whether this entry's popover was created with `dwell` set — what `scheduleLeaveClose` reads to
+   *  find where the dwell chain starts. A non-`dwell` entry (a click-opened alert flyout, say) never
+   *  runs the plain `CLOSE_GRACE_MS` pointer-leave close, so it needs no leave-grace behaviour of its
+   *  own, but it can still sit BELOW a nested `dwell` entry in `openStack` and must survive that
+   *  entry's own leave grace rather than being swept up by the close-everything sentinel. */
+  dwell: boolean;
 }
 
 // Module-level "which popovers are open" stack, indexed by depth
@@ -549,15 +560,33 @@ function scheduleReturnClose(depth: number) {
 }
 
 /**
- * The pointer resting on neither a trigger nor a live `dwell` popover: schedules the whole stack's
- * close after `LEAVE_GRACE_MS`, cancelled by the pointer reaching any trigger or locked popover
- * belonging to a `dwell` popover anywhere in it.
+ * The shallowest currently-open `dwell` entry in `openStack`, or -1 if none is open. What
+ * `scheduleLeaveClose` closes from: a non-`dwell` popover below this index (a click-opened ancestor
+ * a `TermLabel` or other `dwell` popover happens to be nested inside) is not part of the dwell chain
+ * and must survive the leave grace, the same way depth 0 is excluded from the close-everything
+ * sentinel on the return-close path (`closeFromDepth`'s own comment) and for the identical reason —
+ * closing an ancestor the leave grace has no business touching.
+ */
+function firstDwellIndex(): number {
+  return openStack.findIndex((entry) => entry.dwell);
+}
+
+/**
+ * The pointer resting on neither a trigger nor a live `dwell` popover: schedules the dwell chain's
+ * close after `LEAVE_GRACE_MS` — from the shallowest open `dwell` entry downward, via
+ * `closeFromDepth(firstDwellIndex() - 1)` — cancelled by the pointer reaching any trigger or locked
+ * popover belonging to a `dwell` popover anywhere in it. Reads `openStack` live when the timer
+ * fires, like `closeFromDepth` itself, so a stack that has changed shape since this was scheduled is
+ * acted on as it now is. A stack holding no `dwell` entry at all (every consumer non-`dwell`, or the
+ * dwell chain having already closed by some other path before this fires) closes nothing.
  */
 function scheduleLeaveClose() {
   cancelLeaveClose();
   leaveCloseTimer = setTimeout(() => {
     leaveCloseTimer = null;
-    closeFromDepth(-1);
+    const index = firstDwellIndex();
+    if (index === -1) return;
+    closeFromDepth(index - 1);
   }, LEAVE_GRACE_MS);
 }
 
@@ -1022,7 +1051,7 @@ export function Popover({
       // hover-scheduled open that happens to land right after a keyboard one never inherits it.
       const openedViaKeyboard = keyboardOpenRef.current;
       keyboardOpenRef.current = false;
-      claimOpen({ closeSelf, markPinned, unmarkPinned: markUnpinned }, depth);
+      claimOpen({ closeSelf, markPinned, unmarkPinned: markUnpinned, dwell }, depth);
       // A fresh session records nothing yet, so a content unmount partway through one — a Tracker
       // row dropping out of the list under an open popover — can never replay the previous close's
       // decision and pull focus onto a trigger that is going away too.

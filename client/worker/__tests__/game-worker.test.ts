@@ -482,7 +482,7 @@ describe("createGameWorker — interest protocol", () => {
     // The world is still paused (newGame never called setSpeed) — no tick can run underneath this,
     // so any observed change is purely the interest reply, matching the spec's paused-panel case.
     const systemId = getWorld().systems[0].id;
-    scope.receive({ type: "interest", interest: { systems: [systemId], factions: [], goods: [] } });
+    scope.receive({ type: "interest", interest: { systems: [systemId], factions: [], goods: [], lanes: [] } });
 
     expect(getWorld().meta.currentTick).toBe(tickBefore);
     const state = scope.sent.find((m) => m.type === "state");
@@ -502,10 +502,10 @@ describe("createGameWorker — interest protocol", () => {
 
     const systemId = getWorld().systems[0].id;
     // Grow first, so there is a non-empty held set to shrink away from.
-    scope.receive({ type: "interest", interest: { systems: [systemId], factions: [], goods: [] } });
+    scope.receive({ type: "interest", interest: { systems: [systemId], factions: [], goods: [], lanes: [] } });
     scope.sent.length = 0;
 
-    scope.receive({ type: "interest", interest: { systems: [], factions: [], goods: [] } });
+    scope.receive({ type: "interest", interest: { systems: [], factions: [], goods: [], lanes: [] } });
 
     expect(scope.sent).toHaveLength(0);
   });
@@ -519,7 +519,7 @@ describe("createGameWorker — interest protocol", () => {
     await waitForCommandResult(scope, "ng1");
     const systemId = getWorld().systems[0].id;
 
-    scope.receive({ type: "interest", interest: { systems: [systemId], factions: [], goods: [] } });
+    scope.receive({ type: "interest", interest: { systems: [systemId], factions: [], goods: [], lanes: [] } });
     scope.sent.length = 0;
 
     // Same seed/systemCount as ng1: `generateWorld` mints ids from a counter that restarts at 0
@@ -572,7 +572,7 @@ describe("createGameWorker — interest protocol", () => {
 
     // interest reply (grow)
     const systemId = getWorld().systems[0].id;
-    scope.receive({ type: "interest", interest: { systems: [systemId], factions: [], goods: [] } });
+    scope.receive({ type: "interest", interest: { systems: [systemId], factions: [], goods: [], lanes: [] } });
 
     // tick broadcast(s) — real timers: "max" speed's tick budget reads Date.now(), same constraint
     // the throttle-coalescing test above documents.

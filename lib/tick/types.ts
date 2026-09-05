@@ -160,7 +160,7 @@ export interface TickProcessorResult {
    * both outbound and return legs, total quantity sent back as return-leg volume, how many return
    * rows that volume minted, and the part of credited outbound volume landing on a market already
    * at or above its warehousing target. Calibration instrumentation only — the oscillation gate
-   * (spec §8) reads `overshootVolume`; nothing else this pass reads any of these fields as a
+   * (spec §7) reads `overshootVolume`; nothing else this pass reads any of these fields as a
    * decision input. Surfaced via `runWorldTick().instrumentation`, never broadcast or persisted.
    */
   goodsArrivals?: {
@@ -289,7 +289,7 @@ export type TickInstrumentation = Pick<
    * opts in via `runWorldTick`'s `recordStageMs` (the harness does; the live game never sets it) —
    * absent otherwise, so two identical `runWorldTick` calls return identical `instrumentation`.
    * `tick` is the whole `runWorldTick` call; the two stage figures are read around the
-   * goods-arrivals stage and the directed-logistics block specifically — the two stages spec §8's
+   * goods-arrivals stage and the directed-logistics block specifically — the two stages spec §7's
    * wall-clock gate names.
    */
   stageMs?: { tick: number; directedLogistics: number; goodsArrivals: number };

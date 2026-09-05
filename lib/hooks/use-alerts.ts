@@ -12,7 +12,7 @@ export const GLOBAL_ALERTS_KEY = "player";
 export const alertCategoriesOverlay = createOverlayStore<AlertCategorySettings>();
 
 /**
- * The alert bar's whole read — all thirteen categories. Read from the store's `alerts` slice, which
+ * The alert bar's whole read — all fourteen categories. Read from the store's `alerts` slice, which
  * rides every state frame: every category refreshes together on the tick that changed it, with no
  * separate invalidation wiring.
  *

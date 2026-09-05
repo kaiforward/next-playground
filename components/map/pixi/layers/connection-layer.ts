@@ -10,8 +10,8 @@ export class ConnectionLayer {
   /** Position cache for frustum checks and fuel label LOD */
   private positions = new Map<string, { fromX: number; fromY: number; toX: number; toY: number }>();
 
-  /** Sync all connections using system positions */
-  sync(connections: ConnectionData[], systems: SystemNodeData[]) {
+  /** Sync all connections using system positions. `selectedLaneKey` drives the copper highlight. */
+  sync(connections: ConnectionData[], systems: SystemNodeData[], selectedLaneKey: string | null = null) {
     const posMap = new Map<string, { x: number; y: number }>();
     for (const s of systems) {
       posMap.set(s.id, { x: s.x, y: s.y });
@@ -31,7 +31,7 @@ export class ConnectionLayer {
         this.objects.set(data.id, obj);
         this.container.addChild(obj);
       }
-      obj.update(data, from.x, from.y, to.x, to.y);
+      obj.update(data, from.x, from.y, to.x, to.y, data.laneKey === selectedLaneKey);
       this.positions.set(data.id, { fromX: from.x, fromY: from.y, toX: to.x, toY: to.y });
     }
 

@@ -8,6 +8,7 @@ import type { World, WorldSystem } from "@/lib/world/types";
 import { capacityGoodRates, computeSystemLabourSnapshot, inputDemandForGood } from "@/lib/engine/industry";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import { yieldsOf, effOf } from "@/lib/engine/resources";
+import { laneKey } from "@/lib/engine/lanes";
 
 // Imports/exports are summed over the flow window then normalised to a
 // per-REFERENCE_INTERVAL rate (so they share units with production/consumption, which are
@@ -174,24 +175,153 @@ describe("getSystemLogistics", () => {
   });
 });
 
-describe("getTradeFlowEdges", () => {
-  it("aggregates window flows into the logistics edge set", () => {
-    // The per-good window total must clear LOGISTICS_ROUTE_FLOOR for the edge
-    // to render — inject a logistics flow comfortably above it.
+describe("getSystemLogistics — transit rows", () => {
+  it("carries an inbound row while its arrival tick is still ahead, and drops it once the tick passes", () => {
+    const withArrival: World = {
+      ...world,
+      meta: { ...world.meta, currentTick: 100 },
+      pendingArrivals: [
+        {
+          id: "arrival-transit-1", factionId: null, fromSystemId: partnerA.id, toSystemId: system.id,
+          goodId: "water", quantity: 18, dispatchTick: 94, arrivalTick: 105,
+          routeEdges: [laneKey(system.id, partnerA.id)], leg: "outbound",
+        },
+      ],
+    };
+    setWorld(withArrival);
+
+    const before = getSystemLogistics(system.id);
+    if (before.visibility !== "visible") throw new Error("expected visible");
+    expect(before.transit.inbound).toHaveLength(1);
+    expect(before.transit.inbound[0]).toEqual({
+      goodId: "water", goodName: "Water", quantity: 18,
+      otherSystemId: partnerA.id, otherSystemName: partnerA.name, arrivalTick: 105,
+    });
+    expect(before.transit.outbound).toHaveLength(0);
+
+    // Advance the world's own tick past the arrival — the SAME ledger row is still there; the row
+    // is read fresh from it each call, so only `currentTick` changes, never the fixture itself.
+    setWorld({ ...withArrival, meta: { ...withArrival.meta, currentTick: 105 } });
+    const after = getSystemLogistics(system.id);
+    if (after.visibility !== "visible") throw new Error("expected visible");
+    expect(after.transit.inbound).toHaveLength(0);
+  });
+
+  it("classifies a row leaving the focal system as outbound, naming the far end", () => {
     setWorld({
       ...world,
-      flowEvents: [
-        { tick: 9, fromSystemId: system.id, toSystemId: partnerA.id, goodId: "water", quantity: 40 },
+      meta: { ...world.meta, currentTick: 100 },
+      pendingArrivals: [
+        {
+          id: "arrival-transit-2", factionId: null, fromSystemId: system.id, toSystemId: partnerB.id,
+          goodId: "food", quantity: 8, dispatchTick: 96, arrivalTick: 110,
+          routeEdges: [laneKey(system.id, partnerB.id)], leg: "outbound",
+        },
+      ],
+    });
+    const data = getSystemLogistics(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    expect(data.transit.outbound).toHaveLength(1);
+    expect(data.transit.outbound[0].otherSystemId).toBe(partnerB.id);
+    expect(data.transit.outbound[0].otherSystemName).toBe(partnerB.name);
+    expect(data.transit.inbound).toHaveLength(0);
+  });
+
+  it("reads empty transit when the ledger has nothing touching this system", () => {
+    setWorld({ ...world, pendingArrivals: [] });
+    const data = getSystemLogistics(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    expect(data.transit).toEqual({ inbound: [], outbound: [] });
+  });
+});
+
+describe("getTradeFlowEdges", () => {
+  it("reads zero edges when the arrivals ledger is empty", () => {
+    setWorld({ ...world, pendingArrivals: [] });
+    expect(getTradeFlowEdges().logisticsEdges).toHaveLength(0);
+  });
+
+  it("reads an in-flight ledger row's lane hop as a directed edge, above LOGISTICS_ROUTE_FLOOR", () => {
+    const key = laneKey(system.id, partnerA.id);
+    setWorld({
+      ...world,
+      // The hop's own connection row: a lane key with no connection is a desync the read path
+      // throws on, never a free lane.
+      connections: [
+        ...world.connections,
+        { fromId: system.id, toId: partnerA.id, fuelCost: 10 },
+        { fromId: partnerA.id, toId: system.id, fuelCost: 10 },
+      ],
+      pendingArrivals: [
+        {
+          id: "arrival-1",
+          factionId: null,
+          fromSystemId: system.id,
+          toSystemId: partnerA.id,
+          goodId: "water",
+          quantity: 40,
+          dispatchTick: 9,
+          arrivalTick: 12,
+          routeEdges: [key],
+          leg: "outbound",
+        },
       ],
     });
     const edges = getTradeFlowEdges();
 
-    const logisticsEdge = edges.logisticsEdges.find(
-      (e) =>
-        (e.fromSystemId === system.id && e.toSystemId === partnerA.id) ||
-        (e.fromSystemId === partnerA.id && e.toSystemId === system.id),
-    );
+    const logisticsEdge = edges.logisticsEdges.find((e) => e.laneKey === key);
     expect(logisticsEdge).toBeDefined();
-    expect(logisticsEdge!.totalVolume).toBeGreaterThan(0);
+    expect(logisticsEdge!.fromSystemId).toBe(system.id);
+    expect(logisticsEdge!.toSystemId).toBe(partnerA.id);
+    expect(logisticsEdge!.totalVolume).toBe(40);
+    expect(logisticsEdge!.dominantGoodId).toBe("water");
+  });
+
+  it("emits an edge only on the lane a multi-hop route is CURRENTLY crossing — never both hops at once", () => {
+    const hop1 = laneKey(system.id, partnerA.id);
+    const hop2 = laneKey(partnerA.id, partnerB.id);
+    // Fuel 10 per hop at the live LANES.FREIGHT_SPEED (0.5): hop1 starts at dispatch (tick 9), hop2
+    // starts at 9 + round(10/0.5) = 29.
+    const baseWorld: World = {
+      ...world,
+      connections: [
+        ...world.connections,
+        { fromId: system.id, toId: partnerA.id, fuelCost: 10 },
+        { fromId: partnerA.id, toId: system.id, fuelCost: 10 },
+        { fromId: partnerA.id, toId: partnerB.id, fuelCost: 10 },
+        { fromId: partnerB.id, toId: partnerA.id, fuelCost: 10 },
+      ],
+      pendingArrivals: [
+        {
+          id: "arrival-2",
+          factionId: null,
+          fromSystemId: system.id,
+          toSystemId: partnerB.id,
+          goodId: "food",
+          quantity: 10,
+          dispatchTick: 9,
+          arrivalTick: 49,
+          routeEdges: [hop1, hop2],
+          leg: "outbound",
+        },
+      ],
+    };
+
+    setWorld({ ...baseWorld, meta: { ...baseWorld.meta, currentTick: 15 } });
+    let edges = getTradeFlowEdges();
+    expect(edges.logisticsEdges).toHaveLength(1);
+    expect(edges.logisticsEdges[0]).toMatchObject({ laneKey: hop1, fromSystemId: system.id, toSystemId: partnerA.id });
+
+    setWorld({ ...baseWorld, meta: { ...baseWorld.meta, currentTick: 35 } });
+    edges = getTradeFlowEdges();
+    expect(edges.logisticsEdges).toHaveLength(1);
+    expect(edges.logisticsEdges[0]).toMatchObject({ laneKey: hop2, fromSystemId: partnerA.id, toSystemId: partnerB.id });
+
+    // Never a chord directly from system to partnerB.
+    expect(
+      edges.logisticsEdges.some(
+        (e) => e.fromSystemId === system.id && e.toSystemId === partnerB.id,
+      ),
+    ).toBe(false);
   });
 });

@@ -1036,7 +1036,7 @@ export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds
  * never in survival shortfall — the economy only classifies developed systems), so it is out of scope
  * by construction. A lane project is dropped when EITHER endpoint just abandoned — the lane is no
  * longer investable at all once either side loses its faction, matching the spec's "dropped when
- * either endpoint stops satisfying investability" (docs/planned/logistics-lanes.md §4). Refunds
+ * either endpoint stops satisfying investability" (docs/active/gameplay/logistics-lanes.md §4). Refunds
  * nothing either way, matching an ordinary build's own abandonment (work spent is lost).
  */
 export function dropAbandonedBuildProjects(
@@ -1391,7 +1391,7 @@ export async function runWorldTick(
   // `world.markets` here, before any stage writes. Gating this stage, or moving it after another
   // market writer, would leave the previous world's rows exposed to mutation. Modelled on
   // ship-arrivals: an unconditional per-tick drain, never a phase of directed-logistics (which
-  // structurally cannot run off its own boundary tick — docs/planned/logistics-lanes.md §3).
+  // structurally cannot run off its own boundary tick — docs/active/gameplay/logistics-lanes.md §3).
   let goodsArrivals: TickInstrumentation["goodsArrivals"];
   {
     const stageStart = now();
@@ -1666,7 +1666,7 @@ export async function runWorldTick(
     // tunable) reach radii — directed-build's routeCost closure still applies its OWN cutoff
     // below, so a BFS computed at the larger radius is a safe superset for the smaller one.
     // Directed-logistics no longer shares this BFS: it moved onto lane-network routing
-    // (docs/planned/logistics-lanes.md §2), with its own reach substrate below. The BFS is
+    // (docs/active/gameplay/logistics-lanes.md §2), with its own reach substrate below. The BFS is
     // computed once per world, not per tick (see hopsCache).
     if (hopsCache?.key !== world.connections) {
       hopsCache = {
@@ -1699,13 +1699,24 @@ export async function runWorldTick(
         };
       }
       const laneNetwork = laneNetworkCache.network;
+      // Harness-only arm: overrides `LANES.FREIGHT_SPEED` for this run's `freightArrivalTick` calls
+      // AND the booker's own window math below — both must agree on the same speed a haul actually
+      // crosses lanes at.
+      const effectiveFreightSpeed = opts?.freightSpeed ?? LANES.FREIGHT_SPEED;
       // One physical ledger for every hauling faction this run, so two factions booking the same
-      // lane see each other's load and congestion (docs/planned/logistics-lanes.md §2). The booker
+      // lane see each other's load and congestion (docs/active/gameplay/logistics-lanes.md §2). The booker
       // carries no traversability of its own — every real caller goes through `forHauler` below,
-      // which supplies its own hauler-specific traversability.
+      // which supplies its own hauler-specific traversability. Seeded from the ledger BEFORE this
+      // run's own dispatches touch it (`pendingArrivals` here is still the pre-dispatch ledger — see
+      // `scheduledInbound` below, which reads the same variable) so every haul already in flight
+      // occupies the window its crossing lands in first (docs/active/gameplay/logistics-lanes.md §2).
       const laneBooker = createRouteBooker(laneNetwork, {
         congestionMax: LANES.CONGESTION_MAX,
         catchUp: catchUpFactor(cadence.logistics),
+        windowTicks: cadence.logistics,
+        now: tick,
+        freightSpeed: effectiveFreightSpeed,
+        scheduled: pendingArrivals,
       });
       const laneByKey = new Map(world.lanes.map((l) => [l.key, l]));
       const factionIdBySystemId = new Map(systems.map((s) => [s.id, s.factionId]));
@@ -1747,7 +1758,7 @@ export async function runWorldTick(
         fundingByFaction:
           fundedByFaction && new Map([...fundedByFaction].map(([id, f]) => [id, f.logistics])),
         drawBrakeCeiling: opts?.drawBrakeCeiling,
-        freightSpeed: opts?.freightSpeed,
+        freightSpeed: effectiveFreightSpeed,
         mintId: () => `haul-${nextId++}`,
       });
       markets = applyLogisticsMarketUpdates(
@@ -1765,7 +1776,7 @@ export async function runWorldTick(
         return u ? { ...l, bookedLoad: u.bookedLoad, blockedVolume: u.blockedVolume } : l;
       });
       // Decay reads this run's just-written attempted load (bookedLoad + blockedVolume), on the
-      // same catchUp scale the booker priced capacity at (docs/planned/logistics-lanes.md §1). Gated
+      // same catchUp scale the booker priced capacity at (docs/active/gameplay/logistics-lanes.md §1). Gated
       // on `logisticsResolves` alone, not the three-way outer gate: off a logistics boundary the
       // directed-logistics processor above early-returns (`dueKeys.length === 0`), so `laneUpdates`
       // is empty and `lanes` still carries forward last run's figures untouched — decaying against
@@ -2172,7 +2183,7 @@ export async function runWorldTick(
   }
 
   // flowEvents has one writer now: goods-arrivals appends whenever a due row credits — every
-  // tick, not just cycle starts (docs/planned/logistics-lanes.md §3: directed-logistics dispatches
+  // tick, not just cycle starts (docs/active/gameplay/logistics-lanes.md §3: directed-logistics dispatches
   // onto the pending-arrivals ledger and writes no flow row of its own; the flow log records goods
   // actually delivered, which happens on credit). The prune stays every-tick, outside any gate, so
   // the retention window is enforced on the tick it expires rather than up to a cycle late. It is

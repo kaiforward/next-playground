@@ -76,11 +76,15 @@ function sumTravelDuration(
  * Dijkstra over the fuel adjacency, with a linear-scan priority queue (fine for small graphs).
  * `maxFuel` drops any node the budget cannot reach; `stopAt` ends the search the moment that node
  * is the cheapest unvisited one, i.e. once its cost is final. `edgeCost`, when given, replaces the
- * raw `fuelCost` edge weight with `edgeCost(from, to, fuelCost)` — returning `null` closes the edge
- * for this search only (excluded from the graph, never priced). Exported so callers pricing a
- * congested or partially-closed graph (`lib/engine/lane-routing.ts`) reuse this search verbatim
- * instead of re-deriving Dijkstra; every existing caller here omits the hook and is unaffected.
- * Returns the settled cost map and the predecessor map `reconstructPath` walks.
+ * raw `fuelCost` edge weight with `edgeCost(from, to, fuelCost, cumRawAtFrom)` — returning `null`
+ * closes the edge for this search only (excluded from the graph, never priced). `cumRawAtFrom` is
+ * the settled sum of RAW (unweighted) `fuelCost` along the best-known path to `from` — tracked
+ * alongside `dist` (which accrues whatever `edgeCost` returns, congestion-priced or not) so a
+ * time-dependent caller (`lib/engine/lane-routing.ts`'s windowed booking search) can read "how far
+ * into the journey is this edge" without re-deriving it from `prev`. Every existing caller omits
+ * the 4th parameter and is unaffected. Exported so callers pricing a congested or partially-closed
+ * graph reuse this search verbatim instead of re-deriving Dijkstra.
+ * Returns the settled cost map, the raw-distance map, and the predecessor map `reconstructPath` walks.
  */
 export function dijkstra(
   originId: string,
@@ -88,14 +92,16 @@ export function dijkstra(
   options: {
     maxFuel?: number;
     stopAt?: string;
-    edgeCost?: (from: string, to: string, fuelCost: number) => number | null;
+    edgeCost?: (from: string, to: string, fuelCost: number, cumRawAtFrom: number) => number | null;
   } = {},
-): { dist: Map<string, number>; prev: Map<string, string> } {
+): { dist: Map<string, number>; prev: Map<string, string>; cumRaw: Map<string, number> } {
   const dist = new Map<string, number>();
+  const cumRaw = new Map<string, number>();
   const prev = new Map<string, string>();
   const visited = new Set<string>();
 
   dist.set(originId, 0);
+  cumRaw.set(originId, 0);
 
   while (true) {
     // Pick unvisited node with smallest distance
@@ -114,20 +120,24 @@ export function dijkstra(
     visited.add(current);
 
     const neighbors = adjacency.get(current) ?? [];
+    const cumRawAtCurrent = cumRaw.get(current) ?? 0;
     for (const { toSystemId, fuelCost } of neighbors) {
       if (visited.has(toSystemId)) continue;
-      const weight = options.edgeCost ? options.edgeCost(current, toSystemId, fuelCost) : fuelCost;
+      const weight = options.edgeCost
+        ? options.edgeCost(current, toSystemId, fuelCost, cumRawAtCurrent)
+        : fuelCost;
       if (weight === null) continue; // Edge closed for this search
       const newDist = currentDist + weight;
       if (options.maxFuel !== undefined && newDist > options.maxFuel) continue;
       if (newDist < (dist.get(toSystemId) ?? Infinity)) {
         dist.set(toSystemId, newDist);
         prev.set(toSystemId, current);
+        cumRaw.set(toSystemId, cumRawAtCurrent + fuelCost);
       }
     }
   }
 
-  return { dist, prev };
+  return { dist, prev, cumRaw };
 }
 
 /**

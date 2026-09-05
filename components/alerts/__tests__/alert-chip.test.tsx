@@ -4,6 +4,7 @@ import { AlertChip } from "@/components/alerts/alert-chip";
 import type {
   ControlledSystemsAlertCategory,
   FactionAlertCategory,
+  LaneScopedAlertCategory,
   SystemScopedAlertCategory,
 } from "@/lib/types/api";
 
@@ -47,6 +48,14 @@ const maintenanceUnfunded: FactionAlertCategory = {
   instances: [],
 };
 
+const laneCongested: LaneScopedAlertCategory = {
+  id: "lane_congested",
+  unit: "lanes",
+  count: 2,
+  denominator: 9,
+  instances: [],
+};
+
 const buildBlocked: SystemScopedAlertCategory = {
   id: "build_blocked",
   unit: "developed_systems",
@@ -74,6 +83,11 @@ describe("AlertChip — accessible name carries the category, count and its own 
     render(<AlertChip category={maintenanceUnfunded} />);
     expect(screen.getByRole("button", { name: "Maintenance unfunded, 1" })).toBeInTheDocument();
     expect(screen.queryByText(/developed systems/)).not.toBeInTheDocument();
+  });
+
+  it("a lanes category reads its own denominator: 'Lane congested, 2 of 9 lanes'", () => {
+    render(<AlertChip category={laneCongested} />);
+    expect(screen.getByRole("button", { name: "Lane congested, 2 of 9 lanes" })).toBeInTheDocument();
   });
 });
 
