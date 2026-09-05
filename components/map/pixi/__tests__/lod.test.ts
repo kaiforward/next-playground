@@ -69,6 +69,26 @@ describe("computeLOD — unchanged adjacent curves (regression guards)", () => {
   });
 });
 
+describe("computeLOD — lanesCellAlpha (Lanes mode zoomed-out cell tint)", () => {
+  it("is 1 below zoom 0.3 (lanes hidden, cell carries the read)", () => {
+    expect(computeLOD(0.1).lanesCellAlpha).toBe(1);
+    expect(computeLOD(0.3).lanesCellAlpha).toBe(1);
+  });
+
+  it("is 0 above zoom 0.4 (lanes fully in)", () => {
+    expect(computeLOD(0.4).lanesCellAlpha).toBe(0);
+    expect(computeLOD(1.0).lanesCellAlpha).toBe(0);
+  });
+
+  it("is monotone non-increasing across the zoom range", () => {
+    const samples = [0.1, 0.2, 0.28, 0.3, 0.32, 0.35, 0.38, 0.4, 0.6, 1.0];
+    const alphas = samples.map((z) => computeLOD(z).lanesCellAlpha);
+    for (let i = 1; i < alphas.length; i++) {
+      expect(alphas[i]).toBeLessThanOrEqual(alphas[i - 1] + 1e-9);
+    }
+  });
+});
+
 describe("system text fade band", () => {
   it("keeps all text hidden at and below 0.8", () => {
     const lod = computeLOD(0.8);

@@ -373,6 +373,7 @@ export function StarMap({
         developmentBySystem={visibleDevelopment}
         migrationBySystem={visibleMigration}
         provisionBySystem={visibleProvision}
+        laneBandBySystem={mapData.laneBandBySystem}
         selectedFactionId={selectedFactionId}
       />
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Application, Container } from "pixi.js";
 import type { FederatedPointerEvent } from "pixi.js";
 import { Camera } from "./camera";
@@ -23,6 +23,7 @@ import type { MapData } from "@/lib/hooks/use-map-data";
 import type { StarSystemInfo, AtlasData } from "@/lib/types/game";
 import type { ViewportBounds } from "@/lib/types/game";
 import { isValueMapMode, isFactionInteractiveMode, type MapMode } from "@/lib/types/map";
+import { laneBandIndex, type LaneBand } from "./objects/lane-band";
 
 /** Shared empty map for value-choropleth modes with no data yet (avoids a fresh Map per render). */
 const EMPTY = new Map<string, number>();
@@ -61,6 +62,10 @@ export interface PixiMapCanvasProps {
   migrationBySystem?: Map<string, number>;
   /** Per-system Provisioned (0..1, assessed systems only) for the provision choropleth, or empty when mode is off. */
   provisionBySystem?: Map<string, number>;
+  /** Worst `LaneBand` per system (`MapData.laneBandBySystem`) — feeds the Lanes mode's zoomed-out
+   *  cell tint. Always computed by `useMapData` (cheap), so this is passed unconditionally rather
+   *  than gated on `mapMode === "lanes"` the way the other value maps are gated on their own mode. */
+  laneBandBySystem?: Map<string, LaneBand>;
   /** The focused faction (from the /factions/[id] route), or null. Value modes re-normalise pop/development to it and de-emphasise the rest; stability and provision dim but do not rescale. */
   selectedFactionId?: string | null;
 }
@@ -104,6 +109,7 @@ export function PixiMapCanvas({
   developmentBySystem,
   migrationBySystem,
   provisionBySystem,
+  laneBandBySystem,
   selectedFactionId = null,
 }: PixiMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -125,6 +131,16 @@ export function PixiMapCanvas({
 
   const onViewportChangeRef = useRef(onViewportChange);
   onViewportChangeRef.current = onViewportChange;
+
+  // The choropleth deals only in numbers (`setValues`); the Lanes mode's cell tint carries a
+  // `LaneBand`, so it converts through `laneBandIndex` here rather than teaching the layer about
+  // a second value type.
+  const laneBandIndexBySystem = useMemo(() => {
+    if (!laneBandBySystem) return EMPTY;
+    const result = new Map<string, number>();
+    for (const [systemId, band] of laneBandBySystem) result.set(systemId, laneBandIndex(band));
+    return result;
+  }, [laneBandBySystem]);
 
   // Store previous viewport state to skip no-op callbacks (avoids 60 setTimeout/clearTimeout per sec)
   const lastViewportRef = useRef({ minX: 0, minY: 0, maxX: 0, maxY: 0, zoom: 0 });
@@ -309,6 +325,9 @@ export function PixiMapCanvas({
 
         // Connections follow system layer alpha
         connectionLayer.updateVisibility(frustum, lod, lod.systemLayerAlpha);
+        // Congested-lane pulse (Lanes mode only, and only while any lane is congested — see
+        // ConnectionLayer.update's own early-out).
+        connectionLayer.update(dtMs);
 
         territoryLayer.updateVisibility(lod);
         politicalTerritoryLayer.updateVisibility(lod);
@@ -419,6 +438,9 @@ export function PixiMapCanvas({
       p.politicalTerritoryLayer.getFactionUnions(),
       p.politicalTerritoryLayer.getFactionColors(),
     );
+    // Investor colours arrive here (the political layer just re-synced) — re-run setMode so the
+    // Lanes mode picks them up without waiting on a separate mode-toggle render.
+    p.connectionLayer.setMode(mapModeRef.current, p.politicalTerritoryLayer.getFactionColors());
     p.cellHighlightLayer.setCells(cells);
     p.cellHighlightLayer.setFactionUnions(p.politicalTerritoryLayer.getFactionUnions());
   }, [atlasData.systems, atlasData.factions, atlasData.meta.mapSize, pixiReady, regionInfos]);
@@ -436,6 +458,7 @@ export function PixiMapCanvas({
     p.politicalTerritoryLayer.setActive(mapMode === "political");
     p.valueChoroplethLayer.setActive(isValueMapMode(mapMode));
     p.systemLayer.setMode(mapMode);
+    p.connectionLayer.setMode(mapMode, p.politicalTerritoryLayer.getFactionColors());
   }, [mapMode, pixiReady]);
 
   // ── Highlight the selected cell (the open /system/[id] panel) ──
@@ -475,8 +498,15 @@ export function PixiMapCanvas({
       // Reference is passed for shape-consistency with the other setValues calls, but the ramp ignores
       // it entirely for this mode (see valueRampColorPixi) — provision's band edges are absolute.
       p.valueChoroplethLayer.setValues(provisionBySystem ?? EMPTY, provisionBySystem ?? EMPTY, "provision", populationBySystem ?? EMPTY);
+    } else if (mapMode === "lanes") {
+      // Reference is unused (the ramp steps on the band index, never referenceMax) but passed for
+      // shape-consistency, like provision above.
+      p.valueChoroplethLayer.setValues(laneBandIndexBySystem, laneBandIndexBySystem, "lanes");
     }
-  }, [mapMode, stabilityBySystem, populationBySystem, developmentBySystem, migrationBySystem, provisionBySystem, pixiReady]);
+  }, [
+    mapMode, stabilityBySystem, populationBySystem, developmentBySystem, migrationBySystem,
+    provisionBySystem, laneBandIndexBySystem, pixiReady,
+  ]);
 
   // ── Value-mode faction focus (scope) — driven by the /factions/[id] route ──
   // Separate from the per-tick value effect: scope changes only on mode/faction change, not every tick.

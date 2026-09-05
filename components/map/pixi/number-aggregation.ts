@@ -23,7 +23,8 @@ export interface AggregationTiers {
 // delivered share) that must be population-weighted so a populous core dominates and a tiny outpost
 // can't drag it down. Population and development are EXTENSIVE magnitudes → summed, so spreading into
 // new systems adds instead of diluting. (Migration and provision are colour-only for now — this only
-// matters once numbers are shown for either.)
+// matters once numbers are shown for either. Lanes is colour-only too and never reaches this function
+// at all — `SHOWS_NUMBERS.lanes = false` skips aggregation entirely, see `rebuildTiers`.)
 const isWeightedMode = (m: ValueMode) => m === "stability" || m === "migration" || m === "provision";
 
 export function aggregateValue(vals: number[], weights: number[], mode: ValueMode): number {

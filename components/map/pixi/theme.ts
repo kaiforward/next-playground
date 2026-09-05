@@ -69,6 +69,21 @@ export const LANE_HOVERED = {
   glowAlpha: 0.25,
 } as const;
 
+/**
+ * The Lanes map mode's lane style (`objects/lane-style.ts`'s `laneModeStyle`) — a stronger width
+ * ramp than the base layer's, since this mode carries meaning rather than mere position. `fineAlpha`
+ * dims an uncongested/unbusy lane so a busy or congested one (`busyAlpha`, full) stands out;
+ * `pulsePeriodMs`/`pulseColor` drive the congested overlay stroke (`ConnectionLayer.update`).
+ */
+export const LANE_MODE = {
+  baseWidth: 1.2,
+  perLevel: 0.6,
+  fineAlpha: 0.45,
+  busyAlpha: 0.95,
+  pulsePeriodMs: 1400,
+  pulseColor: 0xef4444, // red-500, matches LANE_BAND_COLOR.congested
+} as const;
+
 /** Screen-pixel tolerance for the lane click hit-test (`lane-hit-test.ts`'s `findLaneAt`) — divided
  *  by the camera zoom at click time so a thin lane is as easy to hit zoomed out as zoomed in. Generous
  *  enough to forgive a slightly-off click without swallowing nearby cell clicks. */
