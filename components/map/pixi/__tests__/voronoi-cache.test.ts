@@ -23,9 +23,13 @@ describe("buildSystemCells", () => {
     expect(cells.findSystemAt(-10, 500)).toBeNull();
     expect(cells.findSystemAt(500, MAP + 10)).toBeNull();
   });
-  it("findSystemAt resolves points on the inclusive extent edge (0 / mapSize)", () => {
-    expect(cells.findSystemAt(0, 0)).not.toBeNull();
-    expect(cells.findSystemAt(MAP, MAP)).not.toBeNull();
+  it("findSystemAt resolves points on the inclusive extent edge (0 / mapSize) near a system", () => {
+    // The guard is `x > mapSize` (exclusive on the high side), so the edge itself is a valid
+    // coordinate — this checks the boundary check passes it through, not that every edge point is
+    // real territory (with ghost sites now bounding the rim, a box corner far from every system,
+    // like (0,0) here, legitimately reads as empty; see the ghost-site describe block below).
+    expect(cells.findSystemAt(0, 250)).toBe("a");
+    expect(cells.findSystemAt(MAP, 750)).toBe("d");
   });
   it("centroidBySystemId records each system's own position", () => {
     expect(cells.centroidBySystemId.get("a")).toEqual({ x: 250, y: 250 });
@@ -82,20 +86,54 @@ describe("buildSystemCells — groupBy is the only territory-union path", () => 
   });
 });
 
-describe("buildSystemCells — trimmed edge regions are not clickable", () => {
+describe("buildSystemCells — ghost sites never surface as a system", () => {
   const MAP = 1000;
-  // Three systems clustered near the top-left; the rest of the 1000×1000 box is empty space the
-  // Voronoi would assign to a nearest site but the disc-clip visually trims away.
+  // Three systems clustered near the top-left; the rest of the 1000×1000 box is rim/gap territory
+  // that only a ghost site's cell can cover.
   const systems = [sys("a", 100, 100), sys("b", 160, 100), sys("c", 130, 150)];
   const cells = buildSystemCells(systems, MAP);
+  const realIds = new Set(systems.map((s) => s.id));
 
-  it("returns the system for a click within its (clipped) cell", () => {
+  it("returns the system for a click next to its own site", () => {
     expect(cells.findSystemAt(105, 105)).toBe("a");
     expect(cells.findSystemAt(158, 102)).toBe("b");
   });
-  it("returns null for a click in a trimmed-away region (inside the extent, far from every site)", () => {
-    // Inside the map box but far beyond the disc-clip radius of the clustered sites — visually empty,
-    // so it must read as an empty click even though delaunay.find still names a nearest site.
-    expect(cells.findSystemAt(700, 700)).toBeNull();
+
+  it("returns null for a click in the far empty box, and every non-null hit is a real system", () => {
+    // A grid of points spanning the whole box: any point whose nearest analytic neighbour is a
+    // ghost site must read as an empty click, and every id that does come back must be one of the
+    // three real systems — a ghost index leaking out would return an id like `undefined` or throw.
+    let sawNull = false;
+    for (let x = 0; x <= MAP; x += 50) {
+      for (let y = 0; y <= MAP; y += 50) {
+        const id = cells.findSystemAt(x, y);
+        if (id === null) {
+          sawNull = true;
+        } else {
+          expect(realIds.has(id)).toBe(true);
+        }
+      }
+    }
+    expect(sawNull).toBe(true);
+    // The far corner in particular — deep rim territory nowhere near the cluster.
+    expect(cells.findSystemAt(900, 900)).toBeNull();
+  });
+});
+
+describe("buildSystemCells — interior gap between two clusters", () => {
+  const MAP = 1000;
+  const systems: AtlasSystem[] = [];
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      systems.push(sys(`n${r}-${c}`, 100 + c * 20, 100 + r * 20));
+      systems.push(sys(`f${r}-${c}`, 700 + c * 20, 700 + r * 20));
+    }
+  }
+  const cells = buildSystemCells(systems, MAP);
+
+  it("returns null deep in the gap between the two clusters, and the right id beside a site", () => {
+    expect(cells.findSystemAt(400, 400)).toBeNull();
+    expect(cells.findSystemAt(102, 102)).toBe("n0-0");
+    expect(cells.findSystemAt(702, 702)).toBe("f0-0");
   });
 });
