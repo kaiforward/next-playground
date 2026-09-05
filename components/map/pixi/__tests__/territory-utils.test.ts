@@ -1,10 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Delaunay } from "d3-delaunay";
-import {
-  clipVoronoiCells,
-  unionCellsByGroup,
-  clipPolygonToDisc,
-} from "@/components/map/pixi/territory-utils";
+import { clipVoronoiCells, unionCellsByGroup, ghostSites } from "@/components/map/pixi/territory-utils";
 
 describe("Voronoi cell clipping and grouping", () => {
   it("produces one polygon group per system when keyed by id", () => {
@@ -49,82 +45,6 @@ describe("Voronoi cell clipping and grouping", () => {
     expect(left[0][0].length).toBeGreaterThanOrEqual(4);
   });
 
-  it("clips a cell to a disc, bounding every output vertex within the radius", () => {
-    // A 1000×1000 square fully contains a small disc at its centre, so the
-    // intersection is the disc n-gon itself — every vertex sits within `radius`.
-    const square: [number, number][] = [
-      [0, 0], [1000, 0], [1000, 1000], [0, 1000], [0, 0],
-    ];
-    const result = clipPolygonToDisc(square, 500, 500, 100, 24);
-
-    const verts = result.flat(2);
-    expect(verts.length).toBeGreaterThanOrEqual(3);
-    for (const [x, y] of verts) {
-      expect(Math.hypot(x - 500, y - 500)).toBeLessThanOrEqual(100 + 1e-6);
-    }
-  });
-
-  it("clips edge cells so territory never reaches the far box corners", () => {
-    // A 5×5 grid clustered in the centre of a large box. Without edge clipping,
-    // the perimeter cells extend all the way to the box corners (0,0)/(10000,
-    // 10000) as boxy spurs. With clipping they round off near the systems.
-    const pts: [number, number][] = [];
-    const ids: string[] = [];
-    for (let r = 0; r < 5; r++) {
-      for (let c = 0; c < 5; c++) {
-        pts.push([4000 + c * 500, 4000 + r * 500]);
-        ids.push(`s${r}-${c}`);
-      }
-    }
-    const voronoi = Delaunay.from(pts).voronoi([0, 0, 10000, 10000]);
-    const cells = unionCellsByGroup(clipVoronoiCells(pts.length, voronoi), (i) => ids[i]);
-
-    // Median nearest-neighbour spacing is 500; with any sane radius factor the
-    // clipped territory stays well inside this window and clear of the corners.
-    const verts = [...cells.values()].flat(3);
-    expect(verts.length).toBeGreaterThan(0);
-    for (const [x, y] of verts) {
-      expect(x).toBeGreaterThan(1500);
-      expect(x).toBeLessThan(8500);
-      expect(y).toBeGreaterThan(1500);
-      expect(y).toBeLessThan(8500);
-    }
-  });
-
-  it("clips an interior cell that balloons into a sparse void without ever touching the box", () => {
-    // A tight 3×3 grid (spacing 50) plus one lone site ~8000 units to the right, all well inside a large
-    // box. The grid's middle-right cell balloons rightward toward the lone site's bisector (~3900 units
-    // away) with NO vertex anywhere near the box — the exact case the old box-vertex-only clip test
-    // missed. The extent-based clip (any vertex past ~DISC_RADIUS_FACTOR × the median nearest-neighbour
-    // spacing) trims it, so every output vertex stays within the clip radius of its own site. Un-clipped,
-    // that vertex would sit ~3900 units out; here it must land within ~1.25× the 50-unit spacing.
-    const SPACING = 50;
-    const CLIP_RADIUS = 1.25 * SPACING; // DISC_RADIUS_FACTOR × median nearest-neighbour spacing
-    const pts: [number, number][] = [];
-    const ids: string[] = [];
-    for (let r = 0; r < 3; r++) {
-      for (let c = 0; c < 3; c++) {
-        pts.push([50000 + c * SPACING, 50000 + r * SPACING]);
-        ids.push(`g${r}-${c}`);
-      }
-    }
-    pts.push([58000, 50000]); // lone site — the void the grid balloons into (median NN stays 50)
-    ids.push("lone");
-
-    const voronoi = Delaunay.from(pts).voronoi([0, 0, 100000, 100000]);
-    const cells = unionCellsByGroup(clipVoronoiCells(pts.length, voronoi), (i) => ids[i]);
-
-    for (let i = 0; i < pts.length; i++) {
-      const [sx, sy] = pts[i];
-      const poly = cells.get(ids[i]);
-      expect(poly).toBeDefined();
-      if (!poly) continue;
-      for (const [x, y] of poly.flat(2)) {
-        expect(Math.hypot(x - sx, y - sy)).toBeLessThan(CLIP_RADIUS * 1.5);
-      }
-    }
-  });
-
   it("skips systems whose group key is null", () => {
     const pts: [number, number][] = [
       [100, 100], [900, 100], [500, 900],
@@ -157,5 +77,79 @@ describe("Voronoi cell clipping and grouping", () => {
 
     expect(JSON.stringify(clipped)).toBe(before);
     expect(JSON.stringify([...secondPass])).toBe(JSON.stringify([...firstPass]));
+  });
+});
+
+describe("ghostSites", () => {
+  const MAP = 1000;
+
+  it("closes the rim with straight edges — no real cell reaches the bounding box", () => {
+    // A tight cluster near the centre, leaving most of a large box empty. Without rim ghosts, the
+    // hull cells (d3's own box clip) shoot out to the box corners.
+    const pts: [number, number][] = [];
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 4; c++) {
+        pts.push([450 + c * 30, 450 + r * 30]);
+      }
+    }
+    const ghosts = ghostSites(pts, MAP);
+    expect(ghosts.length).toBeGreaterThan(0);
+
+    const augmented = pts.concat(ghosts);
+    const voronoi = Delaunay.from(augmented).voronoi([0, 0, MAP, MAP]);
+    const cells = clipVoronoiCells(pts.length, voronoi);
+
+    for (const cell of cells) {
+      for (const [x, y] of cell.flat(2)) {
+        expect(x).toBeGreaterThan(0);
+        expect(x).toBeLessThan(MAP);
+        expect(y).toBeGreaterThan(0);
+        expect(y).toBeLessThan(MAP);
+      }
+    }
+  });
+
+  it("bounds every real cell's vertices near its own site, at the rim and across an interior gap", () => {
+    // Two dense clusters (spacing 20) separated by a wide empty gap — the interior-gap case the
+    // rim ghosts alone can't help with.
+    const pts: [number, number][] = [];
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        pts.push([100 + c * 20, 100 + r * 20]);
+        pts.push([700 + c * 20, 700 + r * 20]);
+      }
+    }
+    const SPACING = 20;
+    const BOUND = SPACING * 2;
+
+    const ghosts = ghostSites(pts, MAP);
+    const augmented = pts.concat(ghosts);
+    const voronoi = Delaunay.from(augmented).voronoi([0, 0, MAP, MAP]);
+    const cells = clipVoronoiCells(pts.length, voronoi);
+
+    for (let i = 0; i < pts.length; i++) {
+      const [sx, sy] = pts[i];
+      for (const [x, y] of cells[i].flat(2)) {
+        expect(Math.hypot(x - sx, y - sy)).toBeLessThanOrEqual(BOUND);
+      }
+    }
+  });
+
+  it("terminates within the iteration cap on a pathological input", () => {
+    // A dense 5x5 grid (spacing 30) plus one distant outlier: the triangles bridging the grid to
+    // the outlier are so much larger than the grid's own spacing that closing them spawns new
+    // ghosts whose own triangles are still over threshold, cascading for many iterations before
+    // naturally settling near iteration 19 with thousands of ghosts (measured directly against this
+    // module's own circumcircle/threshold logic, without the cap). The cap must cut this off far
+    // earlier — a low three-figure ghost count, not four.
+    const MAP2 = 2000;
+    const pts: [number, number][] = [];
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) pts.push([100 + c * 30, 100 + r * 30]);
+    }
+    pts.push([1500, 115]);
+
+    const ghosts = ghostSites(pts, MAP2);
+    expect(ghosts.length).toBeLessThan(2500);
   });
 });
