@@ -296,6 +296,7 @@ export function PixiMapCanvas({
         cellHighlightLayer.setHovered(null);
         cellHighlightLayer.setHoveredFaction(null);
         connectionLayer.setHovered(null);
+        systemLayer.setHovered(null);
         pixi.stage.cursor = "default";
       };
       canvas.addEventListener("pointerleave", clearHover);
@@ -371,6 +372,7 @@ export function PixiMapCanvas({
             cellHighlightLayer.setHoveredFaction(factionId);
             cellHighlightLayer.setHovered(null);
             connectionLayer.setHovered(null);
+            systemLayer.setHovered(null);
             pixi.stage.cursor = factionId ? "pointer" : "default";
           } else {
             // Lane wins over the cell, mirroring the click's own precedence (`resolveMapClick`) —
@@ -385,12 +387,14 @@ export function PixiMapCanvas({
             if (laneAt) {
               connectionLayer.setHovered(laneAt);
               cellHighlightLayer.setHovered(null);
+              systemLayer.setHovered(null);
               pixi.stage.cursor = "pointer";
             } else {
               connectionLayer.setHovered(null);
               const cells = pixiRef.current?.cells;
               const hoveredId = cells ? cells.findSystemAt(wh.x, wh.y) : null;
               cellHighlightLayer.setHovered(hoveredId);
+              systemLayer.setHovered(hoveredId);
               pixi.stage.cursor = hoveredId ? "pointer" : "default";
             }
             cellHighlightLayer.setHoveredFaction(null);
@@ -483,6 +487,7 @@ export function PixiMapCanvas({
     p.connectionLayer.setMode(mapModeRef.current, p.politicalTerritoryLayer.getFactionColors());
     p.cellHighlightLayer.setCells(cells);
     p.cellHighlightLayer.setFactionUnions(p.politicalTerritoryLayer.getFactionUnions());
+    p.systemLayer.setCells(cells);
   }, [atlasData.systems, atlasData.factions, atlasData.meta.mapSize, pixiReady, regionInfos]);
 
   // ── Toggle which territory layer is visible ────────────────────────

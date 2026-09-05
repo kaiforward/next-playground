@@ -166,14 +166,21 @@ export const SETTLEMENT_MARK = {
 
 // ── System label backing (name) ──────────────────────────────────
 // The name label sits below the glyph over the bloom and the territory fill,
-// so it gets a semi-transparent black backing for legibility.
+// so it gets a semi-transparent black backing for legibility. The name draws
+// screen-constant (SIZES.systemLabelSize px whatever the zoom, like the value
+// choropleth's system-tier numbers) rather than world-scaled — see
+// SystemObject.setLOD and value-choropleth-layer.ts's own lift formula.
 export const LABEL = {
   bgFill:   0x000000,
   bgAlpha:  0.55,
   bgPadX:   4,
   bgPadY:   1.5,
   bgCorner: 3,
-  offsetY:  38, // px below glyph centre, clear of the bloom/core
+  offsetY:  6, // screen-px gap below the glyph core; lift = GLYPH.coreRadius × dotScale + offsetY / zoom
+  /** Relative zoom-change gate for the cell-fit label pass (`SystemLayer.updateVisibility`) —
+   *  mirrors `updateOutlineZoom`'s 3% band (`value-choropleth-layer.ts`) so a continuous zoom
+   *  gesture re-evaluates fit a bounded number of times rather than every frame. */
+  fitZoomStep: 0.03,
 } as const;
 
 // ── Animation ────────────────────────────────────────────────────

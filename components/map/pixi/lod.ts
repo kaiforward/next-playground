@@ -8,6 +8,9 @@
 export type ViewTier = "universe" | "crossfade" | "system";
 
 export interface LODState {
+  /** The camera zoom this LOD was computed at — carried through so per-object screen-constant
+   *  scaling (e.g. the system name label, `SystemObject.setLOD`) doesn't need a second input. */
+  zoom: number;
   /** Current rendering tier */
   viewTier: ViewTier;
   /** Point cloud alpha: 1 in universe, fades out 0.3→0.4, 0 in system */
@@ -102,6 +105,7 @@ export function computeLOD(zoom: number): LODState {
   const systemObjectsActive = zoom >= 0.28;
 
   return {
+    zoom,
     viewTier,
     pointCloudAlpha,
     systemLayerAlpha,
