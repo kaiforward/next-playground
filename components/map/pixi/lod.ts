@@ -8,6 +8,9 @@
 export type ViewTier = "universe" | "crossfade" | "system";
 
 export interface LODState {
+  /** The camera zoom this LOD was computed at — carried through so per-object screen-constant
+   *  scaling (e.g. the system name label, `SystemObject.setLOD`) doesn't need a second input. */
+  zoom: number;
   /** Current rendering tier */
   viewTier: ViewTier;
   /** Point cloud alpha: 1 in universe, fades out 0.3→0.4, 0 in system */
@@ -36,6 +39,10 @@ export interface LODState {
   regionLabelAlpha: number;
   /** Alpha for the directed-logistics overlay layer (smooth fade in 0.4 → 0.6). */
   logisticsAlpha: number;
+  /** Alpha for the Lanes mode's zoomed-out cell tint: 1 in universe (lanes hidden, the cell carries
+   *  the read), fading to 0 as `systemLayerAlpha` brings the lanes themselves fully in — the two
+   *  never overlap, so a system never shows both its cell tint and its own lane colours at once. */
+  lanesCellAlpha: number;
 }
 
 /** Cubic smoothstep: 0 at edge0, 1 at edge1 with smooth acceleration/deceleration */
@@ -98,6 +105,7 @@ export function computeLOD(zoom: number): LODState {
   const systemObjectsActive = zoom >= 0.28;
 
   return {
+    zoom,
     viewTier,
     pointCloudAlpha,
     systemLayerAlpha,
@@ -131,5 +139,9 @@ export function computeLOD(zoom: number): LODState {
 
     // Trade-flow overlay fades in across the crossfade-to-system band
     logisticsAlpha: smoothStep(0.4, 0.6, zoom),
+
+    // Exactly the complement of systemLayerAlpha: the cell tint carries the Lanes read until the
+    // lanes themselves are fully in.
+    lanesCellAlpha: 1 - systemLayerAlpha,
   };
 }

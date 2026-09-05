@@ -12,7 +12,6 @@ import { useDevOverlay } from "@/components/dev-tools/dev-overlay-context";
 import { PixiMapCanvas } from "@/components/map/pixi/pixi-map-canvas";
 import { useMapData } from "@/lib/hooks/use-map-data";
 import { useMapMode } from "@/lib/hooks/use-map-mode";
-import { useMapOverlays } from "@/lib/hooks/use-map-overlays";
 import { useStaticTiles } from "@/lib/hooks/use-static-tiles";
 import { useVisibility } from "@/lib/hooks/use-visibility";
 import { useOwnership } from "@/lib/hooks/use-ownership";
@@ -60,16 +59,15 @@ export function StarMap({
   // stays staleTime:Infinity — only ownership rides the dynamic path).
   const ownership = useOwnership();
 
-  // ── Map mode (single-select tint) + additive overlay toggles ──
+  // ── Map mode (single-select tint) ──
   const { mode: mapMode, setMode: setMapMode } = useMapMode();
-  const { overlays, toggle } = useMapOverlays();
-  // Lifted here rather than owned inside MapRightRail — the same pattern as mapMode/overlays above —
+  // Lifted here rather than owned inside MapRightRail — the same pattern as mapMode above —
   // because AlertRun needs it too, for its own right inset (see AlertRun's docstring). A single
   // source of truth passed down to both siblings, instead of MapRightRail owning it and echoing a
   // copy upward through an effect.
   const [alertRunSettingsOpen, setAlertRunSettingsOpen] = useState(false);
   const toggleAlertRunSettings = useCallback(() => setAlertRunSettingsOpen((open) => !open), []);
-  const { logisticsEdges } = useTradeFlow(overlays.logistics);
+  const { logisticsEdges } = useTradeFlow(mapMode === "lanes");
   const laneStates = useLanes();
   const stabilityBySystem = useStability(mapMode === "stability");
   // Population is fetched for its own choropleth AND as the weights for stability's population-weighted
@@ -373,6 +371,7 @@ export function StarMap({
         developmentBySystem={visibleDevelopment}
         migrationBySystem={visibleMigration}
         provisionBySystem={visibleProvision}
+        laneBandBySystem={mapData.laneBandBySystem}
         selectedFactionId={selectedFactionId}
       />
 
@@ -389,8 +388,6 @@ export function StarMap({
       <MapRightRail
         mode={mapMode}
         setMode={setMapMode}
-        overlays={overlays}
-        toggle={toggle}
         settingsOpen={alertRunSettingsOpen}
         onToggleSettings={toggleAlertRunSettings}
       />

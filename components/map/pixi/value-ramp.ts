@@ -1,14 +1,16 @@
 import { SUPPLIED_PROVISION, RATIONING_PROVISION, DEPRIVED_PROVISION } from "@/lib/constants/economy";
+import { LANE_BANDS, laneBandCss } from "./objects/lane-band";
+import { LANE_BAND_COLOR } from "./theme";
 
-export type ValueMode = "population" | "development" | "stability" | "migration" | "provision";
+export type ValueMode = "population" | "development" | "stability" | "migration" | "provision" | "lanes";
 
 /**
- * The four modes whose fill is a CONTINUOUS ramp (RAMPS + sample() below) — provision is excluded
- * and handled by its own stepped path (PROVISION_BANDS + sampleStepped()) further down, so
- * `RAMPS[mode]` can never silently treat a stepped mode as continuous (a missing key would be a
- * compile error, not a runtime surprise).
+ * The four modes whose fill is a CONTINUOUS ramp (RAMPS + sample() below) — provision and lanes are
+ * excluded and handled by their own stepped paths (PROVISION_BANDS + sampleStepped() below;
+ * `laneBandColorForValue` further down) so `RAMPS[mode]` can never silently treat a stepped mode as
+ * continuous (a missing key would be a compile error, not a runtime surprise).
  */
-export type ContinuousMode = Exclude<ValueMode, "provision">;
+export type ContinuousMode = Exclude<ValueMode, "provision" | "lanes">;
 
 type Stop = readonly [number, readonly [number, number, number]];
 
@@ -64,6 +66,19 @@ const PROVISION_BANDS: readonly Stop[] = [
   [SUPPLIED_PROVISION, [34, 197, 94]], // green — Supplied, Provision >= SUPPLIED_PROVISION
 ];
 
+/**
+ * The Lanes mode's cell/lane fill: stepped on `laneBandIndex` (0 fine, 1 busy, 2 congested), never
+ * interpolated and never `referenceMax`-normalised — the same "one band = one colour" contract as
+ * PROVISION_BANDS, but the input here is already a discrete index rather than a fraction, so the
+ * step is a floor-and-clamp rather than a threshold table. Colours come straight from
+ * `LANE_BAND_COLOR` (`theme.ts`) so the fill can never drift from the band definition
+ * (`objects/lane-band.ts`) the alert bar and the base lane layer both read.
+ */
+function laneBandColorForValue(value: number): number {
+  const idx = Math.max(0, Math.min(LANE_BANDS.length - 1, Math.floor(value)));
+  return LANE_BAND_COLOR[LANE_BANDS[idx]];
+}
+
 /** Flat step lookup: the colour of the highest band edge at or below `t` (edges ascending, inclusive
  *  low side — matches `foldSupplyState`'s `>=` boundaries). Unlike sample(), never blends. */
 function sampleStepped(bands: readonly Stop[], t: number): number {
@@ -111,6 +126,7 @@ function sample(stops: readonly Stop[], t: number): number {
  */
 export function valueRampColorPixi(value: number, referenceMax: number, mode: ValueMode): number {
   if (mode === "provision") return sampleStepped(PROVISION_BANDS, value > 0 ? value : 0);
+  if (mode === "lanes") return laneBandColorForValue(value);
   if (RESERVES_ABSENT_ZERO[mode] && !(value > 0)) return ABSENT;
   const v = value > 0 ? value : 0;
   const max = referenceMax > 0 ? referenceMax : 1;
@@ -176,6 +192,17 @@ export interface SteppedLegendStop {
  */
 export function provisionLegendStops(): SteppedLegendStop[] {
   return PROVISION_BANDS.map(([position, [r, g, b]]) => ({ position, css: `rgb(${r}, ${g}, ${b})` }));
+}
+
+/**
+ * Legend stops for the Lanes mode's stepped fill, in band order (fine, busy, congested). Positions
+ * are the band INDEX (0, 1, 2), not a 0..1 fraction like `provisionLegendStops` — there is no
+ * continuous domain here, just three fixed states — so a legend renderer spaces them evenly rather
+ * than by a real span. Reads `laneBandCss`, the same colour source `valueRampColorPixi("lanes", …)`
+ * steps through, so the legend can never drift from the fill.
+ */
+export function lanesLegendStops(): SteppedLegendStop[] {
+  return LANE_BANDS.map((band, position) => ({ position, css: laneBandCss(band) }));
 }
 
 /** CSS colour for the reserved "no value / absent" fill (value 0). */

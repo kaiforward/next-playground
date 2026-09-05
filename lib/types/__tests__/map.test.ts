@@ -4,7 +4,7 @@ import { isMapMode, isValueMapMode, isFactionInteractiveMode, settlementMarkFor,
 describe("MapMode", () => {
   it("includes the territory modes in the mode set and ordering", () => {
     expect(MAP_MODES).toEqual([
-      "political", "regions", "stability", "population", "development", "migration", "provision", "none",
+      "political", "regions", "stability", "population", "development", "migration", "provision", "lanes", "none",
     ]);
     expect(isMapMode("political")).toBe(true);
     expect(isMapMode("regions")).toBe(true);
@@ -13,6 +13,7 @@ describe("MapMode", () => {
     expect(isMapMode("development")).toBe(true);
     expect(isMapMode("migration")).toBe(true);
     expect(isMapMode("provision")).toBe(true);
+    expect(isMapMode("lanes")).toBe(true);
     expect(isMapMode("none")).toBe(true);
   });
   it("rejects unknown modes", () => {
@@ -28,6 +29,7 @@ describe("isValueMapMode", () => {
     expect(isValueMapMode("development")).toBe(true);
     expect(isValueMapMode("migration")).toBe(true);
     expect(isValueMapMode("provision")).toBe(true);
+    expect(isValueMapMode("lanes")).toBe(true);
   });
   it("is false for the topology / off modes", () => {
     expect(isValueMapMode("political")).toBe(false);

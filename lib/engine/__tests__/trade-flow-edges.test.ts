@@ -4,7 +4,7 @@ import { buildLaneFlowEdges, type LaneFlowRow } from "@/lib/engine/trade-flow-ed
 function row(
   p: Partial<LaneFlowRow> & Pick<LaneFlowRow, "fromSystemId" | "routeEdges">,
 ): LaneFlowRow {
-  return { goodId: "food", quantity: 10, dispatchTick: 0, arrivalTick: 100, ...p };
+  return { quantity: 10, dispatchTick: 0, arrivalTick: 100, ...p };
 }
 
 /** Every fixture row above dispatches at 0 and arrives at 100 — at `tick: 0` with zero fuel cost
@@ -56,14 +56,13 @@ describe("buildLaneFlowEdges", () => {
   it("sums multiple hauls crossing the same lane in the same direction", () => {
     const edges = build(
       [
-        row({ fromSystemId: "A", routeEdges: ["A|B"], goodId: "food", quantity: 12 }),
-        row({ fromSystemId: "A", routeEdges: ["A|B"], goodId: "alloys", quantity: 20 }),
+        row({ fromSystemId: "A", routeEdges: ["A|B"], quantity: 12 }),
+        row({ fromSystemId: "A", routeEdges: ["A|B"], quantity: 20 }),
       ],
       1,
     );
     expect(edges).toHaveLength(1);
     expect(edges[0].totalVolume).toBe(32);
-    expect(edges[0].dominantGoodId).toBe("alloys");
   });
 
   it("keeps opposite directions over the same lane as separate edges", () => {

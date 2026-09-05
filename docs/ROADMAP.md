@@ -13,26 +13,11 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 ## Queued
 
-- **[M] Map presentation pass — labels, lane layering, a Lanes map mode.** Three things the lane
-  surfaces and the map designer's tight clusters showed at once, folded into one pass with an HTML
-  prototype first (Kai, 2026-09-05):
-  - **Label culling/priority — system names hide when they don't fit.** At very low star spacing and
-    high cluster tightness (far from defaults, but a deliberately interesting map type) system labels
-    overlap into illegibility. Fix in rendering, not generation: EU5/Vic3-style — a label draws only
-    when it has room, with priority (homeworlds, developed, selected always keep theirs) and zoom
-    revealing more. First customer of the label management the map needs anyway once wars, battles
-    and ship units widen what it shows at full zoom-out.
-  - **Lane layering.** One line currently carries fuel tier, invested level, load, blocked,
-    ownership and selection at once, and the cell hover shows under a lane hover. Split it: the
-    always-on lane layer stays quiet and structural (fuel-tier width, a hover highlight on the lane
-    itself, the cell highlight suppressed while the pointer is within lane tolerance — the hit-test
-    already knows which wins the click); the load colour ramp reads too subtle today.
-  - **A Lanes map mode** carries the meaning: territory dims, lanes take the investor faction's
-    colour (grey for unowned or split), width for level, brightness for load, a red pulse for
-    blocked; dashed is freed from the long-lane treatment to mean "no investor".
-  Its own sub-PR into `shared/logistics-lanes`, after the lane surfaces PR.
-  *Next step:* HTML prototype of the two layers and the mode (breadth-first), then implement on the
-  Pixi label and lane layers.
+- **[S] Lanes mode and cell-fit labels — after-play follow-ups.** The Lanes-mode cell tint currently
+  colours every system's cell; restricting it to owned/friendly systems is a filter over
+  `MapData.laneBandBySystem`. Tight clusters hide most names until zoomed well in (cell-fit rule,
+  no priority scheme) — decide after play whether a priority tier is wanted.
+  *Next step:* play with both for a few sessions, then decide.
 - **[M] Good-allocation cliff — how logistics splits a scarce good across demanding systems.**
   Gate 1 of supply-response measured per-good satisfaction as violently bimodal: on worlds below
   full Provision, individual goods sit at 0 or 1 with almost nothing between. Hypothesis: greedy

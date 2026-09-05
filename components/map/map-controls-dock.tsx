@@ -1,14 +1,11 @@
 "use client";
 
 import type { MapMode } from "@/lib/types/map";
-import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
 import { MapOverlayControls } from "@/components/map/map-overlay-controls";
 
 interface MapControlsDockProps {
   mode: MapMode;
   setMode: (mode: MapMode) => void;
-  overlays: MapOverlays;
-  toggle: (key: MapOverlayKey) => void;
 }
 
 /**
@@ -24,16 +21,12 @@ interface MapControlsDockProps {
 export function MapControlsDock({
   mode,
   setMode,
-  overlays,
-  toggle,
 }: MapControlsDockProps) {
   return (
     <div className="pointer-events-auto flex shrink-0 flex-col items-end gap-2">
       <MapOverlayControls
         mode={mode}
         setMode={setMode}
-        overlays={overlays}
-        toggle={toggle}
       />
     </div>
   );

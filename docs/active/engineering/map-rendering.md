@@ -9,10 +9,11 @@ covers what is done with it once it arrives.
 The map is **EU5-style**: the **magnitude** value modes (population / development / stability) are read from the
 **number printed inside each system's Voronoi cell**, with colour complementing rather than carrying the meaning;
 **migration** and **provision** are colour-only heatmaps (no natural printed unit — provision's own number lives on
-the per-system panel, not the map). Everything stays **selectable at any zoom** via the cell rather than a tiny
-star hitbox. Each system's dot is coloured by its **star type**. Five value modes (stability / population /
-development / migration / provision) share one choropleth; two structural modes (political / regions) and a plain
-"none" round out the toggle, and a single additive **logistics** overlay sits on top of any mode.
+the per-system panel, not the map). Everything stays **selectable at any zoom** via the cell — the star itself takes
+no pointer events. Each system's dot is coloured by its **star type**. Six value modes (stability / population /
+development / migration / provision / lanes) share one choropleth; two structural modes (political / regions) and a
+plain "none" round out the toggle. Lanes themselves always draw, quiet and structural, in every mode; the **Lanes**
+mode is where they carry meaning.
 
 ## Map modes
 
@@ -30,12 +31,9 @@ A single mode toggle (`MapMode` in `lib/types/map.ts`) selects what the territor
   `.supplyBand` consulted only as the assessment gate, never shipped) —
   also colour-only and gated on assessment (never-assessed = absent = black), but unlike every other value mode it
   is **stepped, not continuous**, and never re-scales to a focused faction (see below).
+- **Lanes** — the per-lane investor/level/load read (below), plus the directed-logistics convoy
+  particles, both folded into this one mode rather than a separate toggle.
 - **None** — no territory fill.
-
-One **overlay** is additive and sits on top of whichever mode is active:
-
-- **Logistics** — directed faction hauls drawn as travelling particles over the lane network itself
-  (below), never a chord arcing between a haul's origin and destination.
 
 ## Value modes — relative, faction-scopable gradients
 
@@ -132,11 +130,15 @@ changes, not every frame.
 
 - **Every mode, any zoom:** click a Voronoi cell → open `/system/[id]`. Selection is analytic — a Voronoi cell is
   the set of points nearest its site, so `delaunay.find(x, y)` resolves the cell under the cursor in O(log n)
-  (`voronoi-cache.ts`), routed through the existing pointer flow. Selection resolves on pointer-**up** and only
-  when the pointer barely moved (< `CAMERA.clickDragThreshold`), so a quick click selects while a drag pans the
-  camera instead (see Navigation).
-- **A lane click** (within `LANE_HIT_TOLERANCE_PX` screen pixels of its segment) opens `/lane/[key]` instead — see "Selection
-  precedence" below for exactly where this sits relative to the faction/system/cell checks.
+  (`voronoi-cache.ts`), routed through the existing pointer flow. There is no star hitbox — the star's own
+  `eventMode` is `"none"`, so the cell is the only way to select a system. Selection resolves on pointer-**up** and
+  only when the pointer barely moved (< `CAMERA.clickDragThreshold`), so a quick click selects while a drag pans
+  the camera instead (see Navigation).
+- **A lane click** (within `LANE_HIT_TOLERANCE_PX` screen pixels of its segment, sparing a gap at each end so a
+  click at the star itself always falls through to the cell) opens `/lane/[key]` instead — see "Selection
+  precedence" below for exactly where this sits relative to the faction/lane/cell checks.
+- **Hover** follows the same precedence within the lane's tolerance: a hovered lane wins over the cell beneath it,
+  so the pointer never highlights both at once.
 - **The one exception — zoomed out:** a faction click routes to `/factions/[id]`, opening the faction panel and
   re-scaling the value gradient (above).
 - **Selection ≠ camera.** A generic `?focus=<x>,<y>[,<zoom>]` param recentres the camera on any world coordinate
@@ -177,51 +179,101 @@ marks are zoomed-in only — the point cloud stays status-blind.
 ## Lane layer
 
 Every generated jump lane (`WorldLane`, [logistics-lanes.md](../gameplay/logistics-lanes.md) §1) draws as a segment
-between its two systems, styled by `laneStyle` (`components/map/pixi/objects/lane-style.ts`) from
-four inputs — no separate chord overlay:
+between its two systems (`ConnectionObject`, `components/map/pixi/objects/connection-object.ts`). Two layers, one
+job each — no separate chord overlay:
 
-- **Fuel-cost tier** (`ordinary`/`notable`/`major`, unchanged from the map-generation pass) sets the
-  base line weight/alpha and, for a `major` (crossing-priced) lane, a wide soft glow underlay behind
-  a crisp core line.
-- **Invested level** (`WorldLane.level`) widens the line further on top of its tier's base width — a
-  heavier corridor reads thicker regardless of how it was priced.
-- **Load** (`bookedLoad ÷ capacity`) colours the line: grey at ~0 booked load, warming toward amber
-  as load approaches capacity.
-- **Blocked** (`blockedVolume > 0` this run) overrides the colour to red — congestion that turned
-  volume away, i.e. "invest here." Red is never a "nearly full" reading; a lane can sit at high load
-  and stay amber all the way to capacity.
+### The base layer — always on
 
-The selected lane (the open `/lane/:key` route) gets an additional copper highlight, read from the
-router the same way the selected system's cell is.
+`laneStyle` (`components/map/pixi/objects/lane-style.ts`) says only *where the lanes are*, in every map mode:
 
-**The logistics overlay's particles ride the lane network, not a chord.** `getTradeFlowEdges`
-(`lib/services/trade-flow.ts`) reads the scheduled-freight ledger (`WorldPendingArrival`) against
-the hop each row is PHYSICALLY crossing right now (`currentHopIndex`, `lib/engine/freight.ts`) and
-produces one `TradeFlowEdgeInfo` per lane per direction currently carrying volume — a haul crossing
-three lanes lights up one edge at a time, walking lane by lane along its route as ticks pass, never
-all three at once, and never one arc between its origin and destination. `TradeFlowLayer`'s particle
-machinery (unchanged) is fed these edges and travels each lane's own straight segment; particles are
-dropped at the same zoomed-out tier the map's other overlays fade at (`LODState.logisticsAlpha`). An
-empty ledger reads as zero edges.
+- **Width** — `LANE_WIDTH.base` plus `LANE_WIDTH.perLevel × level`, plus `LANE_WIDTH.majorExtra` when
+  `laneTier(fuelCost) === "major"` (priced at or beyond a corridor crossing) — every other fuel tier is
+  proportional to its drawn length and needs no extra mark.
+- **One colour, one alpha** (`LANE_BASE_COLOR`, `LANE_BASE_ALPHA`) — no dashes, no load or blocked read.
+- **Hover** — a lane within `LANE_HIT_TOLERANCE_PX` of the pointer draws `LANE_HOVERED`, a narrow white glow
+  underlay.
+- **Selection** — the open `/lane/:key` route draws `LANE_SELECTED`, the copper glow underlay, unchanged.
+
+### The Lanes map mode
+
+Choosing the **Lanes** mode (`isValueMapMode`) swaps the political fill for the value choropleth — faction
+outlines stay as the quiet backing every value mode keeps — and replaces the base style with `laneModeStyle` for
+every lane, zoomed in:
+
+- **Colour** — the investor faction's Pixi colour, the faction holding both endpoints
+  (`ConnectionData.investorFactionId`, `PoliticalTerritoryLayer.getFactionColors()`). No investor (unclaimed or
+  split endpoints) draws `LANE_BASE_COLOR` (slate) and **dashed**; an investor draws solid.
+- **Width** — `LANE_MODE.baseWidth + LANE_MODE.perLevel × level`, a stronger ramp than the base layer's.
+- **Brightness** — stepped by the lane's `LaneBand` (`fineAlpha` dim, `busyAlpha` full for busy and congested
+  alike), not a continuous ramp.
+- **Congested pulse** — a lane whose band is `congested` (`ConnectionLayer.congestedIds`, maintained in `sync`)
+  animates a separate `Graphics` overlay stroke every frame (`ConnectionLayer.update(dtMs)`, `LANE_MODE.pulseColor`
+  / `pulsePeriodMs`); every other lane is untouched per frame.
+- **Convoy particles** — `TradeFlowLayer` (below) shown only in this mode, count and colour keyed by band.
+- **Zoomed out** (lanes hidden), every system's cell tints by the **worst band among the lanes touching it**
+  (`MapData.laneBandBySystem`, `worstLaneBand`): `valueRampColorPixi(value, _ref, "lanes")` is stepped on
+  `laneBandIndex` (`lane-band.ts`) rather than interpolated, fading in as `lod.lanesCellAlpha = 1 − systemLayerAlpha`
+  — the cell tint and the lanes' own colours never show at once. All systems tint, not just owned/friendly ones
+  (see Deferred); a system with no lane at all is absent (black).
+
+**The band** — one definition (`laneBand`, `components/map/pixi/objects/lane-band.ts`) shared by lane brightness,
+particle density and cell tint, so the three reads never disagree: `congested` when `blockedVolume > 0` this run
+(wins regardless of load); otherwise `busy` when `bookedLoad ÷ capacity ≥ LANE_BUSY_LOAD_FRACTION`; otherwise
+`fine`. `worstLaneBand` (worst-of, `LANE_BANDS` order) rolls a system's lanes up to `laneBandBySystem` in
+`useMapData`.
+
+**The convoy particles ride the lane network, not a chord, and only draw in the Lanes mode.** `getTradeFlowEdges`
+(`lib/services/trade-flow.ts`) reads the scheduled-freight ledger (`WorldPendingArrival`) against the hop each row
+is PHYSICALLY crossing right now (`currentHopIndex`, `lib/engine/freight.ts`) and produces one `TradeFlowEdgeInfo`
+per lane per direction currently carrying volume — a haul crossing three lanes lights up one edge at a time,
+walking lane by lane along its route as ticks pass, never all three at once, and never one arc between its origin
+and destination. `TradeFlowLayer.sync` counts each edge's particles by its lane's band
+(`LOGISTICS_FLOW.particlesPerBand[band]`, a few on a fine lane, many on busy/congested) and colours them
+`LANE_BAND_COLOR[band]` — volume no longer sets the count, only the order edges compete for the global particle
+budget (`maxTotalParticles`). Particles are dropped at the same zoomed-out tier the map's other overlays fade at
+(`LODState.logisticsAlpha`). An empty ledger reads as zero edges.
 
 ## Selection precedence
 
 Selection resolves in one stated order (`resolveMapClick`, `components/map/pixi/lane-hit-test.ts`),
-tried on every stage pointer-up:
+tried on every stage pointer-up. There is no star-radius step — the star takes no pointer events at all, so the
+only choice is ever between a lane and a cell:
 
 1. **Faction** — zoomed out (below `FACTION_SELECT_ZOOM`) and the point lands on a faction's
    territory union → `/factions/[id]`.
-2. **System, by the star's own hover radius** (`findSystemNear`, `SIZES.systemHitRadius`) — a
-   precise click on a star wins even when a lane also passes near that point.
-3. **Lane, by tolerance** (`findLaneAt`, world-unit point-to-segment distance,
-   `LANE_HIT_TOLERANCE_PX` screen pixels divided by the camera zoom) — a lane is a segment between two system points, which no cell-based
-   hit-test shape fits, hence its own hit-test module.
-4. **System, by the ordinary Voronoi cell** (`SystemCells.findSystemAt`) — a click anywhere inside a
+2. **Lane, by tolerance** (`findLaneAt`, world-unit point-to-segment distance, `LANE_HIT_TOLERANCE_PX` screen
+   pixels divided by the camera zoom) — a lane is a segment between two system points, which no cell-based
+   hit-test shape fits, hence its own hit-test module. `findLaneAt` shortens the segment by `LANE_HIT_END_GAP_PX`
+   world units (divided by zoom) at each end before the distance test, so a click at a star's own centre always
+   falls through to the cell rather than to whichever lane happens to end there; a lane shorter than twice the
+   gap is never hit.
+3. **System, by the ordinary Voronoi cell** (`SystemCells.findSystemAt`) — a click anywhere inside a
    system's cell, at any zoom, in every mode.
-5. **Empty** — clears the selection.
+4. **Empty** — clears the selection.
+
+**Hover** follows the same precedence: the pointer resolves `findLaneAt` first, and a hit highlights the lane
+(`ConnectionLayer.setHovered`) while suppressing the cell highlight, so the pointer never lights both.
 
 Selecting a lane opens its route-docked panel (`/lane/:key`); selecting a system while that panel is
 open re-points to the system panel, the same navigation system-to-system already does.
+
+## System names
+
+A system's name (`SystemObject`) draws screen-constant — `SIZES.systemLabelSize` px whatever the zoom, the way the
+choropleth's system-tier numbers already are — lifted below the glyph by `GLYPH.coreRadius × dotScale +
+LABEL.offsetY / zoom`, the choropleth's own lift formula. It draws only when its padded label box fits entirely
+inside the system's own Voronoi cell (`labelFitsCell`, `components/map/pixi/label-fit.ts`): a Voronoi cell clipped
+to a disc is convex, so containment of all four box corners in the cell's exterior ring is a valid fit test; a
+corner exactly on the boundary counts as inside (a snug fit still shows). The fit pass re-runs only when the zoom
+has moved past `LABEL.fitZoomStep` (a relative step, mirroring the choropleth's own outline-zoom gate) or the
+system just entered the frustum, and caches each system's answer against the zoom it was computed at
+(`SystemLayer.updateFit`) — never a per-frame polygon test. The selected system and the hovered system always show
+their name regardless of fit. `lod.showSystemNames` (the zoom-0.8 gate) stays the outer bound; the fit rule only
+hides further.
+
+There is deliberately **no priority scheme** beyond selected/hovered — because cells never overlap, neither can
+the names that fit inside them, so nothing needs to arbitrate between two systems wanting the same screen space the
+way the number-aggregation labels do (see Deferred).
 
 ## Rendering architecture
 
@@ -235,7 +287,11 @@ open re-points to the system panel, the same navigation system-to-system already
   and strokes the faction-union outline. It replaced three near-identical stability/population/development layers.
 - **Perf guardrails.** `pixi-map-canvas.tsx` and `objects/system-object.ts` are large and perf-sensitive: object
   *creation* is frustum-gated (not just visibility), number `Text` is pooled rather than one-always-on-per-system,
-  and per-frame work is guarded by cheap dirty/zoom-band checks.
+  and per-frame work is guarded by cheap dirty/zoom-band checks. Two more per-frame guards on this surface: the
+  system name's screen-constant transform (scale, lift) is reapplied on its own last-applied-zoom check inside
+  `setLOD`, separate from the band-field fast path so a zoom gesture rewrites four label properties and nothing
+  else; and the cell-fit pass (`SystemLayer.updateVisibility`) is gated to systems whose
+  zoom moved past `LABEL.fitZoomStep` or that just entered the frustum, never a full re-test every frame.
 
 ## Gotchas
 
@@ -262,6 +318,10 @@ Non-obvious traps on this surface. Read before touching the map or any WebGL cod
 - **Migration mode** shipped in the map-modes workstream (WS2 P1) as the attractiveness heatmap above. A **price**
   map mode was built then **cut as premature** for the current grand-strategy form (the buy/sell deal-quality
   framing is a trader hangover) — its price pill + overlay are removed too; market data lives on the per-system
-  Market panel. **Migration movement arrows + logistics-as-mode** are the deferred **WS2 P2** flow-viz pass
-  ([ui-ws2-map-modes.md](../../planned/ui-ws2-map-modes.md)).
+  Market panel. The logistics half of **WS2 P2** shipped as the Lanes map mode above; **migration movement arrows**
+  are the remaining deferred half ([ui-ws2-map-modes.md](../../planned/ui-ws2-map-modes.md)).
 - **Panel offset / gamified layout** → the system-detail workstream (WS4).
+- **Owned/friendly-only cell tint** for the Lanes mode — every system tints today; a later filter over
+  `MapData.laneBandBySystem`.
+- **A label priority scheme beyond selected/hovered** — the cell-fit rule made one unnecessary at ship; revisit
+  after play if tight clusters hiding most names proves a problem.

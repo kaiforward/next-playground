@@ -48,17 +48,19 @@ const RESCALES_TO_SCOPE: Record<ValueMode, boolean> = {
   stability: false,
   migration: true,
   provision: false,
+  lanes: false,
 };
 
 // Modes that show aggregated numbers over the choropleth fill. population/development/stability keep
-// their numbers; migration and provision are colour-first heatmaps with no on-map numbers — a `false`
-// entry makes rebuildTiers/updateNumbers lease no Text and print nothing for that mode.
+// their numbers; migration, provision and lanes are colour-first heatmaps with no on-map numbers — a
+// `false` entry makes rebuildTiers/updateNumbers lease no Text and print nothing for that mode.
 const SHOWS_NUMBERS: Record<ValueMode, boolean> = {
   population: true,
   development: true,
   stability: true,
   migration: false,
   provision: false,
+  lanes: false,
 };
 
 /**
@@ -328,8 +330,12 @@ export class ValueChoroplethLayer {
 
   updateVisibility(lod: LODState) {
     if (!this.container.visible) return;
-    this.fills.alpha = lod.valueChoroplethAlpha;
-    this.outlines.alpha = lod.valueChoroplethAlpha;
+    // Lanes mode's cell tint is the zoomed-out reading, so it fades on the OPPOSITE curve to every
+    // other value mode's fill: those stay legible up close (valueChoroplethAlpha), this one hands
+    // off to the lanes themselves once they're fully in.
+    const alpha = this.mode === "lanes" ? lod.lanesCellAlpha : lod.valueChoroplethAlpha;
+    this.fills.alpha = alpha;
+    this.outlines.alpha = alpha;
   }
 
   destroy() {
