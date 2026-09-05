@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Popover, PopoverTrigger } from "@/components/ui/popover";
+import { DWELL_MS, DWELL_OPEN_DELAY_MS, Popover, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertFlyout,
   resolveAlertTarget,
@@ -206,5 +206,42 @@ describe("AlertFlyout — row activation", () => {
 
     expect(onNavigate).toHaveBeenCalledTimes(1);
     expect(onNavigate).toHaveBeenCalledWith({ kind: "lane", laneKey: "sys-a|sys-b" });
+  });
+});
+
+describe("AlertFlyout — Lane congested's header term nests a dwell popover inside this click-opened flyout", () => {
+  // The consumer-level pin of the fix in components/ui/popover.tsx: `scheduleLeaveClose` used to
+  // close the whole stack (`closeFromDepth(-1)`) whenever the pointer left every `dwell` region,
+  // with no regard for what sat below the dwell chain — and this flyout is exactly that shape, a
+  // click-opened, non-`dwell` `Popover` whose header links a `TermLabel` (`components/ui/term-label
+  // .tsx`, `dwell` mode) one level deeper. Real timers throughout, per this file's own dwell-mode
+  // precedent (`components/ui/__tests__/popover.test.tsx`'s header comment) — Radix's Presence
+  // machinery is fragile under fake timers, and a locked `dwell` popover still renders through it.
+  it("opening the term and leaving it closes only the term, leaving the flyout open", async () => {
+    const { user } = await renderOpenFlyout(laneCongested);
+    const flyout = screen.getByRole("dialog", { name: "Lane congested alerts" });
+
+    const term = screen.getByRole("button", { name: "Lane congested" });
+    await user.hover(term);
+    // Past the dwell open delay and the dwell-to-lock timer, so the term's own popover is `locked`
+    // — real, fixed module constants (`DWELL_OPEN_DELAY_MS` 200, `DWELL_MS` 550), not a shortened
+    // test double.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, DWELL_OPEN_DELAY_MS + DWELL_MS + 80));
+    });
+    const termCard = screen.getByRole("dialog", { name: "Congested" });
+    expect(termCard).toBeInTheDocument();
+
+    // Off the term entirely and onto the flyout's own body — its condition line, not the term's
+    // trigger, not the term's own content, and not any other tracked dwell region — a genuine leave
+    // of the whole dwell chain while the flyout itself is still very much under the pointer.
+    await user.hover(screen.getByText(/turned hauls away at capacity/));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Congested" })).not.toBeInTheDocument();
+    });
+    // The bug this pins: the flyout used to close along with the term, via the leave grace's
+    // close-everything sentinel having no notion of a non-`dwell` ancestor beneath the dwell chain.
+    expect(flyout).toBeInTheDocument();
   });
 });

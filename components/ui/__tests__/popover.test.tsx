@@ -1698,6 +1698,60 @@ describe("Popover — the dwell stack lifecycle (return grace, leave grace, dept
   });
 });
 
+describe("Popover — a dwell popover nested inside a non-dwell, click-opened ancestor", () => {
+  // The bug this pins: `scheduleLeaveClose` used to run `closeFromDepth(-1)` — the
+  // close-everything sentinel — unconditionally once `stackHoverCount` reached zero.
+  // `stackHoverCount` is only ever incremented by a `dwell` popover's own regions
+  // (`PopoverTrigger`/`PopoverContent` gate `markRegionEntered`/`markRegionLeft` on
+  // `popover.dwell`), so a non-`dwell` ancestor never contributes to the count at all — leaving a
+  // nested dwell chain (a `TermLabel` inside the alert flyout, `components/alerts/alert-flyout.tsx`,
+  // or inside the settings panel, `components/alerts/alert-settings.tsx`) always drove the count to
+  // zero and closed that ancestor right along with the chain, however far from the leave grace's
+  // business it was. The fix closes only from the shallowest open `dwell` entry down
+  // (`firstDwellIndex`), leaving a click-opened ancestor below it untouched.
+  function renderClickAncestorWithDwellChild() {
+    render(
+      <Popover openDelay={0}>
+        <PopoverTrigger>
+          <button type="button">Flyout trigger</button>
+        </PopoverTrigger>
+        <PopoverContent aria-label="Flyout">
+          <p>Flyout body</p>
+          <Popover dwell>
+            <PopoverTrigger>
+              <button type="button">Term</button>
+            </PopoverTrigger>
+            <PopoverContent aria-label="Term card">
+              <p>Term definition</p>
+            </PopoverContent>
+          </Popover>
+        </PopoverContent>
+      </Popover>,
+    );
+  }
+
+  it("leaving the term closes it but leaves the click-opened ancestor open", async () => {
+    const { user } = setup();
+    renderClickAncestorWithDwellChild();
+
+    await user.click(screen.getByRole("button", { name: "Flyout trigger" }));
+    const flyout = await screen.findByRole("dialog", { name: "Flyout" });
+
+    await openLocked(user, "Term");
+    expect(screen.getByRole("dialog", { name: "Term card" })).toBeInTheDocument();
+
+    // Off the term's trigger entirely, onto the ancestor's own body — not the term's trigger and
+    // not its content, so this is a genuine leave of the whole (one-level) dwell chain while the
+    // click-opened ancestor is still very much under the pointer.
+    await user.hover(screen.getByText("Flyout body"));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Term card" })).not.toBeInTheDocument();
+    });
+    expect(flyout).toBeInTheDocument();
+  });
+});
+
 describe("Popover — keyboard access in the dwell mode", () => {
   // Real timers throughout, per this file's own header comment and Tasks 2/3's own precedent.
 
