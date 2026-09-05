@@ -67,7 +67,7 @@ export interface MapData {
   /**
    * Directed-logistics edges keyed by `${laneKey}|${fromSystemId}` — one entry per lane per
    * direction, never per canonical system pair (a lane can carry traffic both ways at once). Empty
-   * when the Logistics overlay is off — the Pixi layer renders nothing.
+   * outside the Lanes map mode — the Pixi layer renders nothing.
    */
   logisticsFlowEdges: Map<string, TradeFlowEdgeInfo>;
   // Detail panel data

@@ -18,7 +18,6 @@ import type { TradeFlowEdgeInfo } from "@/lib/types/api";
 /** The one shape this module needs from a `WorldPendingArrival` ledger row. */
 export interface LaneFlowRow {
   fromSystemId: string;
-  goodId: string;
   /** In-flight magnitude (rows with quantity <= 0 are ignored). */
   quantity: number;
   /** Ordered lane-key hops the haul crosses, `fromSystemId` → its eventual destination. */
@@ -34,7 +33,6 @@ interface DirectedEdgeAgg {
   laneKey: string;
   fromSystemId: string;
   toSystemId: string;
-  perGood: Map<string, number>;
   total: number;
 }
 
@@ -86,10 +84,9 @@ export function buildLaneFlowEdges(
 
     let entry = byEdge.get(key);
     if (!entry) {
-      entry = { laneKey, fromSystemId: current, toSystemId: next, perGood: new Map(), total: 0 };
+      entry = { laneKey, fromSystemId: current, toSystemId: next, total: 0 };
       byEdge.set(key, entry);
     }
-    entry.perGood.set(row.goodId, (entry.perGood.get(row.goodId) ?? 0) + row.quantity);
     entry.total += row.quantity;
   }
 
@@ -97,21 +94,11 @@ export function buildLaneFlowEdges(
   for (const agg of byEdge.values()) {
     if (agg.total < floor) continue;
 
-    let dominantGoodId = "";
-    let dominantMagnitude = 0;
-    for (const [goodId, magnitude] of agg.perGood) {
-      if (magnitude > dominantMagnitude) {
-        dominantMagnitude = magnitude;
-        dominantGoodId = goodId;
-      }
-    }
-
     edges.push({
       laneKey: agg.laneKey,
       fromSystemId: agg.fromSystemId,
       toSystemId: agg.toSystemId,
       totalVolume: agg.total,
-      dominantGoodId,
     });
   }
   return edges;

@@ -4,25 +4,8 @@ import { isMapMode, type MapMode } from "@/lib/types/map";
 
 const SESSION_KEY = "stellarTrader:mapState";
 
-export interface MapOverlaysState {
-  logistics?: boolean;
-}
-
 export interface MapSessionState {
   mode?: MapMode;
-  overlays?: MapOverlaysState;
-}
-
-function parseOverlays(value: unknown): MapOverlaysState | undefined {
-  if (typeof value !== "object" || value === null) return undefined;
-  const out: MapOverlaysState = {};
-  if ("logistics" in value && typeof value.logistics === "boolean") {
-    out.logistics = value.logistics;
-  }
-  // Legacy keys (`politicalTerritory`, `fleet`, `shipRoutes`, `priceHeatmap`, `events`) are
-  // silently dropped — mode migrated to its own axis; fleet overlays died with the
-  // single-player pivot; events was removed as a map concept.
-  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function parseMode(value: unknown): MapMode | undefined {
@@ -35,10 +18,11 @@ export function getMapSessionState(): MapSessionState | null {
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) return null;
+    // A stored `overlays` object (the retired Overlays section) is silently ignored, the same way
+    // the legacy `politicalTerritory` key inside it once was — the overlay concept no longer exists
+    // on this axis, and a stale sessionStorage entry from an older build must not throw.
     return {
       mode: "mode" in parsed ? parseMode(parsed.mode) : undefined,
-      overlays:
-        "overlays" in parsed ? parseOverlays(parsed.overlays) : undefined,
     };
   } catch {
     return null;
@@ -48,10 +32,7 @@ export function getMapSessionState(): MapSessionState | null {
 function writeSessionState(state: MapSessionState): void {
   try {
     // Empty state — clear the key entirely instead of storing "{}".
-    if (
-      state.mode === undefined &&
-      (!state.overlays || Object.keys(state.overlays).length === 0)
-    ) {
+    if (state.mode === undefined) {
       sessionStorage.removeItem(SESSION_KEY);
       return;
     }
@@ -62,17 +43,8 @@ function writeSessionState(state: MapSessionState): void {
 }
 
 /**
- * Persist the overlay-toggle state without disturbing the mode.
- */
-export function setOverlaysInSession(overlays: MapOverlaysState): void {
-  const current = getMapSessionState() ?? {};
-  writeSessionState({ ...current, overlays });
-}
-
-/**
- * Persist the single-select map mode without disturbing the overlays.
+ * Persist the single-select map mode.
  */
 export function setModeInSession(mode: MapMode): void {
-  const current = getMapSessionState() ?? {};
-  writeSessionState({ ...current, mode });
+  writeSessionState({ mode });
 }

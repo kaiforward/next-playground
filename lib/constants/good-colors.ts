@@ -1,10 +1,9 @@
 import type { GoodTier } from "@/lib/types/game";
-import { GOOD_TIER_BY_KEY } from "./goods";
 
 /**
- * Pixi-side tint per good *tier*. Used by the trade-flow Pixi layer (and
- * any future overlay/legend) so good identity reads at a glance without
- * the player needing to memorize twelve-plus distinct colors.
+ * Pixi-side tint per good *tier*. Used by the logistics panel's tier legend so
+ * good identity reads at a glance without the player needing to memorize
+ * twelve-plus distinct colors.
  *
  * Tier progression reads as a tech ladder:
  *   T0 raw       → green   (agricultural / extractive bulk)
@@ -22,21 +21,12 @@ export const TIER_COLOR: Readonly<Record<GoodTier, number>> = {
   2: 0x22d3ee, // cyan-400  — advanced
 };
 
-/** Player-facing label for each tier — shared with the map legend. */
+/** Player-facing label for each tier. */
 export const TIER_LABEL: Readonly<Record<GoodTier, string>> = {
   0: "Raw",
   1: "Processed",
   2: "Advanced",
 };
-
-/** Fallback when a goodId isn't in the tier map (shouldn't happen in practice). */
-export const GOOD_COLOR_NEUTRAL = 0x94a3b8; // slate-400
-
-export function getGoodColor(goodId: string): number {
-  const tier = GOOD_TIER_BY_KEY[goodId];
-  if (tier === undefined) return GOOD_COLOR_NEUTRAL;
-  return TIER_COLOR[tier];
-}
 
 /** Convert a Pixi hex int (0xRRGGBB) to a CSS color (#rrggbb). */
 export function pixiHexToCss(hex: number): string {

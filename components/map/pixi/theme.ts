@@ -1,4 +1,5 @@
 import type { SunClass } from "@/lib/types/game";
+import type { LaneBand } from "./objects/lane-band";
 
 // Neutral tint for the far-zoom point cloud. The zoomed-in system dot is coloured
 // by star type (SUN_CLASS_COLORS_PIXI); distant points stay neutral.
@@ -185,11 +186,13 @@ export const ANIM = {
 // ── Flow overlay ─────────────────────────────────────────────────
 
 /**
- * Directed-logistics overlay. Glowing "convoy" particles travel the lane itself (a straight segment
- * between its two endpoints) rather than an off-lane arc — a haul's route is now drawn as particles
- * on every lane it crosses, not a chord between its origin and destination, so there is no longer a
- * reason to bow the path off the lane it represents. Visual values are placeholders — tune in the
- * manual smoke (glow/speed).
+ * Directed-logistics overlay, shown in the Lanes map mode. Glowing "convoy" particles travel the
+ * lane itself (a straight segment between its two endpoints) rather than an off-lane arc — a haul's
+ * route is drawn as particles on every lane it crosses, not a chord between its origin and
+ * destination. Particle count and colour are keyed by the lane's `LaneBand` (`objects/lane-band.ts`)
+ * — the same band the base lane brightness and the Lanes-mode choropleth read — so a congested lane
+ * reads busier than a fine one regardless of the raw volume crossing it. Visual values are
+ * placeholders — tune in the manual smoke (glow/speed).
  */
 export const LOGISTICS_FLOW = {
   particleRadius: 3.4,
@@ -201,9 +204,13 @@ export const LOGISTICS_FLOW = {
   pathAlpha: 0.18,
   /** Arrowhead size at the importing (destination) system. */
   arrowSize: 6,
-  minParticlesPerEdge: 2,
-  volumePerExtraParticle: 6,
-  maxParticlesPerEdge: 10,
+  /** Particle count per edge, by the lane's `LaneBand` — presentation knobs, not a mechanic read
+   *  anywhere else. */
+  particlesPerBand: {
+    fine: 2,
+    busy: 5,
+    congested: 9,
+  } satisfies Record<LaneBand, number>,
   /** Smaller global budget than market — logistics is sparse. */
   maxTotalParticles: 800,
 } as const;

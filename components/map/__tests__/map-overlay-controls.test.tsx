@@ -3,7 +3,6 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MapOverlayControls } from "@/components/map/map-overlay-controls";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { MapOverlays } from "@/lib/hooks/use-map-overlays";
 
 // Rendered in jsdom, driven with a real user-event hover and queried by role/accessible name and
 // text — never by class or style, per the component-test convention (AGENTS.md -> Testing).
@@ -18,18 +17,11 @@ class StubResizeObserver {
 }
 vi.stubGlobal("ResizeObserver", StubResizeObserver);
 
-const NO_OVERLAYS: MapOverlays = { logistics: false };
-
 function renderControls() {
   const user = userEvent.setup({ delay: null });
   render(
     <TooltipProvider>
-      <MapOverlayControls
-        mode="lanes"
-        setMode={() => {}}
-        overlays={NO_OVERLAYS}
-        toggle={() => {}}
-      />
+      <MapOverlayControls mode="lanes" setMode={() => {}} />
     </TooltipProvider>,
   );
   return { user };
@@ -57,5 +49,14 @@ describe("MapOverlayControls — the Lanes mode option and its legend", () => {
     expect((await screen.findAllByText("Congested")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(/no investor/i)).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(/turned volume away this run/i)).length).toBeGreaterThan(0);
+  });
+});
+
+describe("MapOverlayControls — the Overlays section is retired (folded into Lanes mode)", () => {
+  it("renders no Overlays group and no checkbox", () => {
+    renderControls();
+    expect(screen.queryByRole("group", { name: "Map overlays" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Overlays")).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).toBeNull();
   });
 });

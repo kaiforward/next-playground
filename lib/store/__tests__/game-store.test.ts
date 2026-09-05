@@ -9,7 +9,6 @@ function edge(totalVolume: number) {
     fromSystemId: "sys-a",
     toSystemId: "sys-b",
     totalVolume,
-    dominantGoodId: "ore",
   };
 }
 

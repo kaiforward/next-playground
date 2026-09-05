@@ -142,6 +142,15 @@ export function PixiMapCanvas({
     return result;
   }, [laneBandBySystem]);
 
+  // Per-lane band, for the logistics flow layer's particle count/colour — built from the same
+  // `ConnectionData.band` the base lane layer and the Lanes-mode choropleth read, so all three
+  // presentations of a lane's status agree.
+  const bandByLaneKey = useMemo(() => {
+    const result = new Map<string, LaneBand>();
+    for (const conn of mapData.connections) result.set(conn.laneKey, conn.band);
+    return result;
+  }, [mapData.connections]);
+
   // Store previous viewport state to skip no-op callbacks (avoids 60 setTimeout/clearTimeout per sec)
   const lastViewportRef = useRef({ minX: 0, minY: 0, maxX: 0, maxY: 0, zoom: 0 });
 
@@ -524,8 +533,8 @@ export function PixiMapCanvas({
     // System objects and connections driven by mapData (viewport detail)
     p.systemLayer.sync(mapData.systems, selectedSystem?.id ?? null);
     p.connectionLayer.sync(mapData.connections, mapData.systems, selectedLaneKey);
-    p.logisticsFlowLayer.sync(mapData.systems, mapData.logisticsFlowEdges);
-  }, [mapData, selectedSystem, selectedLaneKey, pixiReady]);
+    p.logisticsFlowLayer.sync(mapData.systems, mapData.logisticsFlowEdges, bandByLaneKey);
+  }, [mapData, selectedSystem, selectedLaneKey, bandByLaneKey, pixiReady]);
 
   // ── Initial fitView (only when no centerTarget) ────────────────
   useEffect(() => {

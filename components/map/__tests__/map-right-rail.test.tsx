@@ -95,8 +95,6 @@ function renderRail() {
       <MapRightRail
         mode="political"
         setMode={vi.fn()}
-        overlays={{ logistics: false }}
-        toggle={vi.fn()}
         settingsOpen={settingsOpen}
         onToggleSettings={() => setSettingsOpen((open) => !open)}
       />
