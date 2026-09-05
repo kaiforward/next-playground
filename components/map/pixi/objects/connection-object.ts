@@ -1,7 +1,14 @@
 import { Container, Graphics } from "pixi.js";
 import type { ConnectionData } from "@/lib/hooks/use-map-data";
-import { LANE_MAJOR_GLOW, LANE_SELECTED, SIZES } from "../theme";
+import { LANE_BASE_ALPHA, LANE_BASE_COLOR, LANE_HOVERED, LANE_SELECTED, SIZES } from "../theme";
 import { laneStyle } from "./lane-style";
+
+/** Interaction state a `ConnectionObject` draws on top of its base style — orthogonal to the lane's
+ *  own data (fuel cost, level), so it doesn't perturb the base style's dirty-check. */
+export interface ConnectionState {
+  selected: boolean;
+  hovered: boolean;
+}
 
 export class ConnectionObject extends Container {
   connectionId = "";
@@ -22,48 +29,43 @@ export class ConnectionObject extends Container {
     fromY: number,
     toX: number,
     toY: number,
-    selected: boolean,
+    state: ConnectionState,
   ) {
-    const style = laneStyle({
-      fuelCost: data.fuelCost,
-      level: data.level,
-      load: data.load,
-      blocked: data.blocked,
-    });
+    const style = laneStyle({ fuelCost: data.fuelCost, level: data.level });
     // Style fingerprint: skip redraw when only style-relevant flags are unchanged
     // Positions are immutable (static tile data), so only style flags matter
-    const fingerprint = `${style.tier}:${style.width}:${style.color}:${selected}`;
+    const fingerprint = `${style.width}:${state.selected}:${state.hovered}`;
     if (this.connectionId === data.id && fingerprint === this.styleFingerprint) return;
     this.connectionId = data.id;
     this.styleFingerprint = fingerprint;
 
     this.line.clear();
 
-    if (selected) {
-      // Selected lane (the open `/lane/:key` route) — a copper glow underlay, same treatment as the
-      // major-tier "lit pathway" but always drawn regardless of fuel tier.
+    if (state.selected) {
+      // Selected lane (the open `/lane/:key` route) — a copper glow underlay.
       this.line.moveTo(fromX, fromY);
       this.line.lineTo(toX, toY);
       this.line.stroke({ color: LANE_SELECTED.color, width: LANE_SELECTED.glowWidth, alpha: LANE_SELECTED.glowAlpha });
     }
 
-    if (style.tier === "major") {
-      // Crossing-priced lane — amber "lit pathway": a wide soft glow underlay
-      // with a crisp core line stroked over it.
+    if (state.hovered) {
+      // Hovered lane — a fainter, narrower white glow underlay, distinct from selection.
       this.line.moveTo(fromX, fromY);
       this.line.lineTo(toX, toY);
-      this.line.stroke({ color: style.color, width: LANE_MAJOR_GLOW.width, alpha: LANE_MAJOR_GLOW.alpha });
-      this.line.moveTo(fromX, fromY);
-      this.line.lineTo(toX, toY);
-      this.line.stroke({ color: style.color, width: style.width, alpha: style.alpha });
-    } else {
-      // Dashed line for ordinary and notable connections — colour and weight track load/level.
-      drawDashedLine(this.line, fromX, fromY, toX, toY, style.color, style.alpha, style.width);
+      this.line.stroke({ color: LANE_HOVERED.color, width: LANE_HOVERED.glowWidth, alpha: LANE_HOVERED.glowAlpha });
     }
+
+    // The base layer itself: one solid slate stroke, no colour or dashes — those belong to the
+    // Lanes map mode.
+    this.line.moveTo(fromX, fromY);
+    this.line.lineTo(toX, toY);
+    this.line.stroke({ color: LANE_BASE_COLOR, width: style.width, alpha: LANE_BASE_ALPHA });
   }
 }
 
-function drawDashedLine(
+/** Stroke a dashed segment between two points — unused by the base layer (which draws solid), kept
+ *  for the Lanes map mode's "no investor" treatment. */
+export function drawDashedLine(
   gfx: Graphics,
   x1: number,
   y1: number,

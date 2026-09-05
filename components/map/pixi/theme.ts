@@ -25,22 +25,19 @@ export const TERRITORY = {
   strokeWidth: 2,
 } as const;
 
-// ── Lane style (level/load, `objects/lane-style.ts`) ─────────────
-// Base widths per fuel tier — level adds `perLevel` per invested whole level on top. Load colours a
-// lane grey → amber as bookedLoad/capacity rises; blocked (congestion turned volume away this run)
-// overrides to red regardless of load — red means "invest here", never "nearly full".
+// ── Lane style (level, `objects/lane-style.ts`) ───────────────────
+// The base lane layer says only "where the lanes are": one uniform width, widened a little per
+// invested level and a bit more for a major (crossing-priced) fuel tier — no colour, no dashes.
+// Load/blocked meaning belongs to the Lanes map mode, not this layer.
 export const LANE_WIDTH = {
-  ordinary: 1.5,
-  notable: 1.9,
-  major: 2.5,
+  base: 1.5,
+  majorExtra: 1.0,
   perLevel: 0.35,
 } as const;
 
-export const LANE_LOAD_COLOR = {
-  idle: 0x64748b, // slate-500 — ~0 booked load
-  loaded: 0xf59e0b, // amber-500 — booked load at/near capacity
-  blocked: 0xef4444, // red-500 — blockedVolume > 0 this run
-} as const;
+/** The base lane layer's one colour and alpha — slate, always, regardless of tier/level/load. */
+export const LANE_BASE_COLOR = 0x64748b; // slate-500
+export const LANE_BASE_ALPHA = 0.5;
 
 /** Presentation-only threshold on `bookedLoad / capacity` (unclamped) that separates the "busy"
  *  band from "fine" (`objects/lane-band.ts`) — set by eye in the visual smoke, not a mechanic
@@ -49,18 +46,11 @@ export const LANE_BUSY_LOAD_FRACTION = 0.75;
 
 /** Status colours for the three lane bands (`objects/lane-band.ts`) — the design system's
  *  green/amber/red triple (docs/active/design-system/theme.md → Status Colors), reused here rather
- *  than duplicated as a fourth colour set alongside `LANE_LOAD_COLOR`. */
+ *  than a bespoke colour set of its own. */
 export const LANE_BAND_COLOR: Record<"fine" | "busy" | "congested", number> = {
   fine: 0x22c55e, // green-500
   busy: 0xf59e0b, // amber-500
   congested: 0xef4444, // red-500
-} as const;
-
-/** The major (crossing-priced) tier's wide soft glow underlay, drawn under the load-coloured core
- *  line — a structural "lit pathway" treatment, independent of the colour the load ramp picks. */
-export const LANE_MAJOR_GLOW = {
-  width: 7.0,
-  alpha: 0.15,
 } as const;
 
 /** The selected lane's highlight stroke (the open `/lane/:key` route) — Foundry copper, matching the
@@ -69,6 +59,14 @@ export const LANE_SELECTED = {
   color: 0xd06a42,
   glowWidth: 9.0,
   glowAlpha: 0.35,
+} as const;
+
+/** The hovered lane's highlight stroke — a white/slate-100 glow, narrower and fainter than the
+ *  selection glow (`LANE_SELECTED`) so the two never read as the same state. */
+export const LANE_HOVERED = {
+  color: 0xf1f5f9, // slate-100
+  glowWidth: 5.0,
+  glowAlpha: 0.25,
 } as const;
 
 /** Screen-pixel tolerance for the lane click hit-test (`lane-hit-test.ts`'s `findLaneAt`) — divided
