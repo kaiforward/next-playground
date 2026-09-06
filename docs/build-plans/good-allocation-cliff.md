@@ -235,7 +235,8 @@ Two readings of it, for two jobs:
     orderCover = drawDemand > 0 ? counted ÷ drawDemand : +∞     [cycles; +∞ sorts last]
     levelCover = counted ÷ demand                                 [cycles; the unit of L and every raise]
     counted    = stock + scheduledInbound, except: physical stock alone while
-                 stock < RATION_COVER × demandRate (see below)
+                 stock < RATION_COVER × demand (the use-figure proxy of the economy's
+                 ration line — see below; the matcher never reads `demandRate`)
 
 `drawDemand` is the draw figure produced at `lib/tick/processors/good-market-state.ts:190` — the use
 figure gated by each consuming factory's own output brake and live event multiplier, falling back
@@ -255,8 +256,11 @@ a 40-cycle target, in-flight tonnage is a few percent of the ask; against a leve
 can be the whole level, and a haul takes ~17 ticks per ordinary lane (`LANES.FREIGHT_SPEED`,
 `lib/constants/lanes.ts:30-40`), up to two economic cycles on a three-lane run. So a world whose
 **physical** stock is under the economy's ration line is levelled on physical stock alone,
-whatever is in flight; above the line, inbound counts as today. The deficit test itself is
-unchanged (inbound counts there, `directed-logistics.ts:303`). The cost is a bounded double
+whatever is in flight; above the line, inbound counts as today. The line is the use-figure proxy
+`RATION_COVER × demand`, not the economy's own `RATION_COVER × demandRate`: `good-market-state.ts`'s
+header rules the floored `demandRate` out of every warehousing quantity, and on a floored market the
+proxy sits under the real line, so the exception fires slightly less often there — the conservative
+side. The deficit test itself is unchanged (inbound counts there, `directed-logistics.ts:303`). The cost is a bounded double
 shipment: at most one extra raise to a world whose earlier haul lands during the next transit,
 clamped at dispatch by the destination's room less everything inbound
 (`lib/tick/processors/directed-logistics.ts`, the dispatch clamp).
@@ -568,3 +572,263 @@ billing. The pool's reachability search is the one new per-run cost (§3); pick 
 unless the deficit count is smaller.
 
 Next stage: `/build-plan docs/build-plans/good-allocation-cliff.md`.
+
+## Build plan
+
+One branch, one PR (`feat/good-allocation-cliff-measure` carries the measure, the spec and this plan;
+the implementation continues on it). Four code tasks and one doc-fold task, in order; no gates — the
+whole change is one processor's engine, and its galaxy read is the Verification below.
+
+### Resolution — every measure the spec uses, and what produces it
+
+| Measure (spec wording) | State | Producer |
+|---|---|---|
+| `drawDemand` — "the rate goods are actually leaving the shelf" | exists | `lib/tick/processors/good-market-state.ts:190` (read there: `drawRates?.get(m.goodId) ?? demand`) |
+| `demand` — the use figure, "the unit of L and every raise" | exists | `good-market-state.ts:179` from `honestUseRate` (`lib/world/types.ts:562`) |
+| `stock`, `scheduledInbound` | exist | `GoodMarketState.stock` (`good-market-state.ts:182`); `scheduledInbound` plumbed at `lib/tick/processors/directed-logistics.ts` `toLogisticsState` from `lib/engine/freight.ts` `scheduledInbound` |
+| `counted` — physical stock alone under the ration-line proxy `RATION_COVER × demand` | new | Task 2 (`countedStock`); `RATION_COVER` exists `lib/constants/economy.ts:66` |
+| `orderCover` (+∞ at `drawDemand` 0) | new | Task 2 (`orderCover`) |
+| `levelCover` | new | Task 2 (`levelCover`) |
+| target in cycles — "`logisticsTarget`, 40 cycles of use × `anchorMult`" | exists | `good-market-state.ts:185`; its cycles form `logisticsTarget ÷ demand` is the Task 1 input `targetCover` |
+| water level `L`, raise `(L − levelCover) × demand` capped at `logisticsTarget − stock − scheduledInbound` | new | Task 1 (`solveWaterLevel`, `raiseFor`) |
+| pooled reachable supply per good | new | Task 3, inside `matchFactionTransfers`, from `reachableFrom` (`lib/engine/lane-routing.ts:139`, impl `:520-528`) and each donor's live `surplusDrawable` (`lib/engine/directed-logistics.ts:101`) |
+| donor draw order — "per-unit route-cost order, exactly as a fill draws today" | exists | `priceFrom` `lane-routing.ts:129`; the candidate sort `directed-logistics.ts:398-400` |
+| booking, blocked volume | exist | `routeAndBook` `lane-routing.ts:140`; `RouteBooking.blocked` |
+| fixed point with top-up after each exhaustion | new | Task 3 |
+| "descending `GOOD_NECESSITY`", ties by ascending good id | exists + new | `lib/constants/physical-economy.ts:105-131`; the ordering itself Task 4 (`goodsInNecessityOrder`) |
+| `fundingBound` materiality against the raise | new | Task 4, replacing the `d.shortfall` denominator at `directed-logistics.ts:476-478`; `FUNDING_BOUND_RESIDUAL_FRACTION` exists `lib/constants/directed-logistics.ts:100` |
+| `unservable` at the deficit's draw turn | exists | `directed-logistics.ts:389-397` (`reachableDrawable`), emitted `:492-498` |
+| `budgetSkipped`, `blocked`, `logisticsDispatched`, `workPerformedByFaction`, `logisticsBudget` | exist | `TransferMatchResult` `directed-logistics.ts:246-261`; processor return `lib/tick/processors/directed-logistics.ts:308` |
+| Verification reads: haul-budget spend fraction, `budgetSkipped`, lane utilisation / blocked volume / queued levels, `famineShare`, cover medians, conservation identities, tick rate | exist | `lib/tick-harness/types.ts:378`; `lane-analysis.ts:184,190-233`; `population-analysis.ts:428`; `market-analysis.ts:222-262`; `conservation-analysis.ts`; runner wall-clock |
+| Verification reads: ending-cover spread per scarce group, share of a faction's worlds under `SHORTAGE_SATISFACTION` on water/food, `fed()` pass rate | new | the rebuilt `temp/allocation-cliff-diag.ts` (gitignored, never a task file) — see Verification |
+
+Nothing unresolvable. `SHORTAGE_SATISFACTION` exists (`lib/constants/economy.ts:90`); `fed()` exists (`lib/engine/directed-build.ts:249`).
+
+### Task 1 — A pure water-level solver: given worlds' covers, targets and demands, and a supply, the level everyone below it is raised to
+
+Files:      `lib/engine/shelf-levelling.ts` (new); `lib/engine/__tests__/shelf-levelling.test.ts` (new)
+Interface:  `interface LevelWorld { id: string; levelCover: number; targetCover: number; demand: number }` —
+            all in cycles of `demand` except `demand` itself (units per cycle).
+            `solveWaterLevel(worlds: readonly LevelWorld[], supply: number): number` — the level `L`
+            (cycles) at which Σ over worlds of `raiseFor(w, L)` equals `min(supply, Σ full raises)`;
+            never above the largest `targetCover`; 0 for an empty list.
+            `raiseFor(world: LevelWorld, level: number): number` — units: `max(0, min(level, targetCover)
+            − levelCover) × demand`.
+            Pure, no imports from the matcher; the matcher (Task 3) is its only consumer.
+Proves:     - supply at or above every world's full want returns the largest target and every raise
+              equals that world's full want;
+            - supply 0 returns the lowest cover and every raise is 0;
+            - tonnage conservation: the raises sum to `min(supply, total want)` within float
+              tolerance, for a short supply and for an ample one;
+            - a world starting above the returned level receives 0 while a world below it receives
+              a positive raise, and this holds when the above-level world has the larger demand;
+            - a world whose target sits below the returned level stops at its target while the
+              level rises past it (differing `anchorMult`);
+            - vacuity: a solver that returns any constant fails the conservation entry on at least
+              one of the fixtures above.
+Consumes:   nothing.
+
+### Task 2 — Cover readings on a good's market state: what is counted as on the shelf, the ordering cover, the level cover
+
+Files:      `lib/engine/directed-logistics.ts`; `lib/engine/__tests__/directed-logistics.test.ts`
+Interface:  `countedStock(g: GoodMarketState): number` — physical `stock` while
+            `stock < RATION_COVER × demand`, else `stock + (scheduledInbound ?? 0)`.
+            `orderCover(g: GoodMarketState): number` — `countedStock ÷ drawDemand`; `Infinity` when
+            `drawDemand ≤ 0` (never a division by 0).
+            `levelCover(g: GoodMarketState): number` — `countedStock ÷ demand`; only ever called on a
+            deficit (`logisticsTarget > 0` ⇒ `demand > 0`), and states that precondition.
+            `RATION_COVER` imported from `ECONOMY_CONSTANTS` (`lib/constants/economy.ts`) — this file
+            gains that import; `good-market-state.ts` does not change.
+Proves:     - a market under the ration-line proxy with a haul in flight counts physical stock
+              alone; the same market at or above the line counts stock plus inbound;
+            - a market exactly on the line counts inbound (the boundary is strict-below);
+            - `drawDemand` 0 yields `Infinity`, and `Infinity` sorts after every finite cover in an
+              ascending comparator sort (no `NaN` anywhere);
+            - a braked factory (`drawDemand` < `demand`) reads a higher `orderCover` than an unbraked
+              market at the same stock and use, and the same `levelCover`;
+            - `Infinity` is never handed to a `World` field (the readings are per-run values; a grep
+              over the persisted-field writers in the processor is the check).
+Consumes:   nothing.
+
+### Task 3 — Level the shelves within a good: pool, level, ascending draws, fixed point on exhaustion
+
+Files:      `lib/engine/directed-logistics.ts` (`matchFactionTransfers`, its `Deficit`/`Surplus`
+            internals and the function docstring); `lib/engine/__tests__/directed-logistics.test.ts`;
+            `lib/tick/processors/__tests__/directed-logistics.test.ts` (the severity-order case at
+            `:782` re-pinned to cover order under a binding budget)
+Interface:  `matchFactionTransfers(systems: SystemLogisticsState[], booker: RouteBookerFor):
+            TransferMatchResult` — signature, `TransferMatchResult`, `PlannedTransfer`,
+            `FundingBoundMatch`, `UnservableDeficit` all unchanged. Behaviour per good (goods still in
+            one pass per faction; cross-good order is Task 4):
+            - deficit membership as today (`classifyMarketState` on `stock + scheduledInbound` vs
+              `logisticsTarget × DEFICIT_FRACTION`, self-supply gate);
+            - pool = Σ live `drawable` of every donor `reachableFrom(deficit)` for at least one
+              deficit of the good;
+            - `L = solveWaterLevel(worlds, pool)` with each world's `levelCover`, `targetCover =
+              logisticsTarget ÷ demand`, `demand`;
+            - draws placed in ascending `orderCover`, each drawing `raiseFor(world, L)` capped at
+              `logisticsTarget − stock − scheduledInbound`, from its own reachable donors cheapest
+              first, through `routeAndBook`, exactly the per-candidate loop that exists today;
+            - when a world's own donors exhaust before its raise is met: its level is fixed where it
+              stopped, it leaves the set, `L` is recomputed over the remaining worlds with the
+              remaining pool, and every remaining world already drawn this pass is topped up to the
+              new `L` before the good's pass ends; terminates because each recomputation removes a
+              world;
+            - a world with `orderCover` `Infinity` is drawn last;
+            - `budgetSkipped`, `blocked`, `fundingBound` and `unservable` are emitted at the same
+              points as today (their denominators are Task 4's).
+Proves:     - the cliff: two deficits at different covers sharing one donor whose drawable covers
+              neither fully end at equal `levelCover` (the head is not filled to target while the
+              tail gets nothing);
+            - cover, not size: a small world at 4 cycles is raised before a large world at 10, and a
+              large world at 4 cycles is raised while a small world at 40 receives nothing;
+            - fixed point: with three worlds on a shared pool where the middle world's own donors
+              exhaust, the first-drawn world is topped up to the recomputed level rather than left
+              at the first level;
+            - ample supply reproduces today's outcome: every existing "fills to target" case in the
+              engine test file still passes with the same transfer set;
+            - a world with `drawDemand` 0 is drawn after every world with a finite cover, and still
+              receives its raise sized on `demand`;
+            - pool membership: a donor only a saturated path reaches (`priceFrom` null,
+              `reachableFrom` true) counts in the pool that sets `L` and its share stands as blocked
+              volume, never billed or drawn;
+            - vacuity: an implementation that keeps today's worst-first full fill fails the first
+              entry.
+Consumes:   Task 1 (`LevelWorld`, `solveWaterLevel`, `raiseFor`); Task 2 (`countedStock`,
+            `orderCover`, `levelCover`).
+
+### Task 4 — Cross-good necessity order, and the two signal denominators the new draw size moves
+
+Files:      `lib/engine/directed-logistics.ts`; `lib/engine/__tests__/directed-logistics.test.ts`
+Interface:  `goodsInNecessityOrder(goodIds: Iterable<string>): string[]` — descending
+            `GOOD_NECESSITY` (`lib/constants/physical-economy.ts:105`), absent good reads 0, ties by
+            ascending good id; exported, pure, and the order `matchFactionTransfers` processes
+            goods in.
+            `fundingBound`: emitted when a budget stop leaves more than
+            `FUNDING_BOUND_RESIDUAL_FRACTION` of **the raise the budget stopped** standing
+            (`raiseFor(world, L)` at that draw), replacing the `d.shortfall` denominator at
+            `directed-logistics.ts:476-478`; `FundingBoundMatch` fields unchanged.
+            `unservable`: definition unchanged — `shortfall − reachableDrawable` with `shortfall` the
+            full `logisticsTarget − (stock + scheduledInbound)` and `reachableDrawable` summed at the
+            deficit's own draw turn after every earlier draw in the good's pass; `UnservableDeficit`
+            fields unchanged.
+Proves:     - with a budget that funds one good's raises only, water's draws are placed and a
+              lower-necessity good's are budget-skipped, regardless of which good's deficits are
+              more severe; within one necessity weight the lower good id is processed first;
+            - an absent good id in `GOOD_NECESSITY` sorts last, not first, and never throws;
+            - a budget-stopped raise of 3 cycles against a 40-cycle shortfall, left 50% unmet, flags
+              `fundingBound`; the same stop left 5% of the raise unmet does not — and the old
+              denominator would have decided both the other way;
+            - a world levelled to `L` but short of its target reads `unservable` for the buffer it
+              lacks, with the level equal to full shortfall less live reachable drawable at its draw
+              turn — not less the pool computed before draws began;
+            - a deficit with no donor anywhere still reads `unservable` for its whole want and never
+              `fundingBound`;
+            - vacuity: `goodsInNecessityOrder` returning input order fails the first entry.
+Consumes:   Task 1, Task 2, Task 3.
+
+### Task 5 — Docstrings, active docs and the roadmap row
+
+Files:      `lib/engine/directed-logistics.ts` (the `matchFactionTransfers`, `GoodMarketState.drawDemand`
+            and `UnservableDeficit` docstrings — "severity weight", "worst-first order decides which
+            deficits carry the reading"); `lib/tick/processors/good-market-state.ts` (header: "Only
+            the matcher's severity weight reads it"); `docs/active/gameplay/economy-autonomic-agency.md`
+            ("The matching engine" and the "Who carries the residual" paragraph, `:181-204`);
+            `docs/SPEC.md:46` ("severity-ranked (shortfall × draw, worst-first)");
+            `docs/active/gameplay/alert-bar.md:243` (the `unservedShortfall` description gains the
+            population inversion — the residue now lands on the best-covered worlds);
+            `docs/ROADMAP.md` (delete the good-allocation-cliff row; the "Flow priority is a lever"
+            and "Carry necessity into the routing calculations" notes on the logistics-pass row are
+            closed by this change and are deleted with it); `docs/build-plans/good-allocation-cliff.md`
+            (deleted, this file).
+Interface:  none — prose only. The alert's `conditionLine` (`lib/constants/alerts.ts:99`, "A
+            shortfall no reachable supplier or local production can close") still states the
+            structural meaning and is kept; `/game-copy` is consulted only if the implementer finds
+            it no longer reads true against the inverted population.
+Proves:     - `docs/SPEC.md` and `economy-autonomic-agency.md` describe levelling in present tense
+              with no "worst-first" sentence left (a text grep for `worst-first` and `severity` over
+              `docs/active` and `docs/SPEC.md` returns only the alert-bar and planner uses);
+            - the doc-sync test (`docs/active/glossary.md` ↔ `lib/glossary/terms.ts`) still passes —
+              no glossary term is added or renamed;
+            - every deferred item this working file carries is booked before the file is deleted
+              (`git log -S` on the destination): the player priority flag, the survival floor.
+Consumes:   Task 4 (the final behaviour the prose describes).
+
+### Verification
+
+- **Build gate:** `npm run build` (`tsc && vite build`); `npx vitest run`.
+- **Red-proof:** each task's `Proves` list executed item by item at implementation — break the
+  behaviour, watch the named test fail, restore.
+- **Galaxy read, `npm run simulate`** at its two horizons (1,000 / 10,000) plus one YAML run at
+  16,000 ticks (`-- --config`, `ticks: 16000`, seeds 42 and 43), against a baseline run of main at
+  the same seeds. Read: haul-budget spend fraction and `budgetSkipped` (expected flat; a material rise
+  is the budget binding under levelling — spec §3); lane utilisation p50/p90, blocked-volume total
+  and top lanes, mean queued lane levels (expected flat; movement means lane decay or the upgrade
+  planner's target moved — spec §6 row 3 Lanes); `famineShare` per cohort (the even-famine cost,
+  spec §5); consumer and exporter cover medians per good, cohorted (the harness's `medianCover` is
+  anchor-denominated — spec §4); galaxy production and developed count; every conservation identity
+  (a failed identity blocks the merge); wall-clock tick rate against the run's own baseline (the
+  pool's search cost, spec §3).
+- **The measure's runner, rebuilt:** `temp/allocation-cliff-diag.ts` with its hook re-patched per the
+  memory note (`temp-diag-runners`), extended to record ending `levelCover` per deficit (physical
+  stock only), the share of each faction's worlds simultaneously under `SHORTAGE_SATISFACTION` on
+  water or food, and the `fed()` pass rate. Read at 10K and 16K, seeds 42 and 43: ending-cover spread
+  (p90 − p10) per scarce group falls sharply; consumer markets at satisfaction 0 with stock 0 on
+  worlds below full Provision fall; mean per-good satisfaction on those worlds rises. Hook reverted
+  the same turn; the runner stays in `temp/`.
+- **New harness metric:** none required up front. If lane utilisation or queued levels move in the
+  simulate read, a "lane levels shed per 1,000 ticks" metric is added to `lane-analysis.ts` before
+  the PR merges (booked at Verification, below).
+
+### Doc fold
+
+- `docs/active/gameplay/economy-autonomic-agency.md` — "The matching engine" section rewritten for
+  levelling (necessity order across goods, lowest cover first, fixed-point level, physical-stock
+  exception, the raise-denominated funding-bound test); the "Who carries the residual" paragraph
+  replaced by the inversion (the residue lands on the best-covered worlds).
+- `docs/SPEC.md:46` — the directed-logistics sentence: "severity-ranked (shortfall × draw,
+  worst-first)" → levelling, one clause.
+- `docs/active/gameplay/alert-bar.md:243` — `unservedShortfall`'s description gains the inversion.
+- `docs/active/gameplay/logistics-lanes.md` — no change (its §2 describes booking and the
+  per-deficit skip, both kept).
+- `docs/ROADMAP.md` — the good-allocation-cliff row deleted; the two notes on the logistics-pass row
+  it closes deleted with it. No planned doc is superseded.
+- This working file is deleted on the PR, after the fold and the bookings below.
+
+### Not covered
+
+- **Player priority flag** ("protect this world") — **booked**: stays on the logistics gameplay pass
+  row's "mechanical player lever over priority" line, reworded on the fold to name the shipped
+  default it overrides.
+- **Survival floor** (raise water/food to the famine step per world before sharing) — **dropped**:
+  owner decision, even famine as the default (spec §5); recorded in the spec's decision record.
+- **Proportional and band-maximising policies** (roadmap candidates a and c) — **dropped**: levelling
+  chosen over both in the spec's `Why`; the candidate list is deleted with the row.
+- **A lane-levels-shed harness metric** — **booked at Verification**: added only if the lane reads
+  move.
+- **Re-reading the alert copy** for the inverted population — **dropped** unless the implementer
+  finds the `conditionLine` untrue (Task 5).
+- **`demandRate` in the matcher** — **dropped**: the ration-line proxy uses the use figure by spec
+  §1's own rule; the divergence on floored markets is stated there.
+
+### Net-new UI
+
+None. No task touches `components/`; no `Reuse` fields.
+
+### Self-review notes
+
+- Every `file:line` above was read this session, on the reverted `lib/engine/directed-logistics.ts`
+  (post-`git checkout`); `:398-400`, `:389-397`, `:476-478`, `:492-498` re-read while writing.
+- New names grep-clean: `shelf-levelling`, `solveWaterLevel`, `raiseFor`, `LevelWorld`,
+  `countedStock`, `orderCover`, `levelCover`, `goodsInNecessityOrder`.
+- Sibling walk for the only shape that gains members: `GoodMarketState` gains no field; the three
+  cover readings are functions over it, so no adapter, fixture or persisted-field writer changes. The
+  engine test's `sys()` fixture helper already carries `drawDemand` and `scheduledInbound` defaults.
+- Nothing dropped between spec and plan: every §6 row-3 interaction lands in Verification or Task 5;
+  every accepted amendment lands in Tasks 2–4 (cover readings, fixed point, physical-stock
+  exception, funding-bound denominator, unservable turn, necessity tie-break, NaN) or Verification
+  (budget, lanes, famine, colony cohort note).
+- One spec correction made while planning, committed with this plan: §1's physical-stock exception
+  line is `RATION_COVER × demand`, not `× demandRate` — the amended row-1 table already said the
+  matcher does not read `demandRate`, and `good-market-state.ts`'s header rules it out; the
+  divergence on floored markets is now stated in §1.
