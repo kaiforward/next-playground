@@ -414,6 +414,46 @@ back.
   {"good": "medicine", "floorBoundMarkets": 102, "marketsFed40": 87, "marketsFedPlusProd40": 101, "shareFedPlusProd40_09": 0.999, "shareFedPlusProd10_09": 0.872, "unlockable": 498116.912, "shareFed40_09": 0.081, "shareFed40_05": 0.082, "shareFed10_09": 0.041, "ratio40P50": 1.069, "ratio40P90": 1.238, "deficitShareOfUnlock": 0.22, "deficitFed40_09": 0.098, "highCoverShareOfUnlock": 0.768, "highCoverFed40_09": 0.062}
 ```
 
+### Claim 6 — why the withheld ore and minerals do not move (descriptive, no kill-line)
+
+For every ore/minerals holder at ≥ 32 cycles of cover in the claim-5 class, at the last run of
+each 40-cycle window: realised consumption over the window (`stock_start + inbound − stock_end`,
+outbound 0 since drawable was 0 at both ends) against 40 cycles of its `demand`; the civilian
+share of that demand; and whether the holding system produces the good's recipe consumer
+(ore → metals; minerals → chemicals, alloys, components).
+
+```
+Meaning:    The ore and minerals hoards sit at refineries that exist and are producing, whose
+            demand figure counts a full-rate input draw that is not actually happening — the
+            stock is a 40-cycle reserve against consumption that has stopped.
+Claim:      descriptive, no kill-line.
+Number:     tonnage-weighted, holders at ≥ 32 cycles: not consuming (realised < 25% of expected)
+            ore 99.4% / 96.3%, minerals 99.4% / 96.4% (10K / 16K); realised ÷ expected 1% / 12%
+            (ore), 1% / 4.5% (minerals); civilian share of the demand figure 13-20%; sitting at a
+            system that PRODUCES the consumer good 99-100%; at a system with consumer-good demand
+            100%.
+Horizon:    10K (window 8881-9840) and 16K (14881-15840).
+Cohort:     ore/minerals non-producer markets, drawable 0, stock ≥ 32 × demand at the last run
+            (73-97 markets per good).
+Licenses:   supports "the tier-0 hoard is idle input at braked refineries": the use figure
+            (`honestUseRate`, "staffing- and strike-gated draw when running") deliberately
+            excludes the consuming factory's output brake (economy-autonomic-agency.md, the
+            use-vs-draw split), so a refinery whose metals output is braked keeps a 40-cycle ore
+            reserve against a draw the brake has stopped. Hypothesis, not measured here: that the
+            brake is the specific reason the factory is not drawing (vs. an input gate on a
+            second input, or labour) — the runner did not read the brake state. Does NOT say the
+            stock should be released: on a restart the factory draws at full rate again.
+```
+
+### Raw output — tier-0 holders (same runner, third pass)
+
+```
+t10000 {"good": "ore", "holders": 73, "matchedStart": 61, "unlockable": 5917866.556, "shareNotConsuming": 0.994, "realisedOverExpected": 0.01, "civilianShareOfDemand": 0.131, "shareAtSystemsProducingConsumerGood": 0.998, "shareAtSystemsWithConsumerDemand": 1}
+t10000 {"good": "minerals", "holders": 82, "matchedStart": 72, "unlockable": 3636510.975, "shareNotConsuming": 0.994, "realisedOverExpected": 0.01, "civilianShareOfDemand": 0.203, "shareAtSystemsProducingConsumerGood": 0.991, "shareAtSystemsWithConsumerDemand": 1}
+t16000 {"good": "ore", "holders": 96, "matchedStart": 96, "unlockable": 5754125.514, "shareNotConsuming": 0.963, "realisedOverExpected": 0.118, "civilianShareOfDemand": 0.145, "shareAtSystemsProducingConsumerGood": 0.996, "shareAtSystemsWithConsumerDemand": 1}
+t16000 {"good": "minerals", "holders": 97, "matchedStart": 97, "unlockable": 3881049.201, "shareNotConsuming": 0.964, "realisedOverExpected": 0.045, "civilianShareOfDemand": 0.201, "shareAtSystemsProducingConsumerGood": 0.996, "shareAtSystemsWithConsumerDemand": 1}
+```
+
 ## Spec — the supplier floor
 
 ```
