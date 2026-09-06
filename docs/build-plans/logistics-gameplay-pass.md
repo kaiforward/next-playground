@@ -29,60 +29,64 @@ Roadmap row: **[L] Logistics gameplay pass**. Transient; deleted on the PR that 
   product, the depot's holding target is that row's build target — one warehouse, not two
   buildings.
 
-## Idea — depots (brainstorm 2026-09-06)
+## Idea — the supplier floor (decided 2026-09-06; supersedes the depot as the first build)
 
-**Problem.** Almost every world logistics serves waits more than a cycle for its goods (Evidence,
-claim 1: 96% of served sinks at 10K and 16K). Nothing in the galaxy holds stock nearer to the
-worlds that need it, because a world only asks for what it consumes, and only producers give freely.
+**Problem.** Almost every served world waits more than a cycle for its goods (Evidence, claim 1),
+and the supplier one hop away is not drained but *holding*: a non-producer keeps 40 cycles and
+gives only above 56, so every link in a chain fills before it passes anything on (claim 4:
+floor-bound is the dominant near-supplier state for the bulk goods; spare-drained ≤ 13%).
+Hungry-first levelling orders who is served from what donors will give; it never touches what
+they will give — the floor is applied before the matcher sees the stock
+(`surplusDrawable`, `lib/engine/directed-logistics.ts:104`).
 
-**Chosen direction — the neighbourhood-latency depot.** A depot is a per-market policy, not a
-building. For a good it relays, a world keeps the ordinary want (`WAREHOUSE_COVER` 40) and donates
-down to the producer floor (`EXPORT_RESERVE_COVER` 10). Its want is a **relayed demand** figure:
-the summed demand of developed worlds within the two-hop break-even whose inbound for that good
-currently arrives more than a cycle late. The planner recomputes it each run and proposes the
-policy where it is positive; as neighbours industrialise their inbound latency drops, relayed
-demand falls, and the depot drains itself through its own floor — nothing persisted goes stale.
-The matcher serves depot wants **after** real consumption at each necessity. Data flow: the
-arrivals stage folds each credited haul's latency (`arrivalTick − dispatchTick`,
-`lib/tick/processors/goods-arrivals.ts:118`) into one rolling per-market inbound-latency field,
-the same written-by-logistics / read-by-planner pattern as `squeezeCycles` and
-`logisticsFundingBound` (`lib/world/types.ts:589-600`, read at `lib/engine/directed-build.ts:458`);
-the planner's two-hop sum rides its existing candidate × exporter reachability pass.
+**Decision — a third market role, the supplier.** A world's export floor for a good follows how
+reliably it is replenished. A *producer* has its own output and gives down to the producer floor
+(`EXPORT_RESERVE_COVER`, 10). A *supplier* has a steady inbound stream of the good and gives
+down to the same floor. A *consumer* has neither and keeps the deep reserve (`DONOR_RESERVE_COVER`
+40, clear `SURPLUS_MARGIN`). Supplier status is a per-market rule read off one persisted field —
+the rolling inbound rate the arrivals stage already knows at credit time
+(`lib/tick/processors/goods-arrivals.ts:118`) — the same written-by-logistics / read-by-matcher
+pattern as `squeezeCycles` and `logisticsFundingBound` (`lib/world/types.ts:589-600`). Nobody
+nominates suppliers; the planner adds no proposal kind.
+
+**The player's stockpile lever** is the consumer reserve depth: how many cycles a world holds when
+it cannot count on being refilled. Coarse, one number, per Kai's exposure rule.
+
+**Deferred, pending a re-measure after the floor rule ships — the depot (synthetic relayed
+demand).** It serves only the minority cases the floor rule cannot: a neighbourhood short together
+(ore, medicine in claim 4) and the ~half of late sinks with no same-faction system within a cycle
+(claim 4). Re-run `temp/depot-diag.ts` claim 1 after the floor rule and decide on what remains.
 
 **Killed.**
-- *Through-flow-sized depot* — Evidence claim 2: through-flow is diffuse (top 5% carry 10-12%)
-  and unstable (top-10 overlap 3/10 at 16K); most of it crosses undeveloped corridor systems.
-- *Rate-scan depot* (size from the planner's unmet rate deficit) — the scan nets gaps against
-  reachable spare with no latency term (`lib/engine/directed-build.ts:505`); it reads zero exactly
-  where a depot matters (supply exists, far away) and positive only where there is nothing to hold.
-- *Player-marked depots only* — AI factions get none; hubs never shape the galaxy. Automation
-  symmetry.
-- *A separate depot building* — the physical warehouse row makes held cover a build target; a
-  second building would duplicate it.
+- *Through-flow-sized depot* — claim 2: diffuse and unstable.
+- *Rate-scan depot* — the planner's scan nets against reachable spare with no latency term
+  (`lib/engine/directed-build.ts:505`); reads zero exactly where supply is far.
+- *Player-marked depots only* — AI factions get none; automation symmetry.
+- *A separate depot building* — the physical warehouse row owns storage as a build product.
+- *Nominated depot worlds* (the brainstorm's first direction) — superseded: the supplier rule
+  needs no nomination and covers the dominant case.
+
+**Hazards carried to the spec.**
+- **Cascade.** In a chain producer → A → B → C, only the producer makes anything; if A, B, C all
+  hold the shallow floor because deliveries were steady, one bad producer cycle empties all three
+  at once. The reliability read must span several cycles (hysteresis), and the supplier floor is
+  never below the ration line however steady the stream. The spec states both numbers.
+- **First-release flood.** Switching consumers to suppliers releases up to ~30 cycles of stock
+  per market at once; `npm run simulate` reads the transient at both horizons.
+- **Events anchor shift** rides the donor reserve today (`lib/engine/directed-logistics.ts:136`);
+  the supplier floor states whether it rides too.
+- **`surplusDrawable` triple duty** (logistics donor / planner input gate / founding manifest —
+  roadmap "Goods-pricing revisit"): a supplier's released stock is visible to all three; intended
+  (a supplier is a supplier) but stated per reader.
 
 **Premises.**
-- (checkable) *Sites exist:* at equilibrium, for the top-volume goods, a material share of
-  developed worlds have ≥ 1 developed neighbour within two hops whose mean inbound latency for that
-  good exceeds 24 ticks **and** are themselves within one cycle of a producer of it. Falsifiable
-  sentence: "fewer than 10% of developed systems qualify as a depot site for any of the five
-  highest-volume goods at 10K and 16K."
-- (checkable) *Relayed demand is not tiny:* the summed relayed demand at qualifying sites is at
-  least the demand of one median consumer world, so a depot's 30-cycle band is worth hauling.
-- (definitional, Kai 2026-09-06) a depot's want is real demand the matcher serves, ranked below
-  people eating; the donor floor for relayed goods is the producer's; depots are a market policy,
-  no building this pass.
-- (definitional, Kai) player exposure stays coarse — a depot is visible and toggleable per
-  system, never a per-good valve; the AI planner runs the same rule under the lanes automation toggle.
-- (hypothesis) events' anchor shift, which the donor reserve rides today
-  (`lib/engine/directed-logistics.ts:136`), should ride the depot's reserve the same way — carried
-  to the spec's hazard row, not decided.
-- (hypothesis) letting depot stock count as drawable supply for the planner's input gate and the
-  founding manifest (the `surplusDrawable` triple duty) is desirable — a depot is a supplier.
-
-**Terminal falsifier.** If, at both 10K and 16K on seed 42 / 600 systems, fewer than 10% of
-developed systems qualify as a depot site for any of the five highest-volume goods, the depot
-direction is dead at this galaxy size and the latency problem needs a different answer (faster
-freight, or producer placement) — back to brainstorm.
+- (definitional, Kai 2026-09-06) "steady inbound counts like production" — the supplier role.
+- (definitional, Kai) the consumer reserve depth is the player's coarse stockpile lever.
+- (checkable, measured) claims 1, 3, 4 above.
+- (checkable, next) after the floor rule: the share of served sinks with mean inbound latency
+  > 24 ticks falls materially from 96% — the claim-1 instrument re-run is the falsifier for the
+  rule having done anything. Kill line: if it is still ≥ 90% at 10K and 16K, the floor was not
+  what withheld the stock and the reading of claim 4 was wrong.
 
 ## Evidence
 
