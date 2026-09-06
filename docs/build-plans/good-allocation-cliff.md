@@ -332,17 +332,21 @@ gained — the correct cost, since it needs that much to survive the same number
   The exporter/importer asymmetry (ship down to 10 cycles, fill toward 40) survives: exporters keep
   their 10-cycle reserve (`EXPORT_RESERVE_COVER`, `lib/constants/directed-logistics.ts:40`), ordinary
   donors their 40 (`DONOR_RESERVE_COVER`, line 89), so levelling can never create a new deficit.
-- `unservable` (`UnservableDeficit`, `directed-logistics.ts:234`) keeps its definition — the
-  deficit's *full* shortfall to the 40-cycle target less the summed live reachable drawable — and its
-  computation point: the live reachable drawable is summed at the deficit's own draw turn, after
-  every earlier draw in this good's pass, exactly as today (line 389 onward). Its one reader is the
-  alerts service's "Demand unservable" (`lib/services/alerts.ts:452-469`); the build planner does not
-  read it — its suppression gate is `logisticsFundingBound` (`lib/engine/directed-build.ts:458`).
-  **The population carrying the reading inverts.** Today worst-first order serves the severest
-  deficits and leaves the residue on the tail (`UnservableDeficit`'s docstring, lines 224-226); under
-  ascending-cover order the tail is the best-covered worlds, so the residue lands on comfortable
-  ones. The alert keeps its definition (a structural gap between want and what exists) and its copy
-  is re-read at build time against that meaning; it is no longer a proxy for "starving".
+- `unservable` (`UnservableDeficit`, `directed-logistics.ts:234`) keeps its meaning — the part of a
+  deficit's want that no reachable supply can close — but moves its **computation point to the end
+  of the good's pass** (owner decision at implementation, 2026-09-06: "the second makes the most
+  sense"): once levelling for the good has finished, every world still short of its target reads
+  its remaining want (`logisticsTarget − stock − scheduledInbound − what it drew this run`) less the
+  reachable drawable its donors still hold, strictly positive or absent. Under a real shortage that
+  remaining drawable is spent, so every short world carries its share and the levels again sum to
+  the tonnage the faction lacks — the property today's per-turn reading had under worst-first order
+  and would lose under levelling, where a world's turn comes while the pool still looks ample and
+  only the last-drawn world would see the drained donors. Its one reader is the alerts service's
+  "Demand unservable" (`lib/services/alerts.ts:452-469`), whose copy ("a shortfall no reachable
+  supplier or local production can close") is exactly this reading; the build planner does not read
+  it — its suppression gate is `logisticsFundingBound` (`lib/engine/directed-build.ts:458`). A world
+  the budget stopped, with reachable drawable still standing, reads `fundingBound`, not unservable —
+  the two questions stay separate ("does enough exist" vs "did money reach it").
 - `fundingBound` (`FundingBoundMatch`, line 206) keeps its gameplay meaning — "this shortfall persists
   because of money" — which requires re-denominating its materiality test: the residual is measured
   against the **raise** the budget stopped (`(L − levelCover) × demand`), not against the full
@@ -597,7 +601,7 @@ whole change is one processor's engine, and its galaxy read is the Verification 
 | fixed point with top-up after each exhaustion | new | Task 3 |
 | "descending `GOOD_NECESSITY`", ties by ascending good id | exists + new | `lib/constants/physical-economy.ts:105-131`; the ordering itself Task 4 (`goodsInNecessityOrder`) |
 | `fundingBound` materiality against the raise | new | Task 4, replacing the `d.shortfall` denominator at `directed-logistics.ts:476-478`; `FUNDING_BOUND_RESIDUAL_FRACTION` exists `lib/constants/directed-logistics.ts:100` |
-| `unservable` at the deficit's draw turn | exists | `directed-logistics.ts:389-397` (`reachableDrawable`), emitted `:492-498` |
+| `unservable` at the end of the good's pass | new | Task 4 (replacing Task 3's first-turn capture); the live-drawable sum reuses today's walk, `directed-logistics.ts` `reachableDrawableFor` |
 | `budgetSkipped`, `blocked`, `logisticsDispatched`, `workPerformedByFaction`, `logisticsBudget` | exist | `TransferMatchResult` `directed-logistics.ts:246-261`; processor return `lib/tick/processors/directed-logistics.ts:308` |
 | Verification reads: haul-budget spend fraction, `budgetSkipped`, lane utilisation / blocked volume / queued levels, `famineShare`, cover medians, conservation identities, tick rate | exist | `lib/tick-harness/types.ts:378`; `lane-analysis.ts:184,190-233`; `population-analysis.ts:428`; `market-analysis.ts:222-262`; `conservation-analysis.ts`; runner wall-clock |
 | Verification reads: ending-cover spread per scarce group, share of a faction's worlds under `SHORTAGE_SATISFACTION` on water/food, `fed()` pass rate | new | the rebuilt `temp/allocation-cliff-diag.ts` (gitignored, never a task file) — see Verification |
@@ -708,10 +712,12 @@ Interface:  `goodsInNecessityOrder(goodIds: Iterable<string>): string[]` — des
             `FUNDING_BOUND_RESIDUAL_FRACTION` of **the raise the budget stopped** standing
             (`raiseFor(world, L)` at that draw), replacing the `d.shortfall` denominator at
             `directed-logistics.ts:476-478`; `FundingBoundMatch` fields unchanged.
-            `unservable`: definition unchanged — `shortfall − reachableDrawable` with `shortfall` the
-            full `logisticsTarget − (stock + scheduledInbound)` and `reachableDrawable` summed at the
-            deficit's own draw turn after every earlier draw in the good's pass; `UnservableDeficit`
-            fields unchanged.
+            `unservable`: meaning unchanged, computation point moved to the END of the good's pass
+            (spec §3): for every deficit still short of its target once levelling for the good is
+            done, `remainingWant − reachableDrawableNow`, where `remainingWant = logisticsTarget −
+            (stock + scheduledInbound) − drawn this run` and `reachableDrawableNow` is the live
+            drawable its `reachableFrom` donors still hold; emitted only where strictly positive;
+            `UnservableDeficit` fields unchanged. Task 3's first-turn capture is replaced.
 Proves:     - with a budget that funds one good's raises only, water's draws are placed and a
               lower-necessity good's are budget-skipped, regardless of which good's deficits are
               more severe; within one necessity weight the lower good id is processed first;
@@ -719,9 +725,9 @@ Proves:     - with a budget that funds one good's raises only, water's draws are
             - a budget-stopped raise of 3 cycles against a 40-cycle shortfall, left 50% unmet, flags
               `fundingBound`; the same stop left 5% of the raise unmet does not — and the old
               denominator would have decided both the other way;
-            - a world levelled to `L` but short of its target reads `unservable` for the buffer it
-              lacks, with the level equal to full shortfall less live reachable drawable at its draw
-              turn — not less the pool computed before draws began;
+            - under a shared pool that runs dry, every world left short reads `unservable` and the
+              levels sum to the faction's gap (Σ remaining want − 0), not only the last-drawn
+              world's; a world whose donors still hold stock at the end of the pass reads nothing;
             - a deficit with no donor anywhere still reads `unservable` for its whole want and never
               `fundingBound`;
             - vacuity: `goodsInNecessityOrder` returning input order fails the first entry.
