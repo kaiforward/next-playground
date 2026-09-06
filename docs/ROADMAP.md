@@ -40,6 +40,12 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   - **Player priority lever** (2026-08-03, reworded 2026-09-06): logistics levels the emptiest
     shelf first; a per-system priority flag would let the player put a world ahead of that.
     Deferred — the default behaviour ships without it.
+  - **Saturated lanes decide who stays low under levelling** (measured 2026-09-06, seed 42, 600
+    systems): a world whose only donors sit behind lanes at capacity counts in the pool that sets the
+    level but cannot draw, so it is fixed at its start cover while the rest level higher — 74% of
+    starving zero-fill worlds at 10K still had reachable stock they could not cross (1 world at 16K).
+    Lane capacity, not supply, is the binding constraint there; this pass's lane pricing and investment
+    is where it is addressed.
   - **Player exposure stays coarse**: sensible defaults for thresholds, never raw per-good
     warehouse valves (unmanageable, illegible). At most one coarse in-fiction policy (a faction
     stockpile stance); real control lives in automation toggles, budgets, directed orders.

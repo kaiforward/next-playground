@@ -223,6 +223,12 @@ its target reads its remaining want less what its reachable donors still hold â€
 shortage every short world carries its own share and the levels sum to exactly the tonnage the
 faction lacks.
 
+The same sharing holds for water and food. A faction whose reachable supply of a survival good cannot
+lift every world over the famine step (`SHORTAGE_SATISFACTION`, half rations) levels all of them to the
+same low cover, so a severe enough shortage puts every world of the faction into Famine and closes the
+planner's housing gate faction-wide at once â€” an accepted default: the alternative, saving some worlds
+by starving others, is the player's choice to make, not the game's.
+
 ### Dispatch and arrival
 
 A matched transfer is not instant: dispatch debits the donor's stock and writes a row onto the
