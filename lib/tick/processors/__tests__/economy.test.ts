@@ -19,6 +19,7 @@ import { strikeMultiplier } from "@/lib/engine/population";
 import { SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { brakeKnee } from "@/lib/engine/tick";
@@ -1402,5 +1403,127 @@ describe("economy processor: the shard debug log", () => {
       else process.env.DEBUG_ECONOMY = previous;
       vi.resetModules();
     }
+  });
+});
+
+// ── Reserve-rate folding: realisedUse, steadyInbound, lateInboundShare ────
+
+describe("economy processor: reserve-rate folding", () => {
+  it("moves a settled steadyInbound by 0.2 of the gap for one ordinary 8-cycle refill, not to it", async () => {
+    // A reference-interval run (catchUp = 1) so the accumulated inbound this cycle equals the
+    // per-reference-cycle observation directly. An 8-cycle refill of a rate-10 stream credits
+    // 80 in one run; folded at weight 1/40 against a settled prior of 10, the result is
+    // 10 + (80 − 10)/40 = 11.75 = 1.175 × the prior rate — not jumped to the 80 observation.
+    const priorRate = 10;
+    const inboundSinceFold = 8 * priorRate;
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-supplied", 0)],
+      markets: [{
+        ...makeMarket("sys-supplied", "food", FIXTURE_BAND.targetStock),
+        steadyInbound: priorRate,
+        inboundSinceFold,
+      }],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
+    const expected = priorRate + (inboundSinceFold - priorRate) / DIRECTED_LOGISTICS.RESERVE_WINDOW_CYCLES;
+    expect(expected).toBeCloseTo(1.175 * priorRate, 6); // pins the constant's current value (40)
+    expect(world.markets[0].steadyInbound).toBeCloseTo(expected, 6);
+  });
+
+  it("seeds steadyInbound from this cycle's observation when no prior rate is stored", async () => {
+    // No stored steadyInbound at all: the fold must take this cycle's reading outright
+    // (80) rather than averaging it against an assumed 0 (which would read 80/40 = 2).
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-fresh", 0)],
+      markets: [{
+        ...makeMarket("sys-fresh", "food", FIXTURE_BAND.targetStock),
+        inboundSinceFold: 80,
+      }],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
+    expect(world.markets[0].steadyInbound).toBeCloseTo(80, 6);
+  });
+
+  it("zeroes inboundSinceFold and lateInboundSinceFold after folding them", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-zero", 0)],
+      markets: [{
+        ...makeMarket("sys-zero", "food", FIXTURE_BAND.targetStock),
+        inboundSinceFold: 40,
+        lateInboundSinceFold: 10,
+      }],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
+    expect(world.markets[0].inboundSinceFold).toBe(0);
+    expect(world.markets[0].lateInboundSinceFold).toBe(0);
+  });
+
+  it("folds lateInboundShare from the credited late fraction, and leaves it untouched when nothing was credited", async () => {
+    // 10 credited, 4 late this cycle → observed share 0.4, folded from a settled 0.1 at
+    // weight 1/40: 0.1 + (0.4 − 0.1)/40 = 0.1075.
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-late", 0)],
+      markets: [{
+        ...makeMarket("sys-late", "food", FIXTURE_BAND.targetStock),
+        lateInboundShare: 0.1,
+        inboundSinceFold: 10,
+        lateInboundSinceFold: 4,
+      }],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
+    expect(world.markets[0].lateInboundShare).toBeCloseTo(0.1075, 6);
+
+    // Nothing credited this cycle: a 0/0 observation must not fold in, so the stored share
+    // is left exactly where it was rather than dragged toward a false 0.
+    const untouched = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-idle", 0)],
+      markets: [{
+        ...makeMarket("sys-idle", "food", FIXTURE_BAND.targetStock),
+        lateInboundShare: 0.1,
+      }],
+      modifiers: [],
+    });
+    await runEconomyProcessor(untouched, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
+    expect(untouched.markets[0].lateInboundShare).toBe(0.1);
+  });
+
+  it("seeds realisedUse from the metals cascade's own applied draw, per reference cycle", async () => {
+    // A metals factory whose recipe draw is fully satisfied by ore in stock: the ore
+    // market's realisedUse should seed to a positive observation (its own drawnByGood),
+    // never sit at 0, and never at 0's average with a real draw.
+    const smelter: TickSystem = {
+      id: "smelter",
+      name: "smelter",
+      economyType: "industrial",
+      regionId: "r1",
+      factionId: "f1",
+      control: "developed",
+      governmentType: "federation",
+      population: 65,
+      popCap: 200,
+      unrest: 0,
+      buildings: { metals: 2, vocational_school: 1 },
+      buildingIdleCycles: {},
+      collapseDebt: 0,
+      yields: unitResourceVector(),
+      extractionEff: unitResourceVector(),
+      depositCounts: emptyResourceVector(),
+      peopleLand: 0,
+    };
+    const world = new InMemoryEconomyWorld({
+      systems: [smelter],
+      markets: [
+        makeMarket("smelter", "ore", FIXTURE_BAND.targetStock * 4),
+        makeMarket("smelter", "metals", FIXTURE_BAND.minStock + 10),
+      ],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
+    const ore = world.markets.find((m) => m.goodId === "ore")!;
+    expect(ore.realisedUse).toBeGreaterThan(0);
   });
 });
