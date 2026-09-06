@@ -216,3 +216,62 @@ through {"totalThroughVolume": 2610794.565, "throughOverHaulVolume": 2.218, "sys
 top10 Nexus-12[faction-632]:35438.403, Sentinel-1[faction-641]:34808.321, Horizon-20[faction-642]:29946.094, Aegis-3[faction-641]:29131.3, Sentinel-5[faction-641]:28720.713, Rift-18[faction-632]:26534.021, Crucible-2[faction-625]:26373.33, Rift-8[faction-632]:26047.374, Cascade-17[faction-630]:23796.427, Horizon-2[faction-642]:23068.346
 byGood ore top3Share=0.066 | gas top3Share=0.071 | metals top3Share=0.091 | minerals top3Share=0.109 | consumer_goods top3Share=0.223
 ```
+
+### Claim 3 — depot sites exist (the Idea section's first checkable premise)
+
+Site test, per window: for each of the five highest-volume goods, a developed system qualifies
+**strictly** when ≥ 1 developed system within two hops (over lanes whose endpoints are own or
+unclaimed) has volume-weighted mean inbound latency > 24 ticks for that good, AND the candidate's
+own fuel-shortest path to the nearest donor of that good (any source of a haul in the window)
+rounds to ≤ 24 ticks. **Relaxed** (secondary, not the falsifier): the worst late neighbour's
+latency exceeds the candidate's donor distance by ≥ 24 ticks.
+
+```
+Meaning:    More than half of developed worlds sit within a cycle of a supplier of a top good
+            while a neighbour within two hops waits over a cycle for that same good — and those
+            neighbours get almost none of their inbound from anywhere near.
+Claim:      A material share of developed systems qualify as a depot site for a top-five good.
+Number:     strict sites (any of top-5 goods): 63.8% (111/174) at 10K, 56.3% (107/190) at 16K —
+            kill line 10%. Relaxed: 71.3% / 65.3%. Per good, 29-55 strict sites of 174-190.
+            Median relayed demand at a site (late neighbours' inbound per cycle): 29 (10K),
+            92 (16K) vs median sink inbound per cycle 12 / 33 — a site relays ≥ 2 median consumers.
+            **Of strict sites, 65-80% are self-donor** (the site itself shipped the good in the
+            window: gas 29/43, textiles 45/55 at 10K; gas 26/43, medicine 25/34 at 16K), and late
+            neighbours receive only **0.4-12% of their inbound from within one cycle's transit**
+            (mean near-inbound share per good 0.035-0.119 at 10K, 0.004-0.038 at 16K).
+Horizon:    10K (ticks 9601-9840) and 16K (15601-15840); 1K has no hauls.
+Cohort:     all developed systems, per faction graph; top-5 goods by window haul volume (10K: gas,
+            textiles, chemicals, ore, minerals; 16K: gas, ore, minerals, biomass, medicine).
+Licenses:   supports "sites are common, and relayed demand is large enough to be worth hauling."
+            Also supports a sharper finding: a supplier within a cycle of a late world is the
+            NORM, yet it serves almost none of that world's inbound. Does NOT say why — two
+            readings fit: the near supplier is an ordinary donor holding to its 40/56-cycle floor
+            (the depot policy fixes exactly that), or it is spare-bound (its drawable stock is
+            exhausted each run and the far hauls are the residual; a depot then helps only by
+            pre-positioning far-sourced stock). Both keep the direction; they decide its scope.
+            Under-counts sites slightly: friendly/allied foreign space is open in the game and
+            closed here. "Donor" is any source in the window, not a structural producer.
+```
+
+**Outcome:** claim confirmed; the depot direction proceeds to `/feature-spec`. The floor-bound vs
+spare-bound split is the spec's first hazard-4 row and needs a matcher hook (donor drawable at
+each late deficit's turn) — not measured here.
+
+### Raw output — site test, `temp/depot-diag.ts 600 42 16000 10000,16000` (2026-09-06, same run shape; validation unchanged)
+
+```
+== t10000 window ticks 9601-9840 {"topGoods": ["gas", "textiles", "chemicals", "ore", "minerals"], "developed": 174, "strictSitesAnyGood": 111, "strictShare": 0.638, "relaxedSitesAnyGood": 124, "relaxedShare": 0.713, "relayedDemandPerCycleMedian": 29.25168681957083, "medianSinkInboundPerCycle": 12.168159956355504}
+  {"good": "gas", "donors": 37, "candidates": 174, "strictSites": 43, "strictSelfDonor": 29, "lateNeighbourNearInboundShareMean": 0.073, "relaxedSites": 60, "withLateNeighbour": 118, "withinCycleOfDonor": 63, "nearestDonorTicksP50": 33}
+  {"good": "textiles", "donors": 68, "candidates": 174, "strictSites": 55, "strictSelfDonor": 45, "lateNeighbourNearInboundShareMean": 0.119, "relaxedSites": 65, "withLateNeighbour": 104, "withinCycleOfDonor": 94, "nearestDonorTicksP50": 17}
+  {"good": "chemicals", "donors": 23, "candidates": 174, "strictSites": 29, "strictSelfDonor": 20, "lateNeighbourNearInboundShareMean": 0.05, "relaxedSites": 59, "withLateNeighbour": 99, "withinCycleOfDonor": 37, "nearestDonorTicksP50": 52}
+  {"good": "ore", "donors": 46, "candidates": 174, "strictSites": 46, "strictSelfDonor": 31, "lateNeighbourNearInboundShareMean": 0.057, "relaxedSites": 61, "withLateNeighbour": 102, "withinCycleOfDonor": 75, "nearestDonorTicksP50": 29}
+  {"good": "minerals", "donors": 34, "candidates": 174, "strictSites": 35, "strictSelfDonor": 21, "lateNeighbourNearInboundShareMean": 0.035, "relaxedSites": 63, "withLateNeighbour": 113, "withinCycleOfDonor": 55, "nearestDonorTicksP50": 40}
+  sample: gas Eclipse-13[faction-630] donor=0t late=3 worst=240t relayed/cycle=569.8 | gas Eclipse-23[faction-630] donor=0t late=2 worst=240t relayed/cycle=199.8 | gas Horizon-12[faction-642] donor=14t late=1 worst=112t relayed/cycle=27.0 | gas Horizon-17[faction-642] donor=0t late=1 worst=44t relayed/cycle=25.2 | gas Solace-9[faction-642] donor=0t late=1 worst=44t relayed/cycle=25.2 | gas Horizon-18[faction-642] donor=24t late=1 worst=44t relayed/cycle=25.2
+== t16000 window ticks 15601-15840 {"topGoods": ["gas", "ore", "minerals", "biomass", "medicine"], "developed": 190, "strictSitesAnyGood": 107, "strictShare": 0.563, "relaxedSitesAnyGood": 124, "relaxedShare": 0.653, "relayedDemandPerCycleMedian": 92.21787952312299, "medianSinkInboundPerCycle": 33.19153120181143}
+  {"good": "gas", "donors": 45, "candidates": 190, "strictSites": 43, "strictSelfDonor": 26, "lateNeighbourNearInboundShareMean": 0.024, "relaxedSites": 69, "withLateNeighbour": 118, "withinCycleOfDonor": 83, "nearestDonorTicksP50": 31}
+  {"good": "ore", "donors": 49, "candidates": 190, "strictSites": 36, "strictSelfDonor": 25, "lateNeighbourNearInboundShareMean": 0.03, "relaxedSites": 50, "withLateNeighbour": 73, "withinCycleOfDonor": 76, "nearestDonorTicksP50": 29}
+  {"good": "minerals", "donors": 48, "candidates": 190, "strictSites": 37, "strictSelfDonor": 26, "lateNeighbourNearInboundShareMean": 0.004, "relaxedSites": 48, "withLateNeighbour": 101, "withinCycleOfDonor": 74, "nearestDonorTicksP50": 30}
+  {"good": "biomass", "donors": 48, "candidates": 190, "strictSites": 42, "strictSelfDonor": 28, "lateNeighbourNearInboundShareMean": 0.031, "relaxedSites": 42, "withLateNeighbour": 80, "withinCycleOfDonor": 82, "nearestDonorTicksP50": 27}
+  {"good": "medicine", "donors": 34, "candidates": 190, "strictSites": 34, "strictSelfDonor": 25, "lateNeighbourNearInboundShareMean": 0.038, "relaxedSites": 69, "withLateNeighbour": 149, "withinCycleOfDonor": 55, "nearestDonorTicksP50": 48}
+  sample: gas Cascade-11[faction-630] donor=0t late=1 worst=27t relayed/cycle=21.6 | gas Eclipse-23[faction-630] donor=0t late=2 worst=280t relayed/cycle=224.1 | gas Horizon-12[faction-642] donor=14t late=1 worst=28t relayed/cycle=43.9 | gas Horizon-17[faction-642] donor=0t late=2 worst=66t relayed/cycle=573.3 | gas Solace-9[faction-642] donor=0t late=1 worst=51t relayed/cycle=43.6 | gas Horizon-18[faction-642] donor=24t late=1 worst=51t relayed/cycle=43.6
+```
