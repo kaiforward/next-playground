@@ -363,6 +363,57 @@ test reaches the stock claim 4 found, and the role approach is re-assessed rathe
 (Kai, 2026-09-06: "we might have to step back and re-asses"). The 10-cycle window and a 0.5 line
 are reported beside it as secondary readings, never as the kill line.
 
+```
+Meaning:    By count, most worlds holding withheld stock are fed by logistics; by tonnage, the
+            withheld stock splits by good — for the processed and consumer goods it sits on worlds
+            that logistics or their own part-production keeps replenished, for ore and minerals it
+            sits on worlds that neither make nor receive them, which are not consuming them either.
+Claim:      The withheld stock sits mostly on logistics-fed markets (inbound over 40 cycles ≥ 0.9 ×
+            40 cycles of demand).
+Number:     COMMITTED KILL LINE (inbound only): 1.9% (10K), 5.0% (16K) of unlockable stock — under
+            30% → FALSIFIED as committed. The spec's actual test (production + inbound ≥ 0.9 ×
+            demand, 40-cycle window): 36.7% (10K), 32.8% (16K) overall; per good — gas 78% / 74%,
+            textiles 100%, chemicals 99.5%, biomass 84%, medicine 99.9%; ore 1.2% / 5.4%,
+            minerals 1.3% / 5.4%. Ore + minerals hold 58% (10K) / 62% (16K) of all unlockable
+            tonnage. By market count, 70-80% of floor-bound markets are fed (ratio40 median ≈ 1.0).
+            97-99% of the withheld tonnage sits at ≥ 32 cycles of cover (worlds that order nothing).
+Horizon:    10K (window 8881-9840, classification at run 9840) and 16K (14881-15840, run 15840).
+Cohort:     all non-producer markets with drawable 0 and stock > 10 × demand at the last run
+            before the snapshot; top-5 goods per horizon by 10-cycle haul volume.
+Licenses:   the inbound-only supplier test is dead: it reaches under 5% of the stock. The
+            production + inbound test reaches 74-100% of the withheld processed/consumer-good
+            stock and ~1-5% of the withheld ore/minerals stock. The ore/minerals holders neither
+            produce, receive, nor (over 40 cycles at ≥ 32 cycles of cover) consume the good —
+            consistent with stalled tier-1 industry whose `honestUseRate` counts a draw "when
+            running" that is not running (hypothesis; not measured here). That stock is a
+            different problem from the supplier floor and no inbound rule reaches it. Does NOT say
+            the reachable stock would be released in time or safely (claims 1/4 Licenses stand).
+```
+
+**Outcome:** committed falsifier FALSIFIED; the spec's own test survives for five of seven goods
+and is dead for the two tier-0 inputs. Owner decision pending (2026-09-06): proceed with the
+supplier floor on production + inbound over a long window, scoped to what it reaches, or step
+back.
+
+### Raw output — `temp/depot-fed-diag.ts 600 42 16000 10000,16000` (matcher hook, reverted)
+
+```
+== t10000 window40 8881-9840 lastRun 9840 topGoods ['gas', 'textiles', 'chemicals', 'ore', 'minerals']
+  all {"unlockable": 16494327.469, "shareFed40_09": 0.019, "shareFed40_05": 0.021, "shareFed10_09": 0.012, "shareFedPlusProd40_09": 0.367}
+  {"good": "gas", "floorBoundMarkets": 130, "marketsFed40": 99, "marketsFedPlusProd40": 113, "shareFedPlusProd40_09": 0.778, "shareFedPlusProd10_09": 0.761, "unlockable": 4227500.984, "shareFed40_09": 0.034, "shareFed40_05": 0.036, "shareFed10_09": 0.018, "ratio40P50": 1.083, "ratio40P90": 1.423, "deficitShareOfUnlock": 0.007, "deficitFed40_09": 0.857, "highCoverShareOfUnlock": 0.987, "highCoverFed40_09": 0.022}
+  {"good": "textiles", "floorBoundMarkets": 90, "marketsFed40": 72, "marketsFedPlusProd40": 88, "shareFedPlusProd40_09": 1, "shareFedPlusProd10_09": 0.922, "unlockable": 1457525.034, "shareFed40_09": 0.014, "shareFed40_05": 0.015, "shareFed10_09": 0.006, "ratio40P50": 1.152, "ratio40P90": 1.455, "deficitShareOfUnlock": 0.235, "deficitFed40_09": 0.003, "highCoverShareOfUnlock": 0.512, "highCoverFed40_09": 0.022}
+  {"good": "chemicals", "floorBoundMarkets": 101, "marketsFed40": 81, "marketsFedPlusProd40": 92, "shareFedPlusProd40_09": 0.995, "shareFedPlusProd10_09": 0.982, "unlockable": 1199371.528, "shareFed40_09": 0.042, "shareFed40_05": 0.046, "shareFed10_09": 0.028, "ratio40P50": 1.108, "ratio40P90": 1.519, "deficitShareOfUnlock": 0.003, "deficitFed40_09": 0.984, "highCoverShareOfUnlock": 0.978, "highCoverFed40_09": 0.02}
+  {"good": "ore", "floorBoundMarkets": 105, "marketsFed40": 73, "marketsFedPlusProd40": 75, "shareFedPlusProd40_09": 0.012, "shareFedPlusProd10_09": 0.011, "unlockable": 5943106.16, "shareFed40_09": 0.01, "shareFed40_05": 0.012, "shareFed10_09": 0.009, "ratio40P50": 1.007, "ratio40P90": 1.455, "deficitShareOfUnlock": 0.002, "deficitFed40_09": 0.887, "highCoverShareOfUnlock": 0.996, "highCoverFed40_09": 0.006}
+  {"good": "minerals", "floorBoundMarkets": 126, "marketsFed40": 87, "marketsFedPlusProd40": 89, "shareFedPlusProd40_09": 0.013, "shareFedPlusProd10_09": 0.01, "unlockable": 3666823.764, "shareFed40_09": 0.012, "shareFed40_05": 0.014, "shareFed10_09": 0.009, "ratio40P50": 1.005, "ratio40P90": 1.295, "deficitShareOfUnlock": 0.003, "deficitFed40_09": 0.608, "highCoverShareOfUnlock": 0.992, "highCoverFed40_09": 0.006}
+== t16000 window40 14881-15840 lastRun 15840 topGoods ['gas', 'ore', 'minerals', 'biomass', 'medicine']
+  all {"unlockable": 15753899.284, "shareFed40_09": 0.05, "shareFed40_05": 0.071, "shareFed10_09": 0.022, "shareFedPlusProd40_09": 0.328}
+  {"good": "gas", "floorBoundMarkets": 136, "marketsFed40": 101, "marketsFedPlusProd40": 116, "shareFedPlusProd40_09": 0.74, "shareFedPlusProd10_09": 0.702, "unlockable": 4379706.35, "shareFed40_09": 0.076, "shareFed40_05": 0.096, "shareFed10_09": 0.038, "ratio40P50": 1.016, "ratio40P90": 1.169, "deficitShareOfUnlock": 0.022, "deficitFed40_09": 0.945, "highCoverShareOfUnlock": 0.966, "highCoverFed40_09": 0.047}
+  {"good": "ore", "floorBoundMarkets": 117, "marketsFed40": 50, "marketsFedPlusProd40": 64, "shareFedPlusProd40_09": 0.054, "shareFedPlusProd10_09": 0.026, "unlockable": 5861046.939, "shareFed40_09": 0.021, "shareFed40_05": 0.05, "shareFed10_09": 0.013, "ratio40P50": 0.816, "ratio40P90": 1.083, "deficitShareOfUnlock": 0.005, "deficitFed40_09": 0.609, "highCoverShareOfUnlock": 0.982, "highCoverFed40_09": 0.014}
+  {"good": "minerals", "floorBoundMarkets": 119, "marketsFed40": 74, "marketsFedPlusProd40": 80, "shareFedPlusProd40_09": 0.054, "shareFedPlusProd10_09": 0.025, "unlockable": 3945224.117, "shareFed40_09": 0.04, "shareFed40_05": 0.052, "shareFed10_09": 0.014, "ratio40P50": 1.003, "ratio40P90": 1.12, "deficitShareOfUnlock": 0.004, "deficitFed40_09": 1, "highCoverShareOfUnlock": 0.984, "highCoverFed40_09": 0.028}
+  {"good": "biomass", "floorBoundMarkets": 107, "marketsFed40": 75, "marketsFedPlusProd40": 89, "shareFedPlusProd40_09": 0.842, "shareFedPlusProd10_09": 0.749, "unlockable": 1069804.967, "shareFed40_09": 0.122, "shareFed40_05": 0.157, "shareFed10_09": 0.021, "ratio40P50": 1.008, "ratio40P90": 1.111, "deficitShareOfUnlock": 0.098, "deficitFed40_09": 0.146, "highCoverShareOfUnlock": 0.893, "highCoverFed40_09": 0.11}
+  {"good": "medicine", "floorBoundMarkets": 102, "marketsFed40": 87, "marketsFedPlusProd40": 101, "shareFedPlusProd40_09": 0.999, "shareFedPlusProd10_09": 0.872, "unlockable": 498116.912, "shareFed40_09": 0.081, "shareFed40_05": 0.082, "shareFed10_09": 0.041, "ratio40P50": 1.069, "ratio40P90": 1.238, "deficitShareOfUnlock": 0.22, "deficitFed40_09": 0.098, "highCoverShareOfUnlock": 0.768, "highCoverFed40_09": 0.062}
+```
+
 ## Spec — the supplier floor
 
 ```
