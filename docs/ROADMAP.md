@@ -18,10 +18,14 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   `MapData.laneBandBySystem`. Tight clusters hide most names until zoomed well in (cell-fit rule,
   no priority scheme) — decide after play whether a priority tier is wanted.
   *Next step:* play with both for a few sessions, then decide.
-- **[L] Logistics gameplay pass — real cost, hub/chain depth, the surface war will interdict.**
-  Logistics works mechanically but hauling costs nothing and nothing can threaten it — no game in
-  the pillar yet. This pass prices movement (the markets row below needs transport cost to make
-  per-system prices mean anything) and shapes the adversarial surface war later attacks.
+- **[L] Logistics gameplay pass — the surface war will interdict, and what remains after cost and
+  the supplier floor.** The pass's first two decisions — **hauling cost as a funded pool** and the
+  **supplier floor** (a third market role: steady inbound counts like production, so a supplier
+  gives down to the producer floor; consumer reserve depth is the player's stockpile lever) — are
+  in spec, with their evidence, in
+  [logistics-gameplay-pass.md](./build-plans/logistics-gameplay-pass.md); the **depot** (synthetic
+  relayed demand for neighbourhoods short together) is deferred there pending a re-measure once the
+  floor ships. This row keeps the rest.
   Absorbs the former depth-check audit row: the pillar is still shallow — e.g. penalised
   cross-unowned-space
   logistics was inherited from a retired umbrella and never built. Its own pass before calling the
@@ -32,11 +36,6 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   system when logistics carries people (decided at the abandonment measurement, 2026-08-10; the
   interim famine gate on delivery is explicitly temporary scaffolding for this). Kai's design
   leanings for the pass (all leanings, not decisions):
-  - **Hub/chain is the real hard part** (2026-08-03): difficulty should come from being part of a
-    *chain* — infrastructure, cost, labour, distance — not per-world stock thresholds. A
-    throughput/entrepôt world would request more inbound when its exports hit their limit (demand
-    propagating upstream through hubs) while producers near consumers ship direct. The point-to-point
-    matcher today has no hub concept.
   - **Player priority lever** (2026-08-03, reworded 2026-09-06): logistics levels the emptiest
     shelf first; a per-system priority flag would let the player put a world ahead of that.
     Deferred — the default behaviour ships without it.
@@ -71,13 +70,11 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   **Route dictionary / per-source path cache** — not needed at 600 systems (the wall-clock share
   held under the ~3× line); the 10,000-system read was never run (projected ~2h). Book this only if
   that larger read fails the line.
-  *Next step:* lane mechanics and their map/panel surfaces have shipped on `shared/logistics-lanes`
-  (`docs/active/gameplay/logistics-lanes.md`) — real routing, capacity, scheduled transit,
-  investment and claiming, the lane layer and card, in-transit rows. What remains is the unbuilt
-  leanings above. **Decided 2026-09-06:** hauling cost lands as a funded pool (treasury-billed, own
-  slider, one tunable constant); who owns production and movement is the faction-direction pass's
-  question. Depot viability measure and working file:
-  [logistics-gameplay-pass.md](./build-plans/logistics-gameplay-pass.md).
+  *Next step:* after the haul-cost + supplier-floor spec ships, `/measure` the remaining latency
+  (re-run the working file's claim-1 instrument) and decide the depot; then the four open items
+  above — founding freight on real ships, people-movement unification, input-proximity weighting,
+  the player priority lever. Who owns production and movement (companies, strata) is the
+  faction-direction pass's question, not this row's.
 - **[M] Map drawing tool — player paints where stars generate.** Second author of the map-gen
   density grid (`docs/active/gameplay/universe.md`): a New Game canvas writes the same 0–1 grid
   the procedural clusters produce, so galaxy shape becomes paintable with no second generation
