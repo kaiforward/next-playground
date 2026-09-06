@@ -292,6 +292,9 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   (`temp/stage3-gate-report.md`).
   Kai's leaning (2026-08-05): industry pricing probably lands here too — it touches the same
   ROI/build-planner surface, so the ROI ordering gets retuned once, not twice.
+  **Depots** (logistics gameplay pass, 2026-09-06) are a market policy needing no building; when
+  this row makes storage a built product, a depot's held cover is its warehouse build target — one
+  building, not two.
   *Next step:* design pass + `/spec-review` (cross-mechanic: brake, pricing band `maxStock`,
   autonomic build, decay, Industry UI).
   *Don't:* re-size the existing constants to make a brake cap work — no single multiplier fits a

@@ -12,6 +12,23 @@ Roadmap row: **[L] Logistics gameplay pass**. Transient; deleted on the PR that 
   for logistics, sized per good from measured through-flow (the freight ledger's `routeEdges`), with
   restock ranked below real consumption. The latency case rests on the measurement below.
 
+- **Depot direction after the measure (2026-09-06, Kai):** a depot is not a new building and not a
+  through-flow reading. For a good it relays, a world uses the *producer's* donor floor
+  (`EXPORT_RESERVE_COVER`, 10 cycles) instead of the ordinary donor's (`DONOR_RESERVE_COVER`, 40
+  and clear 56), keeping the ordinary want level (`WAREHOUSE_COVER` 40, deficit below 32). The
+  30-cycle band between is what it passes on. Both figures are denominated in cycles of the
+  world's own demand, so a depot for a good it does not consume needs a **relayed demand** figure:
+  the build planner's local unmet rate deficit for that good (the scan that already asks "is there
+  reachable unmet demand nothing can serve") — where no factory can be proposed to close it, the
+  same figure sizes the depot and proposes its placement. Placement and sizing are one calculation.
+  Depot requests rank **below real consumption** in the matcher: an empty depot reads as zero cover
+  and would otherwise jump the hungry-world queue under lowest-cover-first levelling. Open: how
+  relayed demand stays honest as neighbours grow their own industry.
+- **Dependency on the physical warehouse row** (roadmap, Unqueued): the depot is a market policy
+  and needs no building, but its held cover needs physical room; when storage becomes a built
+  product, the depot's holding target is that row's build target — one warehouse, not two
+  buildings.
+
 ## Evidence
 
 ### Claim 1 — served deficit worlds sit more than a cycle from their donors
