@@ -606,6 +606,19 @@ export function matchFactionTransfers(
     return want - remaining;
   }
 
+  // One saturation-blind search per sink SYSTEM for the whole run, shared by every good that system
+  // is short of — reachability is traversability alone (`RouteBookerFor.reachableFrom`), so it
+  // neither varies by good nor moves with this run's bookings. Built on first use.
+  const searches = new Map<string, (donorId: string) => boolean>();
+  const canReach = (d: Deficit, donorId: string): boolean => {
+    let search = searches.get(d.systemId);
+    if (!search) {
+      search = booker.reachableFrom(d.systemId);
+      searches.set(d.systemId, search);
+    }
+    return search(donorId);
+  };
+
   for (const goodId of goodsInNecessityOrder(deficitsByGood.keys())) {
     const worlds = deficitsByGood.get(goodId);
     if (!worlds) continue; // unreachable: the order is taken from this very map's keys
@@ -623,16 +636,11 @@ export function matchFactionTransfers(
       continue;
     }
 
-    // One saturation-blind search per deficit — see `RouteBookerFor.reachableFrom`'s own docstring
-    // — frozen for the whole of this good's pass, and paid up front rather than lazily: the pool
-    // that sets the level has to know which donors each world can reach before any of them draws.
-    // Reachability is `reachableFrom`, NOT `priceFrom`: a donor whose only path is currently
-    // saturated still exists, and congestion is not the same as "does not exist"
-    // (`docs/active/gameplay/logistics-lanes.md` §2, "a blocked haul is not an unservable one").
-    const searches = new Map<string, (donorId: string) => boolean>();
-    for (const d of worlds) searches.set(d.systemId, booker.reachableFrom(d.systemId));
-    const canReach = (d: Deficit, donorId: string): boolean =>
-      searches.get(d.systemId)?.(donorId) ?? false;
+    // The pool that sets the level has to know which donors each world can reach before any of
+    // them draws — `canReach` above, saturation-blind. Reachability is `reachableFrom`, NOT
+    // `priceFrom`: a donor whose only path is currently saturated still exists, and congestion is
+    // not the same as "does not exist" (`docs/active/gameplay/logistics-lanes.md` §2, "a blocked
+    // haul is not an unservable one").
     const reachableDrawableFor = (d: Deficit): number => {
       let total = 0;
       for (const [donorId, source] of sources) if (canReach(d, donorId)) total += source.drawable;
