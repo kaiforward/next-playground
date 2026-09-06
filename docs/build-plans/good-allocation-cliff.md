@@ -275,9 +275,13 @@ Serving the emptiest first is what matters under congestion: if lanes saturate m
 comfortable worlds' raises that are blocked.
 
 **Where a world's own donors run dry** before its raise is met — the supply was reachable by some
-deficit of this good, not necessarily this one — the residue stands and the structural reading
-below records it, as today. `L` is therefore a ceiling any one world reaches, not a guarantee; two
-worlds at the same cover with the same donors reach the same level.
+deficit of this good, not necessarily this one — that world's level is fixed where it stopped, it
+leaves the levelling, and `L` is recomputed over the remaining worlds with the remaining supply.
+Draws continue in ascending cover from there. So no world is left under the level its own donors
+could have reached, and no world draws above the shared level; the residue the exhausted world
+could not take is recorded by the structural reading below, as today. Two worlds at the same cover
+with the same donors reach the same level. A scarce group holds three or four deficit worlds at the
+median (## Evidence), so the recomputation is bounded by that count per good per faction.
 
 **Big and small worlds.** Cover is size-neutral, so a colony at 4 cycles is raised before a capital
 at 10, and a capital at 4 before a colony at 40. Raising a large world by one cycle costs more goods
@@ -336,9 +340,9 @@ found, and a new colony opens at satisfaction 0 on every good regardless of allo
   it counts in the pool that sets `L` but cannot draw this run; its raise stands as blocked volume
   on the lane, which the booker records, and nothing is billed — the same treatment a blocked draw
   gets today (line 456's placement accounting).
-- **A deficit whose own donors hold less than its raise.** It draws what they hold; the pool's `L`
-  was computed before draws began, so later deficits' raises are not re-cut by its shortfall — see
-  the open point in §8.
+- **A deficit whose own donors hold less than its raise.** It draws what they hold, its level is
+  fixed there, and `L` is recomputed for the rest (§2); its unmet residue is unservable for the
+  buffer it lacks.
 - **Rounding.** Quantities stay continuous floats; no quantisation (line 407's rule).
 - **Mid-run congestion.** A draw placed on a lane raises that lane's price for every later draw,
   as any placement does today.
@@ -467,20 +471,19 @@ transient for late goods), 600 systems, seed 42.
   back to brainstorm.
 - **Confirmed** needs both A and B to survive at both horizons.
 
-### 8. Open points for spec review
+### 8. Open point for spec review
 
-- **Pool definition when reachability differs.** `L` is set against the union of donors any
-  deficit of the good reaches; a poorly connected world's raise can exceed what it can draw, and
-  the supply it could not take is not re-levelled among the others this run. The alternative —
-  re-computing `L` after each exhausted deficit — is exact but adds a pass per exhaustion. Chosen
-  for simplicity; the next cycle corrects it (the un-drawn supply is still there).
 - **Cover denominator.** `drawDemand` (the rate goods actually leave the shelf) for ordering and
   the raise, `demand` for the target. The alternative is the use figure throughout, which drops the
-  brake pass the stage-3 gate measured as load-bearing (`good-market-state.ts:131-135`). Stated so
-  the reviewer can weigh the two-denominator cost against that measurement.
-- **Draw granularity.** The outcome is defined (a water level); whether an implementation reaches
-  it with one draw per deficit against a pre-computed `L` or with many small raises is the plan's
-  choice, subject to today's per-draw booking and billing.
+  brake pass the stage-3 gate measured as load-bearing (`good-market-state.ts:131-135`). The
+  reviewer's question is whether that measurement still holds on the post-lanes matcher, not
+  which denominator to prefer.
+
+### 9. Note to the planner
+
+The outcome is defined (a water level, recomputed on each exhaustion); whether an implementation
+reaches it with one draw per deficit against a computed `L` or with many small raises is the
+plan's choice, subject to today's per-draw booking and billing.
 
 Next stage: `/spec-review docs/build-plans/good-allocation-cliff.md` — mandatory, the change is a
-tick processor reading a shared constant and moving a shared signal's producer.
+tick processor moving a shared signal's producer.
