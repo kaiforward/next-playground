@@ -348,6 +348,21 @@ hookRows 25480 wallSeconds 159
   {"good": "medicine", "lateSinks": 130, "lateSinksWithNearSystem": 68, "lateSinkDeficitRuns": 859, "runsWithNear": 471, "nearCandidateRuns": 638, "nearClassShares": {"floor_bound_unlockable": 0.053, "also_deficit": 0.944, "spare_drained": 0.003}, "runsAnyFloorUnlock": 0.064, "runsFloorUnlockCoversShortfall": 0.055, "runsAnySpareLeftNear": 0, "unlockableOverShortfall": 0.152}
 ```
 
+### Claim 5 — is the withheld stock on logistics-fed worlds? (spec-review finding C3)
+
+Claim: the stock claim 4 found withheld behind the consumer floor sits mostly on markets that
+logistics itself feeds — over a long window their credited inbound covers most of what they
+consume — so an inbound-based supplier test would reach it.
+
+Falsifier (committed before the run): over all non-producer markets holding stock above the
+10-cycle producer floor with drawable 0 (the claim-4 floor-bound class, deficits included and
+split out), for the five highest-volume goods at 10K and 16K, seed 42 / 600 systems: if **under
+30% of the unlockable stock** (Σ stock − 10 × demand) sits on markets whose credited inbound over
+the preceding **40 cycles** is ≥ 0.9 × 40 cycles of their demand, then no inbound-based supplier
+test reaches the stock claim 4 found, and the role approach is re-assessed rather than re-cut
+(Kai, 2026-09-06: "we might have to step back and re-asses"). The 10-cycle window and a 0.5 line
+are reported beside it as secondary readings, never as the kill line.
+
 ## Spec — the supplier floor
 
 ```
