@@ -68,7 +68,8 @@ export interface BuildGoodState {
    *  toGoodMarketStates. Absent, the gate reconstructs it from `demand` without `anchorMult`, so a
    *  fixture that omits the field is governed by the same demand-denominated rule as the live path. */
   donorReserve?: number;
-  /** Total local demand rate (civilian + industrial); severity weight + the self-supply gate (vs production). */
+  /** Total local demand rate (civilian + industrial); the matcher's ordering cover, which decides
+   *  which shelf is served first, plus the self-supply gate (vs production). */
   demand: number;
   /** Civilian-only demand rate — what the fed gate reads to know whether anyone here wants this good.
    *  Optional for engine-test fixtures, which then read as having nobody to feed (i.e. fed) exactly as

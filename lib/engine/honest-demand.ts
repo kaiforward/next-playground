@@ -13,7 +13,8 @@
  * **Draw** — how urgently the world needs a delivery right now: the same sum with each
  * consumer's term additionally gated by that consumer's own output brake and its live event
  * production multiplier. A factory stopped by its own full yard should not head the import
- * queue. Only the matcher's severity weight reads it.
+ * queue. Only the matcher's ordering cover reads it — the level and every raise stay sized on
+ * the use figure.
  *
  * Neither figure applies an input gate: a scarce input must not deflate its own demand
  * signal, or rationing spirals into starvation. Neither is the pricing `demandRate`, which

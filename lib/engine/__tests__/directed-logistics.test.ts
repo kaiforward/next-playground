@@ -4,11 +4,17 @@ import {
   matchFactionTransfers,
   classifyMarketState,
   surplusDrawable,
+  countedStock,
+  orderCover,
+  levelCover,
+  goodsInNecessityOrder,
   type SystemLogisticsState,
   type RouteBookerFor,
+  type GoodMarketState,
 } from "@/lib/engine/directed-logistics";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { ECONOMY_CONSTANTS, TARGET_COVER } from "@/lib/constants/economy";
+import { GOOD_NECESSITY } from "@/lib/constants/physical-economy";
 
 describe("classifyMarketState", () => {
   it("classifies below the deficit fraction as deficit with shortfall to target", () => {
@@ -187,14 +193,22 @@ describe("matchFactionTransfers", () => {
     expect(transfers[0].quantity).toBe(3);
   });
 
-  it("ranks the most severe deficit first when budget is scarce", () => {
-    // A: stock 100 ≥ logisticsTarget 50 × 1.4 = 70 ✓ surplus
-    // B mild (demand 1), C severe (demand 10) — C should be served first.
-    const surplus = sys("A", 5, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 1 });
-    const mild = sys("B", 0, { goodId: "food", stock: 5, logisticsTarget: 10, demand: 1 });
-    const severe = sys("C", 0, { goodId: "food", stock: 5, logisticsTarget: 10, demand: 10 });
-    const { transfers } = matchFactionTransfers([surplus, mild, severe], oneHop);
-    expect(transfers[0].toSystemId).toBe("C");
+  it("serves the emptiest shelf first when the budget is scarce, not the largest shortfall", () => {
+    // A: stock 100 ≥ logisticsTarget 50 × 1.4 = 70 ✓ surplus; drawable 50.
+    // `big` is 300 units short with a draw of 10/cycle — by far the largest want in the faction —
+    // but it still holds 10 cycles of cover. `empty` wants only 36 and is down to 4 cycles. The
+    // budget (10 at 1 hop) funds one draw, and it goes to the shelf closest to running out: the
+    // deficit queue is ordered by cover, not by how much a world is missing.
+    const surplus = sys("A", 10, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 1 });
+    const big = sys("big", 0, { goodId: "food", stock: 100, logisticsTarget: 400, demand: 10 });
+    const empty = sys("empty", 0, { goodId: "food", stock: 4, logisticsTarget: 40, demand: 1 });
+    const { transfers, budgetSkipped } = matchFactionTransfers([surplus, big, empty], oneHop);
+    expect(transfers).toHaveLength(1);
+    expect(transfers[0].toSystemId).toBe("empty");
+    // The level over the 50 available sits at 14 cycles, so `empty`'s raise is 10 — the whole
+    // budget — and `big`'s 40-unit raise is left unfunded.
+    expect(transfers[0].quantity).toBeCloseTo(10, 8);
+    expect(budgetSkipped).toBe(1);
   });
 
   it("does not haul to a market whose demand only clears the MIN_DEMAND pricing floor", () => {
@@ -327,16 +341,22 @@ describe("matchFactionTransfers", () => {
   it("draws one source across two deficits without exceeding its drawable", () => {
     // A: stock 20 ≥ logisticsTarget 10 × 1.4 = 14 ✓ surplus; drawable = 20 − 10 = 10. budget = 100.
     const surplus = sys("A", 100, { goodId: "food", stock: 20, logisticsTarget: 10, demand: 0 });
-    // C more severe (demand 10), B less severe (demand 1); each: stock 4 < 10 × 0.8 = 8 ✓ deficit, shortfall = 6.
+    // C at 0.4 cycles of cover (demand 10), B at 4 (demand 1); each: stock 4 < 10 × 0.8 = 8 ✓
+    // deficit, shortfall = 6.
     const severe = sys("C", 0, { goodId: "food", stock: 4, logisticsTarget: 10, demand: 10 });
     const mild = sys("B", 0, { goodId: "food", stock: 4, logisticsTarget: 10, demand: 1 });
     const { transfers } = matchFactionTransfers([surplus, severe, mild], oneHop);
-    // C served first (severity 60 > 6): qty = min(shortfall 6, drawable 10, budget 100) = 6.
-    // B served from A's residual drawable (10 - 6 = 4): qty = min(shortfall 6, drawable 4, budget 94) = 4.
-    // Proves the source is not over-drawn below its own target across iterations.
+    // C is drawn first (0.4 cycles against B's 4) and the level of 8 cycles is above its own
+    // 1-cycle target, so it takes its whole shortfall of 6; B draws its raise from A's residual
+    // drawable (10 − 6 = 4). Proves the source is not over-drawn below its own target across the
+    // pass — the two draws sum to exactly what A had to give.
     expect(transfers).toHaveLength(2);
     expect(transfers[0]).toMatchObject({ fromSystemId: "A", toSystemId: "C", quantity: 6 });
-    expect(transfers[1]).toMatchObject({ fromSystemId: "A", toSystemId: "B", quantity: 4 });
+    expect(transfers[1]).toMatchObject({ fromSystemId: "A", toSystemId: "B" });
+    // A levelled raise is solved in cycles and multiplied back out, so it carries the solver's last
+    // bit of float; the drawable bound it respects does not.
+    expect(transfers[1].quantity).toBeCloseTo(4, 8);
+    expect(transfers[0].quantity + transfers[1].quantity).toBeLessThanOrEqual(10);
   });
 
   it("treats a market above its anchor as a surplus even when far from any storage ceiling", () => {
@@ -411,7 +431,8 @@ describe("matchFactionTransfers", () => {
 
   it("does not mark a deficit left only trivially short by a budget-stopped final draw", () => {
     // D1 affordably delivers 95 of the shortfall of 100; the budget then stops D2's draw with a
-    // residual of 5 — 5% of the original shortfall, under FUNDING_BOUND_RESIDUAL_FRACTION (10%).
+    // residual of 5. Reachable supply covers the whole want here, so the raise IS the 100-unit
+    // shortfall and the residual is 5% of it — under FUNDING_BOUND_RESIDUAL_FRACTION (10%).
     // The flag means "this market's shortfall persists because of money" — it suppresses the
     // planner's capacity proposals and exempts producers from idle decay — so a 95%-served market
     // must not set it. A naive per-draw recording (any unaffordable draw ⇒ flag) fails here.
@@ -459,6 +480,43 @@ describe("matchFactionTransfers", () => {
     ]);
   });
 
+  it("measures the funding-bound residual against the raise the budget stopped, not the whole shortfall to the target", () => {
+    // S is 40 cycles short of its warehousing target (200 units at 5/cycle), but the faction's
+    // reachable supply of the good is 15 units — 3 cycles — so 3 cycles is the raise it is being
+    // levelled to and the whole of what money could possibly deliver this run.
+    const SHORTFALL = 200;
+    const RAISE = 15;
+    const residualFraction = DIRECTED_LOGISTICS.FUNDING_BOUND_RESIDUAL_FRACTION;
+
+    // Half of that raise goes unplaced because the budget (7.5) runs out mid-draw. Half a raise
+    // missing IS "this shortfall persists because of money", and the gameplay gates the flag drives
+    // (planner suppression, the idle-decay exemption) must see it.
+    const halted = sys("D", RAISE / 2, { goodId: "food", stock: 25, logisticsTarget: 10, demand: 5 });
+    const sink = sys("S", 0, { goodId: "food", stock: 0, logisticsTarget: SHORTFALL, demand: 5 });
+
+    const material = matchFactionTransfers([halted, sink], oneHop);
+    expect(material.transfers).toMatchObject([
+      { goodId: "food", fromSystemId: "D", toSystemId: "S", quantity: RAISE / 2 },
+    ]);
+    expect(material.fundingBound).toEqual([{ goodId: "food", fromSystemId: "D", toSystemId: "S" }]);
+    // Discrimination: the retired denominator would have called the same stop immaterial, because
+    // 7.5 units is a rounding error against a 200-unit shortfall — and would have cleared the flag
+    // on every world under a scarce good, which is exactly the population it exists to mark.
+    expect(RAISE / 2).toBeLessThan(SHORTFALL * residualFraction);
+    expect(RAISE / 2).toBeGreaterThan(RAISE * residualFraction);
+
+    // The same stop with 5% of the raise left standing is not material: the world was raised to
+    // within a twentieth of everything the faction had to give it, and money is not what is keeping
+    // it short. (Here the retired denominator agrees — with the raise never larger than the
+    // shortfall, re-denominating can only ever turn a missed flag into a set one.)
+    const nearlyDone = sys("D", RAISE * 0.95, { goodId: "food", stock: 25, logisticsTarget: 10, demand: 5 });
+    const trivial = matchFactionTransfers([nearlyDone, sink], oneHop);
+    expect(trivial.transfers).toMatchObject([
+      { goodId: "food", fromSystemId: "D", toSystemId: "S", quantity: RAISE * 0.95 },
+    ]);
+    expect(trivial.fundingBound).toEqual([]);
+  });
+
   it("does not mark an ample-budget or drawable-bound transfer", () => {
     const donor = sys("A", 100, { goodId: "food", stock: 14, logisticsTarget: 10, demand: 5, production: 0 });
     const receiver = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
@@ -501,9 +559,10 @@ describe("matchFactionTransfers", () => {
   });
 
   it("spends the remaining budget completing the current deficit before any later one", () => {
-    // Budget 20 at 1 hop. The severe deficit's shortfall of 30 needs both donors (14 each); after
-    // the first full draw (cost 14) the remaining 6 must go to the SAME deficit's second donor,
-    // not skip ahead to the mild deficit — a budget-exhausted run stops mid-deficit.
+    // Budget 20 at 1 hop. B is drawn first (0 cycles of cover against C's 0, tie broken by input
+    // order) and its raise of ~25 needs both donors (14 each); after the first full draw (cost 14)
+    // the remaining 6 must go to the SAME deficit's second donor, not skip ahead to C — a
+    // budget-exhausted run stops mid-deficit.
     const d1 = sys("D1", 20, { goodId: "food", stock: 24, logisticsTarget: 10, demand: 5 });
     const d2 = sys("D2", 0, { goodId: "food", stock: 24, logisticsTarget: 10, demand: 5 });
     const severe = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 30, demand: 10 });
@@ -562,23 +621,245 @@ describe("matchFactionTransfers", () => {
   );
 
   it("ranks the import queue by draw urgency, not by standing use", () => {
-    // Two deficits with identical shortfall and identical use figures; only their ability to
-    // consume the delivery right now differs. `idle`'s consuming industry is braked shut, so
-    // `running` must be served first even though both worlds want the good equally in the long run.
+    // Two deficits with identical stock, shortfall and use figures; only their ability to consume
+    // the delivery right now differs. `idle`'s consuming industry is braked shut, so at the same 5
+    // units on the shelf it has 10 cycles of cover at its braked draw where `running` has 1 —
+    // `running` must be drawn first even though both worlds want the good equally in the long run.
     //
-    // `idle` is listed first on purpose: a severity weight still reading `demand` leaves the two
-    // tied, and the stable sort then serves whichever came first.
-    const donor = sys("A", 10, { goodId: "ore", stock: 100, logisticsTarget: 50, demand: 5 });
-    const idle = sys("idle", 0, { goodId: "ore", stock: 0, logisticsTarget: 10, demand: 5, drawDemand: 0.5 });
-    const running = sys("running", 0, { goodId: "ore", stock: 0, logisticsTarget: 10, demand: 5, drawDemand: 5 });
+    // `idle` is listed first on purpose: an order reading `demand` leaves the two tied, and the
+    // stable sort then serves whichever came first.
+    const donor = sys("A", 5, { goodId: "ore", stock: 100, logisticsTarget: 50, demand: 5 });
+    const idle = sys("idle", 0, { goodId: "ore", stock: 5, logisticsTarget: 10, demand: 5, drawDemand: 0.5 });
+    const running = sys("running", 0, { goodId: "ore", stock: 5, logisticsTarget: 10, demand: 5, drawDemand: 5 });
 
-    // Budget 10 at 1 hop covers exactly one of the two 10-unit shortfalls.
+    // Budget 5 at 1 hop covers exactly one of the two 5-unit raises.
     const { transfers } = matchFactionTransfers([idle, running, donor], oneHop);
     expect(transfers).toHaveLength(1);
     expect(transfers[0].toSystemId).toBe("running");
-    expect(transfers[0].quantity).toBe(10);
+    expect(transfers[0].quantity).toBe(5);
   });
 
+});
+
+describe("matchFactionTransfers — levelling the shelves within a good", () => {
+  /** Cycles of cover a sink ends the run on: what it held plus everything it drew, over its use. */
+  const endingCover = (
+    transfers: Array<{ toSystemId: string; quantity: number }>,
+    systemId: string,
+    stock: number,
+    demand: number,
+  ): number =>
+    (stock + transfers.filter((t) => t.toSystemId === systemId)
+      .reduce((sum, t) => sum + t.quantity, 0)) / demand;
+
+  it("levels two deficits at different covers onto a common cover instead of filling the emptier to its target", () => {
+    // A holds 40 drawable against 160 of want — enough for neither world's target. `low` starts at
+    // 2 cycles of cover, `high` at 6; the level lands at 8, so `low` draws 30 and `high` 10 and
+    // both end on the same shelf. Worst-first would have handed all 40 to `low` (severity 450
+    // against 350) and left `high` with nothing — the cliff this exists to remove.
+    const donor = sys("A", 1000, { goodId: "food", stock: 90, logisticsTarget: 50, demand: 5 });
+    const low = sys("low", 0, { goodId: "food", stock: 10, logisticsTarget: 100, demand: 5 });
+    const high = sys("high", 0, { goodId: "food", stock: 30, logisticsTarget: 100, demand: 5 });
+
+    const { transfers } = matchFactionTransfers([donor, low, high], oneHop);
+    expect(transfers).toHaveLength(2);
+    expect(transfers[0]).toMatchObject({ toSystemId: "low" });
+    expect(transfers[1]).toMatchObject({ toSystemId: "high" });
+    expect(transfers[0].quantity).toBeCloseTo(30, 8);
+    expect(transfers[1].quantity).toBeCloseTo(10, 8);
+    expect(endingCover(transfers, "low", 10, 5)).toBeCloseTo(8, 8);
+    expect(endingCover(transfers, "high", 30, 5)).toBeCloseTo(8, 8);
+  });
+
+  it("raises a small world at 4 cycles before a large one at 10, and a large world at 4 while a small one at 40 gets nothing", () => {
+    // Cover is size-neutral in both directions. First: `small` uses 1/cycle and is 36 short,
+    // `large` uses 10 and is 300 short — the donor's 4 units go to the smaller, emptier world,
+    // because at 4 cycles it runs out first.
+    const donorA = sys("A", 1000, { goodId: "food", stock: 14, logisticsTarget: 10, demand: 5 });
+    const small = sys("small", 0, { goodId: "food", stock: 4, logisticsTarget: 40, demand: 1 });
+    const large = sys("large", 0, { goodId: "food", stock: 100, logisticsTarget: 400, demand: 10 });
+
+    const byCover = matchFactionTransfers([donorA, small, large], oneHop);
+    expect(byCover.transfers).toHaveLength(1);
+    expect(byCover.transfers[0]).toMatchObject({ toSystemId: "small" });
+    expect(byCover.transfers[0].quantity).toBeCloseTo(4, 8);
+
+    // Reversed: now the large world is the one at 4 cycles and the small one is comfortable at 40.
+    // The whole 50 goes to the large world — raising it by one cycle costs ten times as much, which
+    // is exactly what it needs to survive the same number of cycles.
+    const donorB = sys("A", 1000, { goodId: "food", stock: 60, logisticsTarget: 10, demand: 5 });
+    const emptyLarge = sys("large", 0, { goodId: "food", stock: 40, logisticsTarget: 400, demand: 10 });
+    const comfySmall = sys("small", 0, { goodId: "food", stock: 40, logisticsTarget: 60, demand: 1 });
+
+    const bySize = matchFactionTransfers([donorB, emptyLarge, comfySmall], oneHop);
+    expect(bySize.transfers).toHaveLength(1);
+    expect(bySize.transfers[0]).toMatchObject({ toSystemId: "large" });
+    expect(bySize.transfers[0].quantity).toBeCloseTo(50, 8);
+  });
+
+  it("tops the first-drawn world up to the recomputed level when a later world's own donors run dry", () => {
+    // W1 (0 cycles), W2 (12) and W3 (24) share a pool of 35, so the first level is 23.5: W1 draws
+    // 23.5 from D1 and W2 asks D2 — the only donor it can reach — for 11.5 and gets the 5 it holds.
+    // W2's level is fixed at 17 and it leaves the levelling; the level over the remaining 6.5 rises
+    // to 27, and W1 is topped up 3.5 rather than left at 23.5 while W3 draws past it. A
+    // single-pass implementation ends with W1 at 23.5 and W3 at 27.
+    const d1 = sys("D1", 1000, { goodId: "food", stock: 40, logisticsTarget: 10, demand: 5 });
+    const d2 = sys("D2", 0, { goodId: "food", stock: 15, logisticsTarget: 10, demand: 5 });
+    const w1 = sys("W1", 0, { goodId: "food", stock: 0, logisticsTarget: 100, demand: 1 });
+    const w2 = sys("W2", 0, { goodId: "food", stock: 12, logisticsTarget: 100, demand: 1 });
+    const w3 = sys("W3", 0, { goodId: "food", stock: 24, logisticsTarget: 100, demand: 1 });
+    const reaches = (from: string, to: string): boolean =>
+      (from === "D1" && (to === "W1" || to === "W3")) || (from === "D2" && to === "W2");
+    const booker = makeBooker({ price: (from, to) => (reaches(from, to) ? 1 : null) });
+
+    const { transfers } = matchFactionTransfers([d1, d2, w1, w2, w3], booker);
+
+    // W1 is drawn twice: its raise to the first level, then the top-up to the recomputed one.
+    const toW1 = transfers.filter((t) => t.toSystemId === "W1");
+    expect(toW1).toHaveLength(2);
+    expect(toW1[0].quantity).toBeCloseTo(23.5, 8);
+    expect(toW1[1].quantity).toBeCloseTo(3.5, 8);
+    // The fixed point: the two worlds still in the levelling end on the same shelf, above the one
+    // whose own donor ran dry.
+    expect(endingCover(transfers, "W1", 0, 1)).toBeCloseTo(27, 6);
+    expect(endingCover(transfers, "W3", 24, 1)).toBeCloseTo(27, 6);
+    expect(endingCover(transfers, "W2", 12, 1)).toBeCloseTo(17, 8);
+  });
+
+  it("fills every deficit to its own target when supply covers them all, whatever their cover", () => {
+    // The ample-supply case is unchanged by levelling: the level is the target, so both worlds take
+    // their whole shortfall and the transfer set is the one worst-first order produced. The donor
+    // holds 170 against 160 of want — ample, but only just, so a level solved against anything less
+    // than the whole reachable pool stops short of the target and shows up here.
+    const donor = sys("A", 1000, { goodId: "food", stock: 220, logisticsTarget: 50, demand: 5 });
+    const low = sys("low", 0, { goodId: "food", stock: 10, logisticsTarget: 100, demand: 5 });
+    const high = sys("high", 0, { goodId: "food", stock: 30, logisticsTarget: 100, demand: 5 });
+
+    const { transfers, unservable } = matchFactionTransfers([donor, low, high], oneHop);
+    expect(transfers).toMatchObject([
+      { toSystemId: "low", quantity: 90 },
+      { toSystemId: "high", quantity: 70 },
+    ]);
+    expect(unservable).toEqual([]);
+  });
+
+  it("draws a world with nothing leaving its shelf last, and still sizes its raise on its use figure", () => {
+    // `idle` has the LOWER cover of the two on the level's own scale (5 cycles of use against
+    // `busy`'s 8) but reads +Infinity on the draw scale — nothing is leaving its shelf right now —
+    // so it is drawn after every world with a finite cover. Its raise is still sized on `demand`:
+    // 15 cycles at 5/cycle = 75, which a raise denominated in the draw figure could not produce
+    // at all.
+    const donor = sys("A", 10_000, { goodId: "food", stock: 1000, logisticsTarget: 50, demand: 5 });
+    const idle = sys("idle", 0, {
+      goodId: "food", stock: 25, logisticsTarget: 100, demand: 5, drawDemand: 0,
+    });
+    const busy = sys("busy", 0, { goodId: "food", stock: 40, logisticsTarget: 100, demand: 5 });
+
+    const { transfers } = matchFactionTransfers([donor, idle, busy], oneHop);
+    expect(transfers.map((t) => t.toSystemId)).toEqual(["busy", "idle"]);
+    expect(transfers[1].quantity).toBe(75);
+  });
+
+  it("counts a donor only a saturated path reaches in the pool that sets the level, without drawing or billing it", () => {
+    // Dsat holds 30 drawable and W1 can structurally reach it, but its path is saturated
+    // (`priceFrom` null) so nothing can cross this run. It still counts in the pool: the level over
+    // 40 sits at 22.5, so W1's raise takes all 10 of the openly-routed donor and W2 — comfortable at
+    // 5 cycles — gets nothing. Leaving the saturated supply out of the pool would put the level at
+    // 7.5 and hand W2 2.5 units of a supply that was never really spare.
+    const open = sys("Dopen", 1000, { goodId: "food", stock: 20, logisticsTarget: 10, demand: 5 });
+    const saturated = sys("Dsat", 0, { goodId: "food", stock: 40, logisticsTarget: 10, demand: 5 });
+    const w1 = sys("W1", 0, { goodId: "food", stock: 0, logisticsTarget: 100, demand: 1 });
+    const w2 = sys("W2", 0, { goodId: "food", stock: 5, logisticsTarget: 100, demand: 1 });
+    const booker = makeBooker({
+      price: (from) => (from === "Dopen" ? 1 : null),
+      reachable: (from, to) => from === "Dopen" || to === "W1",
+    });
+
+    const { transfers } = matchFactionTransfers([open, saturated, w1, w2], booker);
+    expect(transfers).toMatchObject([
+      { fromSystemId: "Dopen", toSystemId: "W1", quantity: 10, cost: 10 },
+    ]);
+    // The saturated donor's share is never drawn from it and never billed — the booker's blocked
+    // volume, not this function's, is where a congestion loss is recorded.
+    expect(transfers.every((t) => t.fromSystemId !== "Dsat")).toBe(true);
+    expect(transfers.reduce((sum, t) => sum + t.cost, 0)).toBe(10);
+  });
+
+  it("still spends the pool on the second world when the first sits under the ration line, instead of stalling the level below its own reach", () => {
+    // R's physical stock (5) sits under the ration line (RATION_COVER 2 × demand 5 = 10), so
+    // `countedStock`/`levelCover` read physical stock alone (1 cycle) while its 70-unit
+    // scheduledInbound still clears the sink test (`c.shortfall` reads stock + inbound), leaving it a
+    // 25-unit remaining want (100 target − 5 stock − 70 inbound). Capping `targetCover` at
+    // `levelCover + shortfall/demand` (6 cycles) rather than the bare `logisticsTarget/demand` (20)
+    // is what lets the solver see R can only ever absorb those 25 units — uncapped, R reads as
+    // wanting a cover it cannot reach on physical stock, the level lands under Q's own 10-cycle
+    // levelCover, and Q draws nothing while 15 of the donor's 40 sit unspent.
+    const donor = sys("A", 1000, { goodId: "food", stock: 40, logisticsTarget: 0, demand: 0, donorReserve: 0 });
+    const r = sys("R", 0, {
+      goodId: "food", stock: 5, logisticsTarget: 100, demand: 5, scheduledInbound: 70,
+    });
+    const q = sys("Q", 0, { goodId: "food", stock: 50, logisticsTarget: 100, demand: 5 });
+
+    const { transfers, unservable } = matchFactionTransfers([donor, r, q], oneHop);
+    expect(transfers).toMatchObject([
+      { toSystemId: "R", quantity: 25 },
+      { toSystemId: "Q", quantity: 15 },
+    ]);
+    expect(transfers.reduce((sum, t) => sum + t.quantity, 0)).toBe(40);
+    // Q's 35-unit remaining want (50 shortfall − 15 drawn) is genuinely unservable once the donor's
+    // 40 drawable is exhausted — not left on the table by an over-stated R.
+    expect(unservable).toEqual([{ goodId: "food", systemId: "Q", shortfall: 35 }]);
+  });
+});
+
+describe("goodsInNecessityOrder", () => {
+  it("sorts a good absent from the necessity table last, not first, and never throws", () => {
+    // The guard the ordering rests on: an unlisted good must read 0 — the bottom of the table —
+    // rather than `undefined`, which would make every comparison NaN and the sort arbitrary.
+    expect("unobtanium" in GOOD_NECESSITY).toBe(false);
+    expect(goodsInNecessityOrder(["unobtanium", "luxuries", "water"]))
+      .toEqual(["water", "luxuries", "unobtanium"]);
+    expect(() => goodsInNecessityOrder(["unobtanium"])).not.toThrow();
+    expect(goodsInNecessityOrder(["unobtanium"])).toEqual(["unobtanium"]);
+  });
+});
+
+describe("matchFactionTransfers — goods in necessity order", () => {
+  it("serves water before a less necessary good when the budget funds one of them, whichever is the more severe", () => {
+    // The luxuries deficit is empty (0 cycles of cover) and wants 100; the water deficit is the
+    // comfortable one at 8 cycles and wants 60. The budget funds 60 units at 1 hop — one of the two
+    // raises. Necessity decides, not severity: the water raise is placed in full and the luxuries
+    // one is budget-skipped. Luxuries is listed FIRST so the order the classification walk met the
+    // goods in would serve exactly the wrong one.
+    const dLux = sys("Dlux", 0, { goodId: "luxuries", stock: 150, logisticsTarget: 50, demand: 5 });
+    const sLux = sys("Slux", 0, { goodId: "luxuries", stock: 0, logisticsTarget: 100, demand: 5 });
+    const dWater = sys("Dwater", 60, { goodId: "water", stock: 150, logisticsTarget: 50, demand: 5 });
+    const sWater = sys("Swater", 0, { goodId: "water", stock: 40, logisticsTarget: 100, demand: 5 });
+
+    const byNecessity = matchFactionTransfers([dLux, sLux, dWater, sWater], oneHop);
+    expect(byNecessity.transfers).toMatchObject([
+      { goodId: "water", fromSystemId: "Dwater", toSystemId: "Swater", quantity: 60 },
+    ]);
+    expect(byNecessity.budgetSkipped).toBe(1);
+    expect(byNecessity.fundingBound).toEqual([
+      { goodId: "luxuries", fromSystemId: "Dlux", toSystemId: "Slux" },
+    ]);
+
+    // Within one necessity weight (metals and ore both sit at 0.1) the good id breaks the tie
+    // ascending, so metals is served and ore skipped — again against both the input order and the
+    // severity order, which would each pick ore.
+    expect(GOOD_NECESSITY.metals).toBe(GOOD_NECESSITY.ore);
+    const dOre = sys("Dore", 60, { goodId: "ore", stock: 150, logisticsTarget: 50, demand: 5 });
+    const sOre = sys("Sore", 0, { goodId: "ore", stock: 0, logisticsTarget: 100, demand: 5 });
+    const dMetals = sys("Dmetals", 0, { goodId: "metals", stock: 150, logisticsTarget: 50, demand: 5 });
+    const sMetals = sys("Smetals", 0, { goodId: "metals", stock: 40, logisticsTarget: 100, demand: 5 });
+
+    const byGoodId = matchFactionTransfers([dOre, sOre, dMetals, sMetals], oneHop);
+    expect(byGoodId.transfers).toMatchObject([
+      { goodId: "metals", fromSystemId: "Dmetals", toSystemId: "Smetals", quantity: 60 },
+    ]);
+    expect(byGoodId.budgetSkipped).toBe(1);
+  });
 });
 
 describe("matchFactionTransfers — inbound-aware sink classification", () => {
@@ -720,8 +1001,8 @@ describe("matchFactionTransfers — booked routing, the per-deficit skip, and bl
   it("does not treat a saturated (price-null) donor as unservable when it is still structurally reachable", () => {
     // D1 holds ample drawable (100) but its only path to B is currently saturated — `price` returns
     // null (congestion), exactly as a real booker's `priceFrom` would for a lane at capacity — while
-    // `reachable` reports true (the path exists, only saturation closes it). `reachableDrawable`
-    // reads `reachableFrom`, not `priceFrom`, so this deficit's 50-unit want is structurally
+    // `reachable` reports true (the path exists, only saturation closes it). The reachable
+    // drawable reads `reachableFrom`, not `priceFrom`, so this deficit's 50-unit want is structurally
     // closeable and must not be reported unservable, even though nothing can actually ship this run.
     const d1 = sys("D1", 100, { goodId: "food", stock: 150, logisticsTarget: 50, demand: 5 });
     const b = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 50, demand: 5 });
@@ -735,7 +1016,7 @@ describe("matchFactionTransfers — booked routing, the per-deficit skip, and bl
   it("still treats a politically-closed donor (unreachable, not merely saturated) as unservable", () => {
     // Same shape as above, but `reachable` also reports false — a donor traversability genuinely
     // excludes, not one congestion has merely priced out for this run. This deficit's want must
-    // still read unservable: `reachableDrawable` is 0, exactly the pre-existing "no donor at all"
+    // still read unservable: the reachable drawable is 0, exactly the pre-existing "no donor at all"
     // reading.
     const d1 = sys("D1", 100, { goodId: "food", stock: 150, logisticsTarget: 50, demand: 5 });
     const b = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 50, demand: 5 });
@@ -870,44 +1151,57 @@ describe("matchFactionTransfers — the unservable result (structural vs. fundin
     expect(result.unservable).toEqual([{ goodId: "food", systemId: "B", shortfall: 160 }]);
   });
 
-  it("flags a deficit left with nothing when the faction's aggregate demand for a good exceeds its aggregate supply", () => {
-    // The case a per-deficit reading taken against each donor's PRE-RUN capacity cannot see: one
-    // donor holding 100, two deficits wanting 100 each. D1 empties the donor, D2 receives not one
-    // unit, and no capacity for it exists anywhere in the faction — so D2 is unservable in the
-    // plainest sense there is, at its whole want. Asked "could this be closed if D2 were the only
-    // one asking", the answer is yes and D2 goes unreported through every channel: it is not
-    // funding-bound either (generation 1000 against 100 units at 1 hop is ample), so nothing at all
-    // would name a system that got zero.
+  it("spreads the residual reading over every world a drained pool left short, and stays silent where the donors still hold stock", () => {
+    // Water: one donor holding 100, two deficits wanting 100 each. Both are at 0 cycles of cover, so
+    // the level splits the donor evenly, each draws 50 and the pool is spent. Read at the END of the
+    // good's pass, both worlds see donors holding nothing and each carries the 50 no capacity in the
+    // faction can close — the levels summing to exactly the 100 the faction lacks. A reading taken at
+    // each world's own draw turn instead puts the whole gap on whichever world the cover order
+    // reached last, because the earlier ones looked at a pool that was still full.
     //
-    // D1 and D2 are identical, so the queue's stable sort serves the one listed first; which of the
-    // two starves is arbitrary, that exactly one does is not.
-    const donor = sys("A", 1000, { goodId: "food", stock: 150, logisticsTarget: 50, demand: 5 });
-    const d1 = sys("D1", 0, { goodId: "food", stock: 0, logisticsTarget: 100, demand: 5 });
-    const d2 = sys("D2", 0, { goodId: "food", stock: 0, logisticsTarget: 100, demand: 5 });
+    // Luxuries: L1 is left just as short, but by a saturated lane — the booker places 10 of its
+    // 50-unit raise — while its donor still holds 90. Capacity is not what is keeping it short, so
+    // it reads nothing here; the booker's blocked volume is where that loss is recorded.
+    const donorWater = sys("Dwater", 1000, { goodId: "water", stock: 150, logisticsTarget: 50, demand: 5 });
+    const w1 = sys("W1", 0, { goodId: "water", stock: 0, logisticsTarget: 100, demand: 5 });
+    const w2 = sys("W2", 0, { goodId: "water", stock: 0, logisticsTarget: 100, demand: 5 });
+    const donorLux = sys("Dlux", 0, { goodId: "luxuries", stock: 150, logisticsTarget: 50, demand: 5 });
+    const l1 = sys("L1", 0, { goodId: "luxuries", stock: 0, logisticsTarget: 50, demand: 5 });
+    const congestedLux = makeBooker({
+      price: () => 1,
+      place: (from, _to, quantity) => (from === "Dlux" ? Math.min(quantity, 10) : quantity),
+    });
 
-    const result = matchFactionTransfers([donor, d1, d2], oneHop);
+    const result = matchFactionTransfers([donorWater, w1, w2, donorLux, l1], congestedLux);
 
     expect(result.transfers).toMatchObject([
-      { goodId: "food", fromSystemId: "A", toSystemId: "D1", quantity: 100, cost: 100 },
+      { goodId: "water", fromSystemId: "Dwater", toSystemId: "W1", quantity: 50, cost: 50 },
+      { goodId: "water", fromSystemId: "Dwater", toSystemId: "W2", quantity: 50, cost: 50 },
+      { goodId: "luxuries", fromSystemId: "Dlux", toSystemId: "L1", quantity: 10, cost: 10 },
     ]);
     expect(result.fundingBound).toEqual([]);
-    // D2 got nothing and says so at full size; D1, served whole from capacity that did exist for it,
-    // carries no structural reading at all.
-    expect(result.unservable).toEqual([{ goodId: "food", systemId: "D2", shortfall: 100 }]);
+    // Every world the drained pool left short, not just the last one drawn.
+    expect(result.unservable).toEqual([
+      { goodId: "water", systemId: "W1", shortfall: 50 },
+      { goodId: "water", systemId: "W2", shortfall: 50 },
+    ]);
+    // The levels sum to the faction's own gap in the good: 100 of want still standing against a
+    // reachable drawable of 0.
+    const water = result.unservable.filter((u) => u.goodId === "water");
+    expect(water.reduce((sum, u) => sum + u.shortfall, 0)).toBeCloseTo(100, 8);
   });
 
-  it("reports the structural GAP, not the whole want, for a deficit a shared donor served in part", () => {
-    // Three deficits of one good sharing one donor, walked worst-first. The donor holds 100 before
-    // the run; D1 takes 80 of it, D2 draws the remaining 20 and ends up short 30, and D3 finds a
-    // donor with nothing left. The levels are what each is actually left missing — 30 and 10, not
-    // the 50 and 10 they asked for — because the part a donor did cover is not unserved. D1, whose
-    // want was met in full, carries nothing.
+  it("levels three deficits sharing one donor to a common cover instead of filling the first to its target", () => {
+    // Three deficits of one good sharing one donor holding 100 against 140 of want. All three are
+    // empty, so all three are drawn, and the level lands at 9 cycles: D1 and D2 both end there
+    // (45 units each at 5/cycle) and D3, whose own 10-unit target is only 2 cycles, stops at its
+    // target. Filling the queue's head to its full target instead would put 80 into D1, 20 into D2
+    // and nothing into D3.
     //
-    // Sizing the levels off the wants instead would report 60 unserved against a faction that is
-    // short exactly 40 (140 wanted, 100 held), and would put D2 ahead of a genuinely worse deficit
-    // in the alert bar's largest-shortfall-first sort. Budget is ample throughout (generation 1000
-    // against 100 units at 1 hop), so nothing here is funding-bound and the two mechanisms cannot be
-    // confused for one another.
+    // The donor ends dry, so the two worlds still short of their targets carry the residue between
+    // them: D1 is 35 short of its 80 and D2 5 short of its 50, summing to the 40 of want the
+    // faction's supply of the good could not cover. D3 reached its own target and reads nothing.
+    // Budget is ample throughout (generation 1000 against 100 units at 1 hop).
     const donor = sys("A", 1000, { goodId: "food", stock: 150, logisticsTarget: 50, demand: 5 });
     const d1 = sys("D1", 0, { goodId: "food", stock: 0, logisticsTarget: 80, demand: 5 });
     const d2 = sys("D2", 0, { goodId: "food", stock: 0, logisticsTarget: 50, demand: 5 });
@@ -915,20 +1209,20 @@ describe("matchFactionTransfers — the unservable result (structural vs. fundin
 
     const result = matchFactionTransfers([donor, d1, d2, d3], oneHop);
 
-    // The contention itself: D1 is served whole, D2 gets only what is left, D3 nothing.
     expect(result.transfers).toMatchObject([
-      { goodId: "food", fromSystemId: "A", toSystemId: "D1", quantity: 80, cost: 80 },
-      { goodId: "food", fromSystemId: "A", toSystemId: "D2", quantity: 20, cost: 20 },
+      { goodId: "food", fromSystemId: "A", toSystemId: "D1", quantity: 45 },
+      { goodId: "food", fromSystemId: "A", toSystemId: "D2", quantity: 45 },
+      { goodId: "food", fromSystemId: "A", toSystemId: "D3", quantity: 10 },
     ]);
+    // The donor is drawn to exactly what it had, and no further.
+    const moved = result.transfers.reduce((sum, t) => sum + t.quantity, 0);
+    expect(moved).toBeCloseTo(100, 8);
     expect(result.fundingBound).toEqual([]);
-    expect(result.unservable).toEqual([
-      { goodId: "food", systemId: "D2", shortfall: 30 },
-      { goodId: "food", systemId: "D3", shortfall: 10 },
-    ]);
-    // The levels add up to the faction's own gap in this good — 140 wanted against 100 held — which
-    // is the property that makes them summable at all.
-    const flagged = result.unservable.reduce((sum, u) => sum + u.shortfall, 0);
-    expect(flagged).toBe(140 - 100);
+    expect(result.unservable).toHaveLength(2);
+    expect(result.unservable[0].systemId).toBe("D1");
+    expect(result.unservable[0].shortfall).toBeCloseTo(35, 8);
+    expect(result.unservable[1].systemId).toBe("D2");
+    expect(result.unservable[1].shortfall).toBeCloseTo(5, 8);
   });
 
   it("emits one unservable entry per good on the same system, each carrying its OWN shortfall figure — de-duplicating to one system, and picking the largest, belongs to the read layer, not here", () => {
@@ -1079,5 +1373,59 @@ describe("strategic exporter reserve", () => {
 
   it("keeps the reserve below the pricing anchor, so an exporter is never held above its own anchor", () => {
     expect(DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER).toBeLessThan(TARGET_COVER);
+  });
+});
+
+describe("countedStock / orderCover / levelCover", () => {
+  it("counts physical stock alone under the ration-line proxy even with a haul in flight", () => {
+    // demand 10 → ration line 20 (RATION_COVER 2 × demand). stock 15 < 20, so inbound is ignored.
+    const g: GoodMarketState = {
+      goodId: "ore", stock: 15, logisticsTarget: 400, donorReserve: 400, demand: 10,
+      drawDemand: 10, civilianDemand: 10, production: 0, capacityProduction: 0,
+      scheduledInbound: 50,
+    };
+    expect(countedStock(g)).toBe(15);
+  });
+
+  it("counts stock plus inbound once stock is at or above the ration line", () => {
+    // demand 10 → ration line 20. stock 25 ≥ 20, so inbound counts.
+    const g: GoodMarketState = {
+      goodId: "ore", stock: 25, logisticsTarget: 400, donorReserve: 400, demand: 10,
+      drawDemand: 10, civilianDemand: 10, production: 0, capacityProduction: 0,
+      scheduledInbound: 50,
+    };
+    expect(countedStock(g)).toBe(75);
+  });
+
+  it("counts inbound at the boundary itself — the exception is strict-below, not at-or-below", () => {
+    // stock exactly at the ration line (20) must land on the "counts inbound" side.
+    const g: GoodMarketState = {
+      goodId: "ore", stock: 20, logisticsTarget: 400, donorReserve: 400, demand: 10,
+      drawDemand: 10, civilianDemand: 10, production: 0, capacityProduction: 0,
+      scheduledInbound: 50,
+    };
+    expect(countedStock(g)).toBe(70);
+  });
+
+  it("orderCover reads +Infinity at drawDemand 0, and Infinity sorts after every finite cover ascending", () => {
+    const g: GoodMarketState = {
+      goodId: "ore", stock: 100, logisticsTarget: 400, donorReserve: 400, demand: 10,
+      drawDemand: 0, civilianDemand: 10, production: 0, capacityProduction: 0,
+    };
+    expect(orderCover(g)).toBe(Infinity);
+
+    const covers = [orderCover(g), 3, 1, 7].sort((a, b) => a - b);
+    expect(covers[covers.length - 1]).toBe(Infinity);
+    for (const c of covers) expect(Number.isNaN(c)).toBe(false);
+  });
+
+  it("a braked factory reads a higher orderCover than an unbraked market at the same stock and use, but the same levelCover", () => {
+    const unbraked: GoodMarketState = {
+      goodId: "ore", stock: 100, logisticsTarget: 400, donorReserve: 400, demand: 10,
+      drawDemand: 10, civilianDemand: 10, production: 0, capacityProduction: 0,
+    };
+    const braked: GoodMarketState = { ...unbraked, drawDemand: 5 };
+    expect(orderCover(braked)).toBeGreaterThan(orderCover(unbraked));
+    expect(levelCover(braked)).toBe(levelCover(unbraked));
   });
 });

@@ -11,7 +11,8 @@
  * quantity here requires: a target that followed the momentary state of the yard it stocks would
  * drain and refill forever. `drawDemand` is the DRAW figure — the same want further gated by each
  * consuming factory's own output brake and live event multipliers, i.e. how urgently a delivery is
- * needed right now. Only the matcher's severity weight reads it.
+ * needed right now. Only the matcher's ordering cover reads it — the level and every raise stay
+ * sized on `demand`.
  *
  * Everything here divides by REAL demand — deliberately not the row's `demandRate`, which floors at
  * `MIN_DEMAND` (a divide-by-zero guard on *pricing*) and below that floor describes the guard rather
@@ -125,8 +126,9 @@ export function toGoodMarketStates(
       ? m.honestUseRate
       : recomputedUseRate(m.goodId);
 
-  // The draw figure has exactly one reader — the matcher's severity weight — so only the logistics
-  // caller pays for the per-market brake pass and the second recipe sum behind it.
+  // The draw figure has exactly one reader — the matcher's ordering cover, which decides which
+  // shelf is served first — so only the logistics caller pays for the per-market brake pass and the
+  // second recipe sum behind it.
   //
   // This brake pass is LOAD-BEARING for welfare, not a refinement: the stage-3 gate's third arm
   // (draw figure pinned to the old anchor ceiling, tick brake identical) measured the brake's

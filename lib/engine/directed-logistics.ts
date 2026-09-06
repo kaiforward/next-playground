@@ -5,6 +5,9 @@
  * See docs/active/gameplay/economy-autonomic-agency.md.
  */
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+import { GOOD_NECESSITY } from "@/lib/constants/physical-economy";
+import { raiseFor, solveWaterLevel, type LevelWorld } from "./shelf-levelling";
 import type { RouteBlocked, RouteBookerFor } from "./lane-routing";
 
 // Re-exported so existing callers (the processor, tests) keep importing the matcher's booker view
@@ -80,7 +83,7 @@ export function classifyMarketState(stock: number, target: number): MarketClassi
  * divide-by-zero guard on *pricing* rather than anything anyone there consumes. Moving this side was
  * measured end to end first: equilibrium is unchanged on every tracked good (consumer cover matches
  * baseline at 16,000 ticks, galaxy production −0.3%). The accepted cost is transient — stock the
- * price anchor used to over-shelter on small markets now feeds the front of the severity queue, so
+ * price anchor used to over-shelter on small markets now feeds the front of the import queue, so
  * during the scarcity era consumer shelves fill roughly 1,000-2,000 ticks later. The
  * consumer-cover "collapse" once read off a 10,000-tick A/B was a horizon artifact: that horizon
  * sits inside the transient for high-tier consumer cover, which is why any A/B of it is taken at
@@ -142,7 +145,9 @@ export interface GoodMarketState {
   /** The DRAW figure: `demand` further gated by each consuming factory's own output brake at its
    *  current stock and its live event production multiplier — how urgently a delivery is needed
    *  RIGHT NOW, as opposed to how much this world uses in the long run. Its only reader is the
-   *  matcher's severity weight; nothing that sizes or reserves stock may touch it. */
+   *  ordering cover (`orderCover`) that decides which shelf is served first; nothing that sizes or
+   *  reserves stock may touch it — the level and every raise stay denominated in `demand`, so a cycle
+   *  is one unit across every world regardless of how braked any of them are right now. */
   drawDemand: number;
   /** The civilian half of `demand` alone (per-capita baseline + skilled baskets, no industrial input
    *  draw). The housing fed-gate folds this: necessity is authored on the civilian axis, so weighting
@@ -172,6 +177,64 @@ export interface GoodMarketState {
    *  in flight is counted exactly once and a world still lacking goods still reads as needing them
    *  for welfare purposes. */
   scheduledInbound?: number;
+}
+
+/**
+ * Physical stock plus what is already in flight toward this market, except: while physical `stock`
+ * sits under `RATION_COVER` cycles of `demand` — the use-figure proxy of the economy's ration line
+ * (`ECONOMY_CONSTANTS.RATION_COVER`, `lib/constants/economy.ts`) — inbound is dropped and only the
+ * physical figure counts. Against a level of a few cycles, a haul in transit (~17 ticks per lane) can
+ * be the whole level while the shelf itself is empty, so a market this thin is read on what is
+ * actually on the shelf. The boundary is strict-below: a market exactly on the line already counts
+ * inbound. Above the line, behaves exactly as the sink test's `stock + scheduledInbound` does today.
+ */
+export function countedStock(g: GoodMarketState): number {
+  const rationLine = ECONOMY_CONSTANTS.RATION_COVER * g.demand;
+  if (g.stock < rationLine) return g.stock;
+  return g.stock + (g.scheduledInbound ?? 0);
+}
+
+/**
+ * Cycles of cover against the DRAW figure — how close a market is to running dry at its current,
+ * possibly-braked draw rate. The ordering term only: never used to size a raise (`drawDemand`'s own
+ * docstring forbids that). Reads +Infinity at `drawDemand` 0 rather than dividing by zero, so a
+ * fully-braked market with no live want sorts last in an ascending-cover queue instead of producing
+ * `NaN`. A braked factory (`drawDemand` below `demand`) therefore reads a HIGHER `orderCover` than an
+ * unbraked market at the same stock and use — it is not drawing urgently right now, whatever its
+ * warehouse level says.
+ */
+export function orderCover(g: GoodMarketState): number {
+  if (g.drawDemand <= 0) return Infinity;
+  return countedStock(g) / g.drawDemand;
+}
+
+/**
+ * Cycles of cover against the USE figure — the unit every warehousing quantity and every raise is
+ * denominated in (`GoodMarketState.demand`'s own docstring). Only ever called on a deficit, where
+ * `logisticsTarget > 0` and so `demand > 0` (`classifyMarketState`'s target-0 guard keeps a market
+ * with no demand out of the deficit list entirely) — never a division by zero in practice.
+ */
+export function levelCover(g: GoodMarketState): number {
+  return countedStock(g) / g.demand;
+}
+
+/**
+ * The goods of one run in the order a faction serves them: descending `GOOD_NECESSITY` — how much
+ * not having the good counts as suffering — with ties broken by ascending good id, so the order is
+ * total and identical on every save. Only the rank is read, never the magnitude. A good absent from
+ * the table reads 0 and sorts last, never first.
+ *
+ * The haul budget and lane capacity are shared across a faction's whole run, so this ordering is
+ * what "food before luxuries" means mechanically: when either binds, it binds on the least
+ * necessary good first.
+ */
+export function goodsInNecessityOrder(goodIds: Iterable<string>): string[] {
+  return [...goodIds].sort((a, b) => {
+    const byNecessity = (GOOD_NECESSITY[b] ?? 0) - (GOOD_NECESSITY[a] ?? 0);
+    if (byNecessity !== 0) return byNecessity;
+    if (a === b) return 0;
+    return a < b ? -1 : 1;
+  });
 }
 
 export interface SystemLogisticsState {
@@ -210,19 +273,18 @@ export interface FundingBoundMatch {
 }
 
 /**
- * One deficit no reachable same-faction donor — at the drawable capacity each still holds when the
- * queue reaches this deficit, summed across every reachable donor — could close, even given
- * unlimited haul budget. The LIVE capacity, not each donor's pre-run figure: what earlier deficits
- * already took is gone, and a faction whose demand for a good exceeds its supply of it really
- * cannot serve everyone. Reading the pre-run figures instead would let a system that received
- * nothing, with no capacity for it anywhere in the faction, report no problem at all. Local
- * production is not restated here: every entry in the deficit queue already failed the self-supply
- * gate (`production < demand`), so "no local production can close it" already holds for anything
- * that reaches this test.
+ * One deficit no reachable same-faction donor — at the drawable capacity each still holds once this
+ * good's whole pass is done, summed across every reachable donor — could close, even given
+ * unlimited haul budget. The LIVE capacity, not each donor's pre-run figure: what the run already
+ * moved is gone, and a faction whose demand for a good exceeds its supply of it really cannot serve
+ * everyone. Reading the pre-run figures instead would let a system that received nothing, with no
+ * capacity for it anywhere in the faction, report no problem at all. Local production is not
+ * restated here: every entry in the deficit queue already failed the self-supply gate
+ * (`production < demand`), so "no local production can close it" already holds for anything that
+ * reaches this test.
  *
- * The queue's own worst-first order therefore decides WHICH deficits carry the reading when supply
- * is short — the severest draw first and the rest are left with the gap — but not how big the gap
- * is: the levels below sum to exactly the tonnage the faction lacks.
+ * Read at the end of the pass, EVERY world the faction's supply left short carries its own share of
+ * the gap, and the levels sum to exactly the tonnage the faction lacks.
  *
  * Independent of `FundingBoundMatch`, which records the budget stopping a fill that had enough
  * reachable capacity to succeed. The two are decided from different quantities (summed reachable
@@ -234,10 +296,11 @@ export interface FundingBoundMatch {
 export interface UnservableDeficit {
   goodId: string;
   systemId: string;
-  /** The part of the deficit's want that no reachable donor capacity covers — `Deficit.shortfall`
-   *  (`target − stock` at classification time) minus the reachable drawable this test summed,
-   *  strictly positive by the test that emits the entry. NOT the whole want: a deficit wanting 50
-   *  that draws 20 and can source no more reports 30, which is exactly what it ends up missing.
+  /** The part of the deficit's want that no reachable donor capacity covers — what it still wants
+   *  when the good's pass ends (`target − stock − scheduledInbound`, less everything it drew this
+   *  run) minus the reachable drawable this test summed, strictly positive by the test that emits
+   *  the entry. NOT the whole want: a deficit wanting 50 that draws 20 and can source no more
+   *  reports 30, which is exactly what it ends up missing.
    *  A CAPACITY measure throughout — computed from what exists, never from how far the
    *  budget-limited spending loop got, which is `FundingBoundMatch`'s question. */
   shortfall: number;
@@ -260,7 +323,47 @@ export interface TransferMatchResult {
   blocked: RouteBlocked[];
 }
 
-interface Deficit { systemId: string; goodId: string; shortfall: number; severity: number; }
+/**
+ * One (system, good) this run is filling. The two cover readings are the levelling's whole state:
+ * `orderCover` is frozen at classification and fixes the draw order, `levelCover` rises in place as
+ * the world draws so a later turn tops it up to a recomputed level instead of re-drawing what it
+ * already holds.
+ */
+interface Deficit {
+  systemId: string;
+  goodId: string;
+  /** The full want to the warehousing target at classification time
+   *  (`logisticsTarget − stock − scheduledInbound`). Only feeds `unservable`'s figure where this good
+   *  has no reachable donor at all — `unservable`'s general numerator is `remainingCap`, and
+   *  `fundingBound`'s materiality base is `stoppedWant`. Never the size of a draw. */
+  shortfall: number;
+  /** The owning system's position in the input array — the draw order's tie-break. */
+  systemOrder: number;
+  /** Cycles of cover against the DRAW figure. Only ever a sort key: `Infinity` (nothing drawing
+   *  here right now) sorts last and never enters any arithmetic. */
+  orderCover: number;
+  /** Cycles of cover against the USE figure — the unit the water level and every raise are
+   *  measured in. */
+  levelCover: number;
+  /** The cover this world stops wanting more at (`logisticsTarget ÷ demand`). */
+  targetCover: number;
+  /** Units per cycle. 0 for a market with no demand, which can never want anything. */
+  demand: number;
+  /** What this world can still take this run: its shortfall less everything drawn so far. Also the
+   *  remaining want the structural reading is taken against once the good's pass is done. */
+  remainingCap: number;
+  /** The donor whose draw the budget stopped on this world's most recent turn, if any. */
+  stoppedDonorId: string | null;
+  /** What that stop left standing of the raise it stopped. */
+  stoppedResidual: number;
+  /** The whole raise that stop ended — the materiality denominator `stoppedResidual` is judged
+   *  against. A world stopped on a later top-up turn is judged against THAT turn's raise, not
+   *  against the first one and not against its full want to the warehousing target. */
+  stoppedWant: number;
+  /** Already counted in `budgetSkipped` — a deficit contributes at most 1 however many turns it
+   *  takes. */
+  budgetCounted: boolean;
+}
 interface Surplus {
   systemId: string;
   goodId: string;
@@ -269,19 +372,53 @@ interface Surplus {
   order: number;
 }
 
+/** Emptiest shelf first, ties broken by the owning system's position in the input array. Written as
+ *  a comparison rather than a subtraction because two worlds with nothing drawing right now both
+ *  read `Infinity`, and `Infinity - Infinity` is `NaN`. */
+function byDrawOrder(a: Deficit, b: Deficit): number {
+  if (a.orderCover !== b.orderCover) return a.orderCover < b.orderCover ? -1 : 1;
+  return a.systemOrder - b.systemOrder;
+}
+
+/** This deficit as the solver sees it — cycles of cover, plus the units-per-cycle a cycle is worth. */
+function levelWorldOf(d: Deficit): LevelWorld {
+  return { id: d.systemId, levelCover: d.levelCover, targetCover: d.targetCover, demand: d.demand };
+}
+
 /**
- * Greedy surplus→deficit matching for ONE faction's systems (or all independents).
- * Budget = Σ system.generation, spent as the summed priced cost of what `booker.routeAndBook`
- * actually places. Worst-deficit-first; each deficit fills from every same-faction donor holding
- * drawable surplus, in ascending `priceFrom`-order (frozen for that deficit's whole fan-out), until
- * its shortfall is met, donors are exhausted, or an unaffordable draw ends this deficit's fill —
- * the **per-deficit skip** that replaces the old run-terminating budget clamp
- * (`docs/active/gameplay/logistics-lanes.md` §2): the remaining budget carries forward to the next
- * deficit rather than zeroing for the whole run, so one dear draw no longer starves every deficit
- * behind it. A haul the booker splits across multiple paths under congestion yields one
- * `PlannedTransfer` per placement, its quantities summing to what the booker actually placed — the
- * unplaced remainder is congestion, which the booker itself records as blocked volume, and is
- * neither drawn from the donor, billed, nor treated as unservable or funding-bound here.
+ * Surplus→deficit matching for ONE faction's systems (or all independents), levelling the shelves
+ * within each good. Budget = Σ system.generation, spent as the summed priced cost of what
+ * `booker.routeAndBook` actually places, shared across every good this run. Goods are served in
+ * necessity order (`goodsInNecessityOrder`), so when the shared budget or a lane binds, it binds on
+ * the least necessary good first.
+ *
+ * Per good: the faction's reachable supply — the live drawable of every donor at least one of that
+ * good's deficits can reach (`reachableFrom`, saturation-blind) — sets a **water level** `L` in
+ * cycles of each world's own use figure (`solveWaterLevel`). Every deficit below `L` is raised to it,
+ * or to its own warehousing target if that is lower; every deficit already above it draws nothing.
+ * When the supply covers every deficit's target, `L` is that target and the whole queue fills, which
+ * is what an ample-supply run has always done.
+ *
+ * Draws are placed in ascending `orderCover` — emptiest shelf first, measured against the DRAW
+ * figure, so it is congestion and the budget that bite the comfortable worlds rather than the
+ * starving ones. Each deficit draws its raise from every same-faction donor holding drawable
+ * surplus, in ascending `priceFrom`-order (frozen for that turn's whole fan-out), until the raise is
+ * met, donors are exhausted, or an unaffordable draw ends this deficit's turn — the **per-deficit
+ * skip** that replaces the old run-terminating budget clamp
+ * (`docs/active/gameplay/logistics-lanes.md` §2): the remaining budget carries forward rather than
+ * zeroing for the whole run, so one dear draw no longer starves every deficit behind it.
+ *
+ * The level is a **fixed point, not a single pass**. Where a world's own donors cannot meet its
+ * raise, its level is fixed where it stopped, it leaves the levelling, and `L` is recomputed over
+ * the worlds still in it against the supply they can still reach; the worlds already drawn are then
+ * topped up to the new level, so a world drawn early never ends below one drawn later. Each
+ * recomputation removes a world, so the loop terminates. A budget stop is not such an event — it is
+ * money, not capacity — so it ends that world's turn and leaves it in the levelling.
+ *
+ * A haul the booker splits across multiple paths under congestion yields one `PlannedTransfer` per
+ * placement, its quantities summing to what the booker actually placed — the unplaced remainder is
+ * congestion, which the booker itself records as blocked volume, and is neither drawn from the
+ * donor, billed, nor treated as unservable or funding-bound here.
  */
 export function matchFactionTransfers(
   systems: SystemLogisticsState[],
@@ -290,8 +427,11 @@ export function matchFactionTransfers(
   let budget = 0;
   for (const s of systems) budget += s.generation;
 
-  // Classify each (system, good) as deficit or surplus. Mutable drawable/stock-shortfall as we allocate.
-  const deficits: Deficit[] = [];
+  // Classify each (system, good) as deficit or surplus. Mutable drawable/cover as we allocate.
+  // Deficits are grouped by good because the level is solved within a good; the goods themselves are
+  // then walked in necessity order (`goodsInNecessityOrder`), so the shared budget and the shared
+  // lane capacity bind on the least necessary good first.
+  const deficitsByGood = new Map<string, Deficit[]>();
   const surplusesByGood = new Map<string, Map<string, Surplus>>();
 
   for (let systemOrder = 0; systemOrder < systems.length; systemOrder++) {
@@ -307,11 +447,44 @@ export function matchFactionTransfers(
       // inventory relative to their demand rate — read as deficits and get shipped a good they
       // already make, piling stock to the ceiling and decaying their own producers.
       if (c.kind === "deficit" && c.shortfall > 0 && g.production < g.demand) {
-        // Triage weight reads the DRAW figure: a factory that cannot run right now — its own yard
-        // full, or an event holding its rate down — should not outrank one that is idle for want of
-        // this very delivery. Membership above is still decided on the use figure, so the queue
-        // reorders without anyone dropping out of it.
-        deficits.push({ systemId: s.systemId, goodId: g.goodId, shortfall: c.shortfall, severity: c.shortfall * g.drawDemand });
+        let list = deficitsByGood.get(g.goodId);
+        if (!list) {
+          list = [];
+          deficitsByGood.set(g.goodId, list);
+        }
+        // A deficit implies a positive warehousing target and so a positive use figure; the guard
+        // keeps a fixture that states otherwise out of every division rather than letting an
+        // Infinity or a NaN into the solver.
+        const uses = g.demand > 0;
+        const currentLevelCover = uses ? levelCover(g) : 0;
+        list.push({
+          systemId: s.systemId,
+          goodId: g.goodId,
+          shortfall: c.shortfall,
+          systemOrder,
+          // The draw order reads the DRAW figure: a factory that cannot run right now — its own
+          // yard full, or an event holding its rate down — is not close to running out, whatever
+          // its warehouse level says, and should not be raised ahead of one idle for want of this
+          // very delivery. Membership above and every quantity below stay on the use figure.
+          orderCover: orderCover(g),
+          levelCover: currentLevelCover,
+          // Capped at levelCover + shortfall/demand, not just logisticsTarget/demand: `levelCover`
+          // is read off PHYSICAL stock alone once a market sits under the ration line
+          // (`countedStock`), while `shortfall` (and so `remainingCap`) is computed against
+          // `stock + scheduledInbound`. The two denominators differ by exactly the in-flight
+          // quantity for a ration-line world, so `logisticsTarget / demand` alone states a cover
+          // this world cannot actually reach — the solver over-states its want, the level lands too
+          // low, and pool is left unspent while later worlds in the same pass draw nothing.
+          targetCover: uses
+            ? Math.min(g.logisticsTarget / g.demand, currentLevelCover + c.shortfall / g.demand)
+            : 0,
+          demand: uses ? g.demand : 0,
+          remainingCap: c.shortfall,
+          stoppedDonorId: null,
+          stoppedResidual: 0,
+          stoppedWant: 0,
+          budgetCounted: false,
+        });
         continue;
       }
       // Surplus source — standing excess inventory above the donor's own reserve OR a structural
@@ -330,67 +503,32 @@ export function matchFactionTransfers(
     }
   }
 
-  deficits.sort((a, b) => b.severity - a.severity);
-
   const transfers: PlannedTransfer[] = [];
   const fundingBound: FundingBoundMatch[] = [];
   const unservable: UnservableDeficit[] = [];
   const blocked: RouteBlocked[] = [];
   let budgetSkipped = 0;
-  for (const d of deficits) {
-    const sources = surplusesByGood.get(d.goodId);
-    if (!sources) {
-      // No system anywhere in this faction currently holds surplus of this good at all — the
-      // deficit queue already guarantees no local production can close it (self-supply gate above),
-      // so this is the plainest structural case: no reachable donor, full stop. Reachable capacity
-      // is 0, so the level below is the whole want — the same `shortfall − reachableDrawable` the
-      // general test computes, with nothing to subtract.
-      unservable.push({ goodId: d.goodId, systemId: d.systemId, shortfall: d.shortfall });
-      continue;
-    }
 
-    // One search from this sink, frozen for its whole donor fan-out — later deficits re-search and
-    // see this deficit's bookings.
+  /**
+   * Draw `want` units into one deficit from every willing donor it can price, cheapest first (tie:
+   * stable system order), and return what was actually placed. One or more `PlannedTransfer` rows
+   * per donor-draw — the booker may split a single draw across paths under congestion. A single-donor
+   * cap here left reachable stock unshipped beside standing deficits (~42% of equilibrium unmet
+   * tonnage in the attribution run). A dry donor is excluded: it could only contribute a
+   * zero-quantity draw. Candidates require a LIVE priced path (`priceFor`) — congestion may block a
+   * donor from shipping this run even though it counts toward the structural reading below.
+   *
+   * `d.stoppedDonorId` / `d.stoppedResidual` / `d.stoppedWant` are rewritten each turn, so they
+   * always describe this world's most recent turn — a world stopped on a later top-up is judged
+   * against that turn's raise. `budgetSkipped` counts the world once however many turns it takes.
+   */
+  function drawRaise(d: Deficit, want: number, sources: ReadonlyMap<string, Surplus>): number {
+    // One priced search from this sink, frozen for its whole donor fan-out — a later draw turn
+    // re-searches and sees this turn's bookings.
     const priceFor = booker.priceFrom(d.systemId);
-    // A second, saturation-blind search from the SAME sink — see `RouteBookerFor.reachableFrom`'s
-    // own docstring. This is what `reachableDrawable` below reads instead of `priceFor`: congestion
-    // this run's own earlier deficits caused must not strand a donor out of the structural signal.
-    // Built lazily: a donor `priceFor` prices has a live path and so trivially a saturation-blind
-    // one, so the second search is only paid when some donor priced null.
-    let reachableFor: ((donorId: string) => boolean) | null = null;
-    const isReachable = (donorId: string): boolean => {
-      reachableFor ??= booker.reachableFrom(d.systemId);
-      return reachableFor(donorId);
-    };
-
-    // Two figures off one walk of this deficit's donors.
-    //
-    // `candidates` — every willing donor with something LEFT to give and an open priced path,
-    // cheapest first (tie: stable system order), one or more `PlannedTransfer` rows per donor-draw
-    // (the booker may split a single draw across paths under congestion). A single-donor cap here
-    // left reachable stock unshipped beside standing deficits (~42% of equilibrium unmet tonnage in
-    // the attribution run). A dry donor is excluded: it could only contribute a zero-quantity draw.
-    // Candidates still require a LIVE priced path (`priceFor`) — congestion may block a donor from
-    // actually shipping this run even though it counts toward the structural reading below.
-    //
-    // `reachableDrawable` — total capacity this deficit can actually reach, summed from each
-    // structurally-reachable donor's LIVE drawable, i.e. what it still holds after the deficits ahead
-    // of it in the queue took their share. Reachability is `reachableFor`, NOT `priceFor`: a donor
-    // whose only path is currently saturated (`priceFor` returns null, congestion) still counts here
-    // — congestion is not the same as "does not exist" (`docs/active/gameplay/logistics-lanes.md` §2, "a
-    // blocked haul is not an unservable one"). A donor `reachableFor` returns false for (no open path
-    // at all, traversability-closed) is not reachable for this test, exactly as an out-of-radius donor
-    // was not before the hop cap was deleted. The structural test asks whether the shortfall is
-    // closeable with what exists, not whether it would be closeable were this deficit the only one
-    // asking: where a faction's demand for a good outruns its supply, the deficits left with nothing
-    // are unservable in the plainest sense and have to say so. Deliberately independent of the budget
-    // mechanics that decide `fundingBound` too: the two questions are "does enough exist" and "did
-    // money reach what exists", and a deficit can fail both at once (see the type's own docstring).
-    let reachableDrawable = 0;
     const candidates: Array<{ source: Surplus; perUnit: number }> = [];
     for (const [sourceSystemId, source] of sources) {
       const perUnit = priceFor(sourceSystemId);
-      if (perUnit !== null || isReachable(sourceSystemId)) reachableDrawable += source.drawable;
       if (perUnit === null) continue;
       if (source.drawable <= 0) continue;
       candidates.push({ source, perUnit });
@@ -399,8 +537,10 @@ export function matchFactionTransfers(
       (a, b) => a.perUnit - b.perUnit || a.source.order - b.source.order,
     );
 
-    let remaining = d.shortfall;
-    let stoppedDonorId: string | null = null;
+    let remaining = want;
+    d.stoppedDonorId = null;
+    d.stoppedResidual = 0;
+    d.stoppedWant = 0;
     for (const { source, perUnit } of candidates) {
       if (remaining <= 0) break;
 
@@ -412,7 +552,7 @@ export function matchFactionTransfers(
       const quantity = Math.min(wanted, affordable);
       // Set when this candidate's LIVE billing overshoots the FROZEN quote `affordable` was sized
       // against — see the comment below the placement loop. Distinct from `affordable < wanted`
-      // (this candidate's own stock/shortfall-limited share was smaller than what the budget could
+      // (this candidate's own stock/raise-limited share was smaller than what the budget could
       // in principle afford): a draw can be exactly `affordable === wanted` (fully served, nothing
       // left over) and still overshoot once congestion prices later placements above the quote.
       let overshotBudget = false;
@@ -435,7 +575,7 @@ export function matchFactionTransfers(
             placedTotal += placement.quantity;
             budget -= cost;
           }
-          // `affordable` above was sized against the FROZEN per-deficit quote (`budget / perUnit`,
+          // `affordable` above was sized against the FROZEN per-turn quote (`budget / perUnit`,
           // `perUnit` from `priceFor`), but each placement above is billed at its own LIVE price
           // (`placement.perUnit`) — and live ≥ frozen by construction: this very draw's earlier
           // placements raise congestion, and a split under congestion can land part of the quantity
@@ -443,7 +583,7 @@ export function matchFactionTransfers(
           // above it. Left negative, `budget` would make `affordable` 0 for every donor and deficit
           // for the rest of the run (`budget > 0 ? … : 0`) — a run-wide cliff, not the per-deficit
           // binding the skip below implements — so it is floored at 0 here. `overshotBudget` still
-          // ends THIS candidate's fill (below): the budget genuinely ran out mid-draw, which
+          // ends THIS candidate's draw (below): the budget genuinely ran out mid-draw, which
           // `affordable < wanted` alone would not catch.
           if (budget < 0) overshotBudget = true;
           budget = Math.max(0, budget);
@@ -456,45 +596,141 @@ export function matchFactionTransfers(
         source.drawable -= placedTotal;
         remaining -= placedTotal;
       }
-      // An unaffordable draw, or one that overshot the live budget above, ends THIS deficit's fill:
+      // An unaffordable draw, or one that overshot the live budget above, ends THIS deficit's turn:
       // later donors here are unaffordable too, and iterating them would only fan out epsilon-sized
       // transfers from float residue. Unlike the retired run-terminating clamp, the budget itself is
       // left exactly as spent (floored at 0, never negative) — the remaining budget stays available
-      // to fund cheaper deficits behind this one in the queue, which is the gradual binding §2 wants
-      // in place of a single cliff. Classification continues either way (see the docstring).
+      // to fund the worlds behind this one, which is the gradual binding §2 wants in place of a
+      // single cliff. A money stop is NOT a capacity event: it ends the turn and leaves the world in
+      // the levelling, where a donor exhaustion would take it out of it.
       if (affordable < wanted || overshotBudget) {
-        stoppedDonorId = source.systemId;
-        budgetSkipped++;
+        d.stoppedDonorId = source.systemId;
+        d.stoppedResidual = remaining;
+        d.stoppedWant = want;
+        if (!d.budgetCounted) {
+          budgetSkipped++;
+          d.budgetCounted = true;
+        }
         break;
       }
     }
+    return want - remaining;
+  }
 
-    // Funding-bound is a gameplay gate (planner suppression, idle-decay exemption), so it records
-    // "this shortfall persists because of money" — a budget-stopped draw alone is not enough when
-    // earlier donors already served the deficit to within the materiality line.
-    if (
-      stoppedDonorId !== null
-      && remaining > d.shortfall * DIRECTED_LOGISTICS.FUNDING_BOUND_RESIDUAL_FRACTION
-    ) {
-      fundingBound.push({
-        goodId: d.goodId,
-        fromSystemId: stoppedDonorId,
-        toSystemId: d.systemId,
-      });
+  // One saturation-blind search per sink SYSTEM for the whole run, shared by every good that system
+  // is short of — reachability is traversability alone (`RouteBookerFor.reachableFrom`), so it
+  // neither varies by good nor moves with this run's bookings. Built on first use.
+  const searches = new Map<string, (donorId: string) => boolean>();
+  const canReach = (d: Deficit, donorId: string): boolean => {
+    let search = searches.get(d.systemId);
+    if (!search) {
+      search = booker.reachableFrom(d.systemId);
+      searches.set(d.systemId, search);
+    }
+    return search(donorId);
+  };
+
+  for (const goodId of goodsInNecessityOrder(deficitsByGood.keys())) {
+    const worlds = deficitsByGood.get(goodId);
+    if (!worlds) continue; // unreachable: the order is taken from this very map's keys
+    const sources = surplusesByGood.get(goodId);
+    if (!sources) {
+      // No system anywhere in this faction currently holds surplus of this good at all — the
+      // deficit list already guarantees no local production can close it (self-supply gate above),
+      // so this is the plainest structural case: no reachable donor, full stop. Reachable capacity
+      // is 0 and nothing is drawn, so the level is the whole want — the same "remaining want less
+      // the drawable its reachable donors still hold" the end-of-pass test computes below, with
+      // nothing to subtract.
+      for (const d of worlds) {
+        unservable.push({ goodId, systemId: d.systemId, shortfall: d.shortfall });
+      }
+      continue;
     }
 
-    // Structural: every reachable donor's remaining capacity, spent with no budget limit at all,
-    // still leaves this much of the shortfall standing. The LEVEL is that residue, not the whole
-    // want — the part the deficit does get served is not unserved — and both the test and the level
-    // are decided against `reachableDrawable`, never against `remaining`: `remaining` reflects
-    // however far the budget-limited loop actually got, which is exactly the quantity `fundingBound`
-    // above already answers for.
-    if (reachableDrawable < d.shortfall) {
-      unservable.push({
-        goodId: d.goodId,
-        systemId: d.systemId,
-        shortfall: d.shortfall - reachableDrawable,
-      });
+    // The pool that sets the level has to know which donors each world can reach before any of
+    // them draws — `canReach` above, saturation-blind. Reachability is `reachableFrom`, NOT
+    // `priceFrom`: a donor whose only path is currently saturated still exists, and congestion is
+    // not the same as "does not exist" (`docs/active/gameplay/logistics-lanes.md` §2, "a blocked
+    // haul is not an unservable one").
+    const reachableDrawableFor = (d: Deficit): number => {
+      let total = 0;
+      for (const [donorId, source] of sources) if (canReach(d, donorId)) total += source.drawable;
+      return total;
+    };
+
+    const drawOrder = [...worlds].sort(byDrawOrder);
+    const levelling = [...drawOrder];
+
+    while (levelling.length > 0) {
+      // The pool: every donor at least one world still in the levelling can reach, at the capacity
+      // it still holds. A donor only a saturated path reaches counts here — the supply exists,
+      // whether or not congestion lets anything cross this run.
+      let pool = 0;
+      for (const [donorId, source] of sources) {
+        if (source.drawable <= 0) continue;
+        if (levelling.some((d) => canReach(d, donorId))) pool += source.drawable;
+      }
+      const level = solveWaterLevel(levelling.map(levelWorldOf), pool);
+
+      let exhausted = -1;
+      for (let i = 0; i < levelling.length; i++) {
+        const d = levelling[i];
+        // A level at or above this world's own target is a full fill: it is sized off the sink
+        // test's own shortfall rather than the cover round-trip, so an ample-supply run places
+        // exactly the quantity it classified, free of float residue. A `demand <= 0` world's
+        // `targetCover` is 0, which this comparison alone would misread as "level already clears
+        // it" and hand it a full `remainingCap` — so it is excluded here too, wanting nothing, the
+        // same "contributes nothing" `shelf-levelling.ts` states for it. Unreachable on the live
+        // path (a deficit implies positive demand); kept for a fixture that states otherwise.
+        const want = d.demand <= 0 ? 0 : level >= d.targetCover
+          ? d.remainingCap
+          : Math.min(raiseFor(levelWorldOf(d), level), d.remainingCap);
+        if (want <= 0) continue;
+
+        const placed = drawRaise(d, want, sources);
+        if (d.demand > 0) d.levelCover += placed / d.demand;
+        d.remainingCap -= placed;
+
+        // Its own donors could not meet its raise, and money is not why: its level is fixed where it
+        // stopped and it leaves the levelling, so the level is recomputed for the rest against what
+        // they can still reach — and the worlds already drawn are topped up to it on the next round.
+        if (d.stoppedDonorId === null && placed < want) {
+          exhausted = i;
+          break;
+        }
+      }
+      if (exhausted < 0) break;
+      levelling.splice(exhausted, 1);
+    }
+
+    for (const d of drawOrder) {
+      // Funding-bound is a gameplay gate (planner suppression, idle-decay exemption), so it records
+      // "this shortfall persists because of money" — a budget-stopped draw alone is not enough when
+      // the donors before it already met the raise to within the materiality line. The residual is
+      // measured against the RAISE that stop ended, not against the whole want to the warehousing
+      // target: a world being raised three cycles is not almost-served merely because the target it
+      // is ultimately filling toward is forty.
+      if (
+        d.stoppedDonorId !== null
+        && d.stoppedResidual > d.stoppedWant * DIRECTED_LOGISTICS.FUNDING_BOUND_RESIDUAL_FRACTION
+      ) {
+        fundingBound.push({
+          goodId,
+          fromSystemId: d.stoppedDonorId,
+          toSystemId: d.systemId,
+        });
+      }
+
+      // Structural, read once the whole of this good's pass is done: what this world still wants,
+      // less the drawable its reachable donors are still holding. Under a real shortage that
+      // remainder is spent, so every world left short carries its share and the levels sum to the
+      // tonnage the faction lacks. Where its donors DO still hold stock, something other than
+      // capacity stopped the haul — money or congestion — and this reading stays silent; those are
+      // `fundingBound`'s question and the booker's blocked volume respectively.
+      const level = d.remainingCap - reachableDrawableFor(d);
+      if (level > 0) {
+        unservable.push({ goodId, systemId: d.systemId, shortfall: level });
+      }
     }
   }
 

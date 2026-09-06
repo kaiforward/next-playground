@@ -18,17 +18,6 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   `MapData.laneBandBySystem`. Tight clusters hide most names until zoomed well in (cell-fit rule,
   no priority scheme) — decide after play whether a priority tier is wanted.
   *Next step:* play with both for a few sessions, then decide.
-- **[M] Good-allocation cliff — how logistics splits a scarce good across demanding systems.**
-  Gate 1 of supply-response measured per-good satisfaction as violently bimodal: on worlds below
-  full Provision, individual goods sit at 0 or 1 with almost nothing between. Hypothesis: greedy
-  fill — each receiving system takes its full demand while in-range supply lasts, so at most one
-  system gets a partial fill and everyone after gets zero. If confirmed, the fix is an allocation
-  policy weighing availability against the number of demanding systems (candidate policies listed
-  on the logistics gameplay pass row below; possibly player-configurable). Complements the band /
-  critical-good mechanics — partial-satisfaction states make `CRITICAL_SATISFACTION` a live line
-  instead of a formality. Sibling of the logistics gameplay pass below.
-  *Next step:* `/measure` the directed-logistics fill order to confirm or kill the greedy-drain
-  hypothesis before any policy design.
 - **[L] Logistics gameplay pass — real cost, hub/chain depth, the surface war will interdict.**
   Logistics works mechanically but hauling costs nothing and nothing can threaten it — no game in
   the pillar yet. This pass prices movement (the markets row below needs transport cost to make
@@ -48,16 +37,18 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
     throughput/entrepôt world would request more inbound when its exports hit their limit (demand
     propagating upstream through hubs) while producers near consumers ship direct. The point-to-point
     matcher today has no hub concept.
-  - **Flow priority is a lever** (2026-08-03): the matcher's sink ordering (severity = shortfall ×
-    draw, worst-first) is designable — e.g. scaling need by relative size so a tiny colony's request
-    can outrank raw tonnage, with a mechanical player lever over priority.
+  - **Player priority lever** (2026-08-03, reworded 2026-09-06): logistics levels the emptiest
+    shelf first; a per-system priority flag would let the player put a world ahead of that.
+    Deferred — the default behaviour ships without it.
+  - **Saturated lanes decide who stays low under levelling** (measured 2026-09-06, seed 42, 600
+    systems): a world whose only donors sit behind lanes at capacity counts in the pool that sets the
+    level but cannot draw, so it is fixed at its start cover while the rest level higher — 74% of
+    starving zero-fill worlds at 10K still had reachable stock they could not cross (1 world at 16K).
+    Lane capacity, not supply, is the binding constraint there; this pass's lane pricing and investment
+    is where it is addressed.
   - **Player exposure stays coarse**: sensible defaults for thresholds, never raw per-good
     warehouse valves (unmanageable, illegible). At most one coarse in-fiction policy (a faction
     stockpile stance); real control lives in automation toggles, budgets, directed orders.
-  - **Scarce-good allocation policy candidates** (2026-08-08, feeding the good-allocation-cliff row
-    above), if the greedy-drain hypothesis confirms: (a) spread available supply evenly across
-    demanding systems; (b) satisfy lowest-Provision systems first; (c) band-maximizing — scale
-    exports so as many systems as possible cross a higher satisfaction band without maxing any one out.
   **Absorbs the former flow-visualisation row**, retired 2026-08-12: a logistics overlay already
   ships on the map, and designing a second flow view before this pass changes what flows is
   backwards. Its approved HTML prototype survives as an input —
@@ -67,13 +58,6 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   `lib/engine/directed-build.ts`) as a yes/no; weighting by route cost to those suppliers
   would favour integrated hubs. Deliberately left out of the post-industry-land-cut ranking
   recut because it overlaps this pass's hub/chain design — pick it up here.
-  **Carry necessity into the routing calculations too** (Kai, 2026-08-16). The same gap the build
-  planner has: logistics decides what to haul from shortfall quantity and route cost, and a unit of
-  unmet food ranks alongside a unit of unmet luxuries. The build side has shipped — the planner's
-  survival band (docs/active/gameplay/economy-autonomic-agency.md, "Survival first") — so this line
-  closes the remaining half. The concrete place it lands is the **good-allocation cliff** row above,
-  which owns the allocation policy; this line exists so the pillar pass does not design that policy
-  necessity-blind.
   **War interdiction is ready to call** — the interdiction query (`flowsCrossingEdge`,
   `lib/engine/freight.ts`) ships with no caller; it answers "which scheduled flows cross edge E in
   [t₁,t₂]" straight off the freight ledger, so war's own pass calls it rather than building a new
