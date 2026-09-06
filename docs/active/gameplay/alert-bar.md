@@ -242,9 +242,12 @@ reads any of them back — they exist purely for this read surface.
   system leaves the candidate set.
 - **`WorldMarket.unservedShortfall`** — how much of a deficit no reachable same-faction donor and no
   local production could close on the latest directed-logistics run, written on the deficit endpoint
-  only. A positive level *is* the classification — there is no separate boolean to keep in step with
-  it. Distinct from `logisticsFundingBound`, which means the work budget, not the galaxy, stopped a fill
-  that had enough reachable capacity to succeed.
+  only. Read at the END of the good's levelling pass: every world still short of its target reads its
+  remaining want less what its reachable donors still hold, so under a real shortage every short world
+  carries its own share and the levels sum to the faction's gap, rather than the residual landing on
+  whichever world the queue reached last. A positive level *is* the classification — there is no
+  separate boolean to keep in step with it. Distinct from `logisticsFundingBound`, which means the work
+  budget, not the galaxy, stopped a fill that had enough reachable capacity to succeed.
 
 One more signal lives beside the industry engine rather than in `World` state: **`IdleReason` gained a
 sixth member, `"inputs"`**, for a fully staffed, freely selling factory whose recipe input never

@@ -84,7 +84,8 @@ requires — targets, donor floors, consumer/producer classification must not tw
 state of the yard they stock. The **draw figure** (`drawDemand`, derived live at the matcher's read
 point) is the same want further gated by each consuming factory's own output brake and live event
 production multipliers — *how urgently does this world need a delivery right now* — and its only reader
-is the matcher's severity weight. Neither figure applies an input gate: a scarce input must not deflate
+is the matcher's ordering cover, which decides which shelf is served first while every raise stays sized
+on the use figure. Neither figure applies an input gate: a scarce input must not deflate
 its own demand signal, or rationing spirals into starvation. Civilian want counts at full rate in both —
 a starving town must never read as a low-demand town.
 
@@ -114,8 +115,9 @@ at and the target a sink fills to together.
 **Logistics classification** (stock-based):
 
 - **Deficit** — `stock < logisticsTarget × DEFICIT_FRACTION` (below the warehousing target, with a
-  dead-band). Severity = shortfall × the **draw figure** — a factory stopped by its own full yard does
-  not head the import queue, while its warehousing target stands unchanged.
+  dead-band). Import order runs by cover against the **draw figure** — a factory stopped by its own
+  full yard is not close to running out right now and is not raised ahead of one idle for want of the
+  delivery, while its warehousing target stands unchanged.
 - **Surplus** — a source of drawable stock by either path, and the two paths stop at different
   floors: **(a)** `stock ≥ donorReserve × SURPLUS_MARGIN` — any holder of excess inventory (margin > 1
   leaves the deliberate residual) — donating only `stock − donorReserve`, never below the reserve it
@@ -137,7 +139,7 @@ at and the target a sink fills to together.
   [economy-equilibrium-rework](./economy-equilibrium-rework.md)). Moving the donor side was measured
   end to end first: equilibrium is unchanged on every tracked good, galaxy production −0.3%, and the
   accepted cost is transient — stock the anchor used to over-shelter on small markets now feeds the
-  front of the severity queue, so mid-game consumer shelves fill ~1,000–2,000 ticks later.
+  front of the import queue, so mid-game consumer shelves fill ~1,000–2,000 ticks later.
   At demand 0 the reserve is 0 and the whole pile is drawable: nobody there consumes the good, so
   there is nothing to hold it for.
 - **Balanced** — the dead-band between, and anything with no demand at all (a zero warehousing target
@@ -180,27 +182,46 @@ rises with how loaded the lane already is. This one choice does triple duty:
 
 ### The matching engine
 
-Per faction, per cycle: rank deficits worst-first (shortfall × the draw figure), and for each, collect
-every same-faction donor of that good with drawable surplus reachable over open lanes — own, unclaimed,
-or friendly-or-allied space, no distance limit — and draw from them in **per-unit route-cost order** —
-`min(remaining shortfall, donor drawable, remaining pool / route cost)` from each in turn. An unaffordable
-draw ends only that deficit's fill, not the whole matching pass — the next deficit in the queue is still
-tried against the same pool. One flow row per donor→deficit draw. The donor never drops below its own
+Per faction, per cycle, goods are processed in descending `GOOD_NECESSITY` — how much not having the
+good counts as suffering — ties broken by good id, so the order is total and the shared work budget and
+shared lane capacity bind on the least necessary good first when either does.
+
+Within one good, logistics stocks the emptiest shelf first. Every deficit is read in cycles of cover:
+cover against the **draw figure** orders which shelf is served first, cover against the **use figure**
+sizes what it draws. The faction's reachable supply of the good — every same-faction donor with
+drawable surplus at least one of that good's deficits can reach over open lanes (own, unclaimed, or
+friendly-or-allied space, no distance limit) — is handed out as a single water level: the lowest-cover
+deficit is raised toward the next-lowest, then both toward the next, and so on, until every deficit
+reaches its warehouse target or the supply is spent. A small colony with four cycles left is served
+before a capital with ten; a capital with four is served before a colony with forty. Where a world's own
+reachable donors run dry before its raise is met, its level is fixed where it stopped and it leaves the
+levelling; the level is recomputed over the worlds still in it against what they can still reach, and
+worlds already raised this pass are topped up to the new level before the good's pass ends — the level
+is a fixed point, not a single pass. A world whose physical stock sits under the ration line (`RATION_COVER` cycles of its use figure —
+the matcher's proxy for the economy's own, which is denominated in the floored pricing rate) is levelled
+on physical stock alone, ignoring anything already in flight; above the line inbound counts, as it does
+in the deficit test. Each deficit draws from its reachable donors in **per-unit route-cost
+order** — `min(remaining raise, donor drawable, remaining pool / route cost)` from each in turn. An
+unaffordable draw ends only that deficit's turn, not the whole matching pass — the next deficit is still
+tried against the same budget. One flow row per donor→deficit draw. The donor never drops below its own
 retained cover — the demand reserve for an ordinary holder, the export reserve for a structural producer
 — so moving goods never creates a new deficit. The sink test reads standing stock plus what is already
 scheduled to arrive, so a delivery already dispatched does not order a second one; the donor test stays
 on physical stock alone. Deficits left unserved — pool spent, or no drawable stock in reach — are
 the residual. A deficit is recorded **funding-bound** only when the budget stopped a draw *and* the
-shortfall still standing exceeds 10% of the original (`FUNDING_BOUND_RESIDUAL_FRACTION`): the flag
-suppresses the build planner's capacity proposals and exempts producers from idle decay, so it must
-keep meaning "short because of money", never "the last donor attempted was unaffordable".
+residual still standing exceeds 10% of the raise that draw was making (`FUNDING_BOUND_RESIDUAL_FRACTION`)
+— not the whole shortfall to the warehousing target, so a world being raised three cycles is not
+read as almost-served merely because its target is forty: the flag suppresses the build planner's
+capacity proposals and exempts producers from idle decay, so it must keep meaning "short because of
+money", never "the last donor attempted was unaffordable".
 
-Who carries the residual is not uniform: severity ranks by shortfall × draw, so mid-size pure
-consumers of the highest-floor goods (ship_frames above all) are served last from the thinnest
-margins, and at some seeds a persistently larger share of them sits empty than under the old
-price-anchor donor rule (~9 points at one measured seed, cover medians and every aggregate at
-parity) — an accepted cost, on the record with its measurements in #212. The structural answer
-belongs to colonisation pacing and globally-aware production planning, not to the donor rule.
+Who carries the residual is shaped by levelling rather than by any one world's rank: under
+scarcity every deficit of a good ends at about the same cover, so a shortage lands on every short
+world's shelf rather than concentrating on whichever the queue served last. `unservedShortfall` is
+read at the end of the good's pass — once levelling for the good is done, every world still short of
+its target reads its remaining want less what its reachable donors still hold — so under a real
+shortage every short world carries its own share and the levels sum to exactly the tonnage the
+faction lacks.
 
 ### Dispatch and arrival
 

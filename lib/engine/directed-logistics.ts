@@ -145,7 +145,9 @@ export interface GoodMarketState {
   /** The DRAW figure: `demand` further gated by each consuming factory's own output brake at its
    *  current stock and its live event production multiplier — how urgently a delivery is needed
    *  RIGHT NOW, as opposed to how much this world uses in the long run. Its only reader is the
-   *  matcher's severity weight; nothing that sizes or reserves stock may touch it. */
+   *  ordering cover (`orderCover`) that decides which shelf is served first; nothing that sizes or
+   *  reserves stock may touch it — the level and every raise stay denominated in `demand`, so a cycle
+   *  is one unit across every world regardless of how braked any of them are right now. */
   drawDemand: number;
   /** The civilian half of `demand` alone (per-capita baseline + skilled baskets, no industrial input
    *  draw). The housing fed-gate folds this: necessity is authored on the civilian axis, so weighting

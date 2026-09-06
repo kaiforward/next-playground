@@ -120,8 +120,8 @@ export interface LaneLoad {
  * The matcher's (and any other caller's) view of a `RouteBooker` for ONE hauler — a structural
  * subset any real booker satisfies and a test can hand-roll without constructing a lane network.
  * `priceFrom` freezes one sink's prices to every donor for that deficit's whole fan-out
- * (`docs/active/gameplay/logistics-lanes.md` §2: "prices are frozen at the moment the severity queue
- * reaches that deficit"); `routeAndBook` is consulted inside the fill loop with the quantity being
+ * (`docs/active/gameplay/logistics-lanes.md` §2: prices are frozen at the moment the draw order
+ * reaches that deficit); `routeAndBook` is consulted inside the fill loop with the quantity being
  * drawn, and places it onto the shared network, so a later deficit's `priceFrom` reflects prior
  * bookings.
  */
