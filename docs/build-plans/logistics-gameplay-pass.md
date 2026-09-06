@@ -454,291 +454,324 @@ t16000 {"good": "ore", "holders": 96, "matchedStart": 96, "unlockable": 5754125.
 t16000 {"good": "minerals", "holders": 97, "matchedStart": 97, "unlockable": 3881049.201, "shareNotConsuming": 0.964, "realisedOverExpected": 0.045, "civilianShareOfDemand": 0.201, "shareAtSystemsProducingConsumerGood": 0.996, "shareAtSystemsWithConsumerDemand": 1}
 ```
 
-## Spec — the supplier floor
+## Spec — reserves against what a world actually uses (the supplier floor, second cut)
+
+Supersedes the first cut after `/spec-review` (report
+`.agent-reviews/spec-logistics-gameplay-pass-2026-09-06-213657.md`) and claims 5-6.
 
 ```
-What changes:  A world that is kept topped up by regular deliveries of a good stops hoarding it.
-               Today only a world that makes a good will ship it down to a thin reserve; every
-               other world keeps a deep reserve and shares only what sits above that, so a chain
-               of worlds each fills up before it passes anything on. After this change a world
-               whose deliveries reliably cover what it uses behaves like a producer for that good:
-               it keeps the same thin reserve and passes the rest down the line, while still asking
-               for more when it runs low. A world that neither makes a good nor reliably receives
-               it keeps the deep reserve, and how deep that reserve is becomes one faction-wide
-               number the player can set.
-Why:           Almost every served world waits more than a cycle for its goods, and the supplier
-               one hop away is not empty — it is holding stock it is allowed to keep (Evidence,
-               claims 1 and 4). Owner decisions this spec encodes, quoted:
-               - "instead of extra cover just lowering the level they donate at works better? …
-                 can't we just get it to donate down to 10X cover like a producer does?"
+What changes:  A world keeps a deep reserve of a good only when it is really eating that good at
+               full rate and nothing refills it. Today every world that does not make a good keeps
+               a deep reserve regardless, so a chain of worlds each fills up before it passes
+               anything on, and a refinery whose output is not selling sits on forty cycles of
+               input it is not using. After this change a world that is steadily refilled by
+               deliveries behaves like a producer for that good: it keeps a thin restart buffer
+               and passes the rest on, asking for more only when it dips under that buffer. A
+               world whose real consumption has fallen away keeps a reserve sized to what it
+               actually uses, never below the same thin buffer. How deep the deep reserve is
+               becomes one faction-wide number the player can set.
+Why:           Almost every served world waits more than a cycle for its goods (claim 1). The
+               supplier one hop away is holding, not empty (claim 4). The stock it holds splits
+               by good: for processed and consumer goods it sits on worlds that deliveries or
+               their own part-production keep replenished (claim 5); for ore and minerals it sits
+               at refineries that are producing but not drawing their input (claim 6).
+               Owner decisions, quoted:
+               - "can't we just get it to donate down to 10X cover like a producer does?"
                - "realistically the only systems that should be holders are systems that are not
                  through worlds for goods or producers themselves … if goods are flowing you dont
                  need to waste loads of space storing them"
                - "this just ties back into the player controlled stockpile levels"
                - "we are just extending the producer/consumer behaviour to add a sort of 'supplier'
                  system type"
-               - "do supplier floor only we already shipped the pricing haha, but we just include
-                 the tweakable knob"
                - "we have separate sliders for how much we want and what level we donate at, those
                  handle all three types :) … we are using existing logistics data to identify when
                  a system should identify as a supplier and then updating the sliders for donation
                  and system stockpiling automatically"
-               - Depot / synthetic demand: "I would not build it yet" (assistant) — "Yeah" (Kai);
-                 deferred pending the re-measure named in ## Idea.
+               - "do supplier floor only we already shipped the pricing haha, but we just include
+                 the tweakable knob"
+               - on the three-case rule (reserve against what you actually use, unless something
+                 refills you): "I think the spirit of that rule is essentially the same, let's
+                 update the spec and then re-review"
+               - Depot / synthetic demand: deferred ("I would not build it yet" — "Yeah").
 Evidence:      - Claim 1 — almost every served world gets its goods more than a cycle after
                  dispatch. Licenses: latency is large for nearly all served worlds; says nothing
                  about unserved deficits or whether the latency hurts.
-               - Claim 4 — the supplier next door is not drained, it is holding stock it is allowed
-                 to keep; for gas/chemicals/minerals/biomass that stock is 2-40× the neighbour's
-                 shortfall. Licenses: rules out spare-drained as a major cause (≤ 13% of near
-                 candidates, both horizons); for ore and medicine the neighbourhood is short
-                 together and a floor change alone does nothing; does NOT say the releasing world
-                 stays safe.
-               - Claim 3 — 56-64% of developed systems sit within a cycle of a supplier while a
-                 neighbour within two hops waits over a cycle. Licenses: sites are common; the
-                 "donor" is any source in the window, not a structural producer.
-               - Claim 2 (killed the through-flow depot) — not load-bearing here.
-Not claimed:   - No depot, no synthetic demand, no new mechanism in the matcher: every role is
-                 the two existing per-market lines (want, give-down-to) set to role-specific
-                 values. A consumer's 40-cycle want is untouched; a supplier's want drops to a
-                 thin line above its floor.
+               - Claim 4 — the supplier next door is holding, not drained (spare-drained ≤ 13%).
+                 Licenses: for ore and medicine the neighbourhood is short together; does NOT say
+                 the releasing world stays safe. No pre-committed falsifier (diagnostic split).
+               - Claim 5 — the inbound-only supplier test is dead (reaches 2-5% of withheld
+                 stock); production + inbound over 40 cycles reaches 74-100% of withheld
+                 processed/consumer-good stock and 1-5% of withheld ore/minerals. Licenses: does
+                 NOT say the reachable stock is released in time or safely.
+               - Claim 6 (descriptive) — the withheld ore/minerals sit at producing refineries
+                 consuming 1-12% of their demand figure over 40 cycles. Licenses: that the output
+                 brake is the specific cause is a hypothesis; does NOT say the stock should go.
+               - Claims 2, 3 — not load-bearing here (depot inputs).
+Not claimed:   - No depot, no synthetic demand, no new matcher mechanism: every case is the two
+                 existing per-market lines (want, give-down-to) set from three per-market
+                 quantities — full-rate use, realised use, steady inbound.
                - No change to hauling cost: work = quantity × congestion-priced route cost is
-                 already billed at `LOGISTICS_RATE_PER_WORK` in its own funded band with its own
-                 slider (`lib/constants/treasury.ts:26`, `components/factions/treasury-card.tsx:130`).
-                 That constant is the tweak knob; this spec does not retune it.
-               - No per-good valves and no per-system stockpile setting — the lever is one number
-                 per faction.
-               - No claim that a supplier world is as safe as today against a supply stop: its
-                 reserve against one is the producer floor, not the deep reserve. That trade is
-                 accepted and bounded in §3.
-               - A world that does not consume a good at all is unchanged: at demand 0 its whole
-                 stock is already drawable (`lib/engine/directed-logistics.ts:91-94`) and it never
-                 asks for any — that "want without demand" is the deferred depot.
-               - Nothing about who owns production or movement (companies, strata).
+                 billed at `LOGISTICS_RATE_PER_WORK` (`lib/constants/treasury.ts:30`) in its own
+                 funded band with its own slider (`components/factions/treasury-card.tsx:130`).
+                 That constant is the tweak knob; not retuned here.
+               - No per-good valves, no per-system stockpile setting: one number per faction.
+               - No claim a thin-buffer world is as safe as today against a supply stop; the trade
+                 is accepted and bounded in §4.
+               - A world with no use of a good at all (use 0) is unchanged: its whole stock is
+                 drawable and it never asks (`lib/engine/directed-logistics.ts:91-94`).
+               - Nothing about who owns production or movement.
 ```
 
-### 1. Three roles per (world, good)
+### 1. Three per-market quantities
 
-Today a market is one of two things when the matcher looks at it as a source
-(`surplusDrawable`, `lib/engine/directed-logistics.ts:104-118`): a **producer** (`production >
-demand`, not strike-suppressed) gives down to `EXPORT_RESERVE_COVER` (10) cycles of its own demand;
-anything else is an **ordinary donor** that gives only once stock clears `SURPLUS_MARGIN` (1.4) ×
-its reserve and stops at the reserve, `DONOR_RESERVE_COVER` (40) cycles
-(`lib/constants/directed-logistics.ts:28,40,89`; the reserve itself is authored at
-`lib/tick/processors/good-market-state.ts:188`).
+Every rule below is stated per (world, good) in cycles of one of three rates, all in units per
+reference cycle, catch-up normalised, and each denominated exactly as the matcher's `demand`
+(`lib/engine/directed-logistics.ts:140-144`):
 
-This spec adds a third role between them:
-
-| Role | Test | Gives down to | Asks for more below |
-|---|---|---|---|
-| Producer | `production > demand` (unchanged) | producer floor, 10 cycles (unchanged) | never — self-supply gate (`lib/engine/directed-logistics.ts:445`) |
-| **Supplier** | `production + steadyInbound ≥ SUPPLIER_REPLENISHMENT × demand`, and not a producer | **producer floor, 10 cycles** | **its own thin line: floor × `SURPLUS_MARGIN` = 14 cycles** |
-| Consumer | otherwise | the faction's **reserve depth** (default 40), clearing `SURPLUS_MARGIN` (unchanged mechanics) | 32 cycles (unchanged) |
-
-The supplier test is the producer test with steady inbound added to the supply side — "steady
-inbound counts like production". Each role is the same two per-market numbers the matcher already
-reads — the want line (`logisticsTarget`) and the give-down-to line (`donorReserve`), both authored
-at `lib/tick/processors/good-market-state.ts:187-188` — set per role; the role test sets them
-automatically from existing logistics data. Kai: "we have separate sliders for how much we want
-and what level we donate at, those handle all three types." A supplier never rides the
-SURPLUS_MARGIN dead-band on the give side: like a producer, everything above its floor is
-drawable. Its want line sits one margin above its floor, so it lives in a ten-to-fourteen-cycle
-band: each cycle's consumption dips it under fourteen and it asks for about what it eats — which
-is exactly the steady inbound that keeps it a supplier — and when a neighbour draws it down it
-asks for more, relaying without holding. A world's existing "either short or a source in a run"
-classification is unchanged.
-
-Requirement: `steadyInbound` — new, emitted per (market, good) by the goods-arrivals stage at the
-credit site (`lib/tick/processors/goods-arrivals.ts:102-112`), §2. `SUPPLIER_REPLENISHMENT` — new
-constant, proposal 0.9 (rationale §7). The supplier want line reuses `SURPLUS_MARGIN` (1.4) over
-`EXPORT_RESERVE_COVER` (10) — no new constant; if the two ever need to move apart, that is the
-moment to author one.
-
-### 2. The steady-inbound signal
-
-`steadyInbound` is a per-market rolling per-cycle rate of goods actually credited by arrivals —
-outbound legs only, never return legs (a return is goods going back to a donor,
-`lib/tick/processors/goods-arrivals.ts:115-129`). Observable behaviour:
-
-- It is denominated exactly as `demand` is (units per reference cycle, catch-up normalised), so
-  the §1 test compares like with like. Producer of the denominator: `WorldMarket.demand`
-  (`lib/world/types.ts:553-566`).
-- It smooths over `SUPPLIER_WINDOW_CYCLES` (proposal 4) — an exponential average with that
-  time constant, updated once per economy cycle from the quantity credited since the last update.
-  One cycle of bulk fill does not make a supplier; four cycles of steady top-ups do; four cycles
-  of silence unmake one. This is the cascade's hysteresis (§3).
-- It is persisted on the market row, optional, absent reads as 0 (a consumer) — the same
-  written-by-logistics / read-by-the-matcher pattern as `squeezeCycles` and
-  `logisticsFundingBound` (`lib/world/types.ts:589-600`, read at
-  `lib/engine/directed-build.ts:458`). Save format bumps (`SAVE_FORMAT_VERSION`,
-  `lib/world/save.ts:61`); an old save loads with every world a consumer and earns supplier
-  status over the next window.
-- A freshly established colony starts at 0. The founding manifest's staged goods are not
-  arrivals-credited inbound and do not count.
-
-### 3. Floors, the matcher, and the cascade bound
-
-**No dual role.** A first draft required a supplier below its want to be both a world in the
-levelling and a source in the same run, because with the consumer's 32-cycle want line a supplier
-under scarcity would hoard to 32 before passing anything on. Rejected by the owner: the thin want
-line in §1 removes the need. A supplier is short only under 14 cycles and a source only above it,
-so the matcher's exclusive classification (`lib/engine/directed-logistics.ts:443-495`) stands, and
-the levelling raises a supplier to at most its own 14-cycle target — `targetCover` is already
-per-world (`directed-logistics.ts:470-480`), so no solver change.
-
-**Cascade, bounded.** In producer → A → B → C, only the producer makes anything. If deliveries stop,
-each supplier holds ten to fourteen cycles and keeps giving down to 10 until its own
-`steadyInbound` decays below the test — at most `SUPPLIER_WINDOW_CYCLES` cycles — then reverts to
-a consumer (want 32, give-line the reserve depth) and stops giving. During those cycles it consumes
-at most ~4 of its 10-cycle floor, so it reverts holding ≥ 6 cycles, three times the ration line
-(`RATION_COVER` 2, `lib/constants/economy.ts:66`). The accepted trade: the reserve a supplier holds
-against a supply stop is ten to fourteen cycles, not 40. The producer floor is never lowered by
-this spec; if a later tune wants it lower, the constraint is `floor − SUPPLIER_WINDOW_CYCLES >
-RATION_COVER`.
-
-**First release.** On the first run after a world qualifies, everything between its old reserve
-line and 10 cycles becomes drawable at once — up to ~46 cycles of demand per market — and its want
-drops from 40 to 14, so it stops asking as well. It flows only
-to deficits in the levelling, never into the void, but galaxy-wide it is a transient; §6 names the
-harness reads that judge it.
-
-### 4. The stockpile lever
-
-The consumer reserve depth stops being a global constant read and becomes **one number per
-faction**, `reserveCover`, default `DONOR_RESERVE_COVER` (40): "how many cycles a world holds when
-it cannot count on being refilled." It replaces the constant at the reserve's one producer
-(`lib/tick/processors/good-market-state.ts:188`) and at the planner's fallback
-(`lib/engine/directed-build.ts:998`); the harness's role read (`lib/tick-harness/cohort-analysis.ts:47`)
-follows the same definition. AI factions keep the default. The player sets it on the faction's
-treasury card beside the funding sliders (§5), a stepped control over a small range
-(proposal 20 / 40 / 60 cycles) — coarse by decision ("never raw per-good warehouse valves",
-roadmap row). It moves the *floor* only; the 40-cycle want is not a lever.
-
-Requirement: `reserveCover` — new, persisted on the faction's treasury row
-(`WorldFactionTreasury`, `lib/world/types.ts:794-815`, the only persisted per-faction tick-mutable
-state), written by the same policy command that writes the funding sliders
-(`updateTreasuryPolicy`, `lib/services/treasury.ts:50`).
-
-### 5. Surfaces
-
-- **System → Logistics tab, per good:** the role reads as a word — Producer / Supplier / Consumer
-  — and the reserve line reads "gives down to N cycles". A supplier's row also shows its steady
-  inbound beside its demand, which is the number that made it one. Copy goes through
-  `/game-copy`.
-- **Treasury card:** the reserve-depth control under the Funding sliders, labelled in cycles.
-- **Map:** nothing new. The Provision and Lanes modes already show the outcome.
-- **Harness (`npm run simulate`):** the market-role cohort gains *supplier* (three stocked roles
-  become four, `lib/tick-harness/cohort-analysis.ts:60`), cover distributions read per role, and a
-  new **inbound-latency** metric — the claim-1 instrument (`temp/depot-diag.ts`, share of served
-  sinks with volume-weighted mean inbound latency > 24 ticks) promoted into
-  `lib/tick-harness/lane-analysis.ts`, because it is the re-measure falsifier and the depot decision
-  reads it.
-
-### 6. Edges
-
-- **demand = 0:** unchanged — whole stock drawable, never a sink, role reads Producer-like
-  (`lib/engine/directed-logistics.ts:91-94`). Not called a supplier; the test divides by demand.
-- **Strike:** a producer whose output is suppressed already drops to the ordinary path
-  (`productionSuppressed`, `lib/engine/directed-logistics.ts:112`); the supplier test uses
-  realised `production` the same way, so a struck part-producer keeps supplier status only if its
-  inbound alone covers the test.
-- **Events:** an anchor shift scales the consumer reserve and the want together
-  (`good-market-state.ts:185-188`); the producer floor does not ride it
-  (`directed-logistics.ts:111`). The supplier floor is the producer floor and does not ride it
-  either — a supplier's reserve is a physical hold, not a price band. Stated, intended.
-- **Save/load:** `steadyInbound` absent → 0; `reserveCover` absent → default. No migration beyond
-  the version bump.
-- **In-flight hauls:** the sink test already counts scheduled inbound
-  (`directed-logistics.ts:443`); `steadyInbound` counts only credited arrivals, so a world with a
-  big convoy en route is not yet a supplier — by design, it has not been *steadily* fed.
-- **Catch-up:** the rate is normalised per reference cycle at update, like `demand`; a longer
-  logistics interval does not inflate it.
-
-### 7. Constants (proposals — defaults from measurement later, definitions from meaning)
-
-| Constant | Proposal | Meaning |
+| Quantity | Meaning | Producer today / new |
 |---|---|---|
-| `SUPPLIER_REPLENISHMENT` | 0.9 | Inbound + production must cover this share of demand to count as replenished. Below 1 so a world topped up to exactly what it eats does not flicker at the boundary. |
-| `SUPPLIER_WINDOW_CYCLES` | 4 | Smoothing time constant of `steadyInbound`; the cascade bound (§3). Must satisfy `EXPORT_RESERVE_COVER − window > RATION_COVER`. |
-| `reserveCover` default | 40 (= `DONOR_RESERVE_COVER`) | Unchanged behaviour for AI factions and for a player who never touches the control. |
-| `EXPORT_RESERVE_COVER` | 10 (unchanged) | Now also the supplier floor. |
-| `LOGISTICS_RATE_PER_WORK` | 0.4 (unchanged) | The haul-cost knob; already shipped. |
+| **use** `u` | full-rate use: civilian want plus the staffing- and strike-gated recipe draw when running — the existing use figure | `WorldMarket.honestUseRate` (`lib/world/types.ts:553-566`), surfaced as `GoodMarketState.demand` by `toGoodMarketStates` (`lib/tick/processors/good-market-state.ts:124-127,181`) |
+| **realised use** `r` | what the economy actually removed from this market's stock, averaged over the long window: civilian delivered plus recipe inputs actually drawn | **new** — the economy run already computes civilian `delivered` per entry (`lib/engine/supply-chain.ts:35-36,153-155`) and draws inputs in recipe order (`:70,137-140`); it emits one more per-entry figure, `used = delivered + inputs actually drawn`, and the economy processor folds it into a persisted rolling rate beside the `satisfaction`/`squeezeCycles` it already writes per market (`lib/tick/processors/economy.ts:181-188`) |
+| **steady inbound** `i` | goods credited to this market by the arrivals stage, outbound legs only, averaged over the long window | **new** — accumulated at the outbound credit branch (`lib/tick/processors/goods-arrivals.ts:102-114`, never the return branch `:115-129`) through a widened `MarketCreditUpdate` (`lib/tick/world/goods-arrivals-world.ts:42-45`, today `{id, stock}`), and folded by the **population processor** after it rewrites `honestUseRate` (run order: goods-arrivals `lib/world/tick.ts:1399` → economy `:1450` → population `:1543` → directed logistics `:1753`), so the rate and its denominator always come from the same cycle |
 
-### 8. Hazard worksheet
+Both rolling rates are exponential averages with time constant `RESERVE_WINDOW_CYCLES`
+(proposal 40, §7), each backed by two persisted optional fields on the market row — the rate and
+the since-last-fold accumulator (`steadyInbound?`, `inboundSinceFold?`, `realisedUse?`,
+`usedSinceFold?`). Absent reads as 0 for the accumulators and as "unknown" for the rates, and an
+unknown rate makes the world a plain consumer on the deep reserve (the behaviour every world has
+today), so an old save loads unchanged and earns its roles over the following window. A freshly
+established colony starts unknown; the founding manifest's staged goods are not arrivals credits.
+`drawDemand` (`directed-logistics.ts:145-151`) is **not** read by anything here — its docstring
+forbids sizing or reserving stock against it because the brake it carries can flicker cycle to
+cycle, and a 40-cycle average of realised removals is the slow quantity that objection asks for.
 
-**1. One quantity, several jobs** (`npm run impact`, 2026-09-06):
+### 2. Roles and the two lines
+
+The matcher reads two lines per market, both authored at
+`lib/tick/processors/good-market-state.ts:187-188`: the **want** (`logisticsTarget`, a world is
+short below `DEFICIT_FRACTION` × want, `directed-logistics.ts:57`) and the **give-down-to** line
+(`donorReserve`, `surplusDrawable` `:104-118`). This spec sets them per role from `u`, `r`, `i`:
+
+| Role | Test (in this order) | Give-down-to | Want | Short below |
+|---|---|---|---|---|
+| **Producer** | `production > u` and not strike-suppressed (unchanged, `directed-logistics.ts:112`) | `F × u` (10) | never a sink — self-supply gate `:449` (unchanged) | — |
+| **Supplier** | not a producer, and `production + i ≥ SUPPLIER_REPLENISHMENT × u` (0.9) | `F × u` (10) | `S × u` (`SUPPLIER_WANT_COVER`, 12) | `0.8 × 12 = 9.6` |
+| **Consumer** | otherwise | `max(F × u, R × r)` | `max(S × u, W × r)` | `0.8 × want` |
+
+with `F = EXPORT_RESERVE_COVER` (10), `S = SUPPLIER_WANT_COVER` (new, 12), `R` = the faction's
+**reserve depth** (`reserveCover`, default `DONOR_RESERVE_COVER` 40), `W = WAREHOUSE_COVER` (40).
+
+What the consumer row does, in words: a world reserves `R` cycles of what it *actually* uses and
+asks back up to `W` cycles of the same, never below a restart buffer of `F` cycles at full rate.
+For a world consuming at full rate (`r = u`) both lines are exactly today's — 40 and 40 — so no
+behaviour changes anywhere the new signals are not telling a different story. For a refinery that
+has stopped drawing (`r → 0`) the lines collapse to the buffer: it gives down to 10 cycles of
+full-rate use and re-orders under 9.6 — claim 6's 60% of withheld tonnage becomes drawable while
+the factory keeps one full-rate restart buffer. For a supplier, `i` replaces production in the
+producer's own test — "steady inbound counts like production" — and the same buffer applies.
+
+**The band invariant holds in every case.** The shipped rule that a donor drawn to its give line
+must not immediately read as short — `reserve ≥ want × DEFICIT_FRACTION`
+(`lib/constants/directed-logistics.ts:74-77`, asserted by `band-constants.test.ts:63`) — is why
+the first cut's supplier pair (10 under 11.2) was a per-cycle drain/refill loop. Here: producer and
+supplier `10 ≥ 0.8 × 12 = 9.6`; consumer with `R × r` binding, `R × r ≥ 0.8 × W × r` ⇔ `R ≥ 32`
+(the existing invariant, now a constraint on the player's `reserveCover` range); consumer with
+`F × u` binding and `W × r` the larger want, `F × u ≥ R × r ≥ 0.8 × W × r` since `R ≥ 0.8 W`. The
+constraint list is in §7; `band-constants.test.ts` gains the two new pairs.
+
+**The 1.4 clearance** (`SURPLUS_MARGIN`, `surplusDrawable` `:116`) is a dead-band above the
+*deep* reserve — its docstring's meaning (`constants/directed-logistics.ts:24-28`). It applies
+when the consumer's give line is the `R × r` term; a give line that is the buffer (`F × u`, in any
+role) is margin-free, as the producer's is today. Behaviourally: a world holding the buffer gives
+everything above it; a world holding the deep reserve gives only what clears 1.4× it.
+
+**Slow up, fast down.** Roles are re-evaluated where the lines are authored, every logistics run.
+Qualifying as a supplier is slow by construction — one ordinary refill (8 cycles of use in one
+run, `directed-logistics.ts:685-687`; 30 off empty) moves a 40-cycle average by 0.2-0.75 of `u`,
+so a consumer served once is not a supplier, and a world that is fed every time it dips is (its
+ratio sits near 1.0: claim 5, ratio40 median 1.00-1.15). Losing the role is fast: a supplier that
+has been short for `SUPPLIER_DROP_RUNS` consecutive runs (proposal 4) with nothing credited in
+that span reverts to consumer on the spot, whatever its average still says. Losing the
+"not-consuming" discount is likewise bounded: `r` is an average of removals, so a restarted
+refinery's reserve grows toward `R × u` over the window while its stock sits at the buffer — the
+buffer is what covers the restart, which is what it is for.
+
+### 3. The stockpile lever
+
+`reserveCover` — one number per faction, default `DONOR_RESERVE_COVER` (40): "how many cycles of
+what a world actually uses it holds when nothing refills it". Persisted on the faction's treasury
+row (`WorldFactionTreasury`, `lib/world/types.ts:794-815`), written by the same policy command as
+the funding sliders (`updateTreasuryPolicy`, `lib/services/treasury.ts:50`, whose Zod input
+widens), set on the treasury card beside them as a stepped control (proposal 32 / 40 / 60 cycles —
+32 is the invariant's floor, §7). AI factions keep the default.
+
+**Plumb.** `toGoodMarketStates` has no faction in scope (`MarketStateSource`,
+`good-market-state.ts:76-84`) and is called from six live sites (`directed-logistics.ts:74`,
+`directed-build.ts:158/290/403`, `construction.ts:58`, `cohort-analysis.ts:85/114`,
+`market-analysis.ts:496`). It takes `reserveCover` as a number in its options; each caller
+resolves it from the owning faction's treasury row, and passes the default where there is no
+faction (the independent `factionId === null` group, `directed-logistics.ts:174-176`, has no
+treasury row — `lib/world/gen.ts:244` mints one per faction) or no row. The harness call sites
+pass the owning faction's value so `npm run simulate` reads the same lines the tick does.
+
+### 4. The cascade bound and the first release
+
+**Cascade.** In producer → A → B → C only the producer makes anything. If deliveries stop, each
+supplier holds 10-12 cycles, keeps giving down to 10 until it has been short for
+`SUPPLIER_DROP_RUNS` runs with nothing credited, then reverts to consumer and stops giving. In
+those runs it consumes at most `SUPPLIER_DROP_RUNS` cycles of use from a floor of 10, so it
+reverts holding ≥ 6 cycles, three times the ration line (`RATION_COVER` 2,
+`lib/constants/economy.ts:67`). Accepted trade: a supplier's reserve against a supply stop is
+10-12 cycles, not 40. Constraint: `F − SUPPLIER_DROP_RUNS > RATION_COVER`.
+
+**First release.** On the first run a world's lines drop, everything between its old 56-cycle
+clearance and its new give line becomes drawable at once — up to ~46 cycles of use per market.
+It is drawn only for a specific deficit's raise (`directed-logistics.ts:525-618,690`), never into
+the void, and arrivals that overshoot a destination's band return (`goods-arrivals.ts:97-133`),
+but galaxy-wide it is a transient; §6 names the harness reads that judge it.
+
+**Anchor shifts.** `anchorMult` scales today's want and reserve together
+(`good-market-state.ts:185-188`; clamp [0.1, 4.0], `lib/constants/events.ts:46,48`). Here the
+deep terms `R × r` and `W × r` ride it as today; the buffer terms `F × u` and `S × u` do not,
+exactly as the producer floor does not (`directed-logistics.ts:111`) and for the reason
+`EXPORT_RESERVE_COVER`'s docstring gives ("immune to anchor_shift … no business moving warehouse
+policy", `constants/directed-logistics.ts:35-36`). Consequence, stated: a supplier's or
+not-consuming world's lines are anchor-immune while its full-rate neighbours' move. The
+re-order line can therefore never be pushed under the ration knee by an event: constraint
+`0.8 × S > RATION_COVER` (§7).
+
+### 5. Every reader of the changed quantities
+
+`npm run impact` (2026-09-06; re-run unabridged):
 
 ```
-surplusDrawable — SHARED — 8 references across 3 modules: directed-build, directed-logistics, construction
-  directed-build   lib/engine/directed-build.ts:19 (import), :999 (input gate "could a factory here be fed")
-  construction     lib/services/construction.ts:24 (import), :70 (founding manifest draw)
-  directed-logistics  lib/engine/directed-logistics.ts:104 (definition), :492 (the matcher's source)
-DONOR_RESERVE_COVER — SHARED — 3 modules: directed-build (:998 fallback), good-market-state (:188 producer), market-analysis (harness role read)
+surplusDrawable — SHARED — 8 refs / 3 modules: directed-build (engine :19,:999; processor :190), directed-logistics (:104,:492), construction (:24,:70)
+DONOR_RESERVE_COVER — SHARED — 3 modules: directed-build (:998, fixture-only fallback per its docstring :66-69), good-market-state (:188), market-analysis (:256)
 EXPORT_RESERVE_COVER — CONTAINED — directed-logistics (:111)
 SURPLUS_MARGIN — CONTAINED — directed-logistics (classifyMarketState :60, surplusDrawable :116)
-LOGISTICS_RATE_PER_WORK — CONTAINED — treasury, tick
+WAREHOUSE_COVER — good-market-state (:187), market-analysis (:256 ratio)
 ```
 
-| Quantity | Every reader today | Which this design moves | Intended? |
+| Reader | What it does today | Under this spec |
+|---|---|---|
+| matcher source (`directed-logistics.ts:492`) | `surplusDrawable(stock, donorReserve, demand, production, suppressed)` | reads the role-authored `donorReserve` and a margin-free flag; the producer branch unchanged |
+| planner input gate (`directed-build.ts:999`) | "could a factory here be fed" from reachable drawable | same call, same lines — a supplier or not-consuming world is a feedable source. Intended. |
+| founding staging plan (`processors/directed-build.ts:190`, moves goods) and its readout (`construction.ts:70`) | plans the manifest draw as the founder's drawable | **capped at the founder's deep line `R × u`** (what a full-rate consumer keeps), whatever its role: a colony never draws a relay or idle world below what a consumer would have held. Proposal — owner call at review. |
+| `founderCover` (`processors/directed-build.ts:778-779`, surfaced `:791`) | post-draw stock ÷ `donorReserve` | ÷ `R × u` explicitly, so the readout keeps meaning "cover against the deep reserve" whatever role the founder is in |
+| harness cover (`market-analysis.ts:254-271`) | reconstructs the give line from `DONOR_RESERVE_COVER / WAREHOUSE_COVER` | `logisticsTargetsByKey` (`cohort-analysis.ts:104-117`) carries the row's `donorReserve` and `computeCoverLevels` reads it |
+| harness role (`cohort-analysis.ts:47-60`) | exporter / self-supplier / consumer / inert on production vs demand | four logistics roles — producer / supplier / consumer / idle (consumer with `R × r < F × u`) — and the existing `self-supplier` renamed `part-producer` so the two taxonomies cannot be confused |
+| `WAREHOUSE_COVER` | want line for every market | the consumer's `W × r` term only |
+| `anchorMult` | want + reserve | deep terms only (§4) |
+
+### 6. Surfaces and harness
+
+- **System → Logistics tab, per good:** the role as a word — Producer / Supplier / Consumer /
+  Idle — and "gives down to N cycles". A supplier's row shows steady inbound beside its use; an
+  idle row shows realised use beside full-rate use — the two numbers that decided it. Copy through
+  `/game-copy`.
+- **Treasury card:** the reserve-depth control under the Funding sliders, in cycles.
+- **Map:** nothing new.
+- **Harness:** the four-role cohort with cover per role; the re-measure metric (share of served
+  sinks with volume-weighted mean inbound latency > 24 ticks, from `temp/depot-diag.ts`, promoted
+  into `lib/tick-harness/lane-analysis.ts`) **with its guards beside it** — served-sink count,
+  median raise size, hauls per served sink, and the unweighted per-haul latency distribution, so
+  a fall driven by more, smaller, nearer raises reads differently from stock released nearer;
+  famine share and Provision by world cohort at both horizons against the same-seed baseline for
+  the first-release transient; and a first-cycle read of released tonnage.
+
+### 7. Constants (proposals; defaults from measurement, definitions from meaning)
+
+| Constant | Proposal | Meaning / constraint |
+|---|---|---|
+| `SUPPLIER_REPLENISHMENT` | 0.9 | production + steady inbound must cover this share of full-rate use; below 1 so a world topped up to what it eats does not flicker |
+| `RESERVE_WINDOW_CYCLES` | 40 | time constant of both rolling rates; one refill of 8 cycles moves the average 0.2 |
+| `SUPPLIER_DROP_RUNS` | 4 | consecutive short runs with nothing credited that end supplier status; `F − SUPPLIER_DROP_RUNS > RATION_COVER` |
+| `SUPPLIER_WANT_COVER` | 12 | a supplier's want; `F ≥ 0.8 × S` (band invariant) and `0.8 × S > RATION_COVER` |
+| `reserveCover` | default 40; player range 32-60 | the deep reserve in cycles of realised use; `R ≥ 0.8 × W` (band invariant) — hence 32 is the floor of the range |
+| `EXPORT_RESERVE_COVER` | 10 (unchanged) | the restart buffer for every role; docstring widens |
+| `WAREHOUSE_COVER`, `DEFICIT_FRACTION`, `SURPLUS_MARGIN`, `LOGISTICS_RATE_PER_WORK` | unchanged | — |
+
+### 8. Edges
+
+- **use = 0:** unchanged (§ Not claimed).
+- **Strike:** a struck producer drops to the ordinary path today (`:112`); it is then tested as a
+  supplier (`production + i`, with the struck production as realised) and otherwise as a consumer
+  — whose `r` falls as the strike suppresses its own draw, so its reserve shrinks toward the
+  buffer over the window. Stated, intended: a striking refinery is not hoarding input.
+- **Save/load:** four optional market fields, one optional treasury field; version bump
+  (`SAVE_FORMAT_VERSION`, `lib/world/save.ts:61`); absent → today's behaviour.
+- **In-flight hauls:** the sink test counts scheduled inbound (`:443`); `i` counts only credited
+  arrivals, so a convoy en route does not make a supplier.
+- **Catch-up:** both rates normalised per reference cycle at fold; a longer interval does not
+  inflate them.
+- **Independents / unowned:** default `reserveCover`; roles apply as to any market.
+
+### 9. Hazard worksheet
+
+**1. One quantity, several jobs** — §5's table with the impact output above. Kept coupled on
+purpose: `surplusDrawable`'s three engine readers see the same role-authored line. Separated:
+`DONOR_RESERVE_COVER` → per-faction `reserveCover`; `founderCover` and the founding staging cap
+→ the deep line explicitly. `SURPLUS_MARGIN` keeps one meaning (dead-band above the deep reserve)
+and is never used to build a want — the first cut's misuse.
+
+**2. Constant read against its meaning:**
+
+| Constant | Docstring says | Used as | Same? |
 |---|---|---|---|
-| `surplusDrawable` | matcher source (`directed-logistics.ts:492`), planner input gate (`directed-build.ts:999`), founding manifest (`construction.ts:70`) | all three, identically: the supply term becomes `production + steadyInbound` | Yes — kept coupled on purpose: a supplier is a supplier to a factory and to a founding colony exactly as to a deficit world. Each reader's adapter must carry `steadyInbound` or the reader silently sees a consumer. |
-| `DONOR_RESERVE_COVER` | reserve producer (`good-market-state.ts:188`), planner fallback (`directed-build.ts:998`), harness role (`cohort-analysis.ts:47`) | all three read the faction's `reserveCover` instead | Yes — separated from the constant; the constant survives as the default. |
-| `EXPORT_RESERVE_COVER` | `surplusDrawable` only | gains a second role (supplier floor) inside the same function | Yes — one floor for "replenished" worlds. |
-| `SURPLUS_MARGIN` | `classifyMarketState` (:60), `surplusDrawable` (:116) | gains a third read: the supplier want line = floor × margin | Yes — same meaning ("the dead-band above a floor"), stated; author a separate constant only if they need to diverge. |
-| `WAREHOUSE_COVER` / `DEFICIT_FRACTION` | want line for every market (`good-market-state.ts:187`) | consumers only; a supplier's want is authored from the floor instead | Yes — separated per role. |
-| `WorldMarket.demand` | every warehousing quantity (`types.ts:553-566`) | unchanged; new reader (§1 test) | Yes. |
-| `anchorMult` | want + consumer reserve (`good-market-state.ts:187-188`) | not read by the supplier floor | Yes, §6. |
+| `EXPORT_RESERVE_COVER` | "cycles of its own demand a structural exporter keeps before shipping the rest … immune to anchor_shift … above RATION_COVER" (`constants/directed-logistics.ts:29-39`) | the restart buffer for any world that is refilled or not consuming | yes — output refills a producer; deliveries refill a supplier; an idle world's buffer is for its restart. Widen the docstring. |
+| `DONOR_RESERVE_COVER` | "cycles of its own REAL demand an ordinary donor keeps … invariant ≥ WAREHOUSE_COVER × DEFICIT_FRACTION" (`:66-88`) | the default of `reserveCover`, now in cycles of realised use | yes; the invariant becomes a range constraint |
+| `SURPLUS_MARGIN` | "a surplus when stock ≥ target × this; an ordinary donor gives only once stock clears reserve × this … a deliberate residual" (`:24-28`) | the dead-band above the deep reserve only | yes — and explicitly NOT a want multiplier |
+| `WAREHOUSE_COVER` | "cycles of a system's REAL demand directed logistics tries to keep on hand" (`:41-63`) | the consumer's want in cycles of realised use | yes, with the denominator moved from full-rate to realised use for the consumer only — stated |
+| `drawDemand` | "nothing that sizes or reserves stock may touch it" (`directed-logistics.ts:145-151`) | not read | — (the reason it is not read is the reason `r` is a 40-cycle average of removals) |
+| `honestUseRate` | "what this system's population and industry actually USE … every warehousing quantity is denominated in it … missing reads as a live recompute, never 0" (`types.ts:553-566`) | `u`, the denominator of the supplier test and the buffer terms | yes; the fold must read the same resolved figure and its never-0 rule |
+| `RATION_COVER` | the ration knee (`constants/economy.ts:58-67`) | the line the buffer and the re-order line stay above | yes |
 
-**2. A constant read for a meaning it was not authored to have:**
-
-| Constant | Docstring says | This design uses it as | Same? |
-|---|---|---|---|
-| `EXPORT_RESERVE_COVER` | "Cycles of its own demand a structural exporter keeps on hand before shipping the rest … immune to anchor_shift … well above RATION_COVER so exporting never rations the exporter" (`constants/directed-logistics.ts:29-39`) | the reserve of any world whose replenishment covers its demand | Yes — the docstring's reason (output refills it; never rations) holds for a replenished world; docstring to be widened. |
-| `DONOR_RESERVE_COVER` | "Cycles of its own REAL demand an ordinary (non-exporter) donor keeps for itself before it will give" (:66-88) | the default of the per-faction reserve depth | Yes. |
-| `RATION_COVER` | "the gap between the logistics deficit signal … and this knee … a system that starves never ran out of warning" (`constants/economy.ts:58-66`) | the line the supplier floor must stay above after the window drains | Yes — read as the ration line, which is what it is. |
-| `WorldMarket.demand` | "what this system's population and industry actually USE … every warehousing quantity is denominated in it" (`types.ts:553-566`) | the denominator of the supplier test | Yes. |
-
-**3. A system you did not think about:**
+**3. Systems:**
 
 | System | Interaction | Reason if none |
 |---|---|---|
-| Events | Anchor shift scales want and consumer reserve; supplier floor does not ride it (§6). No event writes `steadyInbound`. | — |
-| Population + migration | None directly. Indirect: a supplier's stock sits lower, so a supply stop reaches Provision sooner (§3 bound). Migration reads unrest/headroom, not stock. | consumption never changes; only what is held after consumption |
-| Unrest / regime | Same indirect path via Provision. The famine floor and critical-good override are untouched. | — |
-| Industry + staffing | The planner's input gate sees supplier stock as feedable input (hazard 1). No building, no staffing. | no capacity is added |
-| Infrastructure decay | None. Decay reads staffed-and-selling and occupancy, not stock. | — |
-| Directed logistics | The change itself: role test, floor, dual membership in a run (§3), harness role. | — |
-| Directed build / planner | Reads `reserveCover` at :998 and supplier stock via `surplusDrawable` at :999; the structural-deficit scan (`:426-538`) is unchanged — it nets against *rate* spare, not stock. | — |
-| Colonisation + founding manifest | The manifest may draw a supplier's stock down to its floor (`construction.ts:70`). Intended (hazard 1). | — |
-| Treasury / purse | `reserveCover` lives on the treasury row (§4). Haul cost unchanged. | — |
-| Factions + relations | None. Traversal policy is untouched; a supplier gives only to its own faction's deficits, as any donor. | — |
-| Save format | `WorldMarket.steadyInbound?`, `WorldFactionTreasury.reserveCover?`; version bump. | — |
-| Harness metrics | Supplier role in cohorts; inbound-latency metric added (§5); read famine share and Provision at both horizons for the first-release transient. | — |
+| Events | anchor shift rides the deep terms only; buffer terms immune; re-order line cannot go under the ration knee (§4, §7). No event writes the new fields. | — |
+| Population + migration | population processor folds `i` after rewriting `honestUseRate`; migration unchanged. Indirect: thinner reserves reach Provision sooner on a supply stop (§4 bound). | consumption itself never changes |
+| Unrest / regime | same indirect path; famine floor and critical override untouched. | — |
+| Industry + staffing | economy emits `used`; the planner's input gate sees supplier/idle stock as feedable. A restarted refinery draws from its 10-cycle buffer while `r` recovers. | no capacity added |
+| Infrastructure decay | none — decay reads staffing, selling, occupancy, `logisticsFundingBound` (`lib/engine/infrastructure-decay.ts:104-125`), not stock. | — |
+| Directed logistics | the change: role test, lines, margin-free flag, drop rule. | — |
+| Directed build / planner | input gate (:999) unchanged call; founding staging plan (:190) capped at the deep line; `founderCover` (:778) re-denominated; structural scan (:426-538) unchanged (rate-based). | — |
+| Colonisation + founding manifest | the cap above; a fresh colony is a consumer with unknown rates → deep reserve. | — |
+| Treasury / purse | `reserveCover` on the treasury row; policy command widens; haul cost unchanged. | — |
+| Factions + relations | none — traversal and same-faction giving unchanged. | — |
+| Save format | four market fields, one treasury field, version bump. | — |
+| Harness | four-role cohort, `donorReserve` threaded, latency metric + guards, transient reads (§6). Conservation identities are tonnage-based and role-blind (`conservation-analysis.ts:403-409,228,286`). | — |
 
-**4. Symptoms with measurements:** every mechanic claim in this spec carries a `file:line`; the
-three numbers it rests on are claims 1, 3 and 4 in ## Evidence with horizon and cohort.
+**4. Claims with measurement** — every mechanic sentence above carries a `file:line`; the numbers
+are claims 1, 4, 5, 6 in `## Evidence` with horizon and cohort; claim 6's brake attribution is
+labelled hypothesis. Claim 4 carries no pre-committed falsifier (diagnostic split) and is read
+only through claims 5-6, which do.
 
 **5. Signals that must exist:**
 
-| Consumes | Produced at | Shape today | Design assumes |
+| Consumes | Produced at | Shape | Assumes |
 |---|---|---|---|
-| `demand` per market | `good-market-state.ts` (use figure) | ≥ 0 float, units/cycle | same |
-| `production` per market (realised) | economy signals → `GoodMarketState.production` | ≥ 0 float | same |
-| `productionSuppressed` | strike state → `GoodMarketState` | boolean | same |
-| credited arrival quantity | `goods-arrivals.ts:102-112` | per tick, per row | summed per market per cycle — **new** accumulation |
-| `steadyInbound` | **new** — goods-arrivals + a per-cycle fold | — | float ≥ 0, units/cycle |
-| `reserveCover` | **new** — treasury policy command | — | one of a small set of cycle counts |
-| water level per good | `solveWaterLevel` (`shelf-levelling.ts`) | cover float | unchanged |
+| `u` | `good-market-state.ts:124-127,181` from `honestUseRate` | ≥ 0 float, never 0-by-absence | same |
+| `production`, `productionSuppressed` | economy signals → `GoodMarketState` | ≥ 0 float; boolean | same |
+| civilian `delivered` per entry | `supply-chain.ts:35-36,153-155` | per run, ≥ 0 | summed into `used` — **new** |
+| inputs actually drawn per entry | drawn in recipe order `supply-chain.ts:70,137-140`, not emitted | — | **new** emission beside `delivered`/`realised` |
+| `used` fold → `realisedUse` | **new** — economy processor, beside `satisfaction` (`economy.ts:181-188`) | rolling rate | — |
+| credited outbound quantity | `goods-arrivals.ts:102-114` | per tick per row | **new** accumulation via widened `MarketCreditUpdate` |
+| `inboundSinceFold` fold → `steadyInbound` | **new** — population processor after `honestUseRate` | rolling rate | — |
+| `reserveCover` | **new** — treasury policy command; default where absent | 32-60 | — |
+| water level | `solveWaterLevel` (`shelf-levelling.ts:23-33`) | capped at each world's `targetCover` | unchanged — no raise exceeds a world's own want |
 
 **6. Aggregates that move for other reasons:**
 
 | Metric | Read at | What else moves it |
 |---|---|---|
-| share of served sinks with mean inbound latency > 24 (the re-measure falsifier) | per faction, per good, both horizons | route lengths (lane investment), freight speed, which worlds are served at all (cohort) — quote the served-sink count beside it |
-| consumer cover | per role (now 4 roles) — a consumer becoming a supplier *leaves* the cohort | role migration alone lowers "consumer" median cover; read the four roles side by side |
-| famine share / Provision | per world cohort, both horizons | founding-era transient; compare against a same-seed baseline at the same tick |
+| served-sink share with mean inbound latency > 24 | per faction, per good, both horizons, with served-sink count | route lengths, freight speed, cohort (who orders at all), **haul-size mix** — thinner wants mean more, smaller, nearer raises; the guards in §6 separate that from stock released nearer |
+| cover per role | four roles side by side | role migration alone empties the consumer cohort's top; never read the consumer median alone |
+| famine share / Provision | by world cohort, both horizons, vs same-seed baseline at the same tick | founding-era transient |
+| released tonnage, first cycle | galaxy total and per good | the size of the withheld pool at that tick (claims 5-6 give the baseline: ~16M units unlockable across the top-5 goods) |
 
-### 9. Falsifiers (moved from ## Idea unedited)
+### 10. Falsifiers (moved unedited)
 
 Committed at `b0b3407c`, moved here unedited:
 
@@ -747,10 +780,10 @@ Committed at `b0b3407c`, moved here unedited:
 > rule having done anything. Kill line: if it is still ≥ 90% at 10K and 16K, the floor was not
 > what withheld the stock and the reading of claim 4 was wrong.
 
-Committed at `d57d4df5` (claim 1) and `baeee32c` (claim 3, as the brainstorm's terminal falsifier),
-both already compared in ## Evidence — confirmed, text unchanged there.
+Read with §6's guards beside it. Claim 5's falsifier (committed `1c50f8f0`) was failed as
+committed and is recorded so in `## Evidence`; this spec rests on the survivor (production +
+inbound) and on claim 6.
 
-### 10. Next stage
+### 11. Next stage
 
-Cross-mechanic (the matcher, the planner's input gate, the founding manifest, a shared constant's
-read, a new persisted market field, a harness cohort) → `/spec-review` is mandatory.
+Cross-mechanic → `/spec-review` again (owner: "let's update the spec and then re-review").
