@@ -4,8 +4,12 @@ import {
   matchFactionTransfers,
   classifyMarketState,
   surplusDrawable,
+  countedStock,
+  orderCover,
+  levelCover,
   type SystemLogisticsState,
   type RouteBookerFor,
+  type GoodMarketState,
 } from "@/lib/engine/directed-logistics";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { ECONOMY_CONSTANTS, TARGET_COVER } from "@/lib/constants/economy";
@@ -1079,5 +1083,59 @@ describe("strategic exporter reserve", () => {
 
   it("keeps the reserve below the pricing anchor, so an exporter is never held above its own anchor", () => {
     expect(DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER).toBeLessThan(TARGET_COVER);
+  });
+});
+
+describe("countedStock / orderCover / levelCover", () => {
+  it("counts physical stock alone under the ration-line proxy even with a haul in flight", () => {
+    // demand 10 → ration line 20 (RATION_COVER 2 × demand). stock 15 < 20, so inbound is ignored.
+    const g: GoodMarketState = {
+      goodId: "ore", stock: 15, logisticsTarget: 400, donorReserve: 400, demand: 10,
+      drawDemand: 10, civilianDemand: 10, production: 0, capacityProduction: 0,
+      scheduledInbound: 50,
+    };
+    expect(countedStock(g)).toBe(15);
+  });
+
+  it("counts stock plus inbound once stock is at or above the ration line", () => {
+    // demand 10 → ration line 20. stock 25 ≥ 20, so inbound counts.
+    const g: GoodMarketState = {
+      goodId: "ore", stock: 25, logisticsTarget: 400, donorReserve: 400, demand: 10,
+      drawDemand: 10, civilianDemand: 10, production: 0, capacityProduction: 0,
+      scheduledInbound: 50,
+    };
+    expect(countedStock(g)).toBe(75);
+  });
+
+  it("counts inbound at the boundary itself — the exception is strict-below, not at-or-below", () => {
+    // stock exactly at the ration line (20) must land on the "counts inbound" side.
+    const g: GoodMarketState = {
+      goodId: "ore", stock: 20, logisticsTarget: 400, donorReserve: 400, demand: 10,
+      drawDemand: 10, civilianDemand: 10, production: 0, capacityProduction: 0,
+      scheduledInbound: 50,
+    };
+    expect(countedStock(g)).toBe(70);
+  });
+
+  it("orderCover reads +Infinity at drawDemand 0, and Infinity sorts after every finite cover ascending", () => {
+    const g: GoodMarketState = {
+      goodId: "ore", stock: 100, logisticsTarget: 400, donorReserve: 400, demand: 10,
+      drawDemand: 0, civilianDemand: 10, production: 0, capacityProduction: 0,
+    };
+    expect(orderCover(g)).toBe(Infinity);
+
+    const covers = [orderCover(g), 3, 1, 7].sort((a, b) => a - b);
+    expect(covers[covers.length - 1]).toBe(Infinity);
+    for (const c of covers) expect(Number.isNaN(c)).toBe(false);
+  });
+
+  it("a braked factory reads a higher orderCover than an unbraked market at the same stock and use, but the same levelCover", () => {
+    const unbraked: GoodMarketState = {
+      goodId: "ore", stock: 100, logisticsTarget: 400, donorReserve: 400, demand: 10,
+      drawDemand: 10, civilianDemand: 10, production: 0, capacityProduction: 0,
+    };
+    const braked: GoodMarketState = { ...unbraked, drawDemand: 5 };
+    expect(orderCover(braked)).toBeGreaterThan(orderCover(unbraked));
+    expect(levelCover(braked)).toBe(levelCover(unbraked));
   });
 });

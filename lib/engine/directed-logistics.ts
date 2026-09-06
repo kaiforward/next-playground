@@ -5,6 +5,7 @@
  * See docs/active/gameplay/economy-autonomic-agency.md.
  */
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import type { RouteBlocked, RouteBookerFor } from "./lane-routing";
 
 // Re-exported so existing callers (the processor, tests) keep importing the matcher's booker view
@@ -172,6 +173,45 @@ export interface GoodMarketState {
    *  in flight is counted exactly once and a world still lacking goods still reads as needing them
    *  for welfare purposes. */
   scheduledInbound?: number;
+}
+
+/**
+ * Physical stock plus what is already in flight toward this market, except: while physical `stock`
+ * sits under `RATION_COVER` cycles of `demand` — the use-figure proxy of the economy's ration line
+ * (`ECONOMY_CONSTANTS.RATION_COVER`, `lib/constants/economy.ts`) — inbound is dropped and only the
+ * physical figure counts. Against a level of a few cycles, a haul in transit (~17 ticks per lane) can
+ * be the whole level while the shelf itself is empty, so a market this thin is read on what is
+ * actually on the shelf. The boundary is strict-below: a market exactly on the line already counts
+ * inbound. Above the line, behaves exactly as the sink test's `stock + scheduledInbound` does today.
+ */
+export function countedStock(g: GoodMarketState): number {
+  const rationLine = ECONOMY_CONSTANTS.RATION_COVER * g.demand;
+  if (g.stock < rationLine) return g.stock;
+  return g.stock + (g.scheduledInbound ?? 0);
+}
+
+/**
+ * Cycles of cover against the DRAW figure — how close a market is to running dry at its current,
+ * possibly-braked draw rate. The ordering term only: never used to size a raise (`drawDemand`'s own
+ * docstring forbids that). Reads +Infinity at `drawDemand` 0 rather than dividing by zero, so a
+ * fully-braked market with no live want sorts last in an ascending-cover queue instead of producing
+ * `NaN`. A braked factory (`drawDemand` below `demand`) therefore reads a HIGHER `orderCover` than an
+ * unbraked market at the same stock and use — it is not drawing urgently right now, whatever its
+ * warehouse level says.
+ */
+export function orderCover(g: GoodMarketState): number {
+  if (g.drawDemand <= 0) return Infinity;
+  return countedStock(g) / g.drawDemand;
+}
+
+/**
+ * Cycles of cover against the USE figure — the unit every warehousing quantity and every raise is
+ * denominated in (`GoodMarketState.demand`'s own docstring). Only ever called on a deficit, where
+ * `logisticsTarget > 0` and so `demand > 0` (`classifyMarketState`'s target-0 guard keeps a market
+ * with no demand out of the deficit list entirely) — never a division by zero in practice.
+ */
+export function levelCover(g: GoodMarketState): number {
+  return countedStock(g) / g.demand;
 }
 
 export interface SystemLogisticsState {
