@@ -179,13 +179,14 @@ export function toGoodMarketStates(
   for (const m of row.markets) {
     const civ = consByKey.get(m.goodId) ?? 0;
     const demand = useRateOf(m);
+    // Cycles of the demand this system actually has. Both carry `anchorMult` so an event that
+    // shifts a market's anchor moves the warehousing target and the donor floor together.
+    const donorReserve = DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * Math.max(0, demand) * m.anchorMult;
     goods.push({
       goodId: m.goodId,
       stock: m.stock,
-      // Cycles of the demand this system actually has. Both carry `anchorMult` so an event that
-      // shifts a market's anchor moves the warehousing target and the donor floor together.
       logisticsTarget: DIRECTED_LOGISTICS.WAREHOUSE_COVER * Math.max(0, demand) * m.anchorMult,
-      donorReserve: DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * Math.max(0, demand) * m.anchorMult,
+      donorReserve,
       demand,
       // A good with no draw entry keeps its standing want as its urgency rather than sinking to
       // the back of the import queue; callers that never read urgency get the same fallback.
@@ -201,6 +202,15 @@ export function toGoodMarketStates(
       proposalCycles: m.proposalCycles,
       logisticsFundingBound: m.logisticsFundingBound,
       scheduledInbound: opts?.scheduledInboundFor?.(m.goodId),
+      // Straight pass-through — absent on the row must stay absent here, never read as 0 (an unknown
+      // rolling rate is not the same claim as a measured zero).
+      realisedUse: m.realisedUse,
+      steadyInbound: m.steadyInbound,
+      lateInboundShare: m.lateInboundShare,
+      // No role split yet: every market clears the ordinary margin, and the deep line published
+      // here is the donor floor already computed above.
+      marginFree: false,
+      consumerDeepLine: donorReserve,
     });
   }
   return goods;

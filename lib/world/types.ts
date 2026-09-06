@@ -691,6 +691,52 @@ export interface WorldMarket {
    * back.
    */
   unservedShortfall?: number;
+  /**
+   * Reference-cycle realised use — what this good's stock actually lost to civilian delivery plus
+   * every consuming factory's applied draw, as an exponential rolling average with per-cycle weight
+   * `1 / RESERVE_WINDOW_CYCLES` (`lib/constants/directed-logistics.ts`). Distinct from `honestUseRate`
+   * (full-rate use, what the world WOULD use running unconstrained): this is what it actually removed,
+   * which is why an input-starved consumer's reserve shrinks toward the buffer instead of staying
+   * pinned at a draw that never happened. Folded by the economy processor at the cycle boundary from
+   * the accumulated `used` figure the simulator resolves that pass. Absent means unknown, not 0 — an
+   * unknown rate makes the world read as a plain consumer on the deep reserve, the behaviour every
+   * world has today, so an old save loads unchanged. Cleared on abandonment (`resetAbandonedMarkets`).
+   */
+  realisedUse?: number;
+  /**
+   * Reference-cycle steady inbound — goods this market's outbound arrivals credited (never the
+   * `return`-leg early credit), as the same kind of rolling average as `realisedUse`. Folded by the
+   * economy processor from `inboundSinceFold` at the cycle boundary. Absent means unknown, not 0, for
+   * the same reason `realisedUse` does. Cleared on abandonment.
+   */
+  steadyInbound?: number;
+  /**
+   * The share, by credited volume over the same rolling window, of this market's steady inbound that
+   * took longer than `SUPPLIER_MAX_LATENCY_CYCLES` to arrive — a tail statistic of the single refill
+   * haul, not the average haul. Folded by the economy processor from `lateInboundSinceFold` alongside
+   * `steadyInbound`. Absent means unknown, not 0. Cleared on abandonment.
+   */
+  lateInboundShare?: number;
+  /**
+   * Credited inbound volume accumulated since the last fold into `steadyInbound` — written every tick
+   * by the goods-arrivals stage's outbound credit path, read and zeroed by the economy processor at
+   * the cycle boundary. A tick-scoped accumulator, not itself a rate: absent reads as 0. Cleared on
+   * abandonment.
+   */
+  inboundSinceFold?: number;
+  /**
+   * The late-arriving (> `SUPPLIER_MAX_LATENCY_CYCLES`) share of `inboundSinceFold`, accumulated and
+   * folded the same way, into `lateInboundShare`. Absent reads as 0. Cleared on abandonment.
+   */
+  lateInboundSinceFold?: number;
+  /**
+   * Consecutive directed-logistics runs this market has sat short (below its deficit line) with
+   * nothing credited, while it held supplier status — the drop rule's counter
+   * (`SUPPLIER_DROP_RUNS`): reaching the threshold reverts the market to consumer regardless of what
+   * its rolling averages still say. Written by the directed-logistics processor beside the per-market
+   * fields it already writes. Absent reads as 0. Cleared on abandonment.
+   */
+  supplierShortRuns?: number;
 }
 
 // ── Factions ────────────────────────────────────────────────────
@@ -798,6 +844,12 @@ export interface WorldFactionTreasury {
   taxLevel: TaxLevel;
   /** Funding sliders (0-1); maintenance is floored at 0.5 at every write boundary. */
   bands: TreasuryBands;
+  /**
+   * Multiplies every give-line and want-line of this faction's markets, for every logistics role —
+   * "my worlds hold more" or "my worlds hold less". Player-set, stepped to
+   * `DIRECTED_LOGISTICS.STOCKPILE_SCALE_STEPS`. Absent reads as 1 (today's behaviour, unscaled).
+   */
+  stockpileScale?: number;
   /** Latched paid-fractions from the last settlement — the effective funding each band's consumers run at. */
   funded: TreasuryBands;
   /** Work performed since the last settlement (logistics S-normalised at accrual); billed then cleared. */

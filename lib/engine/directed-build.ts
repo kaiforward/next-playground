@@ -101,6 +101,17 @@ export interface BuildGoodState {
   proposalCycles?: number;
   /** A reachable logistics match was constrained by the faction's funded haul work. */
   logisticsFundingBound?: boolean;
+  /** Rolling steady-inbound rate — see `GoodMarketState.steadyInbound`. Carried through so the input
+   *  gate can read "producer or supplier" instead of "producer" alone. Optional for engine-test
+   *  fixtures, exactly like `production`. */
+  steadyInbound?: number;
+  /** Whether this market's give-line is a role-authored floor rather than the ordinary margin —
+   *  see `GoodMarketState.marginFree`. Optional for engine-test fixtures; the tick path always
+   *  supplies it via `toGoodMarketStates`. */
+  marginFree?: boolean;
+  /** The deep line a full-rate consumer would keep — see `GoodMarketState.consumerDeepLine`. Optional
+   *  for engine-test fixtures; the tick path always supplies it via `toGoodMarketStates`. */
+  consumerDeepLine?: number;
 }
 
 /** A system's buildable state — markets + the body-derived capacity it can build into. */

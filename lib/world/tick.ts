@@ -469,6 +469,10 @@ export function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRo
       proposalCycles: m.proposalCycles,
       logisticsFundingBound: m.logisticsFundingBound,
       unservedShortfall: m.unservedShortfall,
+      realisedUse: m.realisedUse,
+      steadyInbound: m.steadyInbound,
+      lateInboundShare: m.lateInboundShare,
+      supplierShortRuns: m.supplierShortRuns,
     };
     const list = bySystem.get(m.systemId);
     if (list) list.push(row);
@@ -1009,7 +1013,14 @@ export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: str
  * next — a re-founded colony's warehouse is real, but its predecessor's drain rate and the point
  * it was drained from are not. `unservedShortfall` joins the same clear for the same reason: a
  * structural reading names a shortfall THIS colony's donors and production could not close, and a
- * resettled colony has neither yet — its own local-supply story starts over.
+ * resettled colony has neither yet — its own local-supply story starts over. The same clear covers
+ * the supplier-floor rolling figures — `realisedUse`, `steadyInbound`, `lateInboundShare`, their
+ * since-last-fold accumulators `inboundSinceFold`/`lateInboundSinceFold`, and the drop-rule counter
+ * `supplierShortRuns` — for the identical reason: each names what THIS colony's economy actually did
+ * over its rolling window, and a resettled colony has done nothing yet. Absent already reads as
+ * unknown for the three rates (never 0 — an unknown rate reads as a plain consumer on the deep
+ * reserve, the role every world starts in) and as 0 for the two accumulators and the counter, so a
+ * resettled colony opens exactly as a freshly-created market row would.
  */
 export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds: string[]): WorldMarket[] {
   if (abandonedSystemIds.length === 0) return markets;
@@ -1023,6 +1034,12 @@ export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds
     delete next.stockChange;
     delete next.stockAtLastBoundary;
     delete next.unservedShortfall;
+    delete next.realisedUse;
+    delete next.steadyInbound;
+    delete next.lateInboundShare;
+    delete next.inboundSinceFold;
+    delete next.lateInboundSinceFold;
+    delete next.supplierShortRuns;
     return next;
   });
 }

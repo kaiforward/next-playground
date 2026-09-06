@@ -2659,6 +2659,40 @@ describe("marketRowsBySystem carries unservedShortfall through the market join",
   });
 });
 
+describe("marketRowsBySystem carries the supplier-floor rolling figures through the market join", () => {
+  it("carries every present value onto the projected row", () => {
+    const base = generateWorld({ systemCount: 20, seed: 3 }).markets[0];
+    const flagged: WorldMarket = {
+      ...base,
+      realisedUse: 12,
+      steadyInbound: 8,
+      lateInboundShare: 0.4,
+      supplierShortRuns: 2,
+    };
+    const rows = marketRowsBySystem([flagged]).get(flagged.systemId);
+    const row = rows?.find((r) => r.goodId === flagged.goodId);
+    expect(row?.realisedUse).toBe(12);
+    expect(row?.steadyInbound).toBe(8);
+    expect(row?.lateInboundShare).toBeCloseTo(0.4, 10);
+    expect(row?.supplierShortRuns).toBe(2);
+  });
+
+  it("carries absence through as undefined, never as 0 — matching unservedShortfall's own projection", () => {
+    const base = generateWorld({ systemCount: 20, seed: 3 }).markets[0];
+    const untouched: WorldMarket = { ...base };
+    delete untouched.realisedUse;
+    delete untouched.steadyInbound;
+    delete untouched.lateInboundShare;
+    delete untouched.supplierShortRuns;
+    const rows = marketRowsBySystem([untouched]).get(untouched.systemId);
+    const row = rows?.find((r) => r.goodId === untouched.goodId);
+    expect(row?.realisedUse).toBeUndefined();
+    expect(row?.steadyInbound).toBeUndefined();
+    expect(row?.lateInboundShare).toBeUndefined();
+    expect(row?.supplierShortRuns).toBeUndefined();
+  });
+});
+
 describe("resetAbandonedMarkets clears unservedShortfall", () => {
   it("deletes a stale level on abandonment, leaving stock untouched", () => {
     const base = generateWorld({ systemCount: 20, seed: 3 }).markets[0];
@@ -2669,6 +2703,43 @@ describe("resetAbandonedMarkets clears unservedShortfall", () => {
     expect(reset.unservedShortfall).toBeUndefined();
     expect("unservedShortfall" in reset).toBe(false);
     expect(reset.stock).toBe(777);
+  });
+});
+
+describe("resetAbandonedMarkets clears the supplier-floor rolling figures", () => {
+  it("deletes all six new fields on abandonment, leaving stock untouched — a resettled world opens unknown, not as an idle market on a ten-cycle line", () => {
+    const base = generateWorld({ systemCount: 20, seed: 3 }).markets[0];
+    const stale: WorldMarket = {
+      ...base,
+      realisedUse: 12,
+      steadyInbound: 8,
+      lateInboundShare: 0.4,
+      inboundSinceFold: 3,
+      lateInboundSinceFold: 1,
+      supplierShortRuns: 2,
+      stock: 777,
+    };
+
+    const [reset] = resetAbandonedMarkets([stale], [stale.systemId]);
+
+    expect("realisedUse" in reset).toBe(false);
+    expect("steadyInbound" in reset).toBe(false);
+    expect("lateInboundShare" in reset).toBe(false);
+    expect("inboundSinceFold" in reset).toBe(false);
+    expect("lateInboundSinceFold" in reset).toBe(false);
+    expect("supplierShortRuns" in reset).toBe(false);
+    expect(reset.stock).toBe(777);
+  });
+
+  it("leaves an untouched (non-abandoned) system's rolling figures alone", () => {
+    const base = generateWorld({ systemCount: 20, seed: 3 }).markets[0];
+    const other = generateWorld({ systemCount: 20, seed: 3 }).markets[1];
+    const stale: WorldMarket = { ...base, realisedUse: 12, steadyInbound: 8 };
+    const untouched: WorldMarket = { ...other, realisedUse: 9, systemId: `${base.systemId}-not-abandoned` };
+
+    const [, keptUntouched] = resetAbandonedMarkets([stale, untouched], [stale.systemId]);
+
+    expect(keptUntouched.realisedUse).toBe(9);
   });
 });
 

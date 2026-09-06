@@ -177,6 +177,32 @@ export interface GoodMarketState {
    *  in flight is counted exactly once and a world still lacking goods still reads as needing them
    *  for welfare purposes. */
   scheduledInbound?: number;
+  /** Rolling realised-use rate — see `WorldMarket.realisedUse`. Absent ⇒ unknown, never 0. Threaded
+   *  through so the read path carries it end to end to the role classification. */
+  realisedUse?: number;
+  /** Rolling steady-inbound rate — see `WorldMarket.steadyInbound`. Absent ⇒ unknown, never 0. Read
+   *  by the planner's input gate so a supplier's flow, not just a producer's, licenses a
+   *  factory downstream. */
+  steadyInbound?: number;
+  /** Rolling late-inbound share — see `WorldMarket.lateInboundShare`. Absent ⇒ unknown, never 0. */
+  lateInboundShare?: number;
+  /**
+   * Whether this market's give-line for this good is a role-authored floor (deep reserve, supplier
+   * buffer or exporter buffer) rather than the price-anchor-adjacent margin `surplusDrawable`'s
+   * ordinary-donor branch otherwise clears before it donates — the margin-free flag `surplusDrawable`
+   * reads at every call site. While `false` everywhere, every market clears `SURPLUS_MARGIN` as an
+   * ordinary donor.
+   */
+  marginFree: boolean;
+  /**
+   * The deep line a full-rate consumer of this good would keep — `DONOR_RESERVE_COVER × demand ×
+   * anchorMult × stockpileScale` — read by the founding staging cap (§5) regardless of this market's
+   * own role, so a colony never draws a relay or idle world below what a consumer would have held.
+   * Equal to `donorReserve` today, by construction: this task changes no line, only publishes the one
+   * that already exists under a name the founding cap can read without assuming this market IS a
+   * consumer.
+   */
+  consumerDeepLine: number;
 }
 
 /**

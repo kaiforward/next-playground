@@ -41,6 +41,14 @@ export interface MarketRowForLogistics {
    *  matcher itself never reads it as a decision input. See `WorldMarket.unservedShortfall` for the
    *  full contract. */
   unservedShortfall?: number;
+  /** Rolling realised-use rate; see `WorldMarket.realisedUse`. Missing ⇒ unknown, never 0. */
+  realisedUse?: number;
+  /** Rolling steady-inbound rate; see `WorldMarket.steadyInbound`. Missing ⇒ unknown, never 0. */
+  steadyInbound?: number;
+  /** Rolling late-inbound share; see `WorldMarket.lateInboundShare`. Missing ⇒ unknown, never 0. */
+  lateInboundShare?: number;
+  /** Consecutive short supplier runs; see `WorldMarket.supplierShortRuns`. Missing ⇒ 0. */
+  supplierShortRuns?: number;
 }
 
 /** One system's logistics-relevant state. */

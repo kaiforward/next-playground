@@ -381,3 +381,41 @@ describe("toGoodMarketStates: the two demand figures", () => {
     expect(ore.drawDemand).toBe(ore.demand);
   });
 });
+
+// ── The supplier-floor read path: realisedUse / steadyInbound / lateInboundShare, marginFree,
+// consumerDeepLine — the three rolling rates pass through unchanged (absent stays absent) and the
+// two role-authored fields are authored as today's behaviour (no role split yet).
+
+describe("toGoodMarketStates: the supplier-floor rolling figures", () => {
+  it("carries a present rolling figure through onto GoodMarketState", () => {
+    const m = { ...foodMarket(10, 40), realisedUse: 6, steadyInbound: 3, lateInboundShare: 0.25 };
+    const out = toGoodMarketStates({
+      buildings: {}, population: 100, yields: unitResourceVector(), markets: [m],
+    });
+    expect(out[0].realisedUse).toBe(6);
+    expect(out[0].steadyInbound).toBe(3);
+    expect(out[0].lateInboundShare).toBeCloseTo(0.25, 10);
+  });
+
+  it("reaches GoodMarketState as absent, never as 0, when absent on the world row", () => {
+    const m = foodMarket(10, 40);
+    expect("realisedUse" in m).toBe(false);
+    expect("steadyInbound" in m).toBe(false);
+    expect("lateInboundShare" in m).toBe(false);
+    const out = toGoodMarketStates({
+      buildings: {}, population: 100, yields: unitResourceVector(), markets: [m],
+    });
+    expect(out[0].realisedUse).toBeUndefined();
+    expect(out[0].steadyInbound).toBeUndefined();
+    expect(out[0].lateInboundShare).toBeUndefined();
+  });
+
+  it("authors marginFree false and consumerDeepLine equal to donorReserve — the vacuity check: nothing has moved yet", () => {
+    const m = foodMarket(10, 40);
+    const out = toGoodMarketStates({
+      buildings: {}, population: 100, yields: unitResourceVector(), markets: [m],
+    });
+    expect(out[0].marginFree).toBe(false);
+    expect(out[0].consumerDeepLine).toBe(out[0].donorReserve);
+  });
+});
