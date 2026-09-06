@@ -373,6 +373,10 @@ Why:           Almost every served world waits more than a cycle for its goods, 
                  system type"
                - "do supplier floor only we already shipped the pricing haha, but we just include
                  the tweakable knob"
+               - "we have separate sliders for how much we want and what level we donate at, those
+                 handle all three types :) … we are using existing logistics data to identify when
+                 a system should identify as a supplier and then updating the sliders for donation
+                 and system stockpiling automatically"
                - Depot / synthetic demand: "I would not build it yet" (assistant) — "Yeah" (Kai);
                  deferred pending the re-measure named in ## Idea.
 Evidence:      - Claim 1 — almost every served world gets its goods more than a cycle after
@@ -388,9 +392,10 @@ Evidence:      - Claim 1 — almost every served world gets its goods more than 
                  neighbour within two hops waits over a cycle. Licenses: sites are common; the
                  "donor" is any source in the window, not a structural producer.
                - Claim 2 (killed the through-flow depot) — not load-bearing here.
-Not claimed:   - No depot, no synthetic demand, no new want level: a world's *want* (the 40-cycle
-                 warehousing target) is untouched for every role. Only the floor it gives down to
-                 changes.
+Not claimed:   - No depot, no synthetic demand, no new mechanism in the matcher: every role is
+                 the two existing per-market lines (want, give-down-to) set to role-specific
+                 values. A consumer's 40-cycle want is untouched; a supplier's want drops to a
+                 thin line above its floor.
                - No change to hauling cost: work = quantity × congestion-priced route cost is
                  already billed at `LOGISTICS_RATE_PER_WORK` in its own funded band with its own
                  slider (`lib/constants/treasury.ts:26`, `components/factions/treasury-card.tsx:130`).
@@ -421,16 +426,27 @@ This spec adds a third role between them:
 | Role | Test | Gives down to | Asks for more below |
 |---|---|---|---|
 | Producer | `production > demand` (unchanged) | producer floor, 10 cycles (unchanged) | never — self-supply gate (`lib/engine/directed-logistics.ts:445`) |
-| **Supplier** | `production + steadyInbound ≥ SUPPLIER_REPLENISHMENT × demand`, and not a producer | **producer floor, 10 cycles** | the ordinary deficit line, `DEFICIT_FRACTION × WAREHOUSE_COVER` = 32 cycles (unchanged) |
+| **Supplier** | `production + steadyInbound ≥ SUPPLIER_REPLENISHMENT × demand`, and not a producer | **producer floor, 10 cycles** | **its own thin line: floor × `SURPLUS_MARGIN` = 14 cycles** |
 | Consumer | otherwise | the faction's **reserve depth** (default 40), clearing `SURPLUS_MARGIN` (unchanged mechanics) | 32 cycles (unchanged) |
 
 The supplier test is the producer test with steady inbound added to the supply side — "steady
-inbound counts like production". A supplier never rides the SURPLUS_MARGIN dead-band: like a
-producer, everything above its floor is drawable.
+inbound counts like production". Each role is the same two per-market numbers the matcher already
+reads — the want line (`logisticsTarget`) and the give-down-to line (`donorReserve`), both authored
+at `lib/tick/processors/good-market-state.ts:187-188` — set per role; the role test sets them
+automatically from existing logistics data. Kai: "we have separate sliders for how much we want
+and what level we donate at, those handle all three types." A supplier never rides the
+SURPLUS_MARGIN dead-band on the give side: like a producer, everything above its floor is
+drawable. Its want line sits one margin above its floor, so it lives in a ten-to-fourteen-cycle
+band: each cycle's consumption dips it under fourteen and it asks for about what it eats — which
+is exactly the steady inbound that keeps it a supplier — and when a neighbour draws it down it
+asks for more, relaying without holding. A world's existing "either short or a source in a run"
+classification is unchanged.
 
 Requirement: `steadyInbound` — new, emitted per (market, good) by the goods-arrivals stage at the
 credit site (`lib/tick/processors/goods-arrivals.ts:102-112`), §2. `SUPPLIER_REPLENISHMENT` — new
-constant, proposal 0.9 (rationale §7).
+constant, proposal 0.9 (rationale §7). The supplier want line reuses `SURPLUS_MARGIN` (1.4) over
+`EXPORT_RESERVE_COVER` (10) — no new constant; if the two ever need to move apart, that is the
+moment to author one.
 
 ### 2. The steady-inbound signal
 
@@ -456,32 +472,27 @@ outbound legs only, never return legs (a return is goods going back to a donor,
 
 ### 3. Floors, the matcher, and the cascade bound
 
-**A supplier must be able to give while it is still asking.** Today classification is exclusive:
-a market below 32 cycles is a deficit and is never a source in that run
-(`lib/engine/directed-logistics.ts:443-495`: the source branch runs only for non-deficits). Under
-scarcity the water level sits below 32, so a supplier that could only give when *balanced* would
-hoard to 32 before passing anything on — the chain problem moved from 56 to 32, not removed.
-Rejected for that reason.
-
-Requirement: within one logistics run, a supplier below its want is **both** a world in the
-levelling (it draws toward the water level like any deficit) **and** a source whose drawable is
-`stock − floor` (it gives down to the level). Observable invariant, checkable in a fixture: after
-a run, no supplier holds stock above the run's final water level for that good while any world in
-the same pool that could reach it is below that level — the level is shared, floors are personal.
-Producers stay exempt from sinking (the self-supply gate is unchanged). How the matcher represents
-dual membership is `/build-plan`'s.
+**No dual role.** A first draft required a supplier below its want to be both a world in the
+levelling and a source in the same run, because with the consumer's 32-cycle want line a supplier
+under scarcity would hoard to 32 before passing anything on. Rejected by the owner: the thin want
+line in §1 removes the need. A supplier is short only under 14 cycles and a source only above it,
+so the matcher's exclusive classification (`lib/engine/directed-logistics.ts:443-495`) stands, and
+the levelling raises a supplier to at most its own 14-cycle target — `targetCover` is already
+per-world (`directed-logistics.ts:470-480`), so no solver change.
 
 **Cascade, bounded.** In producer → A → B → C, only the producer makes anything. If deliveries stop,
-each supplier keeps giving down to 10 cycles until its own `steadyInbound` decays below the test —
-at most `SUPPLIER_WINDOW_CYCLES` cycles — then reverts to a consumer and stops giving. During those
-cycles it consumes at most ~4 of its 10-cycle floor, so it reverts holding ≥ 6 cycles, three times
-the ration line (`RATION_COVER` 2, `lib/constants/economy.ts:66`). The accepted trade: the reserve a
-supplier holds against a supply stop is ~10 cycles, not 40. The producer floor is never lowered by
+each supplier holds ten to fourteen cycles and keeps giving down to 10 until its own
+`steadyInbound` decays below the test — at most `SUPPLIER_WINDOW_CYCLES` cycles — then reverts to
+a consumer (want 32, give-line the reserve depth) and stops giving. During those cycles it consumes
+at most ~4 of its 10-cycle floor, so it reverts holding ≥ 6 cycles, three times the ration line
+(`RATION_COVER` 2, `lib/constants/economy.ts:66`). The accepted trade: the reserve a supplier holds
+against a supply stop is ten to fourteen cycles, not 40. The producer floor is never lowered by
 this spec; if a later tune wants it lower, the constraint is `floor − SUPPLIER_WINDOW_CYCLES >
 RATION_COVER`.
 
 **First release.** On the first run after a world qualifies, everything between its old reserve
-line and 10 cycles becomes drawable at once — up to ~46 cycles of demand per market. It flows only
+line and 10 cycles becomes drawable at once — up to ~46 cycles of demand per market — and its want
+drops from 40 to 14, so it stops asking as well. It flows only
 to deficits in the levelling, never into the void, but galaxy-wide it is a transient; §6 names the
 harness reads that judge it.
 
@@ -567,6 +578,8 @@ LOGISTICS_RATE_PER_WORK — CONTAINED — treasury, tick
 | `surplusDrawable` | matcher source (`directed-logistics.ts:492`), planner input gate (`directed-build.ts:999`), founding manifest (`construction.ts:70`) | all three, identically: the supply term becomes `production + steadyInbound` | Yes — kept coupled on purpose: a supplier is a supplier to a factory and to a founding colony exactly as to a deficit world. Each reader's adapter must carry `steadyInbound` or the reader silently sees a consumer. |
 | `DONOR_RESERVE_COVER` | reserve producer (`good-market-state.ts:188`), planner fallback (`directed-build.ts:998`), harness role (`cohort-analysis.ts:47`) | all three read the faction's `reserveCover` instead | Yes — separated from the constant; the constant survives as the default. |
 | `EXPORT_RESERVE_COVER` | `surplusDrawable` only | gains a second role (supplier floor) inside the same function | Yes — one floor for "replenished" worlds. |
+| `SURPLUS_MARGIN` | `classifyMarketState` (:60), `surplusDrawable` (:116) | gains a third read: the supplier want line = floor × margin | Yes — same meaning ("the dead-band above a floor"), stated; author a separate constant only if they need to diverge. |
+| `WAREHOUSE_COVER` / `DEFICIT_FRACTION` | want line for every market (`good-market-state.ts:187`) | consumers only; a supplier's want is authored from the floor instead | Yes — separated per role. |
 | `WorldMarket.demand` | every warehousing quantity (`types.ts:553-566`) | unchanged; new reader (§1 test) | Yes. |
 | `anchorMult` | want + consumer reserve (`good-market-state.ts:187-188`) | not read by the supplier floor | Yes, §6. |
 
