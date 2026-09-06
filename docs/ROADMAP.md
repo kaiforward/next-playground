@@ -19,10 +19,11 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   no priority scheme) — decide after play whether a priority tier is wanted.
   *Next step:* play with both for a few sessions, then decide.
 - **[L] Logistics gameplay pass — the surface war will interdict, and what remains after cost and
-  the supplier floor.** The pass's first two decisions — **hauling cost as a funded pool** and the
+  the supplier floor.** Hauling cost turned out to be shipped already (work × route cost, billed
+  at `LOGISTICS_RATE_PER_WORK` in the Logistics funding band — that constant is the knob). The
   **supplier floor** (a third market role: steady inbound counts like production, so a supplier
-  gives down to the producer floor; consumer reserve depth is the player's stockpile lever) — are
-  in spec, with their evidence, in
+  gives down to the producer floor; consumer reserve depth is the player's stockpile lever) is
+  in spec, with its evidence, in
   [logistics-gameplay-pass.md](./build-plans/logistics-gameplay-pass.md); the **depot** (synthetic
   relayed demand for neighbourhoods short together) is deferred there pending a re-measure once the
   floor ships. This row keeps the rest.
@@ -70,7 +71,7 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   **Route dictionary / per-source path cache** — not needed at 600 systems (the wall-clock share
   held under the ~3× line); the 10,000-system read was never run (projected ~2h). Book this only if
   that larger read fails the line.
-  *Next step:* after the haul-cost + supplier-floor spec ships, `/measure` the remaining latency
+  *Next step:* after the supplier-floor spec ships, `/measure` the remaining latency
   (re-run the working file's claim-1 instrument) and decide the depot; then the four open items
   above — founding freight on real ships, people-movement unification, input-proximity weighting,
   the player priority lever. Who owns production and movement (companies, strata) is the
