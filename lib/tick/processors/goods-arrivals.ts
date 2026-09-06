@@ -5,6 +5,8 @@ import type {
   ArrivalFlowInsert,
 } from "@/lib/tick/world/goods-arrivals-world";
 import type { WorldPendingArrival } from "@/lib/world/types";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 
 export interface GoodsArrivalsProcessorParams {
   /** Mints a fresh, globally-unique id for a return leg — the same `world.nextId` counter every
@@ -25,7 +27,10 @@ export interface GoodsArrivalsProcessorParams {
  * remainder is minted as a fresh `leg: "return"` row back toward the donor over the reversed
  * `routeEdges`, arriving after the SAME transit delay (`arrivalTick − dispatchTick`) the outbound
  * leg took. A credited outbound quantity writes one flow row; an uncredited (fully-returned)
- * outbound writes none.
+ * outbound writes none. The same credited quantity also adds onto the destination market's
+ * `inboundSinceFold` accumulator, and onto `lateInboundSinceFold` too when the haul's transit
+ * delay exceeded `SUPPLIER_MAX_LATENCY_CYCLES` cycles — never the return-leg credit below, and
+ * never the uncredited remainder.
  *
  * **Return legs** credit their target (the original donor) in full, uncapped — the
  * cancelled-colony precedent (staged materials return uncapped, docs/active/gameplay/
@@ -72,6 +77,11 @@ export async function runGoodsArrivalsProcessor(
   let returnedTotal = 0;
   let returnedRows = 0;
   let overshootVolume = 0;
+  // Per-key outbound credit this tick, and the late-arriving part of it — the source `creditMarkets`
+  // adds onto the market row's since-fold accumulators. Never touched by the return-leg path above.
+  const creditedInboundByKey = new Map<string, number>();
+  const lateInboundByKey = new Map<string, number>();
+  const maxLatencyTicks = DIRECTED_LOGISTICS.SUPPLIER_MAX_LATENCY_CYCLES * CYCLE_LENGTH;
 
   for (const row of due) {
     const key = `${row.toSystemId}|${row.goodId}`;
@@ -102,6 +112,11 @@ export async function runGoodsArrivalsProcessor(
     if (credited > 0) {
       runningStock.set(key, stockBefore + credited);
       creditedTotal += credited;
+      creditedInboundByKey.set(key, (creditedInboundByKey.get(key) ?? 0) + credited);
+      const delay = row.arrivalTick - row.dispatchTick;
+      if (delay > maxLatencyTicks) {
+        lateInboundByKey.set(key, (lateInboundByKey.get(key) ?? 0) + credited);
+      }
       flows.push({
         tick: ctx.tick,
         fromSystemId: row.fromSystemId,
@@ -135,7 +150,12 @@ export async function runGoodsArrivalsProcessor(
     settled.push({ id: row.id, credited, returned: returnedRow });
   }
 
-  const creditUpdates = Array.from(runningStock, ([id, stock]) => ({ id, stock }));
+  const creditUpdates = Array.from(runningStock, ([id, stock]) => ({
+    id,
+    stock,
+    creditedInbound: creditedInboundByKey.get(id) ?? 0,
+    lateInbound: lateInboundByKey.get(id) ?? 0,
+  }));
   await world.creditMarkets(creditUpdates);
   await world.settleArrivals(settled);
   await world.appendFlows(flows);

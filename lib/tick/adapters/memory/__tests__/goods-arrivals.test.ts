@@ -64,6 +64,44 @@ describe("InMemoryGoodsArrivalsWorld", () => {
     expect(world.markets.find((m) => m.goodId === "food")).toEqual(other);
   });
 
+  it("creditMarkets adds creditedInbound and lateInbound onto the row's since-fold accumulators", async () => {
+    const world = new InMemoryGoodsArrivalsWorld({
+      markets: [market({ systemId: "sink", goodId: "water", stock: 0 })],
+      pendingArrivals: [],
+    });
+
+    await world.creditMarkets([{ id: "sink|water", stock: 10, creditedInbound: 10, lateInbound: 4 }]);
+
+    const row = world.markets.find((m) => m.goodId === "water")!;
+    expect(row.inboundSinceFold).toBe(10);
+    expect(row.lateInboundSinceFold).toBe(4);
+  });
+
+  it("creditMarkets treats an absent since-fold accumulator as 0 before adding", async () => {
+    const world = new InMemoryGoodsArrivalsWorld({
+      markets: [market({ systemId: "sink", goodId: "water", stock: 0, inboundSinceFold: undefined })],
+      pendingArrivals: [],
+    });
+
+    await world.creditMarkets([{ id: "sink|water", stock: 10, creditedInbound: 6 }]);
+
+    expect(world.markets.find((m) => m.goodId === "water")!.inboundSinceFold).toBe(6);
+  });
+
+  it("creditMarkets sums onto an existing accumulator across two calls rather than overwriting it", async () => {
+    const world = new InMemoryGoodsArrivalsWorld({
+      markets: [market({ systemId: "sink", goodId: "water", stock: 0, inboundSinceFold: 3, lateInboundSinceFold: 1 })],
+      pendingArrivals: [],
+    });
+
+    await world.creditMarkets([{ id: "sink|water", stock: 5, creditedInbound: 5, lateInbound: 5 }]);
+    await world.creditMarkets([{ id: "sink|water", stock: 8, creditedInbound: 3, lateInbound: 2 }]);
+
+    const row = world.markets.find((m) => m.goodId === "water")!;
+    expect(row.inboundSinceFold).toBe(3 + 5 + 3);
+    expect(row.lateInboundSinceFold).toBe(1 + 5 + 2);
+  });
+
   it("settleArrivals drains settled rows and appends minted return legs", async () => {
     const row = pending({ id: "row-1" });
     const world = new InMemoryGoodsArrivalsWorld({ markets: [], pendingArrivals: [row] });

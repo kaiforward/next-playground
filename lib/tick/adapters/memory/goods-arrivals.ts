@@ -52,13 +52,18 @@ export class InMemoryGoodsArrivalsWorld implements GoodsArrivalsWorld {
 
   creditMarkets(updates: MarketCreditUpdate[]): Promise<void> {
     if (updates.length === 0) return Promise.resolve();
-    const byKey = new Map(updates.map((u) => [u.id, u.stock]));
+    const byKey = new Map(updates.map((u) => [u.id, u]));
     let applied = 0;
     this.markets = this.markets.map((m) => {
-      const stock = byKey.get(`${m.systemId}|${m.goodId}`);
-      if (stock === undefined) return m;
-      applied += stock - m.stock;
-      return { ...m, stock };
+      const update = byKey.get(`${m.systemId}|${m.goodId}`);
+      if (update === undefined) return m;
+      applied += update.stock - m.stock;
+      return {
+        ...m,
+        stock: update.stock,
+        inboundSinceFold: (m.inboundSinceFold ?? 0) + (update.creditedInbound ?? 0),
+        lateInboundSinceFold: (m.lateInboundSinceFold ?? 0) + (update.lateInbound ?? 0),
+      };
     });
     this.appliedCreditTotal += applied;
     return Promise.resolve();
