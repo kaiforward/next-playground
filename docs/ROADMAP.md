@@ -27,8 +27,11 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   on the logistics gameplay pass row below; possibly player-configurable). Complements the band /
   critical-good mechanics — partial-satisfaction states make `CRITICAL_SATISFACTION` a live line
   instead of a formality. Sibling of the logistics gameplay pass below.
-  *Next step:* `/measure` the directed-logistics fill order to confirm or kill the greedy-drain
-  hypothesis before any policy design.
+  **Measured 2026-09-06, hypothesis confirmed** — evidence in
+  [good-allocation-cliff.md](./build-plans/good-allocation-cliff.md): the head of the queue is filled
+  to its full 40-cycle target, 70–82% of deficits in a scarce group get nothing, and even spread
+  would lift 56–80% of the starving zero-fills over the ration line.
+  *Next step:* `/feature-spec` the allocation policy from that evidence, then `/spec-review`.
 - **[L] Logistics gameplay pass — real cost, hub/chain depth, the surface war will interdict.**
   Logistics works mechanically but hauling costs nothing and nothing can threaten it — no game in
   the pillar yet. This pass prices movement (the markets row below needs transport cost to make
