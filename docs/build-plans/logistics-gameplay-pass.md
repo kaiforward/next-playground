@@ -275,3 +275,67 @@ each late deficit's turn) — not measured here.
   {"good": "medicine", "donors": 34, "candidates": 190, "strictSites": 34, "strictSelfDonor": 25, "lateNeighbourNearInboundShareMean": 0.038, "relaxedSites": 69, "withLateNeighbour": 149, "withinCycleOfDonor": 55, "nearestDonorTicksP50": 48}
   sample: gas Cascade-11[faction-630] donor=0t late=1 worst=27t relayed/cycle=21.6 | gas Eclipse-23[faction-630] donor=0t late=2 worst=280t relayed/cycle=224.1 | gas Horizon-12[faction-642] donor=14t late=1 worst=28t relayed/cycle=43.9 | gas Horizon-17[faction-642] donor=0t late=2 worst=66t relayed/cycle=573.3 | gas Solace-9[faction-642] donor=0t late=1 worst=51t relayed/cycle=43.6 | gas Horizon-18[faction-642] donor=24t late=1 worst=51t relayed/cycle=43.6
 ```
+
+### Claim 4 — why a near supplier serves so little: floor-bound, not spare-bound
+
+Hook inside `matchFactionTransfers` (temporary, reverted): per logistics run in the window, every
+(system, good) row's stock, reserve, demand, production, classification and `surplusDrawable`,
+plus each donor's drawable left after the pass. For every late sink (mean inbound latency > 24) in
+each run it was a deficit, every same-faction developed system within 24 ticks of transit is
+classified: *also_deficit* (short itself), *spare_drained* (had drawable stock, all taken this
+run), *spare_left* (had drawable stock nobody took), *floor_bound_unlockable* (drawable 0, not a
+producer, stock above the 10-cycle producer floor — the depot policy would release it),
+*floor_bound_thin* (below even that), *empty*, *exporter_dry*.
+
+```
+Meaning:    The supplier next door is not drained; it is holding stock it is allowed to keep. The
+            depot policy's floor change releases it, and for the bulk goods that stock is many
+            times the neighbour's shortfall. Where it is not, the whole neighbourhood is short.
+Claim:      Late worlds' near suppliers are floor-bound (holding to the ordinary donor line), not
+            spare-bound (drained by earlier draws).
+Number:     near-candidate-runs classed spare_drained: 2-13% (10K), 0-11% (16K); spare_left
+            1-22%. floor_bound_unlockable: gas 49%, textiles 40%, chemicals 31%, ore 32%,
+            minerals 37% (10K); gas 32%, ore 43%, minerals 82%, biomass 82%, medicine 5% (16K).
+            also_deficit: 34-57% (10K), 16-62% bulk goods and 94% medicine (16K).
+            Late-sink deficit runs where floor-unlockable stock within a cycle covers the whole
+            shortfall: gas 40%, textiles 37%, chemicals 27%, ore 24%, minerals 33% (10K);
+            gas 33%, ore 34%, minerals 80%, biomass 75%, medicine 6% (16K).
+            Unlockable ÷ shortfall (summed): gas 15×/14×, chemicals 9×, minerals 18×/41×,
+            textiles 2×, biomass 1.6×, ore 0.5×/0.6×, medicine 0.15×.
+            Only 45-52% of late sinks have any same-faction developed system within 24 ticks.
+Horizon:    10K (9601-9840, 10 runs) and 16K (15601-15840, 10 runs).
+Cohort:     late sinks × runs in which they were a deficit; near = same-faction developed systems
+            ≤ 24 transit ticks over own/unclaimed lanes; top-5 goods per horizon.
+Licenses:   supports both halves of the direction with a split by good: for gas, chemicals,
+            minerals, biomass (and textiles at 10K) the near stock exists and the FLOOR is what
+            withholds it — the producer-floor policy alone releases it; for ore and medicine the
+            neighbourhood is short together (also_deficit dominant, unlockable < shortfall) and only
+            an imported, held depot stock (the added-demand half) can shorten their wait. Rules out
+            spare-drained as a major cause at both horizons (≤ 13% of near candidates). Does NOT
+            say releasing the stock leaves the releasing world safe — it drops to 10 cycles of its
+            own demand; the spec decides whether depot status is gated on that world's own
+            Provision. Half of late sinks have no near same-faction system at all: for them only
+            the imported-stock half (or a claim) can help.
+```
+
+**Outcome:** confirmed. Floor-bound is the dominant fixable cause; spare-bound ruled out as a
+major cause (both horizons, cohort above). The direction goes to `/feature-spec` with both halves:
+the producer floor on relayed goods, and relayed demand where a neighbourhood is short together.
+
+### Raw output — `temp/depot-floor-diag.ts 600 42 16000 10000,16000` with the matcher hook (reverted after the run)
+
+```
+hookRows 25480 wallSeconds 159
+== t10000 window 9601-9840 runs=10 developed=174
+  {"good": "gas", "lateSinks": 96, "lateSinksWithNearSystem": 45, "lateSinkDeficitRuns": 194, "runsWithNear": 87, "nearCandidateRuns": 112, "nearClassShares": {"floor_bound_unlockable": 0.491, "spare_left": 0.116, "also_deficit": 0.339, "spare_drained": 0.054}, "runsAnyFloorUnlock": 0.552, "runsFloorUnlockCoversShortfall": 0.402, "runsAnySpareLeftNear": 0.149, "unlockableOverShortfall": 15.398}
+  {"good": "textiles", "lateSinks": 78, "lateSinksWithNearSystem": 34, "lateSinkDeficitRuns": 138, "runsWithNear": 62, "nearCandidateRuns": 80, "nearClassShares": {"floor_bound_unlockable": 0.4, "spare_left": 0.075, "also_deficit": 0.4, "spare_drained": 0.125}, "runsAnyFloorUnlock": 0.371, "runsFloorUnlockCoversShortfall": 0.371, "runsAnySpareLeftNear": 0.097, "unlockableOverShortfall": 2.027}
+  {"good": "chemicals", "lateSinks": 86, "lateSinksWithNearSystem": 40, "lateSinkDeficitRuns": 291, "runsWithNear": 174, "nearCandidateRuns": 220, "nearClassShares": {"floor_bound_unlockable": 0.305, "also_deficit": 0.568, "empty": 0.041, "spare_drained": 0.05, "spare_left": 0.018, "floor_bound_thin": 0.018}, "runsAnyFloorUnlock": 0.374, "runsFloorUnlockCoversShortfall": 0.27, "runsAnySpareLeftNear": 0.023, "unlockableOverShortfall": 9.309}
+  {"good": "ore", "lateSinks": 78, "lateSinksWithNearSystem": 37, "lateSinkDeficitRuns": 193, "runsWithNear": 118, "nearCandidateRuns": 139, "nearClassShares": {"floor_bound_unlockable": 0.324, "also_deficit": 0.547, "spare_left": 0.108, "spare_drained": 0.022}, "runsAnyFloorUnlock": 0.347, "runsFloorUnlockCoversShortfall": 0.237, "runsAnySpareLeftNear": 0.127, "unlockableOverShortfall": 0.488}
+  {"good": "minerals", "lateSinks": 87, "lateSinksWithNearSystem": 46, "lateSinkDeficitRuns": 205, "runsWithNear": 110, "nearCandidateRuns": 120, "nearClassShares": {"also_deficit": 0.558, "floor_bound_thin": 0.042, "floor_bound_unlockable": 0.367, "spare_left": 0.033}, "runsAnyFloorUnlock": 0.4, "runsFloorUnlockCoversShortfall": 0.327, "runsAnySpareLeftNear": 0.036, "unlockableOverShortfall": 18.429}
+== t16000 window 15601-15840 runs=10 developed=190
+  {"good": "gas", "lateSinks": 86, "lateSinksWithNearSystem": 40, "lateSinkDeficitRuns": 208, "runsWithNear": 84, "nearCandidateRuns": 111, "nearClassShares": {"also_deficit": 0.622, "floor_bound_unlockable": 0.315, "spare_drained": 0.054, "spare_left": 0.009}, "runsAnyFloorUnlock": 0.393, "runsFloorUnlockCoversShortfall": 0.333, "runsAnySpareLeftNear": 0.012, "unlockableOverShortfall": 14.344}
+  {"good": "ore", "lateSinks": 52, "lateSinksWithNearSystem": 29, "lateSinkDeficitRuns": 72, "runsWithNear": 47, "nearCandidateRuns": 54, "nearClassShares": {"spare_left": 0.222, "floor_bound_unlockable": 0.426, "spare_drained": 0.056, "also_deficit": 0.296}, "runsAnyFloorUnlock": 0.383, "runsFloorUnlockCoversShortfall": 0.34, "runsAnySpareLeftNear": 0.255, "unlockableOverShortfall": 0.614}
+  {"good": "minerals", "lateSinks": 65, "lateSinksWithNearSystem": 34, "lateSinkDeficitRuns": 88, "runsWithNear": 45, "nearCandidateRuns": 51, "nearClassShares": {"floor_bound_unlockable": 0.824, "also_deficit": 0.157, "spare_left": 0.02}, "runsAnyFloorUnlock": 0.889, "runsFloorUnlockCoversShortfall": 0.8, "runsAnySpareLeftNear": 0.022, "unlockableOverShortfall": 40.709}
+  {"good": "biomass", "lateSinks": 59, "lateSinksWithNearSystem": 22, "lateSinkDeficitRuns": 73, "runsWithNear": 24, "nearCandidateRuns": 28, "nearClassShares": {"floor_bound_unlockable": 0.821, "also_deficit": 0.071, "spare_drained": 0.107}, "runsAnyFloorUnlock": 0.875, "runsFloorUnlockCoversShortfall": 0.75, "runsAnySpareLeftNear": 0, "unlockableOverShortfall": 1.574}
+  {"good": "medicine", "lateSinks": 130, "lateSinksWithNearSystem": 68, "lateSinkDeficitRuns": 859, "runsWithNear": 471, "nearCandidateRuns": 638, "nearClassShares": {"floor_bound_unlockable": 0.053, "also_deficit": 0.944, "spare_drained": 0.003}, "runsAnyFloorUnlock": 0.064, "runsFloorUnlockCoversShortfall": 0.055, "runsAnySpareLeftNear": 0, "unlockableOverShortfall": 0.152}
+```
