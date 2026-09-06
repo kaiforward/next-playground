@@ -546,8 +546,10 @@ All three rolling figures are exponential averages with per-cycle weight `1 / RE
 (proposal 40, §7 — one 8-cycle refill moves `i` by 0.2u; from `r = u`, the deep term `R × r`
 falls under the buffer after `RESERVE_WINDOW_CYCLES × ln(R / F)` cycles of zero draw: ~55 at a
 40-cycle window, ~44 at 32, ~83 at 60), backed by five persisted optional fields on the market
-row — `realisedUse?`, `steadyInbound?`, `lateInboundShare?`, and the two since-last-fold
-accumulators the arrivals stage writes every tick, `inboundSinceFold?` and `lateInboundSinceFold?`.
+row — `realisedUse?`, `steadyInbound?`, `lateInboundShare?`, the two since-last-fold
+accumulators the arrivals stage writes every tick, `inboundSinceFold?` and `lateInboundSinceFold?`,
+and `supplierShortRuns?`, the drop rule's counter (§2), written by the directed-logistics processor
+beside the per-market fields it already writes.
 `r` needs no accumulator: the economy processor resolves the whole galaxy on the boundary tick
 (`cycleStartShard`, `lib/tick/shard.ts:81-84`; `economy.ts:72-83`) and folds its own run's `used`
 in the same pass. The one fold, in the economy processor at the cycle boundary, reads and zeroes
@@ -557,7 +559,7 @@ rates, and an unknown rate makes the world a plain consumer on the deep reserve 
 every world has today), so an old save loads unchanged and earns its roles over the following
 window. A freshly established colony starts unknown; the founding manifest's staged goods are not
 arrivals credits (`processors/directed-build.ts:832`, a separate write path). **Abandonment:**
-`resetAbandonedMarkets` (`lib/world/tick.ts:1014-1026`) deletes all five new fields alongside
+`resetAbandonedMarkets` (`lib/world/tick.ts:1014-1026`) deletes all six new fields alongside
 `honestUseRate`, so a resettled world starts unknown and opens as a consumer on the deep reserve,
 not as an idle market on a ten-cycle line.
 
@@ -809,7 +811,7 @@ WAREHOUSE_COVER — good-market-state (:187), market-analysis (:256 ratio)
   supplier (`production + i`, with the struck production as realised) and otherwise as a consumer
   — whose `r` falls as the strike suppresses its own draw, so its reserve shrinks toward the
   buffer over the window. Stated, intended: a striking refinery is not hoarding input.
-- **Save/load:** five optional market fields, one optional treasury field, all additive with an
+- **Save/load:** six optional market fields, one optional treasury field, all additive with an
   absent-reads-as-unknown rule — no `SAVE_FORMAT_VERSION` bump (`lib/world/save.ts:55-61`: the
   bump is for shapes an old save cannot satisfy; the six existing optional market signals set the
   precedent), and no guard changes (the loader validates no market rows, `:19-24`).
@@ -852,10 +854,10 @@ every line scaled by one per-faction `stockpileScale`. `SURPLUS_MARGIN` keeps on
 | Infrastructure decay | **indirect**: decay reads `logisticsFundingBound` (`lib/engine/infrastructure-decay.ts:113-119`), a gate that also suppresses planner proposals (`constants/directed-logistics.ts:90-100`), and this change can raise its incidence by raising total haul work through relayed multi-leg delivery (each leg billed, `processors/directed-logistics.ts:176`). Bounded by the funding band; read by the §6 harness guards (work per delivered unit, funding-bound incidence by faction). | — |
 | Directed logistics | the change: role test, lines, margin-free flag, drop rule. | — |
 | Directed build / planner | input gate (:999) unchanged call; founding staging plan (:190) capped at the deep line; `founderCover` (:778) re-denominated; structural scan (:426-538) unchanged (rate-based). | — |
-| Colonisation + founding manifest | the cap above (implementable at the plan's seed site `processors/directed-build.ts:188-190`, which governs every later line for the key and the readout at `construction.ts:70` alike); a fresh colony is a consumer with unknown rates → deep reserve; abandonment resets the five fields (§1). | — |
+| Colonisation + founding manifest | the cap above (implementable at the plan's seed site `processors/directed-build.ts:188-190`, which governs every later line for the key and the readout at `construction.ts:70` alike); a fresh colony is a consumer with unknown rates → deep reserve; abandonment resets the six fields (§1). | — |
 | Treasury / purse | `stockpileScale` on the treasury row; policy command widens; haul cost unchanged in rate, higher in volume where chains relay (§6 guard). | — |
 | Factions + relations | none — traversal and same-faction giving unchanged. | — |
-| Save format | five optional market fields, one optional treasury field, no bump (§8). | — |
+| Save format | six optional market fields, one optional treasury field, no bump (§8). | — |
 | Harness | four-role cohort, `donorReserve` threaded, latency metric + guards, transient reads (§6). Conservation identities are tonnage-based and role-blind (`conservation-analysis.ts:403-409,228,286`). | — |
 
 **4. Claims with measurement** — every mechanic sentence above carries a `file:line`; the numbers
@@ -909,3 +911,319 @@ inbound) and on claim 6.
 ### 11. Next stage
 
 Three `/spec-review` passes complete; owner: "okay perfect, go". → `/build-plan`.
+
+## Build plan — the supplier floor
+
+Spec: `## Spec` above (fourth cut, `0d18a82b`), three `/spec-review` passes recorded in
+`.agent-reviews/spec-logistics-gameplay-pass-2026-09-06-213657.md`. One spec completion made
+while resolving measures, stated here and folded into §1/§8 of the spec in the same commit: the
+drop rule (`SUPPLIER_DROP_RUNS` consecutive short runs with nothing credited) needs a persisted
+per-market counter, `supplierShortRuns?`, written by the directed-logistics processor beside the
+per-market fields it already writes — the sixth optional market field.
+
+### Resolution — every measure the spec names, to its producer
+
+| Measure (spec wording) | State | Producer |
+|---|---|---|
+| full-rate use `u` | exists | `WorldMarket.honestUseRate` → `GoodMarketState.demand` (`lib/tick/processors/good-market-state.ts:124-127,181`) |
+| realised use `r` | new | Task 4 (`SimulatedMarketEntry.used` → `MarketUpdate.realisedUse`) |
+| steady inbound `i` | new | Task 3 accumulates, Task 4 folds (`MarketUpdate.steadyInbound`) |
+| late-inbound share `l` | new | Task 3 accumulates, Task 4 folds (`MarketUpdate.lateInboundShare`) |
+| producer test `production > u`, not suppressed | exists | `lib/engine/directed-logistics.ts:112` |
+| self-supply gate | exists | `lib/engine/directed-logistics.ts:449` |
+| deficit test `stock + scheduledInbound < want × DEFICIT_FRACTION` | exists | `classifyMarketState` `:52-64`, called `:443` |
+| give line / want line per market | exists (authoring site), new (per role) | `good-market-state.ts:187-188` → Task 5 |
+| margin-free flag | new | Task 5 authors; Task 6 threads to `surplusDrawable` |
+| stockpile scale `k` | new | Task 7 (`WorldFactionTreasury.stockpileScale`), passed as `toGoodMarketStates` option |
+| `SUPPLIER_REPLENISHMENT`, `RESERVE_WINDOW_CYCLES`, `SUPPLIER_DROP_RUNS`, `SUPPLIER_WANT_COVER`, `SUPPLIER_MAX_LATENCY`, `SUPPLIER_LATE_SHARE`, `STOCKPILE_SCALE_STEPS` | new | Task 1 (`lib/constants/directed-logistics.ts`) |
+| consecutive short runs with nothing credited | new | Task 5 (`WorldMarket.supplierShortRuns?`, written by the directed-logistics processor) |
+| brake knee / ceiling | exists | `brakeKnee` (`lib/engine/tick.ts:127-142`) |
+| civilian `delivered` per entry | exists | `lib/engine/supply-chain.ts:35-36,153-155` |
+| inputs actually drawn per input good | new | Task 4 (`drawnByGood`, applied delta at `supply-chain.ts:143-146`) |
+| credited outbound quantity, per row, with latency | exists (in the credit block), new (as an accumulator) | `lib/tick/processors/goods-arrivals.ts:102-118` → Task 3 |
+| planner input gate "producer or supplier" | new | Task 6 (reads `production`, `steadyInbound` on `BuildGoodState`) |
+| founding staging cap `R × u × k` (the consumer deep line at full rate) | new | Task 5 publishes `consumerDeepLine` on `GoodMarketState`/`BuildGoodState`; Task 6 applies it |
+| `founderCover` denominator | exists → changed | `lib/tick/processors/directed-build.ts:778-779` → Task 6 |
+| harness cover per role, `donorReserve` per row | exists → changed | `lib/tick-harness/market-analysis.ts:246-271`, `cohort-analysis.ts:102-118` → Task 8 |
+| served-sink share with mean inbound latency > 24 ticks, and its guards | new | Task 9 (`lane-analysis.ts`; instrument shape from `temp/depot-diag.ts`) |
+| logistics work per delivered unit; funding-bound incidence | new | Task 9 |
+| physical cover at the ration line by role; anchor-event cohort; released tonnage first cycle; gate-excluded share | new | Task 9 |
+| water level | exists | `solveWaterLevel` (`lib/engine/shelf-levelling.ts:23-33`) |
+
+No `Interface` line below names a measure outside this table.
+
+### Task 1 — constants and their invariants
+
+Files: `lib/constants/directed-logistics.ts`, `lib/constants/__tests__/band-constants.test.ts`
+Interface: `DIRECTED_LOGISTICS` gains `SUPPLIER_REPLENISHMENT` (0.9), `RESERVE_WINDOW_CYCLES` (40),
+`SUPPLIER_DROP_RUNS` (4), `SUPPLIER_WANT_COVER` (12), `SUPPLIER_MAX_LATENCY_CYCLES` (4),
+`SUPPLIER_LATE_SHARE` (0.1), `STOCKPILE_SCALE_STEPS` (`readonly [0.75, 1, 1.5]`), each with the
+spec §7 docstring; `EXPORT_RESERVE_COVER`'s and `DONOR_RESERVE_COVER`'s docstrings widened per
+spec §9 row 2. The test file states the spec §2/§4/§7 constraints as assertions, and rewords the
+existing brake-ceiling case (`:78-88`) as the full-rate statement it now is.
+Proves: `SUPPLIER_WANT_COVER × DEFICIT_FRACTION` above `EXPORT_RESERVE_COVER` fails; the ration
+constraint at the lowest scale step fails when the step drops; the physical exposure constraint
+(`F × k_min > RATION_COVER + SUPPLIER_MAX_LATENCY_CYCLES`) fails when the latency constant rises
+past it; the cascade constraint fails when the drop-run count or the logistics interval rises;
+the existing 52 ≤ 56 case still fails when either constant crosses.
+Consumes: nothing.
+
+### Task 2 — persisted fields, row shapes, the read path, the abandonment clear
+
+Files: `lib/world/types.ts`, `lib/tick/world/directed-logistics-world.ts`, `lib/world/tick.ts`
+(`marketRowsBySystem` `:452-477`, `resetAbandonedMarkets` `:1014-1029`), `lib/engine/directed-logistics.ts`
+(`GoodMarketState` `:125-180`), `lib/engine/directed-build.ts` (`BuildGoodState` `:61-104`),
+`lib/tick/processors/good-market-state.ts` (`:176-204`, the copy onto `GoodMarketState`),
+`lib/world/__tests__/` (the resettlement test beside the existing clear)
+Interface: `WorldMarket` gains six optionals — `realisedUse?`, `steadyInbound?`,
+`lateInboundShare?`, `inboundSinceFold?`, `lateInboundSinceFold?`, `supplierShortRuns?` — each
+documented "absent = unknown / 0" per spec §1; `WorldFactionTreasury.stockpileScale?: number`.
+`MarketRowForLogistics` gains `realisedUse?`, `steadyInbound?`, `lateInboundShare?`,
+`supplierShortRuns?`; `marketRowsBySystem` copies them. `GoodMarketState` gains `steadyInbound?`,
+`realisedUse?`, `lateInboundShare?`, `marginFree: boolean`, `consumerDeepLine: number`;
+`BuildGoodState` gains `steadyInbound?`, `marginFree?`, `consumerDeepLine?`. `resetAbandonedMarkets`
+deletes the six market fields. No behaviour changes in this task: `marginFree` is authored `false`
+and `consumerDeepLine` equals today's `donorReserve` until Task 5.
+Proves: a resettled system's market rows carry none of the six fields; a row built by
+`marketRowsBySystem` carries every value the `WorldMarket` had; an absent field on the world row
+reaches `GoodMarketState` as absent, never as 0; a save written before this task loads with every
+market on today's lines (the existing role of the deep reserve unchanged — the vacuity check for
+"nothing moved yet").
+Consumes: nothing.
+
+### Task 3 — arrivals accumulate inbound and late inbound
+
+Files: `lib/tick/world/goods-arrivals-world.ts` (`MarketCreditUpdate` `:42-45`),
+`lib/tick/adapters/memory/goods-arrivals.ts` (`creditMarkets` `:53-`), `lib/tick/processors/goods-arrivals.ts`
+(`:96-135`), `lib/tick/processors/__tests__/goods-arrivals.test.ts`, `lib/tick/adapters/memory/__tests__/`
+Interface: `MarketCreditUpdate` gains `creditedInbound?: number` and `lateInbound?: number` (this
+tick's outbound credit and the part of it whose `arrivalTick − dispatchTick` exceeds
+`SUPPLIER_MAX_LATENCY_CYCLES × CYCLE_LENGTH`); `creditMarkets` adds them onto the row's
+`inboundSinceFold` / `lateInboundSinceFold` (absent → 0 before adding). The processor sets both
+only inside the `credited > 0` outbound block (`:102-114`), never on the return-leg path (`:80-94`)
+and never for the uncredited remainder.
+Proves: a return leg credits stock but moves neither accumulator; a fully-returned outbound row
+(zero room) moves neither; a row exactly at the latency limit counts as on-time and one tick over
+counts as late; two credits in consecutive ticks sum, not overwrite; the conservation identity's
+credit term (`appliedCreditTotal`) is unchanged by the new fields.
+Consumes: Task 1 (`SUPPLIER_MAX_LATENCY_CYCLES`), Task 2 (fields).
+
+### Task 4 — the economy emits realised use and folds all three rates
+
+Files: `lib/engine/supply-chain.ts` (`:85-170`), `lib/tick/world/economy-world.ts` (`MarketUpdate`
+`:48-67`), `lib/tick/adapters/memory/economy.ts` (`applyMarketUpdates` `:177-188`),
+`lib/tick/processors/economy.ts` (`:150-210`), `lib/engine/__tests__/supply-chain.test.ts`,
+`lib/tick/processors/__tests__/economy.test.ts`
+Interface: `SimulatedMarketEntry` gains `used: number` — civilian `delivered` plus the *applied*
+input removals attributed to this entry's own good (`drawnByGood`, mirroring
+`realisedByGood`/`deliveredByGood`, summed as `before − max(0, before − perOutput × actualOutput)`
+at the draw site). `MarketUpdate` gains `realisedUse`, `steadyInbound`, `lateInboundShare`
+(the folded rates, per reference cycle via `catchUpFactor`, exponential average with weight
+`1 / RESERVE_WINDOW_CYCLES`, seeded from the first observation when the stored rate is absent) and
+zeroes `inboundSinceFold` / `lateInboundSinceFold`. The adapter writes all five.
+Proves: a metals factory's draw lands on the ore row's `used`, not on the metals row; when two
+consumers share an input and the second's desired draw exceeds what remains, `used` equals what
+was actually removed; one 8-cycle refill moves a settled `steadyInbound` by 0.2 of the rate, not
+to it; a market with no prior rate takes this cycle's value rather than averaging against 0; the
+accumulators read 0 after the fold; `maxStock` overflow at `:158` never enters `used`.
+Consumes: Task 1 (`RESERVE_WINDOW_CYCLES`), Task 2 (fields), Task 3 (accumulators).
+
+### Task 5 — roles author the two lines
+
+Files: `lib/tick/processors/good-market-state.ts` (`:176-204` and the `toGoodMarketStates` options),
+`lib/tick/processors/directed-logistics.ts` (the per-market write beside `unservedShortfall`),
+`lib/tick/world/directed-logistics-world.ts` (the market write shape), `lib/tick/adapters/memory/directed-logistics.ts`,
+`lib/tick/processors/__tests__/good-market-state.test.ts`, `lib/tick/processors/__tests__/directed-logistics.test.ts`
+Interface: `toGoodMarketStates(source, opts)` — `opts` gains `stockpileScale: number` (1 where the
+caller has no faction). Per market it authors, from `u`, `r`, `i`, `l`, `production`,
+`productionSuppressed`, `supplierShortRuns` and `anchorMult`, exactly spec §2's table and §4's
+anchor rule: `logisticsTarget` (the want), `donorReserve` (the give line), `marginFree`,
+`consumerDeepLine` (`DONOR_RESERVE_COVER × u × k × anchorMult`), and exposes the role as
+`role: "producer" | "supplier" | "consumer" | "idle"` (idle = consumer whose buffer term binds).
+The directed-logistics processor writes `supplierShortRuns` per market after each run: incremented
+where the market held the supplier role, was classified short this run and had `inboundSinceFold`
+0 at the run; reset to 0 otherwise. The supplier test reads `supplierShortRuns <
+SUPPLIER_DROP_RUNS` as one of its conditions.
+Proves: a full-rate consumer (`r = u`, `i` 0) gets exactly today's two lines at `k` 1 — the
+vacuity check that nothing moved for the untreated; a part-producer at `production` 0.95u with no
+credits is a supplier and is not blocked by an unknown `l`; a world whose test is carried by
+inbound and whose late share sits one step over `SUPPLIER_LATE_SHARE` is a consumer; a refinery at
+`r` 0.1u gets the buffer lines and `marginFree`; `k` 0.75 scales a producer's line, not only a
+consumer's; an anchor shift of 0.5 moves the deep terms and leaves the buffer terms; the counter
+reaches `SUPPLIER_DROP_RUNS` after four short uncredited runs and the fifth run's lines are the
+consumer's, while one credited run in between resets it.
+Consumes: Task 1, Task 2, Task 4 (the rates on the row).
+
+### Task 6 — `surplusDrawable` takes the line; its four callers; the founding cap; `founderCover`
+
+Files: `lib/engine/directed-logistics.ts` (`surplusDrawable` `:104-118`, matcher `:492`),
+`lib/engine/directed-build.ts` (`:993-1004`, `:997-999`), `lib/tick/processors/directed-build.ts`
+(`:183-195`, `:770-791`), `lib/services/construction.ts` (`:58-70`), `lib/tick/types.ts` (`:209-213`),
+`lib/engine/__tests__/directed-logistics.test.ts`, `lib/engine/__tests__/directed-build.test.ts`,
+`lib/tick/processors/__tests__/directed-build.test.ts`, `lib/services/__tests__/`
+Interface: `surplusDrawable(stock, giveLine, marginFree, demand, production, productionSuppressed)` —
+the producer branch reads `giveLine` (it no longer recomputes `EXPORT_RESERVE_COVER × demand`);
+the ordinary branch applies `SURPLUS_MARGIN` only when `marginFree` is false. All four call sites
+pass the row's authored line and flag. The planner's `surplusSystemsByGood` (`:994-1004`) admits a
+market only where its role is producer or supplier (the spec's test on `production` and
+`steadyInbound`, `SUPPLIER_REPLENISHMENT × demand`). The founding staging plan's seed at `:188-190`
+is additionally capped at `max(0, stock − consumerDeepLine)`; `construction.ts:70` computes the same
+cap for the readout. `founderCover` divides by `consumerDeepLine`; its docstring in
+`lib/tick/types.ts:209-213` is re-authored per spec §5.
+Proves: a producer's drawable moves when its passed line moves (the Task 5 `k` case reaches it
+end to end); a supplier at 15 cycles is drawable with no margin while a full-rate consumer at 50 is
+not; an idle world with 30 cycles of released stock never enters `surplusSystemsByGood`; a founding
+manifest cannot plan a draw that takes a supplier below its consumer deep line, and
+`applyFoundingStagingDraws` never refuses a draw the plan produced; `founderCover` reads the same
+value for the same physical stock on a producer and a consumer founder.
+Consumes: Task 5 (`donorReserve`, `marginFree`, `consumerDeepLine`, `steadyInbound` on the states).
+
+### Task 7 — the stockpile scale: treasury field, policy command, every `toGoodMarketStates` caller
+
+Files: `lib/world/types.ts` (`WorldFactionTreasury`), `lib/world/gen.ts` (`:244`, the treasury mint),
+`lib/schemas/treasury.ts` (`:14-29`), `lib/services/treasury.ts` (`:20-40`, `:50-76`), `lib/types/api.ts`
+(`FactionTreasuryData` `:641-`, `TreasuryPolicyData` `:659-662`), `lib/tick/processors/directed-logistics.ts`
+(`:174-178`, beside `fundingByFaction`), `lib/tick/world/directed-logistics-world.ts` (params),
+`lib/world/tick.ts` (`:1758` and `:1938`, where `fundingByFaction` is built for the logistics and build params), `lib/engine/directed-build.ts`
+(`:158`, `:290`, `:403`), `lib/services/construction.ts` (`:58`), `lib/tick-harness/cohort-analysis.ts`
+(`:85`, `:114`), `lib/tick-harness/market-analysis.ts` (`:496`), `lib/hooks/use-faction-treasury.ts`,
+`lib/services/__tests__/treasury.test.ts` (or the nearest existing), `lib/schemas/__tests__/`
+Interface: `treasuryPolicySchema` gains `stockpileScale: z.literal` over `STOCKPILE_SCALE_STEPS`,
+optional, and the refine accepts it as a third sufficient field; `updateTreasuryPolicy` writes it;
+`TreasuryPolicyData` and `FactionTreasuryData` carry `stockpileScale: number`; a treasury minted at
+world-gen or loaded without the field reads 1. The directed-logistics params gain
+`stockpileScaleByFaction: ReadonlyMap<string, number>` built beside `fundingByFaction`; every one of
+the eight `toGoodMarketStates` callers passes the owning faction's value, 1 for the null group and
+for any system without a treasury row.
+Proves: a policy update carrying only `stockpileScale` is accepted and persisted; a value off the
+step list is rejected at the schema; an independent (null-faction) system's lines are unscaled
+whatever any faction set; the harness call sites read the same scaled lines the tick does for a
+faction at 1.5 (compare a row's `donorReserve` through both paths); an old save's faction reads 1.
+Consumes: Task 5 (the option), Task 1 (`STOCKPILE_SCALE_STEPS`).
+
+### Task 8 — harness roles and cover read the authored lines
+
+Files: `lib/tick-harness/types.ts` (`MARKET_ROLES` `:29-30`, `StockedRole` `:101`, `RoleCoverEntry` `:116-121`),
+`lib/tick-harness/cohort-analysis.ts` (`:45-60`, `:102-118`), `lib/tick-harness/market-analysis.ts`
+(`:246-271`), `lib/tick-harness/build-analysis.ts` (`:147-148`, `:190`, `:309-343`), `lib/tick-harness/__tests__/`
+Interface: `MARKET_ROLES` becomes `["producer", "supplier", "consumer", "idle", "part-producer", "inert"]`
+— the existing `self-supplier` renamed `part-producer`, the four logistics roles added from
+`GoodMarketState.role`; `classifyMarketRole` returns the logistics role where the state carries one
+and falls back to the production-only taxonomy only for `inert`/`part-producer`. `logisticsTargetsByKey`
+carries `donorReserve` and `marginFree` beside `logisticsTarget`; `computeCoverLevels` reads them
+instead of `DONOR_RESERVE_COVER / WAREHOUSE_COVER`. `founderCoverAfter` / `medianFounderCoverAfter`
+keep their names with the re-authored meaning in their comments.
+Proves: a supplier at 15 cycles reads as surplus in the harness exactly when the matcher would draw
+it; a full-rate consumer's cover reading is unchanged from today's at `k` 1; the four-role cover
+table has no market counted twice; a `part-producer` row is never also a `supplier` row.
+Consumes: Task 5 (`role`, `marginFree`), Task 6 (`founderCover` meaning), Task 7 (harness callers pass `k`).
+
+### Task 9 — the re-measure metric and its guards in the harness
+
+Files: `lib/tick-harness/lane-analysis.ts` (`LaneRunAccumulator` `:37-52`, `sampleLaneDispatch` `:143-`,
+`LaneMetricsSummary` `:232-249`, `summariseLanes` `:320-`), `lib/tick-harness/runner.ts` (`:546` and the
+lane report print), `lib/tick-harness/logistics-analysis.ts` (work and funding-bound reads),
+`lib/tick-harness/__tests__/`, `temp/depot-diag.ts` (the reference instrument, not committed)
+Interface: `LaneMetricsSummary` gains `inboundLatency: { servedSinks; shareOver24Ticks;
+shareOver24TreatedCohort; gateExcludedShare; medianRaiseSize; haulsPerServedSink; perHaulLatencyP50;
+perHaulLatencyP90 }` read over the last ten cycles before each horizon from the dispatch samples
+the accumulator already takes (each row carries `dispatchTick`, `arrivalTick`, `toSystemId`,
+`quantity`); `logisticsWorkPerDeliveredUnit` and `fundingBoundIncidenceByFaction`;
+`physicalCoverAtRationByRole`; `anchorEventCohort` (markets under `anchorMult < 0.5`, by role and
+brake state); `releasedTonnageFirstCycle` (drawable that became so on the first run after a role
+change). The runner prints them in the lane section at both horizons.
+Proves: the served-sink share reproduces `temp/depot-diag.ts`'s 96% reading on the pre-change
+baseline (seed 42, 600, 10K and 16K) — the vacuity check for the metric; a haul of exactly 24 ticks
+is not "over 24"; the treated-cohort share excludes gate-excluded sinks and only them; work per
+delivered unit reads 1× on a galaxy with only direct hauls; released tonnage reads 0 on a run with
+no role change.
+Consumes: Task 3/4 (`lateInboundShare` for the gate-excluded cohort), Task 5 (`role`), Task 8 (role cohorts).
+
+### Gate — the galaxy read
+
+Arms: baseline (`main` at `9cf32fa9`, harness metrics from Task 9 applied on top so both arms read
+the same instrument) vs branch; seed 42, 600 systems; 1K, 10K, 16K.
+Reads: every conservation identity; famine share and Provision by world cohort vs baseline at the
+same tick; `inboundLatency.shareOver24TreatedCohort` against the §10 falsifier (kill line ≥ 90% at
+10K and 16K) with its guards beside it; `logisticsWorkPerDeliveredUnit` and funding-bound
+incidence; `physicalCoverAtRationByRole` (no role's median under `RATION_COVER`);
+`releasedTonnageFirstCycle` at the first run after the fields seed; `medianCover` per role, read as
+by-construction (never as a regression).
+Merge condition: identities pass; the kill line is not hit on the treated cohort; famine share is
+not worse than baseline beyond a coarse health bar (no world cohort's famine share more than
+doubles); no role's physical cover at the ration line collapses. **Booked at this gate:** the depot
+re-measure decision (roadmap row *Next step*) reads `shareOver24TreatedCohort` and
+`gateExcludedShare` from this run; and the haul-cost retune question (`LOGISTICS_RATE_PER_WORK`)
+reads `logisticsWorkPerDeliveredUnit` here — both stay on the roadmap row with these numbers
+attached.
+
+### Task 10 — surfaces: the Logistics tab and the treasury card
+
+Files: `lib/types/api.ts` (`LogisticsGoodRow` `:127-`), `lib/services/trade-flow.ts` (`getSystemLogistics`
+`:87`), `lib/hooks/use-system-logistics.ts`, `components/system/logistics-panel.tsx`,
+`components/factions/treasury-card.tsx` (`:118-146`), `lib/hooks/use-faction-treasury.ts`,
+`components/system/__tests__/logistics-panel.test.tsx` (new), `components/factions/__tests__/treasury-card.test.tsx`
+Interface: `LogisticsGoodRow` gains `role`, `givesDownToCycles`, `wantCycles`, `steadyInbound?`,
+`realisedUse?`, `lateInboundShare?`; the panel renders the role word and "gives down to N cycles"
+per good, with the deciding numbers beside the role (supplier: steady inbound and late share;
+idle: realised use against full-rate use). The treasury card renders a stepped stockpile-scale
+control under the funding sliders and commits it through `updateTreasuryPolicy`. All strings
+through `/game-copy`.
+Reuse: `SegmentedControl` (`components/form/segmented-control.tsx`, `SegmentedControlProps<T>
+extends RadioOptionGroupBaseProps<T>` — the stepped control); `FundingSlider`'s row layout in
+`treasury-card.tsx:121-146` as the placement precedent; `TermLabel` (`components/ui/term-label.tsx`, `TermLabelProps { id: TermId; children? }` — the role
+words become glossary terms so the label carries its definition); `StatRow` (`components/ui/stat-row.tsx`) for the two
+deciding numbers; `Badge` (`components/ui/badge.tsx`) only if the role word needs a tone. New: none.
+Proves: a supplier row shows the word and its two numbers and a consumer row shows neither number;
+the stockpile control offers exactly the step list and committing a step dispatches one policy
+command with only that field; a market with an unknown rate renders as a consumer with no
+placeholder number; the role word is read from the DOM, not rebuilt from props (the component-test
+vacuity rule).
+Consumes: Task 5 (`role` and lines on the state → service), Task 7 (`stockpileScale` on
+`FactionTreasuryData` and the command).
+
+### Task 11 — doc fold
+
+Files: `docs/active/gameplay/economy-autonomic-agency.md` (the donor floors / use-figure section and
+the logistics-budget section's "no money model" line), `docs/SPEC.md` (Directed Logistics
+paragraph: three roles, the stockpile scale), `docs/ROADMAP.md` (the logistics row: haul cost note, the gate's
+two bookings with numbers), `docs/build-plans/logistics-gameplay-pass.md` (deleted at ship, after
+its durable content — the six evidence claims' one-line meanings — lands in the active doc's
+rationale).
+Interface: none.
+Proves: `npm run build` green with `docs/` excluded from the Tailwind scan (the backslash-hex trap);
+the doc-sync test's entry count matches; no reference to `reserveCover`, `inboundLatency` (the
+withdrawn first-cut names) survives in docs, code or memory.
+Consumes: everything above.
+
+### Verification
+
+The feature is proven at the Gate, in the galaxy: the treated-cohort latency share against the
+§10 falsifier, both horizons, with the guards; conservation identities; famine and Provision by
+cohort. Build gate `npm run build`; unit gate `npx vitest run`; every new test red-proofed against
+its `Proves` list. New harness metrics: Task 9, because the symptom (stock released nearer) hides
+inside the aggregate cover reading that this feature moves by construction.
+
+### Doc fold
+
+Stale on ship: `economy-autonomic-agency.md` (donor floors, "no money model" wording),
+`docs/SPEC.md` (Directed Logistics), the constants' docstrings (Task 1). Superseded: nothing in
+`docs/planned/`. This working file is deleted on the PR that ships, after the fold.
+
+### Not covered
+
+- The depot / synthetic relayed demand — **booked at the gate** (the roadmap row's *Next step*
+  already names the re-measure; the gate attaches the numbers).
+- Retuning `LOGISTICS_RATE_PER_WORK` — **booked at the gate** (work per delivered unit attaches).
+- The four remaining roadmap-row items (founding freight on real ships, people-movement
+  unification, input-proximity weighting, player priority lever) — **booked** on the row already.
+- Claim 6's brake attribution (why the refineries stopped drawing) — **dropped** as a question for
+  this feature: the rule reads realised removals and does not need the cause; if the harness's
+  anchor-event or physical-cover reads show refineries starving on restart, that is the gate's
+  finding, not this plan's.
+- The physical warehouse model (storage as a built limit) — **booked** (roadmap, Unqueued row).
+
+### Net-new UI
+
+None. The stepped control composes `SegmentedControl`; the role word and numbers compose
+`TermLabel` and `StatRow`.
