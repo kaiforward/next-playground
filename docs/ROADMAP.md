@@ -74,7 +74,10 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   *Next step:* lane mechanics and their map/panel surfaces have shipped on `shared/logistics-lanes`
   (`docs/active/gameplay/logistics-lanes.md`) — real routing, capacity, scheduled transit,
   investment and claiming, the lane layer and card, in-transit rows. What remains is the unbuilt
-  leanings above.
+  leanings above. **Decided 2026-09-06:** hauling cost lands as a funded pool (treasury-billed, own
+  slider, one tunable constant); who owns production and movement is the faction-direction pass's
+  question. Depot viability measure and working file:
+  [logistics-gameplay-pass.md](./build-plans/logistics-gameplay-pass.md).
 - **[M] Map drawing tool — player paints where stars generate.** Second author of the map-gen
   density grid (`docs/active/gameplay/universe.md`): a New Game canvas writes the same 0–1 grid
   the procedural clusters produce, so galaxy shape becomes paintable with no second generation
