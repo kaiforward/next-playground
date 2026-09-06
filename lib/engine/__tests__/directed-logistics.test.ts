@@ -784,6 +784,32 @@ describe("matchFactionTransfers — levelling the shelves within a good", () => 
     expect(transfers.every((t) => t.fromSystemId !== "Dsat")).toBe(true);
     expect(transfers.reduce((sum, t) => sum + t.cost, 0)).toBe(10);
   });
+
+  it("still spends the pool on the second world when the first sits under the ration line, instead of stalling the level below its own reach", () => {
+    // R's physical stock (5) sits under the ration line (RATION_COVER 2 × demand 5 = 10), so
+    // `countedStock`/`levelCover` read physical stock alone (1 cycle) while its 70-unit
+    // scheduledInbound still clears the sink test (`c.shortfall` reads stock + inbound), leaving it a
+    // 25-unit remaining want (100 target − 5 stock − 70 inbound). Capping `targetCover` at
+    // `levelCover + shortfall/demand` (6 cycles) rather than the bare `logisticsTarget/demand` (20)
+    // is what lets the solver see R can only ever absorb those 25 units — uncapped, R reads as
+    // wanting a cover it cannot reach on physical stock, the level lands under Q's own 10-cycle
+    // levelCover, and Q draws nothing while 15 of the donor's 40 sit unspent.
+    const donor = sys("A", 1000, { goodId: "food", stock: 40, logisticsTarget: 0, demand: 0, donorReserve: 0 });
+    const r = sys("R", 0, {
+      goodId: "food", stock: 5, logisticsTarget: 100, demand: 5, scheduledInbound: 70,
+    });
+    const q = sys("Q", 0, { goodId: "food", stock: 50, logisticsTarget: 100, demand: 5 });
+
+    const { transfers, unservable } = matchFactionTransfers([donor, r, q], oneHop);
+    expect(transfers).toMatchObject([
+      { toSystemId: "R", quantity: 25 },
+      { toSystemId: "Q", quantity: 15 },
+    ]);
+    expect(transfers.reduce((sum, t) => sum + t.quantity, 0)).toBe(40);
+    // Q's 35-unit remaining want (50 shortfall − 15 drawn) is genuinely unservable once the donor's
+    // 40 drawable is exhausted — not left on the table by an over-stated R.
+    expect(unservable).toEqual([{ goodId: "food", systemId: "Q", shortfall: 35 }]);
+  });
 });
 
 describe("goodsInNecessityOrder", () => {
@@ -975,7 +1001,7 @@ describe("matchFactionTransfers — booked routing, the per-deficit skip, and bl
   it("does not treat a saturated (price-null) donor as unservable when it is still structurally reachable", () => {
     // D1 holds ample drawable (100) but its only path to B is currently saturated — `price` returns
     // null (congestion), exactly as a real booker's `priceFrom` would for a lane at capacity — while
-    // `reachable` reports true (the path exists, only saturation closes it). the reachable
+    // `reachable` reports true (the path exists, only saturation closes it). The reachable
     // drawable reads `reachableFrom`, not `priceFrom`, so this deficit's 50-unit want is structurally
     // closeable and must not be reported unservable, even though nothing can actually ship this run.
     const d1 = sys("D1", 100, { goodId: "food", stock: 150, logisticsTarget: 50, demand: 5 });

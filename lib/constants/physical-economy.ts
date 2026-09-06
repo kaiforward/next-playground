@@ -101,6 +101,10 @@ export const GOOD_CONSUMPTION: Record<string, number> = scaleRecord({
  * relative shape matters; magnitudes are a first draft and the simulator owns the finals. Moving any
  * weight moves the scenario arithmetic the shortage cut was drawn against — re-derive it (see
  * lib/constants/__tests__/band-constants.test.ts), don't nudge the cut.
+ *
+ * Also fixes the order a faction's goods are hauled in when the shared haul budget or a lane binds
+ * (`goodsInNecessityOrder`, `lib/engine/directed-logistics.ts`) — descending necessity, so a bound
+ * budget or a saturated lane cuts the least necessary good first.
  */
 export const GOOD_NECESSITY: Record<string, number> = {
   // Survival — losing either of these must be able to collapse a system.

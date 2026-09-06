@@ -804,7 +804,7 @@ describe("getAlertData", () => {
   });
 
   describe("Demand unservable", () => {
-    it("counts a system unservable in three goods once, at its largest shortfall — not three times and not the sum", () => {
+    it("counts a system unservable in three goods once, at whichever good's shortfall is the most cycles of its demand — not the largest raw quantity and not the sum", () => {
       const world = seatWorld();
       const pid = world.player!.controlledFactionId;
       const [target, servable] = spareSystemIds(world, 2);
@@ -816,9 +816,11 @@ describe("getAlertData", () => {
         ]),
       );
       const withFixture = withMarketRows(withTargets, [
-        marketRow(target, "food", { unservedShortfall: 5 }),
-        marketRow(target, "ore", { unservedShortfall: 20 }),
-        marketRow(target, "metals", { unservedShortfall: 8 }),
+        // metals: 8 / 2 = 4.0 cycles of its own demand — the biggest hole in cycles, so this is the
+        // good that names the instance despite ore's larger raw quantity (20 / 20 = 1.0 cycle).
+        marketRow(target, "food", { unservedShortfall: 5, demandRate: 10 }), // 0.5 cycles
+        marketRow(target, "ore", { unservedShortfall: 20, demandRate: 20 }), // 1.0 cycle
+        marketRow(target, "metals", { unservedShortfall: 8, demandRate: 2 }), // 4.0 cycles
         // A row with no unservedShortfall never contributes — a merely funding-bound deficit
         // (logisticsFundingBound) is a different, temporary condition.
         marketRow(servable, "food", { logisticsFundingBound: true }),
@@ -828,9 +830,69 @@ describe("getAlertData", () => {
       const unservable = category("demand_unservable");
       expect(unservable.instances.filter((i) => i.systemId === target)).toHaveLength(1);
       expect(unservable.instances.map((i) => i.systemId)).not.toContain(servable);
-      // Sorts by the worst (largest) unservedShortfall — ore's 20 dominates food's 5, metals' 8, and
-      // the sum (33) they would produce if this wrongly accumulated instead of taking the max.
-      expect(unservable.instances[0].measure).toBe("ore unserved by 20.0");
+      // Most cycles wins — metals' 4.0 beats ore's 1.0 and food's 0.5, even though ore's raw
+      // shortfall (20) is the largest of the three and would win a by-quantity comparison.
+      expect(unservable.instances[0].measure).toContain("metals unserved by 8.0");
+    });
+
+    it("sorts the system whose shortfall is the most cycles of its demand first, even when its raw quantity is the smaller of the two", () => {
+      // capital: a large shortfall (100) that its own demand (50 a cycle) would use up in 2 cycles —
+      // a big number, a shallow hole. colony: a small shortfall (2) that is 20 cycles of its demand
+      // (0.1 a cycle) — a deep hole. The colony must sort first; a by-quantity sort would put the
+      // capital first instead.
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [capital, colony] = spareSystemIds(world, 2);
+      const withTargets = withSystems(
+        world,
+        new Map([
+          [capital, developedPatch(pid)],
+          [colony, developedPatch(pid)],
+        ]),
+      );
+      const withFixture = withMarketRows(withTargets, [
+        marketRow(capital, "food", { unservedShortfall: 100, demandRate: 50 }), // 2 cycles
+        marketRow(colony, "food", { unservedShortfall: 2, demandRate: 0.1 }), // 20 cycles
+      ]);
+      setWorld(withFixture);
+
+      const unservable = category("demand_unservable");
+      const order = unservable.instances
+        .filter((i) => i.systemId === capital || i.systemId === colony)
+        .map((i) => i.systemId);
+      expect(order).toEqual([colony, capital]);
+    });
+
+    it("shows both the raw quantity and the cycles of demand it represents in the measure", () => {
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [target] = spareSystemIds(world, 1);
+      const withTarget = withSystems(world, new Map([[target, developedPatch(pid)]]));
+      // 6 / 6 = 1.0 cycle = 24 ticks = 6 days (TICKS_PER_DAY 4), under formatDuration's 45-day
+      // whole-days branch — the same conversion `survival_stock_falling` already pins.
+      const withFixture = withMarketRows(withTarget, [
+        marketRow(target, "food", { unservedShortfall: 6, demandRate: 6 }),
+      ]);
+      setWorld(withFixture);
+
+      const unservable = category("demand_unservable");
+      expect(unservable.instances[0].measure).toBe("food unserved by 6.0 — ≈6 days of demand");
+    });
+
+    it("prefers honestUseRate over demandRate when both are present", () => {
+      // demandRate (100) would read 0.05 cycles; honestUseRate (1) reads 5 cycles instead — the
+      // measure and the sort must both follow the USE figure, not the floored pricing rate.
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [target] = spareSystemIds(world, 1);
+      const withTarget = withSystems(world, new Map([[target, developedPatch(pid)]]));
+      const withFixture = withMarketRows(withTarget, [
+        marketRow(target, "food", { unservedShortfall: 5, demandRate: 100, honestUseRate: 1 }),
+      ]);
+      setWorld(withFixture);
+
+      const unservable = category("demand_unservable");
+      expect(unservable.instances[0].sortKey).toBe(-5);
     });
 
     it("excludes a row with no shortfall and one whose shortfall is 0 — absence-or-zero is servable, never demandRate", () => {

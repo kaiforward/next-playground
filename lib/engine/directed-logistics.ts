@@ -333,8 +333,9 @@ interface Deficit {
   systemId: string;
   goodId: string;
   /** The full want to the warehousing target at classification time
-   *  (`logisticsTarget − stock − scheduledInbound`) — `unservable`'s numerator and `fundingBound`'s
-   *  materiality base. Never the size of a draw. */
+   *  (`logisticsTarget − stock − scheduledInbound`). Only feeds `unservable`'s figure where this good
+   *  has no reachable donor at all — `unservable`'s general numerator is `remainingCap`, and
+   *  `fundingBound`'s materiality base is `stoppedWant`. Never the size of a draw. */
   shortfall: number;
   /** The owning system's position in the input array — the draw order's tie-break. */
   systemOrder: number;
@@ -455,6 +456,7 @@ export function matchFactionTransfers(
         // keeps a fixture that states otherwise out of every division rather than letting an
         // Infinity or a NaN into the solver.
         const uses = g.demand > 0;
+        const currentLevelCover = uses ? levelCover(g) : 0;
         list.push({
           systemId: s.systemId,
           goodId: g.goodId,
@@ -465,8 +467,17 @@ export function matchFactionTransfers(
           // its warehouse level says, and should not be raised ahead of one idle for want of this
           // very delivery. Membership above and every quantity below stay on the use figure.
           orderCover: orderCover(g),
-          levelCover: uses ? levelCover(g) : 0,
-          targetCover: uses ? g.logisticsTarget / g.demand : 0,
+          levelCover: currentLevelCover,
+          // Capped at levelCover + shortfall/demand, not just logisticsTarget/demand: `levelCover`
+          // is read off PHYSICAL stock alone once a market sits under the ration line
+          // (`countedStock`), while `shortfall` (and so `remainingCap`) is computed against
+          // `stock + scheduledInbound`. The two denominators differ by exactly the in-flight
+          // quantity for a ration-line world, so `logisticsTarget / demand` alone states a cover
+          // this world cannot actually reach — the solver over-states its want, the level lands too
+          // low, and pool is left unspent while later worlds in the same pass draw nothing.
+          targetCover: uses
+            ? Math.min(g.logisticsTarget / g.demand, currentLevelCover + c.shortfall / g.demand)
+            : 0,
           demand: uses ? g.demand : 0,
           remainingCap: c.shortfall,
           stoppedDonorId: null,
@@ -666,8 +677,12 @@ export function matchFactionTransfers(
         const d = levelling[i];
         // A level at or above this world's own target is a full fill: it is sized off the sink
         // test's own shortfall rather than the cover round-trip, so an ample-supply run places
-        // exactly the quantity it classified, free of float residue.
-        const want = level >= d.targetCover
+        // exactly the quantity it classified, free of float residue. A `demand <= 0` world's
+        // `targetCover` is 0, which this comparison alone would misread as "level already clears
+        // it" and hand it a full `remainingCap` — so it is excluded here too, wanting nothing, the
+        // same "contributes nothing" `shelf-levelling.ts` states for it. Unreachable on the live
+        // path (a deficit implies positive demand); kept for a fixture that states otherwise.
+        const want = d.demand <= 0 ? 0 : level >= d.targetCover
           ? d.remainingCap
           : Math.min(raiseFor(levelWorldOf(d), level), d.remainingCap);
         if (want <= 0) continue;

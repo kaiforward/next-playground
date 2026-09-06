@@ -217,11 +217,18 @@ money", never "the last donor attempted was unaffordable".
 
 Who carries the residual is shaped by levelling rather than by any one world's rank: under
 scarcity every deficit of a good ends at about the same cover, so a shortage lands on every short
-world's shelf rather than concentrating on whichever the queue served last. `unservedShortfall` is
+world's shelf rather than concentrating on whichever the queue served last — except a world whose
+donors sit behind lanes at capacity, which is fixed at its start cover while the rest level higher
+(lane capacity, not supply, binds there). `unservedShortfall` is
 read at the end of the good's pass — once levelling for the good is done, every world still short of
 its target reads its remaining want less what its reachable donors still hold — so under a real
 shortage every short world carries its own share and the levels sum to exactly the tonnage the
 faction lacks.
+
+With goods processed in necessity order, war matériel (necessity 0.01–0.02: munitions, hull plating,
+weapons, weapons systems, targeting arrays, reactor cores, ship frames) is the first thing a bound
+budget or a saturated lane cuts — an accepted, structural cost of serving the least necessary good
+last (the 10K read shows weapons_systems consumer empties 0% → 20% on 5 markets).
 
 The same sharing holds for water and food. A faction whose reachable supply of a survival good cannot
 lift every world over the famine step (`SHORTAGE_SATISFACTION`, half rations) levels all of them to the

@@ -454,24 +454,37 @@ export function getAlertData(): AlertData {
     // the DEFICIT endpoint only, so a donor never carries one. The level IS the classification: the
     // logistics engine only records one where that residue is strictly positive, so absent-or-zero
     // means servable and there is no separate bit to agree with. A system unservable in three goods
-    // counts once — the chip counts systems, not (system, good) pairs — at its largest (worst)
-    // shortfall, never the sum across goods. Sorts by that shortfall descending (negated, biggest
-    // unserved deficit first). ──
+    // counts once — the chip counts systems, not (system, good) pairs — at whichever good's
+    // shortfall is the MOST cycles of that world's own demand (`unservedShortfall ÷ useRate`), not
+    // the largest raw quantity: a capital short by a huge tonnage it uses in two cycles is in far
+    // less trouble than a colony short by a handful of units that would feed it for fifty. Sorts
+    // largest cycle figure first (negated, so ascending `sortKey` keeps the "smaller is worse"
+    // convention every other category uses). Uses the USE figure (`honestUseRate`) where the
+    // persisted market carries one, falling back to the floored pricing rate (`demandRate`) only for
+    // the rare row still missing it; a zero denominator cannot be expressed in cycles at all — it
+    // reads 0 cycles, never wins the comparison, and the measure shows the quantity alone. ──
+    let worstCyclesUnserved: number | undefined;
     let worstShortfall: number | undefined;
     let worstUnservableGood: string | undefined;
     for (const row of marketRows) {
       if (row.unservedShortfall === undefined || row.unservedShortfall <= 0) continue;
-      if (worstShortfall === undefined || row.unservedShortfall > worstShortfall) {
+      const useRate = row.honestUseRate ?? row.demandRate;
+      const cyclesUnserved = useRate > 0 ? row.unservedShortfall / useRate : 0;
+      if (worstCyclesUnserved === undefined || cyclesUnserved > worstCyclesUnserved) {
+        worstCyclesUnserved = cyclesUnserved;
         worstShortfall = row.unservedShortfall;
         worstUnservableGood = row.goodId;
       }
     }
-    if (worstShortfall !== undefined && worstUnservableGood !== undefined) {
+    if (worstCyclesUnserved !== undefined && worstShortfall !== undefined && worstUnservableGood !== undefined) {
+      const quantity = `${worstUnservableGood} unserved by ${worstShortfall.toFixed(1)}`;
       demandUnservable.push({
         systemId: system.id,
         name: system.name,
-        measure: `${worstUnservableGood} unserved by ${worstShortfall.toFixed(1)}`,
-        sortKey: -worstShortfall,
+        measure: worstCyclesUnserved > 0
+          ? `${quantity} — ${formatDuration(worstCyclesUnserved * CYCLE_LENGTH)} of demand`
+          : quantity,
+        sortKey: -worstCyclesUnserved,
       });
     }
 

@@ -23,8 +23,9 @@ describe("runTickHarness: logistics instruments", () => {
   it("wires the third-arm drawBrakeCeiling pin through to a measurable divergence", async () => {
     // A silently dropped wire is invisible on every OTHER counter — both arms would just run the
     // live game twice and agree everywhere — so the guard has to be a same-seed A/B. The pin
-    // reaches only the draw figure, whose one reader is the matcher's severity weight, and
-    // severity does nothing but ORDER the deficit queue. Donor pools are held per good, and the
+    // reaches only the draw figure, whose one reader is the matcher's ordering cover, which decides
+    // which shelf is served first, and does nothing but ORDER the deficit queue. Donor pools are
+    // held per good, and the
     // haul budget goes barely 0.2% spent at this scale, so reordering two deficits of DIFFERENT
     // goods changes nothing at all: the divergence needs two systems of the same faction short of
     // the SAME good in one cycle, competing for one donor's drawable.

@@ -119,8 +119,8 @@ describe("drawRatesByGood", () => {
 
   it("gates each consumer's term by that consumer's own brake and event multiplier", () => {
     // Only the metals line is braked; ore's own (civilian-only) draw is untouched, and the
-    // draw on ore falls by exactly the metals gate — the per-consumer application the
-    // matcher's severity ordering depends on.
+    // draw on ore falls by exactly the metals gate — the per-consumer application the matcher's
+    // ordering cover, which decides which shelf is served first, depends on.
     const use = useRatesByGood(makeInput(1));
     const gated: DrawRateInput = {
       ...makeInput(1),
