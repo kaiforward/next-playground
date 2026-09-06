@@ -151,3 +151,332 @@ seed 43 t16000 developed=189 flowDeliveredInWindow=1084630.77
  byGoodScarce {"medicine": {"groups": 316, "drainedZero": 1845, "clears": 1353}, "metals": {"groups": 153, "drainedZero": 1095, "clears": 856}, "polymers": {"groups": 136, "drainedZero": 877, "clears": 812}, "gas": {"groups": 223, "drainedZero": 823, "clears": 536}, "chemicals": {"groups": 147, "drainedZero": 598, "clears": 444}, "alloys": {"groups": 116, "drainedZero": 421, "clears": 276}, "hull_plating": {"groups": 100, "drainedZero": 345, "clears": 215}, "electronics": {"groups": 109, "drainedZero": 298, "clears": 119}, "ship_frames": {"groups": 119, "drainedZero": 284, "clears": 148}, "reactor_cores": {"groups": 113, "drainedZero": 272, "clears": 144}, "weapons_systems": {"groups": 114, "drainedZero": 270, "clears": 119}, "targeting_arrays": {"groups": 109, "drainedZero": 247, "clears": 126}}
  satisfaction {"developedConsumerWorlds": 189, "worldsBelowFullProvision": 188, "allDeveloped": {"zero": 480, "low": 0, "mid": 15, "high": 7, "one": 4412}, "belowFullProvision": {"zero": 480, "low": 0, "mid": 15, "high": 7, "one": 4386}, "belowFull_stockZero": {"zero": 479, "low": 0, "mid": 0, "high": 0, "one": 0}, "belowFull_stockPositive": {"zero": 1, "low": 0, "mid": 15, "high": 7, "one": 4386}}
 ```
+
+## Spec
+
+```
+What changes:  When a faction cannot supply every world that wants a good, logistics feeds every
+               world that is about to run short before it tops anyone up. A run now fills in two
+               rounds: a need round that brings every importing world up to the line where its
+               consumption would otherwise be rationed, sharing the available stock in equal
+               proportion when there is not enough to reach that line for everyone; then a buffer
+               round that tops worlds up toward their warehouse target exactly as today. Survival
+               goods are served before other goods in both rounds. When supply is ample nothing
+               visible changes; when it is short, the shortage lands on warehouses, not on tables.
+Why:           The measure confirmed the roadmap row's hypothesis: under scarcity the head of the
+               queue is filled to its full 40-cycle target while 70–82% of the deficits behind it
+               get nothing, and the placed tonnage spread evenly would have kept 56–80% of the
+               starving ones at full consumption (## Evidence). Owner decisions, in Kai's words:
+               - "the issue of systems requesting too much is real"
+               - "just sending less … feels like a bit of a cheating solution since the fact is
+                 that the combined systems often create and have enough resources they just
+                 arent shared properly. I think how much deficit is asked for is tied into how we
+                 actually choose which systems to supply first"
+               - "rounds makes sense to me if that means we prioritize systems that NEED the goods
+                 (below 2 cycles) vs systems that WANT the goods (above 2 cycles) … It has to be
+                 based on what we have available though if we happen to have enough available to
+                 fill every systems higher than 2 then we do that, but with not enough we
+                 prioritise need"
+               - "I still worry option 1 means large systems starve all the others" — size
+                 ordering dropped; "spread across all worlds which are short makes more sense than
+                 saving some and not others without the player deciding themselves which they
+                 want to fail/not fail"
+               - "the player customisation can be a later change, now we just plan the default
+                 behaviour"
+               - Roadmap, Kai 2026-08-16: "Carry necessity into the routing calculations too … a
+                 unit of unmet food ranks alongside a unit of unmet luxuries … The concrete place
+                 it lands is the good-allocation cliff row."
+               - Roadmap, 2026-08-03: "Flow priority is a lever: the matcher's sink ordering
+                 (severity = shortfall × draw, worst-first) is designable."
+Evidence:      ## Evidence, one reading. Meaning: under scarcity the matcher hands the head of the
+               queue its full 40-cycle warehouse target and everyone behind it nothing, and on
+               most of the deficits left starving that tonnage spread evenly would have been
+               enough to keep their consumption at full rate. Licenses: the greedy-drain fill
+               shape as the mechanism deciding which systems hold zero stock; real room for an
+               allocation policy on processed goods (~85% of drained zero-fills clear under even
+               spread) and much less on advanced goods (~20% at 10K); NOT any galaxy-level
+               outcome under a spread policy (static one-run counterfactual); NOT equilibrium
+               (both active horizons founding era); funding not a confound (budgetStopped 0).
+               The bimodal satisfaction is the formula plus stock level: every satisfaction-0
+               market had stock 0, none with stock 0 read above 0.25.
+Not claimed:   No player control — the per-system priority flag discussed is deferred, and the
+               default behaviour must be complete without it. No change to the warehouse target,
+               the deficit line, either donor reserve, or the exporter/importer asymmetry
+               (exporters ship down to 10 cycles, importers still warehouse to 40 in the buffer
+               round). No change to what "unservable" or "funding-bound" mean. No claim that a
+               faction short of a good overall ends up better fed in aggregate — the design moves
+               the shortage from consumption onto buffers; a faction whose supply is below its
+               total need still rations, now evenly. No pricing of hauling (the logistics
+               gameplay pass). No change to the build planner's survival band. The buffer round
+               keeps the existing worst-first greedy fill deliberately; a proportional buffer
+               round is a named variant, not part of this spec.
+```
+
+### 1. The need line
+
+Every importing market gets a **need line**: the stock below which the economy would ration its
+consumption. Today the economy delivers in full while stock covers `RATION_COVER` (2) cycles of the
+market's total demand and ramps delivery down as the square root of the shortfall below it
+(`lib/engine/tick.ts:79`, applied at `lib/engine/supply-chain.ts:152` against
+`rationCover × demandRate`, `lib/engine/supply-chain.ts:99`). Satisfaction is exactly that
+delivered share (`lib/tick/processors/economy.ts:166`), which is why a market at or above the line
+reads 1 and a market at stock 0 reads 0.
+
+The need round fills to the line **plus one cycle of consumption**, so the world is still on the
+line after the economy cycle that follows the delivery, rather than one draw below it:
+
+    needTarget = NEED_COVER × demand,  NEED_COVER = RATION_COVER + 1  (new — derived, not authored)
+
+`demand` is the matcher's use figure — civilian want at full rate plus staffing- and strike-gated
+recipe draw, produced at `lib/tick/processors/good-market-state.ts:179` from `honestUseRate`
+(`lib/world/types.ts:562`). It is unfloored, so a tiny market's need line is what it consumes, not
+the `MIN_DEMAND` pricing guard (`lib/constants/market-economy.ts:75`) the economy's own ration line
+uses; on a market whose real demand sits under the floor the economy rations slightly above where
+this round stops filling. Accepted, for the reason `WAREHOUSE_COVER`'s docstring gives
+(`lib/constants/directed-logistics.ts:41-63`): a divide-by-zero guard for pricing is not a
+consumption fact. The need line does **not** ride `anchorMult`: it mirrors the economy's ration
+line, which does not (`lib/engine/supply-chain.ts:99`), and an event that shifts a price anchor
+has no business changing when a population goes hungry.
+
+### 2. Two rounds per run
+
+The matcher still runs per faction per logistics cycle (`lib/tick/processors/directed-logistics.ts`,
+`matchFactionTransfers` at `lib/engine/directed-logistics.ts:286`), still classifies a market as a
+deficit at stock plus scheduled inbound under 80% of the 40-cycle target
+(`lib/engine/directed-logistics.ts:303`, `classifyMarketState` at line 49), still gates sinks on
+`production < demand` (line 309), and still sizes donors by `surplusDrawable` (line 101). What
+changes is how the deficit list is served.
+
+**Round one — need.** The subset of deficits whose stock plus scheduled inbound is under their
+`needTarget`. Each asks for `needTarget − (stock + scheduledInbound)`. For each good, the faction's
+**pooled need supply** is the summed live drawable of every donor at least one of that good's
+need-round deficits can reach (`reachableFrom`, `lib/engine/lane-routing.ts:139`, the
+saturation-blind test the structural reading already uses). Then:
+
+- if the pool covers the summed asks, every need-round deficit is filled to its `needTarget`;
+- otherwise every need-round deficit is granted the same **fraction** of its ask,
+  `f = pool ÷ Σask`, and draws `f × ask`.
+
+A deficit draws its grant from its own reachable donors, cheapest first, exactly as a fill works
+today (line 404 onward). Where a deficit's own reachable donors run dry before its grant is met —
+the pool was reachable by *some* need-round deficit, not necessarily this one — the residue stands,
+and the structural `unservable` reading below records it as it does today. `f` is therefore a
+ceiling on what any one world gets, not a guarantee; two worlds with the same ask and the same
+donors get the same quantity.
+
+Round one never touches a donor below its reserve: the exporter's 10 cycles
+(`EXPORT_RESERVE_COVER`, `lib/constants/directed-logistics.ts:40`) and the ordinary donor's 40
+(`DONOR_RESERVE_COVER`, line 89) hold, so feeding a hungry world can still never create a new
+deficit.
+
+**Round two — buffer.** Every deficit not yet at 80% of its 40-cycle target (need-round deficits
+included, with their round-one grant and anything scheduled inbound counted as stock) is served by
+today's algorithm unchanged: worst-first by severity (`shortfall × drawDemand`, lines 314 and 333),
+each filling from every reachable donor cheapest-first up to its full `logisticsTarget`, with the
+per-deficit budget skip (line 465) and blocked-volume handling as they are. The greedy cliff still
+exists here, by decision — it now falls between warehouses, not between a fed world and a starving
+one.
+
+**Order across goods.** In both rounds, goods are processed in descending `GOOD_NECESSITY`
+(`lib/constants/physical-economy.ts:105`, water and food 1.0 down to war matériel 0.02), ties broken
+by today's severity order. The haul budget (`lib/engine/directed-logistics.ts:290`) and lane capacity
+(`routeAndBook`, `lib/engine/lane-routing.ts:140`) are shared across goods within a faction's run,
+so this is what "food before luxuries" means mechanically: when either binds, it binds on the least
+necessary good first. Within a good, need-round deficits are visited in severity order too — it
+does not change anyone's grant, only which draws book lanes first under congestion.
+
+**Order within the need round is not by size.** A two-population colony and a capital short of the
+same good receive the same fraction of their respective needs. This is the decision recorded in
+`Why`, and it is what the measured counterfactual scored.
+
+### 3. What is unchanged, stated
+
+- The deficit line, warehouse target and both donor reserves keep their values and denominators;
+  the buffer round is today's fill. The exporter/importer asymmetry (ship down to 10, warehouse to
+  40) survives in the buffer round.
+- `unservable` (`UnservableDeficit`, `lib/engine/directed-logistics.ts:234`) keeps its definition:
+  the deficit's *full* shortfall to the 40-cycle target less the summed live reachable drawable,
+  computed once per deficit when the buffer round reaches it. A world fed in round one but not
+  buffered still reads unservable for the buffer it lacks — that reading feeds the alerts service's
+  "Demand unservable" (`lib/services/alerts.ts:452`) and the build planner's suppression, both of
+  which are about structural supply, not this run's rationing.
+- `fundingBound` (`FundingBoundMatch`, line 206), `budgetSkipped`, `blocked` and `logisticsDispatched` keep their
+  meanings; a budget stop inside the need round ends that deficit's need-round fill exactly as it
+  ends a fill today and is recorded the same way.
+- Scheduled inbound counts toward stock in both rounds' sink tests, so a world fed last run does not
+  re-enter the need round while its haul is in transit (`docs/active/gameplay/logistics-lanes.md` §3).
+- Dispatch, the pending-arrivals ledger, the flow log and the conservation identity are untouched.
+- No new world state. Nothing here persists; the need line is derived each run from `demand`.
+
+### 4. Observable outcomes and how they are read
+
+Read with `npm run simulate` at both horizons, plus the measure's own runner re-run against the
+change (its "scarce group" and "drained zero-fill" cohorts are the direct check):
+
+| Observable | Expected direction | Read at |
+|---|---|---|
+| Drained zero-fill deficits whose stock + inbound is under the need line, in scarce groups | → ~0, residue only from per-deficit donor exhaustion (connectivity) | measure runner, 10K and 16K, both seeds |
+| Consumer markets at satisfaction 0 with stock 0 on developed worlds below full Provision | falls; the remaining zeros are goods with no reachable donor at all | measure runner satisfaction snapshot |
+| Consumer cover medians per good, consumer cohort | flat to slightly down for the head-of-queue goods (they warehouse later), up for the tail | `npm run simulate`, market role cohort |
+| Exporter cover | unchanged (reserves untouched) | `npm run simulate`, exporter cohort |
+| Galaxy production, developed count, conservation identities | unchanged within noise | `npm run simulate`, both horizons |
+
+Reading the consumer cover medians needs the cohort split: the consumer cohort grows as colonies
+found, and a new colony opens at satisfaction 0 on every good regardless of allocation.
+
+### 5. Edges
+
+- **Demand 0.** `needTarget` is 0; the market is never a need-round deficit, exactly as a zero
+  `logisticsTarget` already drops it from the deficit list (`classifyMarketState`, line 51).
+- **Self-supplier.** `production ≥ demand` excludes a market from both rounds, as today (line 309).
+- **Pool 0 for a good.** Round one grants nothing; every need-round deficit goes to round two with
+  its ask intact; if no donor exists anywhere the buffer round records it unservable as today
+  (line 348).
+- **A need-round deficit whose only reachable donors are saturated** (`priceFrom` null,
+  `reachableFrom` true): it contributes to the pool's denominator and numerator but cannot draw
+  this run; its grant stands as blocked volume on the lane, which the booker records, and nothing
+  is billed — the same treatment a blocked buffer draw gets today (blocked volume, line 456's placement accounting).
+- **Fraction rounding.** Quantities stay continuous floats; no quantisation (line 407's rule).
+- **Mid-run congestion.** A need-round draw placed on a lane raises that lane's price for every
+  later draw in both rounds, as any placement does today; the pool is computed once per good before
+  its need-round draws begin, so a later deficit's grant is not re-cut by earlier ones' bookings.
+- **Save/load.** No new fields; a save from before the change loads and behaves under the new
+  rounds from its next logistics cycle.
+
+### 6. Hazard worksheet
+
+Scope: all six rows (tick processor, shared constants).
+
+**1. One quantity, several jobs.**
+
+| Quantity | Every reader today (`file:line`) | Which this design moves | Intended? |
+|---|---|---|---|
+| `RATION_COVER` | `lib/constants/economy.ts:66` (def), `:79` (sim params); `lib/engine/industry.ts` (1×, the input-draw ramp); read in the tick at `lib/engine/supply-chain.ts:99,152` via `rationCover` | Gains one derived reader: `NEED_COVER = RATION_COVER + 1` in the matcher | Yes, and deliberately coupled: the need line *is* "where consumption is rationed", so the two must move together. Stated as a derivation, never a second literal. |
+| `WAREHOUSE_COVER` / `logisticsTarget` | `lib/constants/directed-logistics.ts:63`; `lib/tick/processors/good-market-state.ts:185` (producer); `lib/engine/directed-logistics.ts` (2×, sink test and shortfall); harness `lib/tick-harness/market-analysis.ts:65-265` (cover levels), `cohort-analysis.ts` (1×) | None. The buffer round fills to it as today. | Yes — kept coupled. |
+| `DONOR_RESERVE_COVER` / `donorReserve` | `lib/constants/directed-logistics.ts:89`; `good-market-state.ts:186` (producer); `lib/engine/directed-logistics.ts:101` (`surplusDrawable`); `lib/engine/directed-build.ts:997` (input-supply gate); harness `market-analysis.ts:256` | None. Both rounds draw through `surplusDrawable` unchanged. | Yes — kept coupled with the planner by design (the planner's "surplus" must equal the matcher's). `npm run impact` verdict SHARED, pasted below. |
+| `EXPORT_RESERVE_COVER` | `lib/constants/directed-logistics.ts:40`; `lib/engine/directed-logistics.ts:108` | None | Yes |
+| `demand` (use figure) | producer `good-market-state.ts:179` from `honestUseRate` (`lib/world/types.ts:562`); readers: `logisticsTarget`, `donorReserve`, self-supply gate (`directed-logistics.ts:309`), `surplusDrawable`, `brakeKnee` use rate | Gains the need line as a reader | Yes — same denominator family as every other warehousing quantity, per `GoodMarketState.demand`'s docstring (`directed-logistics.ts:137-142`). |
+| `drawDemand` | producer `good-market-state.ts:190`; sole reader the severity weight `directed-logistics.ts:314` | Still the only severity reader; now the within-round tie-break | Yes |
+| `unservedShortfall` | `lib/world/tick.ts` (8×), `lib/tick/adapters/memory/directed-logistics.ts` (4×), `lib/tick/world/directed-logistics-world.ts` (2×), `lib/world/types.ts`, `lib/services/alerts.ts:452-469` | None — definition kept (§3) | Yes. SHARED verdict pasted below. |
+
+`npm run impact -- DONOR_RESERVE_COVER --quiet`:
+
+```
+TICK SIMULATION — 3 references in 3 modules (+9 in tests)
+  directed-logistics  lib/constants/directed-logistics.ts
+  directed-build      lib/engine/directed-build.ts
+  good-market-state   lib/tick/processors/good-market-state.ts
+HARNESS + TESTS — market-analysis 1×
+SHARED — 3 references across 3 modules: HAZARD 1 APPLIES.
+```
+
+`npm run impact -- RATION_COVER --quiet`:
+
+```
+TICK SIMULATION — 3 references in 2 modules (+5 in tests)
+  economy   2×  lib/constants/economy.ts
+  industry  1×  lib/engine/industry.ts
+ALSO TOUCHED BY — 4/10 economy
+CONTAINED — 3 references across 2 module(s)
+```
+
+`npm run impact -- unservedShortfall --quiet`:
+
+```
+TICK RIPPLE — 7/10 directed logistics
+TICK SIMULATION — 15 references in 4 modules: tick 8×, directed-logistics (adapter) 4×,
+  directed-logistics-world 2×, world/types 1×
+OUTSIDE THE TICK — alerts 3×
+SHARED — 18 references across 5 modules: HAZARD 1 APPLIES.
+```
+
+**2. A constant read for a meaning it was not authored to have.**
+
+| Constant | Docstring says | This design uses it as | Same? |
+|---|---|---|---|
+| `RATION_COVER` (`economy.ts:54-65`) | "Emergency stock cover in demand cycles. Civilian delivery and industrial input draws remain full while stock covers at least this many cycles of total local demand; below it, explicit rationing ramps toward zero at empty. Deliberately independent of the 40-cycle pricing/reserve anchor." | The line the need round fills to (plus one cycle) | Yes — the same fact, read from the other side. The docstring's "widening this buffer is never the fix for a starving galaxy" is respected: the constant's value is not moved. |
+| `GOOD_NECESSITY` (`physical-economy.ts:97-104`) | Weights "how much not having a good is suffering"; "this table just stops the model calling not having [luxuries] suffering"; dimensionless, relative shape only | Cross-good processing order (descending) in both rounds | Yes — an ordering by suffering-if-unmet is the authored meaning. Only rank is read, never magnitude. Whole table checked: 26 entries, 1.0 → 0.02, water/food alone at the ceiling. |
+| `GOOD_CONSUMPTION` | a tier gradient, not a necessity ranking (the shipped instance) | Not read by this design | — |
+| `WAREHOUSE_COVER` (`directed-logistics.ts:41-63`) | "Cycles of a system's REAL demand that directed logistics tries to keep on hand — the warehousing target the DEFICIT test measures against" | Unchanged: the buffer round's target | Yes |
+| `DEFICIT_FRACTION` (`:65`) | "A good is a deficit when stock < logisticsTarget × this" | Unchanged: membership of the deficit list | Yes |
+
+**3. A system you did not think about.**
+
+| System | Interaction | Reason if none |
+|---|---|---|
+| Events | `anchor_shift` modifiers (`lib/engine/events.ts:127`) move `anchorMult`, which scales `logisticsTarget` and `donorReserve` (`good-market-state.ts:185-186`) and so the buffer round's asks and every donor's floor — as today. The need line deliberately does not ride `anchorMult` (§1). Production-multiplier events reach the need round only through `drawDemand` (tie-break). | — |
+| Population + migration | Satisfaction (`economy.ts:166`) feeds Provision and growth; the need round's purpose is to keep more worlds at satisfaction 1 under scarcity, so expect fewer worlds crossing into rationing during shortages and more worlds sharing a shallow one. Migration reads attractiveness, unchanged. | — |
+| Unrest / regime | Crisis term keys off `CRITICAL_SATISFACTION` (0.25, `lib/engine/population.ts:227`) on survival goods; proportional need-round grants can hold a world *between* 0.25 and 1 where today it sat at 0 or 1 — the roadmap row's "makes CRITICAL_SATISFACTION a live line" outcome. A severe faction-wide shortage now puts every world into shallow rationing at once rather than a few into famine. | — |
+| Industry + staffing | Input draws ration at the same line (`supply-chain.ts:48,99`); the use figure already includes staffing-gated industrial draw, so a factory's inputs are inside the need line. | — |
+| Infrastructure decay | Idle decay is exempted for funding-bound producers (`fundingBound` meaning unchanged); the buffer round still fills warehouses, so the "staffed-and-selling" signal decay reads is not starved. | — |
+| Directed logistics | The change itself. | — |
+| Directed build / planner | Reads `surplusDrawable` with the same `donorReserve` (`directed-build.ts:997`), `unservedShortfall` for suppression, and `fed()` (`directed-build.ts:249`) off satisfaction. Fewer satisfaction-0 worlds under scarcity ⇒ `fed()` passes on more worlds ⇒ more housing builds lead. Expected and wanted (a fed world is a viable one); the planner's own survival band is untouched. | — |
+| Colonisation + founding manifest | A new colony opens at stock 0 on every good, so it is a need-round deficit on all 26 at once and now shares scarce goods proportionally instead of taking the head of the queue by severity. Founding stock itself is unchanged. | — |
+| Treasury / purse | Work billed = Σ draw cost as today (`directed-logistics.ts` processor, `work`); the need round's smaller, more numerous draws change the *shape* of spend, not the identity. Budget did not bind in any measured run (budgetStopped 0). | — |
+| Factions + relations | None | Matching is per faction over its own systems; traversability and `foreignShare` on lanes are unchanged. |
+| Save format (`World` shape) | None | No new persisted field; the need line is derived per run. |
+| The harness's own metrics | Cover levels (`market-analysis.ts:226-265`) and the conservation identities read the same fields; `logisticsDispatched` and the fifth identity are untouched. No new metric required to read the outcome — the measure's runner is the direct instrument (§4). | — |
+
+**4. Symptoms asserted.**
+
+| Claim | Evidence | Horizon | Cohort |
+|---|---|---|---|
+| The matcher fills the head of the queue to 40 cycles and the rest get nothing under scarcity | ## Evidence: median partials per scarce group 0; zero-fills 70–82% of deficits in scarce groups | 10K, 16K | scarce groups, seeds 42/43 |
+| Even spread would keep most starving zero-fills at full consumption | ## Evidence: 78/56% at 10K, 80/69% at 16K of starving drained zero-fills lifted | 10K, 16K | drained zero-fills with stock+inbound under the ration line |
+| Satisfaction reads 0 iff stock is 0 on these worlds | ## Evidence satisfaction snapshot: 1172/1180 zero-satisfaction markets at stock 0 (s42 10K); 0 stock-0 markets above 0.25 | 1K, 10K, 16K | developed, Provision < 1, civilian-consumed goods |
+| Budget never binds | ## Evidence: budgetStopped 0 in every scarce group | 10K, 16K | scarce groups |
+| Advanced goods are genuinely scarce, allocation cannot fix them | ## Evidence byGoodScarce: reactor cores 239/1158 clear (s42 10K) | 10K | drained zero-fills per good |
+| Consumption is delivered in full above 2 cycles and ramps as √ below | `lib/engine/tick.ts:79-83` | — | — |
+
+**5. Signals and primitives consumed.**
+
+| Consumes | Produced at | Actual shape today | Design assumes |
+|---|---|---|---|
+| `demand` (use figure) | `good-market-state.ts:179` | ≥ 0, per reference cycle, unfloored; missing `honestUseRate` recomputes live, never 0 | ≥ 0 per cycle; 0 ⇒ no need line |
+| `scheduledInbound` | `lib/engine/freight.ts` `scheduledInbound`, passed at `directed-logistics.ts` processor `toLogisticsState` | ≥ 0 per (system, good); absent ⇒ 0 | same |
+| `reachableFrom(sink)(donor)` | `lib/engine/lane-routing.ts:139` | boolean, saturation-blind, traversability-aware | used for the pool's membership |
+| `priceFrom(sink)(donor)` | `lane-routing.ts:129` | per-unit price or null when saturated | used for draw order, as today |
+| `routeAndBook` | `lane-routing.ts:140` | placements + blocked volume | as today |
+| `GOOD_NECESSITY[goodId]` | `physical-economy.ts:105` | 26 entries in (0, 1]; absent good ⇒ treat as 0 (`pop-needs.ts:61` precedent) | rank only |
+| `RATION_COVER` | `economy.ts:66` | 2 | need line = 3 × demand |
+| `surplusDrawable` | `directed-logistics.ts:101` | ≥ 0 | donor capacity in both rounds |
+
+**6. Aggregates that move for other reasons.**
+
+| Metric | Cohort read at | What else moves it |
+|---|---|---|
+| Consumer cover median per good | market role = consumer, per good, both horizons | Cohort growth as colonies found (each opens at 0); the 10K horizon sits mid-transient for high-tier goods (`directed-logistics.ts:82-87`) |
+| Share of consumer markets at satisfaction 0 | developed worlds, Provision < 1 | New colonies (stock 0 on every good at founding); goods with no producer anywhere in the faction (structural, allocation-blind) — split by "has any reachable donor" |
+| Scarce-group counts | per faction × good × run | Supply growth across horizons (3,927 → 1,680 on s42 between 10K and 16K before any change) — compare shares, not counts |
+| Provision band populations | developed worlds | Expectation dynamics and unrest; read alongside satisfaction, never alone |
+
+### 7. Falsifiers (provenance: committed at `f2e97242`, moved here unedited)
+
+Read at **both** 1,000 and 10,000 ticks (plus 16,000, because 10K sits inside the founding
+transient for late goods), 600 systems, seed 42.
+
+- **A is false** if, over scarce groups at a horizon, the median number of partially-filled
+  deficits per group exceeds 1, **or** fewer than half of scarce groups contain a zero-fill deficit
+  whose reachable donors held drawable stock pre-run. Then the matcher is not producing a
+  one-partial-then-zero cliff and the roadmap row's hypothesis is dead.
+- **B is false** if, at both horizons, fewer than 25% of drained zero-fill deficits would clear
+  `RATION_COVER × demand` under even spread of the group's placed tonnage. Then the cliff is
+  scarcity, not allocation — an allocation policy could not move satisfaction — and the row goes
+  back to brainstorm.
+- **Confirmed** needs both A and B to survive at both horizons.
+
+### 8. Open points for spec review
+
+- **Buffer round greedy vs proportional.** Kept greedy by decision; the one-line variant
+  (proportional buffer fills) is the obvious alternative and is the reviewer's to argue for.
+- **Pool definition when reachability differs.** `f` is computed against the union of donors any
+  need-round deficit reaches; a poorly connected deficit's grant can exceed what it can draw. The
+  alternative — per-deficit `f` against its own reachable donors — is fairer per world but lets a
+  well-connected world take more than its faction-wide share. Chosen for legibility; stated so the
+  reviewer can weigh it.
+- **`NEED_COVER = RATION_COVER + 1`.** One cycle of headroom is the minimum that keeps a fed world
+  on the line through the next economy cycle. A larger headroom is a tuning question the simulator
+  owns, not a definition.
+
+Next stage: `/spec-review docs/build-plans/good-allocation-cliff.md` — mandatory, the change is a
+tick processor reading a shared constant and moving a shared signal's producer.
