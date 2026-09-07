@@ -98,7 +98,10 @@ function logisticsRoleInfoByGood(
   yields: ResourceVector,
   extractionEff: ResourceVector,
 ): Map<string, LogisticsRoleInfo> {
-  const marketRows = marketRowsBySystem(world.markets).get(system.id) ?? [];
+  // Filtered before the rows are shaped, not after: `marketRowsBySystem` projects every market row
+  // in the galaxy, and this read wants one system's.
+  const marketRows =
+    marketRowsBySystem(world.markets.filter((m) => m.systemId === system.id)).get(system.id) ?? [];
   const stockpileScaleByFaction = new Map(
     world.treasuries.map((t) => [t.factionId, t.stockpileScale ?? 1]),
   );
