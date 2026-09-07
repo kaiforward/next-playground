@@ -55,6 +55,7 @@ function renderSummary({
     bands: { maintenance: 1, logistics: 1, construction: 1 },
     funded: { maintenance: 1, logistics: 1, construction: 1 },
     net: 0, foundingCommitted: 0, lastSettlement: null,
+    stockpileScale: 1,
     ...treasury,
   };
   vitalsValue.current = {

@@ -24,9 +24,15 @@ import type { LaneMetricsSummary } from "./lane-analysis";
 // ── Market role classification ──────────────────────────────────
 
 /** Which role a market (system × good) plays for that good. Mutually exclusive. The tuple is
- *  the single source for every roster iteration/validation, so a fifth role added to it grows
- *  the union and every consumer together. */
-export const MARKET_ROLES = ["exporter", "self-supplier", "consumer", "inert"] as const;
+ *  the single source for every roster iteration/validation, so a role added to it grows the
+ *  union and every consumer together. `producer`, `supplier`, `consumer` and `idle` are the
+ *  logistics engine's own four roles (`LogisticsRole`, `lib/engine/directed-logistics.ts`) —
+ *  what a market's two lines are authored from; `part-producer` and `inert` are this harness's
+ *  own production-only taxonomy, kept apart because they answer a different question ("does this
+ *  market make anything at all") than the logistics role does. */
+export const MARKET_ROLES = [
+  "producer", "supplier", "consumer", "idle", "part-producer", "inert",
+] as const;
 export type MarketRole = (typeof MARKET_ROLES)[number];
 
 // ── Calibration harness config ──────────────────────────────────
@@ -124,8 +130,8 @@ export interface RoleCoverEntry {
   trulyInertCount: number;
   /** Share of consumer markets sitting at the stock floor — literally empty, not merely low. */
   consumerEmptyFrac: number;
-  /** Median price / basePrice across exporter markets — the resting-price read. */
-  exporterMedianPriceRatio: number;
+  /** Median price / basePrice across producer markets — the resting-price read. */
+  producerMedianPriceRatio: number;
 }
 
 // ── World cohorts ───────────────────────────────────────────────

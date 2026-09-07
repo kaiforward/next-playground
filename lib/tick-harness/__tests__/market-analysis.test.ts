@@ -12,7 +12,10 @@ import {
 } from "../market-analysis";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
+import { surplusDrawable } from "@/lib/engine/directed-logistics";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
+import { logisticsTargetsByKey } from "../cohort-analysis";
+import type { LogisticsTargetInfo } from "../cohort-analysis";
 import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldMarket } from "@/lib/world/types";
 import { TARGET_COVER } from "@/lib/constants/market-economy";
@@ -26,8 +29,29 @@ function market(
   return { systemId, goodId, stock, anchorMult: 1, demandRate: 1, storageCapacity: 0 };
 }
 
+/**
+ * A `LogisticsTargetInfo` reachable through a plain `logisticsTarget` number, for suites that only
+ * care about the deficit side (or nothing at all). `donorReserve` is recovered via the same
+ * DONOR_RESERVE_COVER/WAREHOUSE_COVER ratio `computeCoverLevels` used to read from the constants
+ * before the role split, `marginFree` false and `production` 0 so `surplusDrawable`'s ordinary-donor
+ * branch reproduces exactly the pre-split SURPLUS_MARGIN dead-band test these fixtures were built
+ * against. `demand` defaults to the target itself (never 0, so the producer branch of
+ * `surplusDrawable` stays untriggered) unless a suite needs a specific value.
+ */
+function targetInfo(logisticsTarget: number, over: Partial<LogisticsTargetInfo> = {}): LogisticsTargetInfo {
+  return {
+    logisticsTarget,
+    donorReserve: logisticsTarget * (DIRECTED_LOGISTICS.DONOR_RESERVE_COVER / DIRECTED_LOGISTICS.WAREHOUSE_COVER),
+    marginFree: false,
+    demand: Math.max(logisticsTarget, 1),
+    production: 0,
+    productionSuppressed: false,
+    ...over,
+  };
+}
+
 /** Warehousing targets only feed `deficitFrac`; the suites below assert other metrics. */
-const NO_TARGETS = new Map<string, number>();
+const NO_TARGETS = new Map<string, LogisticsTargetInfo>();
 
 /** A staffed food producer — 2 extractors, ample population, developed unless overridden. */
 function producerSystem(id: string, control: TickSystem["control"] = "developed"): TickSystem {
@@ -259,8 +283,12 @@ describe("computeMarketHealth — price levels", () => {
 });
 
 describe("computeMarketHealth — cover levels", () => {
-  /** Warehousing targets keyed as the runner keys them, for markets whose demand clears the floor. */
-  const targets = (...entries: [string, number][]) => new Map(entries);
+  /** Warehousing targets keyed as the runner keys them, for markets whose demand clears the floor.
+   *  Each entry is a plain want-line number, expanded through `targetInfo` into the full role tuple
+   *  `computeCoverLevels` now reads — a full-rate, non-producing, non-margin-free consumer, which is
+   *  exactly the shape these fixtures were written against before the role split. */
+  const targets = (...entries: [string, number][]) =>
+    new Map(entries.map(([key, target]): [string, LogisticsTargetInfo] => [key, targetInfo(target)]));
 
   it("reports per-good median cover vs the anchor and surplus/deficit fractions vs the logistics lines", () => {
     // covers (stock/anchor=40): 80→2.0 surplus(≥1.4×donor line 40), 40→1.0 balanced, 20→0.5 deficit(<0.8).
@@ -331,9 +359,10 @@ describe("computeMarketHealth — cover levels", () => {
     // Real demand 0 ⇒ donor reserve 0 ⇒ the whole pile is drawable under the live donor rule
     // (surplusDrawable's demand-0 branch). A known 0 must not be conflated with an absent entry:
     // the target map stores an entry for every walked market, including a computed 0.
+    const zeroInfo = targetInfo(0, { demand: 0 });
     const { coverLevels } = computeMarketHealth(
       [market("sys-1", "water", 30), market("sys-2", "water", 0)],
-      targets(["sys-1|water", 0], ["sys-2|water", 0]),
+      new Map([["sys-1|water", zeroInfo], ["sys-2|water", zeroInfo]]),
     );
     const water = coverLevels.find((c) => c.goodId === "water");
     expect(water?.surplusFrac).toBeCloseTo(1 / 2, 5); // stocked ⇒ surplus; empty ⇒ neither
@@ -346,6 +375,74 @@ describe("computeMarketHealth — cover levels", () => {
     const water = coverLevels.find((c) => c.goodId === "water");
     expect(water?.deficitFrac).toBe(0);
     expect(water?.surplusFrac).toBe(0);
+  });
+});
+
+describe("computeMarketHealth — cover levels read the matcher's own role-authored lines", () => {
+  /** A system with no buildings and low population, so `capacityGoodRates` produces no production
+   *  and the persisted `honestUseRate`/`steadyInbound`/etc on the market row alone decide the role. */
+  function plainSystem(id: string): TickSystem {
+    return {
+      id, name: id, economyType: "agricultural", regionId: "r1", factionId: "f1", control: "developed",
+      governmentType: "federation", population: 10, popCap: 20, unrest: 0,
+      buildings: {}, buildingIdleCycles: {}, collapseDebt: 0,
+      yields: emptyResourceVector(), extractionEff: unitResourceVector(),
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+    };
+  }
+
+  it("reads a supplier's cover as a surplus at 15 cycles of use and not at 9, exactly matching surplusDrawable — the same test the matcher itself would draw on", () => {
+    // Steady inbound (i=1) alone clears SUPPLIER_REPLENISHMENT (0.9 × use 1 = 0.9), with a known,
+    // on-time late-inbound share, so the engine's own role is "supplier" and the give line is the
+    // EXPORT_RESERVE_COVER buffer (10 cycles of use) — margin-free, so it gives everything above 10
+    // with no SURPLUS_MARGIN dead-band. 15 cycles of stock clears it; 9 does not.
+    for (const [cycles, expectSurplus] of [[15, true], [9, false]] as const) {
+      const systems = [plainSystem("s1")];
+      const markets = [{
+        systemId: "s1", goodId: "water", stock: cycles, anchorMult: 1, demandRate: 1, storageCapacity: 0,
+        honestUseRate: 1, steadyInbound: 1, lateInboundShare: 0,
+      }];
+
+      const targets = logisticsTargetsByKey(systems, markets);
+      const info = targets.get("s1|water");
+      if (!info) throw new Error("no logistics target for s1|water");
+      expect(info.donorReserve).toBeCloseTo(DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER, 9); // premise: supplier buffer
+      expect(info.marginFree).toBe(true); // premise: a buffer, not a deep reserve
+
+      const matcherSurplus = surplusDrawable(
+        cycles, info.donorReserve, info.marginFree, info.demand, info.production, info.productionSuppressed,
+      ) > 0;
+      expect(matcherSurplus).toBe(expectSurplus);
+
+      const { coverLevels } = computeMarketHealth(markets, targets);
+      const water = coverLevels.find((c) => c.goodId === "water");
+      expect((water?.surplusFrac ?? 0) > 0).toBe(matcherSurplus);
+    }
+  });
+
+  it("keeps a full-rate consumer's surplus/deficit reading identical to today's, at stockpileScale 1", () => {
+    // No steady inbound, no production ⇒ the engine's role is "consumer" and — with no `realisedUse`
+    // override — read at full rate, so both lines are exactly today's pre-role-split figures:
+    // DONOR_RESERVE_COVER and WAREHOUSE_COVER cycles of demand.
+    const systems = [plainSystem("s1")];
+    const stock = 45;
+    const markets = [{
+      systemId: "s1", goodId: "water", stock, anchorMult: 1, demandRate: 1, storageCapacity: 0,
+      honestUseRate: 1,
+    }];
+
+    const targets = logisticsTargetsByKey(systems, markets);
+    const info = targets.get("s1|water");
+    if (!info) throw new Error("no logistics target for s1|water");
+    expect(info.logisticsTarget).toBeCloseTo(DIRECTED_LOGISTICS.WAREHOUSE_COVER, 9);
+    expect(info.donorReserve).toBeCloseTo(DIRECTED_LOGISTICS.DONOR_RESERVE_COVER, 9);
+    expect(info.marginFree).toBe(false);
+
+    const { coverLevels } = computeMarketHealth(markets, targets);
+    const water = coverLevels.find((c) => c.goodId === "water");
+    const expectedSurplus = stock >= DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * DIRECTED_LOGISTICS.SURPLUS_MARGIN;
+    expect((water?.surplusFrac ?? 0) > 0).toBe(expectedSurplus);
+    expect(expectedSurplus).toBe(false); // premise: 45 sits in the dead-band below 40 × 1.4 = 56
   });
 });
 

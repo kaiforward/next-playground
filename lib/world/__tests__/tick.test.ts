@@ -2962,7 +2962,10 @@ describe("runWorldTick — stockpileScale reaches every toGoodMarketStates calle
     );
     const harnessTargets = logisticsTargetsByKey(tickSystems, after.markets, stockpileScaleByFaction);
 
-    expect(harnessTargets.get(`${systemId}|water`)).toBeCloseTo(tickState.logisticsTarget, 9);
+    const harnessWater = harnessTargets.get(`${systemId}|water`);
+    if (!harnessWater) throw new Error("no harness water target");
+    expect(harnessWater.logisticsTarget).toBeCloseTo(tickState.logisticsTarget, 9);
+    expect(harnessWater.donorReserve).toBeCloseTo(tickState.donorReserve, 9);
 
     // Both read 1.5× the k=1 figure on the identical row data — the multiplier reaching this site
     // at all, not merely the two paths agreeing with each other.
