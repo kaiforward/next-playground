@@ -171,8 +171,16 @@ function knownRate(rate: number | undefined): number | undefined {
  * stream, or the two together covering `SUPPLIER_REPLENISHMENT` of what it uses? Gated on the
  * late-inbound tail ONLY where inbound is load-bearing: a world that clears the bar on production
  * alone has no transit exposure to bound, so an unknown late share cannot deny it the role.
+ *
+ * A production-suppressed world is refused outright, whatever the arithmetic says — the same
+ * drawdown question `surplusDrawable` refuses a struck producer on, asked one step earlier. The
+ * producer test above already excludes a struck world; without this it fell straight through to the
+ * supplier test and picked up a margin-free ten-cycle give line on output that has stopped arriving,
+ * which is the opposite of what a strike should do to a world's willingness to export. It keeps the
+ * consumer's deep reserve instead, and re-earns the role when its output comes back.
  */
 function replenished(m: MarketRoleInputs, use: number): boolean {
+  if (m.productionSuppressed) return false;
   if ((m.supplierShortRuns ?? 0) >= DIRECTED_LOGISTICS.SUPPLIER_DROP_RUNS) return false;
   const inbound = knownRate(m.steadyInbound) ?? 0;
   const bar = DIRECTED_LOGISTICS.SUPPLIER_REPLENISHMENT * use;

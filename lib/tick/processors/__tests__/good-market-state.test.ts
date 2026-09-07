@@ -510,6 +510,24 @@ describe("toGoodMarketStates: roles and the two lines", () => {
     expect(linesOf({ steadyInbound: U }).role).toBe("consumer");
   });
 
+  it("refuses the supplier role to a struck world, whatever its production covers", () => {
+    // The identical part-producer as above, now strike- or maintenance-suppressed: the output
+    // backing a supplier's thin give line has stopped arriving, so it keeps the consumer's deep
+    // reserve rather than shipping down to a ten-cycle buffer with no dead-band.
+    const struck = linesOf({ realisedProductionRate: 0.95 * U, productionSuppressed: true });
+    expect(struck.role).toBe("consumer");
+    expect(struck.donorReserve).toBeCloseTo(R * U, 9);
+    expect(struck.logisticsTarget).toBeCloseTo(W * U, 9);
+    expect(struck.marginFree).toBe(false);
+    // Suppression alone is what did it — the same row unsuppressed is a supplier.
+    expect(linesOf({ realisedProductionRate: 0.95 * U }).role).toBe("supplier");
+    // And a world whose replenishment is carried by deliveries rather than its own output is
+    // refused just the same: a struck world is never a supplier.
+    expect(
+      linesOf({ steadyInbound: U, lateInboundShare: 0, productionSuppressed: true }).role,
+    ).toBe("consumer");
+  });
+
   it("collapses a refinery that has stopped drawing onto the margin-free restart buffer", () => {
     // r = 0.1u: the deep reserve (4 cycles of full-rate use) falls under the 10-cycle buffer, so
     // the buffer binds on both lines and everything above it is drawable without a dead-band.

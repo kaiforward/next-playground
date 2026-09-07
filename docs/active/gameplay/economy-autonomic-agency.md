@@ -139,7 +139,7 @@ Roles, side by side:
 | Role | Qualifies when | Gives down to | Re-orders under | Margin |
 |---|---|---|---|---|
 | Producer | makes more than it uses, not strike-suppressed (unchanged) | `EXPORT_RESERVE_COVER` × use (10) | never a sink | none — buffer |
-| Supplier | not a producer; production + steady inbound covers `SUPPLIER_REPLENISHMENT` (0.9) of use — gated on the late-inbound tail only where inbound itself is load-bearing to that test (`production < SUPPLIER_REPLENISHMENT × use`) | `EXPORT_RESERVE_COVER` × use (10) | `SUPPLIER_WANT_COVER` × use (12) | none — buffer |
+| Supplier | not a producer and not strike-suppressed (a struck world exports on nothing, so it holds the consumer's deep reserve until its output returns); production + steady inbound covers `SUPPLIER_REPLENISHMENT` (0.9) of use — gated on the late-inbound tail only where inbound itself is load-bearing to that test (`production < SUPPLIER_REPLENISHMENT × use`) | `EXPORT_RESERVE_COVER` × use (10) | `SUPPLIER_WANT_COVER` × use (12) | none — buffer |
 | Consumer | otherwise | `DONOR_RESERVE_COVER` × realised use, floored at the buffer (40) | `WAREHOUSE_COVER` × realised use, floored at the supplier want (40) | `SURPLUS_MARGIN` (1.4×) dead-band above the deep line |
 | Idle | a consumer whose buffer term now exceeds its deep term | as consumer — collapses to the buffer | as consumer — collapses to the buffer | none once the buffer binds |
 
