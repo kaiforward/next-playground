@@ -92,7 +92,8 @@ function externalSegments(g: LogisticsGoodRow): BarSegment[] {
  *  reuses the same StatList/StatRow markup the rest of the panel's stat sections use — every
  *  row with demand shows the give-down-to and want lines; a supplier additionally shows the two
  *  numbers that qualified it (steady inbound, late deliveries), and an idle row shows realised
- *  use against the full rate it has fallen away from. A consumer or producer row shows neither,
+ *  use against the use figure its role was decided on — the gated rate it has fallen away from,
+ *  not the ungated production/consumption totals below. A consumer or producer row shows neither,
  *  since nothing else decided its role. Steady inbound is shown as a per-cycle rate rather than a
  *  percentage of full-rate use: unlike late deliveries, that ratio can run past 100% (a supplier
  *  fed faster than it uses), which a clamped percentage would misstate. */
