@@ -453,6 +453,9 @@ describe("computeMarketHealth — cover levels read the matcher's own role-autho
 
 describe("demand hunting", () => {
   const WAREHOUSE = DIRECTED_LOGISTICS.WAREHOUSE_COVER;
+  // No cached want for any of these fixtures' keys — every call falls back to the pre-role-split
+  // formula, matching this describe block's pre-cache fixtures/expectations.
+  const NO_WANTS = new Map<string, number>();
   // `ore` is a recipe input (metals consumes it); `luxuries` is consumed by nothing.
   const inputRow = (systemId: string, stock: number, useRate = 1): WorldMarket => ({
     systemId, goodId: "ore", stock, anchorMult: 1, demandRate: 1,
@@ -463,7 +466,7 @@ describe("demand hunting", () => {
 
   it("reads no flips on a market that never crosses the dead band", () => {
     const acc = newDemandHuntingAccumulator();
-    for (let i = 0; i < 6; i++) sampleDemandHunting(acc, [deep("s1")]);
+    for (let i = 0; i < 6; i++) sampleDemandHunting(acc, [deep("s1")], NO_WANTS);
     expect(summariseDemandHunting(acc, []).flipRate).toBe(0);
   });
 
@@ -471,10 +474,10 @@ describe("demand hunting", () => {
     const acc = newDemandHuntingAccumulator();
     // deficit, surplus, deficit, surplus → 3 reversals over 3 comparable readings (the first
     // decided reading has nothing to reverse and sits outside the denominator).
-    sampleDemandHunting(acc, [deep("s1")]);
-    sampleDemandHunting(acc, [full("s1")]);
-    sampleDemandHunting(acc, [deep("s1")]);
-    sampleDemandHunting(acc, [full("s1")]);
+    sampleDemandHunting(acc, [deep("s1")], NO_WANTS);
+    sampleDemandHunting(acc, [full("s1")], NO_WANTS);
+    sampleDemandHunting(acc, [deep("s1")], NO_WANTS);
+    sampleDemandHunting(acc, [full("s1")], NO_WANTS);
     expect(acc.decidedReadings).toBe(4);
     expect(summariseDemandHunting(acc, []).flipRate).toBeCloseTo(1, 9);
   });
@@ -483,12 +486,12 @@ describe("demand hunting", () => {
     // Two markets, one sample each: two decided readings, zero comparable — an unreversible
     // first reading must dilute nothing, or the rate shrinks with how often markets decide.
     const acc = newDemandHuntingAccumulator();
-    sampleDemandHunting(acc, [deep("s1"), full("s2")]);
+    sampleDemandHunting(acc, [deep("s1"), full("s2")], NO_WANTS);
     expect(acc.decidedReadings).toBe(2);
     expect(summariseDemandHunting(acc, []).flipRate).toBe(0);
 
     // One of them reverses once: 1 reversal over exactly 1 comparable reading, not over 3.
-    sampleDemandHunting(acc, [full("s1")]);
+    sampleDemandHunting(acc, [full("s1")], NO_WANTS);
     expect(summariseDemandHunting(acc, []).flipRate).toBeCloseTo(1, 9);
   });
 
@@ -499,9 +502,9 @@ describe("demand hunting", () => {
     // report 0 here while the market genuinely oscillated.
     const mid = inputRow("s1", WAREHOUSE); // inside [0.8, 1.4) × target — balanced
     const acc = newDemandHuntingAccumulator();
-    sampleDemandHunting(acc, [deep("s1")]);
-    sampleDemandHunting(acc, [mid]);
-    sampleDemandHunting(acc, [full("s1")]);
+    sampleDemandHunting(acc, [deep("s1")], NO_WANTS);
+    sampleDemandHunting(acc, [mid], NO_WANTS);
+    sampleDemandHunting(acc, [full("s1")], NO_WANTS);
     expect(acc.decidedReadings).toBe(2); // the balanced sample decided nothing
     expect(summariseDemandHunting(acc, []).flipRate).toBeCloseTo(1, 9);
   });
@@ -512,8 +515,8 @@ describe("demand hunting", () => {
       systemId: "s1", goodId: "luxuries", stock, anchorMult: 1, demandRate: 1,
       honestUseRate: 1, storageCapacity: 0,
     });
-    sampleDemandHunting(acc, [luxuries(0)]);
-    sampleDemandHunting(acc, [luxuries(WAREHOUSE * 2)]);
+    sampleDemandHunting(acc, [luxuries(0)], NO_WANTS);
+    sampleDemandHunting(acc, [luxuries(WAREHOUSE * 2)], NO_WANTS);
     expect(summariseDemandHunting(acc, []).flipRate).toBe(0);
   });
 
@@ -524,15 +527,33 @@ describe("demand hunting", () => {
     const bare: WorldMarket = {
       systemId: "s1", goodId: "ore", stock: 0, anchorMult: 1, demandRate: 1, storageCapacity: 0,
     };
-    sampleDemandHunting(acc, [bare]);
-    sampleDemandHunting(acc, [bare]);
+    sampleDemandHunting(acc, [bare], NO_WANTS);
+    sampleDemandHunting(acc, [bare], NO_WANTS);
     expect(acc.decidedReadings).toBe(0);
 
     // Positive control: the same row carrying a use figure classifies both times.
     const carried = newDemandHuntingAccumulator();
-    sampleDemandHunting(carried, [{ ...bare, honestUseRate: 1 }]);
-    sampleDemandHunting(carried, [{ ...bare, honestUseRate: 1 }]);
+    sampleDemandHunting(carried, [{ ...bare, honestUseRate: 1 }], NO_WANTS);
+    sampleDemandHunting(carried, [{ ...bare, honestUseRate: 1 }], NO_WANTS);
     expect(carried.decidedReadings).toBe(2);
+  });
+
+  it("classifies a supplier market against its own authored want, not the full-rate formula", () => {
+    // A supplier's want is the 12-cycle buffer (spec: "reserves against what a world actually
+    // uses"), far below the pre-role-split full-rate consumer's WAREHOUSE_COVER line. A market
+    // sitting on 15 cycles of use is comfortably above ITS want and must not read as a deficit —
+    // the old formula (WAREHOUSE_COVER × useRate) would still call this short.
+    const useRate = 1;
+    const supplierWant = 12 * useRate; // this market's role-authored want
+    const row = inputRow("s1", 15 * useRate, useRate); // stock: 15 cycles of use on hand
+    expect(supplierWant).toBeLessThan(WAREHOUSE * useRate); // sanity: want really is the lower line
+    const wantByKey = new Map([["s1|ore", supplierWant]]);
+
+    const acc = newDemandHuntingAccumulator();
+    sampleDemandHunting(acc, [row], wantByKey);
+    // Reading against the authored want: 15 cycles sits inside [0.8, 1.4) × 12 = [9.6, 16.8) —
+    // balanced, not deficit — so nothing is decided.
+    expect(acc.decidedReadings).toBe(0);
   });
 
   it("reads no haul churn when every delivery stays where it landed", () => {
@@ -573,6 +594,9 @@ describe("demand hunting", () => {
 
 describe("survival spell distribution", () => {
   const WAREHOUSE = DIRECTED_LOGISTICS.WAREHOUSE_COVER;
+  // No cached want for any of these fixtures' keys — every call falls back to the pre-role-split
+  // formula, matching this describe block's pre-cache fixtures/expectations.
+  const NO_WANTS = new Map<string, number>();
   const waterRow = (stock: number, useRate = 1): WorldMarket => ({
     systemId: "s1", goodId: "water", stock, anchorMult: 1, demandRate: 1,
     honestUseRate: useRate, storageCapacity: 0,
@@ -587,9 +611,9 @@ describe("survival spell distribution", () => {
 
   it("closes a spell the cycle it clears, counting its consecutive-deficit length", () => {
     const acc = newSpellAccumulator();
-    sampleSurvivalSpells(acc, [deep()], 24, 0); // spell starts
-    sampleSurvivalSpells(acc, [deep()], 48, 0); // still deficit — length 2
-    sampleSurvivalSpells(acc, [full()], 72, 0); // clears — spell closes at length 2
+    sampleSurvivalSpells(acc, [deep()], 24, 0, NO_WANTS); // spell starts
+    sampleSurvivalSpells(acc, [deep()], 48, 0, NO_WANTS); // still deficit — length 2
+    sampleSurvivalSpells(acc, [full()], 72, 0, NO_WANTS); // clears — spell closes at length 2
     const summary = summariseSpellDistribution(acc);
     expect(summary.n).toBe(1);
     expect(summary.median).toBe(2);
@@ -597,16 +621,16 @@ describe("survival spell distribution", () => {
 
   it("drops a spell still open at the last sample — censored, not completed", () => {
     const acc = newSpellAccumulator();
-    sampleSurvivalSpells(acc, [deep()], 24, 0);
-    sampleSurvivalSpells(acc, [deep()], 48, 0);
+    sampleSurvivalSpells(acc, [deep()], 24, 0, NO_WANTS);
+    sampleSurvivalSpells(acc, [deep()], 48, 0, NO_WANTS);
     // Run ends mid-deficit: nothing ever closes this spell.
     expect(summariseSpellDistribution(acc).n).toBe(0);
   });
 
   it("excludes a spell that started before the equilibrium horizon even though it closes after it", () => {
     const acc = newSpellAccumulator();
-    sampleSurvivalSpells(acc, [deep()], 10, 100); // spell starts before eqStartTick 100
-    sampleSurvivalSpells(acc, [full()], 130, 100); // closes after the horizon
+    sampleSurvivalSpells(acc, [deep()], 10, 100, NO_WANTS); // spell starts before eqStartTick 100
+    sampleSurvivalSpells(acc, [full()], 130, 100, NO_WANTS); // closes after the horizon
     expect(summariseSpellDistribution(acc).n).toBe(0);
   });
 
@@ -616,8 +640,8 @@ describe("survival spell distribution", () => {
       systemId: "s1", goodId: "ore", stock, anchorMult: 1, demandRate: 1,
       honestUseRate: 1, storageCapacity: 0,
     });
-    sampleSurvivalSpells(acc, [ore(0)], 24, 0);
-    sampleSurvivalSpells(acc, [ore(WAREHOUSE * 2)], 48, 0);
+    sampleSurvivalSpells(acc, [ore(0)], 24, 0, NO_WANTS);
+    sampleSurvivalSpells(acc, [ore(WAREHOUSE * 2)], 48, 0, NO_WANTS);
     expect(summariseSpellDistribution(acc).n).toBe(0);
   });
 
@@ -626,8 +650,18 @@ describe("survival spell distribution", () => {
     const bare: WorldMarket = {
       systemId: "s1", goodId: "water", stock: 0, anchorMult: 1, demandRate: 1, storageCapacity: 0,
     };
-    sampleSurvivalSpells(acc, [bare], 24, 0);
-    sampleSurvivalSpells(acc, [bare], 48, 0);
+    sampleSurvivalSpells(acc, [bare], 24, 0, NO_WANTS);
+    sampleSurvivalSpells(acc, [bare], 48, 0, NO_WANTS);
+    expect(acc.activeByKey.size).toBe(0);
+  });
+
+  it("classifies against the cached authored want instead of the full-rate formula", () => {
+    // Same shape as the demand-hunting red-proof above: a supplier's want (12 cycles) is well
+    // below the full-rate WAREHOUSE_COVER line, so a market resting on 15 cycles of use is
+    // balanced against its own want and must never open a deficit spell.
+    const wantByKey = new Map([["s1|water", 12]]);
+    const acc = newSpellAccumulator();
+    sampleSurvivalSpells(acc, [waterRow(15)], 24, 0, wantByKey);
     expect(acc.activeByKey.size).toBe(0);
   });
 });

@@ -437,7 +437,10 @@ export interface LaneMetricsSummary {
   inboundLatency: InboundLatencySummary;
   /** Σ billed logistics work ÷ Σ arrivals-credited quantity, both gated to `LOGISTICS_WARMUP_TICKS`
    *  — relaying bills every leg, so this rises with chain depth while delivered tonnage does not
-   *  (spec §6). 0 when nothing was delivered in the window. */
+   *  (spec §6). 0 when nothing was delivered in the window. The delivered denominator includes
+   *  return-leg credits — a returned unit was billed for its outbound leg only, not the return — but
+   *  return legs were 0.04% of rows on the reference run, so this is a coarse guard, not a tuning
+   *  input. */
   logisticsWorkPerDeliveredUnit: number;
   fundingBoundIncidenceByFaction: FundingBoundIncidenceEntry[];
   physicalCoverAtRationByRole: PhysicalCoverAtRationEntry[];

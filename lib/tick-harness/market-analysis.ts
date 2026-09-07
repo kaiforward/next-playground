@@ -336,30 +336,30 @@ const INDUSTRIAL_INPUT_GOODS = new Set(
 );
 
 /**
- * Fold one cycle's market rows into the flip reading. Classification runs straight off the
- * persisted use figure against `WAREHOUSE_COVER × useRate` — the full-rate consumer's want line,
- * not each row's own role-authored target (that needs `systems`, which this per-tick sampling
- * point does not carry) — so this costs a pass over the rows rather than a galaxy-wide state
- * rebuild. This is now a DIFFERENT number from `logisticsTarget` for a producer, supplier, idle,
- * or below-full-rate consumer market, so the flip rate reads against the pre-role-split target on
- * those markets; not re-plumbed here (out of this task's scope — flagged, not fixed). A row with no
- * use figure is skipped rather than classified against a zero target, which would read as
+ * Fold one cycle's market rows into the flip reading. Classification runs off each row's own
+ * role-authored want (`wantByKey`, keyed `systemId|goodId`) — the caller's per-logistics-cycle
+ * cache of `LogisticsTargetInfo.logisticsTarget`, not rebuilt here — so a supplier or idle
+ * market (want as low as the 10-cycle buffer) is judged against its own line rather than the
+ * full-rate consumer's. A key the cache has never carried (a market that appeared mid-cycle)
+ * falls back to `WAREHOUSE_COVER × useRate × anchorMult`, the pre-role-split formula. A row with
+ * no use figure is skipped rather than classified against a zero target, which would read as
  * permanently balanced.
  */
 export function sampleDemandHunting(
   acc: DemandHuntingAccumulator,
   markets: ReadonlyArray<WorldMarket>,
+  wantByKey: ReadonlyMap<string, number>,
 ): void {
   for (const m of markets) {
     if (!INDUSTRIAL_INPUT_GOODS.has(m.goodId)) continue;
     const useRate = m.honestUseRate;
     if (typeof useRate !== "number" || !Number.isFinite(useRate) || useRate <= 0) continue;
 
-    const target = DIRECTED_LOGISTICS.WAREHOUSE_COVER * useRate * m.anchorMult;
+    const key = `${m.systemId}|${m.goodId}`;
+    const target = wantByKey.get(key) ?? DIRECTED_LOGISTICS.WAREHOUSE_COVER * useRate * m.anchorMult;
     const { kind } = classifyMarketState(m.stock, target);
     if (kind === "balanced") continue;
 
-    const key = `${m.systemId}|${m.goodId}`;
     acc.decidedReadings++;
     const previous = acc.lastDecidedByKey.get(key);
     if (previous !== undefined && previous !== kind) acc.reversals++;
@@ -440,26 +440,28 @@ export function newSpellAccumulator(): SpellAccumulator {
  * that began during founding but happens to close after the horizon would otherwise credit the
  * equilibrium reading with founding-era churn.
  *
- * Classifies against `WAREHOUSE_COVER × useRate`, the full-rate consumer's want line, not each
- * row's own role-authored `logisticsTarget` (unavailable here without `systems`) — the same
- * divergence `sampleDemandHunting` now carries and for the same reason; not re-plumbed in this
- * task. `SURVIVAL_GOODS` markets are civilian-only, though, so a role split (producer/supplier vs.
- * consumer) matters far less here than on an industrial input.
+ * Classifies against each row's own role-authored want (`wantByKey`, keyed `systemId|goodId`) —
+ * the caller's per-logistics-cycle cache of `LogisticsTargetInfo.logisticsTarget`, the same cache
+ * `sampleDemandHunting` reads — rather than the full-rate consumer's `WAREHOUSE_COVER × useRate`
+ * line. A key the cache has never carried falls back to that formula. `SURVIVAL_GOODS` markets are
+ * civilian-only, though, so a role split (producer/supplier vs. consumer) matters far less here
+ * than on an industrial input.
  */
 export function sampleSurvivalSpells(
   acc: SpellAccumulator,
   markets: ReadonlyArray<WorldMarket>,
   tick: number,
   eqStartTick: number,
+  wantByKey: ReadonlyMap<string, number>,
 ): void {
   for (const m of markets) {
     if (!SURVIVAL_GOODS.includes(m.goodId)) continue;
     const useRate = m.honestUseRate;
     if (typeof useRate !== "number" || !Number.isFinite(useRate) || useRate <= 0) continue;
 
-    const target = DIRECTED_LOGISTICS.WAREHOUSE_COVER * useRate * m.anchorMult;
-    const { kind } = classifyMarketState(m.stock, target);
     const key = `${m.systemId}|${m.goodId}`;
+    const target = wantByKey.get(key) ?? DIRECTED_LOGISTICS.WAREHOUSE_COVER * useRate * m.anchorMult;
+    const { kind } = classifyMarketState(m.stock, target);
     const active = acc.activeByKey.get(key);
     if (kind === "deficit") {
       if (active) active.length++;

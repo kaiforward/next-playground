@@ -1398,6 +1398,7 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     balance: number,
     maxCycles = 40,
     throughputPerPop = 0.05,
+    stockpileScaleByFaction?: ReadonlyMap<string, number>,
   ) {
     let projects: WorldConstructionProject[] = [stagingProject()];
     let committed = 0;
@@ -1417,6 +1418,7 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
         construction: mkConstruction(STAGE_CAP, throughputPerPop),
         develop: { candidateProvider: () => [], params: STAGING_PARAMS },
         treasuryByFaction: new Map([["f1", { balance, pendingFounding: committed, maintenanceBill: 0 }]]),
+        stockpileScaleByFaction,
       });
       committed += r.foundingDebitsByFaction?.get("f1") ?? 0;
       draws.push(...w.foundingStagingDraws);
@@ -1503,6 +1505,49 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
       expect(draw.quantity).toBeLessThanOrEqual(headroom + 1e-9);
       expect(draw.quantity).toBeLessThanOrEqual(stock);
     }
+  });
+
+  it("scales the founder's deep line with the faction's stockpileScale, at k ≠ 1", async () => {
+    // Same fixture as the k=1 case above — a supplier founder parked so its headroom above the
+    // k=1 deep line is exactly a quarter of the colony's want — but run at stockpileScaleByFaction
+    // 1.5. `consumerDeepLine` is `DONOR_RESERVE_COVER × demand × anchorMult × stockpileScale`, so
+    // the deep line itself scales to 1.5× the k=1 figure and the founder's headroom shrinks by the
+    // same amount: the draw must leave the founder at or above 1.5× the k=1 deep line, not just
+    // the (smaller) unscaled line a broken scale resolution would still enforce.
+    const K = 1.5;
+    const homeDemand = consumptionRate("food", { population: HOME_POP, technicians: 0, engineers: 0 });
+    const partProduction = homeDemand * 0.95;
+    const deepLineK1 = DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand;
+    const headroom = foundingWant("food") / 4;
+    const stock = K * deepLineK1 + headroom;
+    const home = stockedHome({ food: stock }, { food: partProduction });
+
+    const good = toGoodMarketStates(home, { stockpileScale: K }).find((g) => g.goodId === "food");
+    if (good === undefined) throw new Error("no food market on the founder");
+    expect(good.role).toBe("supplier");
+    expect(good.consumerDeepLine).toBeCloseTo(K * deepLineK1, 6);
+    expect(foundingDrawableAt(good)).toBeCloseTo(headroom, 9);
+
+    const run = await runEstablish(home, 1_000_000, undefined, undefined, new Map([["f1", K]]));
+
+    expect(run.developed).toBe(true);
+    expect(run.draws.length).toBeGreaterThan(0);
+    // Per-draw, mirroring the k=1 case above: the founder's headroom above the SCALED deep line
+    // is the cap on any single draw. A processor that resolved the scale as 1 regardless of the
+    // map would compute headroom against the unscaled (smaller) deep line instead — a figure
+    // 0.5× deepLineK1 larger than this bound — and a draw would exceed it.
+    for (const draw of run.draws) {
+      expect(draw.quantity).toBeLessThanOrEqual(headroom + 1e-9);
+      expect(draw.quantity).toBeLessThanOrEqual(stock);
+    }
+
+    // founderCover reads against the scaled line too: with headroom this tight against the want,
+    // the last staged cycle leaves the founder within a hair of 1× its OWN (scaled) deep line —
+    // the same reading a broken scale resolution would report against the unscaled line instead,
+    // where it would sit well above 1.
+    const lastEvent = run.manifestEvents[run.manifestEvents.length - 1];
+    if (lastEvent === undefined) throw new Error("no founding manifest recorded");
+    expect(lastEvent.founderCover).toBeCloseTo(1, 1);
   });
 
   it("reads the same founder cover for the same physical stock whatever role the founder trades on", async () => {

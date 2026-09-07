@@ -286,6 +286,11 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   const hopFuelCostsOf = (row: WorldPendingArrival): number[] =>
     row.routeEdges.map((k) => laneFuelCosts.get(k) ?? 0);
   const spellAcc = newSpellAccumulator();
+  // Role-authored want per `systemId|goodId`, refreshed once per logistics cycle (see the cache
+  // build below) — the two per-tick samplers read a market's actual want off this rather than the
+  // old full-rate-consumer formula. Empty until the first logistics cycle resolves; both samplers
+  // fall back to the old formula for a key this cache has never carried.
+  let wantByKey: ReadonlyMap<string, number> = new Map();
   const dispatchDrain: DispatchDrainCensus = newDispatchDrainCensus();
   const logisticsInterval = config.cadence?.logistics ?? LOGISTICS_INTERVAL;
   // Calibration-only wall-clock: Σ stage / Σ tick over EVERY tick (goods-arrivals and the outer tick
@@ -377,19 +382,27 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       }
       if (world.meta.currentTick % logisticsInterval === 0) {
         sampleLaneUtilisation(laneAcc, world.lanes, catchUpFactor(logisticsInterval));
+        // Role-authored want lines only change on a logistics run, so this cache — and the
+        // `cycleTargets` full market-state walk it comes from — is refreshed here rather than
+        // per tick. `sampleDemandHunting` (cycle-boundary) and `sampleSurvivalSpells` (this
+        // boundary) both read it instead of rebuilding market state themselves.
+        const cycleStockpileScale = new Map(
+          world.treasuries.map((t) => [t.factionId, t.stockpileScale ?? 1]),
+        );
+        const cycleSystems = toTickSystems(world);
+        const cycleTargets = logisticsTargetsByKey(cycleSystems, currentMarkets, cycleStockpileScale);
+        const nextWantByKey = new Map<string, number>();
+        for (const [key, info] of cycleTargets) nextWantByKey.set(key, info.logisticsTarget);
+        wantByKey = nextWantByKey;
         // Spec §7 measures spells as "consecutive-logistics-run deficit spells" (premise 3's own
         // cadence) — sampled on the logistics boundary, not the economy cycle, even though the two
         // intervals default equal.
-        sampleSurvivalSpells(spellAcc, currentMarkets, world.meta.currentTick, LOGISTICS_WARMUP_TICKS);
-        // First-release transient (spec §6): reuses this same per-cycle boundary rather than a
-        // second walk over the galaxy, and stops paying for it once the first positive run is
-        // found — `sampleReleasedTonnage` is a no-op past that point.
+        sampleSurvivalSpells(spellAcc, currentMarkets, world.meta.currentTick, LOGISTICS_WARMUP_TICKS, wantByKey);
+        // First-release transient (spec §6): reuses the `cycleTargets` walk just built above rather
+        // than a second walk over the galaxy, and stops paying for the extra `computeReleasedByGood`
+        // pass once the first positive run is found — `sampleReleasedTonnage` is a no-op past that
+        // point.
         if (!laneAcc.releasedFirst) {
-          const cycleStockpileScale = new Map(
-            world.treasuries.map((t) => [t.factionId, t.stockpileScale ?? 1]),
-          );
-          const cycleSystems = toTickSystems(world);
-          const cycleTargets = logisticsTargetsByKey(cycleSystems, currentMarkets, cycleStockpileScale);
           const marketByKey = new Map(currentMarkets.map((m) => [`${m.systemId}|${m.goodId}`, m]));
           sampleReleasedTonnage(
             laneAcc, world.meta.currentTick, computeReleasedByGood(cycleTargets, marketByKey),
@@ -508,7 +521,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     // The flip half of the hunting reading is a per-cycle observation; the churn half comes off
     // the whole flow log at the end.
     if (cycleLength > 0 && world.meta.currentTick % cycleLength === 0) {
-      sampleDemandHunting(demandHunting, currentMarkets);
+      sampleDemandHunting(demandHunting, currentMarkets, wantByKey);
     }
     if (tickSystems && colonyDue) {
       sampleFoundedColonies(tickSystems, currentMarkets, world.meta.currentTick, foundedColonies);
