@@ -71,8 +71,16 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   **Route dictionary / per-source path cache** — not needed at 600 systems (the wall-clock share
   held under the ~3× line); the 10,000-system read was never run (projected ~2h). Book this only if
   that larger read fails the line.
-  *Next step:* after the supplier-floor spec ships, `/measure` the remaining latency
-  (re-run the working file's claim-1 instrument) and decide the depot; then the four open items
+  *Next step:* decide the depot from the supplier-floor gate read (seed 42, 600 systems, same
+  instrument both arms): the share of served sinks with mean inbound latency > 24 ticks went
+  0.965 → 0.925 at 10K and 0.963 → 0.896 at 16K; on the treated cohort (supplier / idle sinks) the
+  branch reads 0.919 at 10K (n=148) and 0.867 at 16K (n=165), with 8-11% of served sinks
+  gate-excluded by the late-inbound share. The kill line (≥ 0.90 at both horizons) was not hit, but
+  the fall is modest — most served worlds still wait more than a cycle, which is the depot's
+  case. The haul-cost retune (`LOGISTICS_RATE_PER_WORK`) reads logistics work per delivered unit
+  at 39.9 (10K) / 37.9 (16K) on the branch — transfers 54.3K → 136.9K at 10K for the same tonnage
+  moved (mean size 97 → 40), budget spent fraction 0.002 on both arms, funding-bound 0 — no
+  baseline figure exists (main's harness prints no work total). Then the four open items
   above — founding freight on real ships, people-movement unification, input-proximity weighting,
   the player priority lever. Who owns production and movement (companies, strata) is the
   faction-direction pass's question, not this row's.
