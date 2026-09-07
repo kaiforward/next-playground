@@ -117,6 +117,7 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
       steadyInbound: 0,
       inboundSinceFold: 0,
       lateInboundSinceFold: 0,
+      inboundCreditedLastCycle: 0,
     }]);
     expect(world.markets[0].realisedProductionRate).toBe(0);
     // Opposite polarities, both deliberate: a corrupt realised rate reads as "produced nothing",
@@ -181,6 +182,7 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
       steadyInbound: 0,
       inboundSinceFold: 0,
       lateInboundSinceFold: 0,
+      inboundCreditedLastCycle: 0,
     }]);
     expect(world.markets[0].squeezeCycles).toBe(1.5); // not floored to 1
     const views = await world.getMarketsForSystems(["s1"]);
