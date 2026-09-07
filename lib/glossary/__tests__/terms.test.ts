@@ -79,6 +79,11 @@ const EXPECTED_TERM_IDS: readonly TermId[] = [
   "fundedFraction",
   "charterFee",
   "manifest",
+  "producer",
+  "supplier",
+  "consumer",
+  "idle",
+  "stockpile",
   // Territory and politics
   "ownershipLadder",
   "claim",

@@ -85,6 +85,11 @@ export type TermId =
   | "fundedFraction"
   | "charterFee"
   | "manifest"
+  | "producer"
+  | "supplier"
+  | "consumer"
+  | "idle"
+  | "stockpile"
   // Territory and politics
   | "ownershipLadder"
   | "claim"
@@ -938,6 +943,47 @@ export const TERMS: Readonly<Record<TermId, TermDefinition>> = {
       text(" by "),
       ref("cycle", "cycle"),
       text(" and credited to its market when it opens."),
+    ],
+  },
+  producer: {
+    id: "producer",
+    term: "Producer",
+    body: [
+      text("A world that makes more of this good than it uses. It keeps a short restart buffer and ships the rest."),
+    ],
+  },
+  supplier: {
+    id: "supplier",
+    term: "Supplier",
+    body: [
+      text(
+        "A world kept topped up by steady deliveries or its own part-production. It holds a thin buffer like a producer and passes the rest on.",
+      ),
+    ],
+  },
+  consumer: {
+    id: "consumer",
+    term: "Consumer",
+    body: [
+      text(
+        "A world that uses this good and has no steady refill. It keeps a deep reserve sized to what it actually uses.",
+      ),
+    ],
+  },
+  idle: {
+    id: "idle",
+    term: "Idle",
+    body: [
+      text("A world whose use of this good has fallen away. It holds only a restart buffer until use returns."),
+    ],
+  },
+  stockpile: {
+    id: "stockpile",
+    term: "Stockpile",
+    body: [
+      text(
+        "How deep every system in a faction holds goods, in three steps a player sets once for the whole faction: lean holds less, deep holds more.",
+      ),
     ],
   },
 

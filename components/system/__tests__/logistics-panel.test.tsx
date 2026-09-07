@@ -18,6 +18,7 @@ vi.mock("@/lib/hooks/use-system-logistics", () => ({
 function goodRow(overrides: Partial<LogisticsGoodRow> & { goodId: string; goodName: string }): LogisticsGoodRow {
   return {
     tier: 0,
+    role: "consumer",
     production: 10,
     consumption: 4,
     inputDemand: 0,
@@ -39,14 +40,15 @@ function renderPanel() {
 /** Locates a bar cell's trigger by its own accessible name (`"<good> — Internal"`/
  *  `"<good> — External"`, the `BarCell` `title`) rather than a bare `[tabindex]` selector, so a
  *  markup change that preserves focusability but drops the trigger's name still fails here.
- *  `cellIndex` picks which `<td>` in the good's row carries the bar (1 = internal, 3 = external). */
+ *  `cellIndex` picks which `<td>` in the good's row carries the bar (2 = internal, 4 = external —
+ *  Good and Role are the two cells ahead of the Internal bar). */
 async function openBarCell(user: ReturnType<typeof userEvent.setup>, goodName: string, cellIndex: number) {
   const nameCell = screen.getByText(goodName);
   const row = nameCell.closest("tr");
   if (!row) throw new Error(`no <tr> ancestor for "${goodName}"`);
   const cell = row.children[cellIndex];
   if (!cell) throw new Error(`no cell ${cellIndex} in "${goodName}"'s row`);
-  const kind = cellIndex === 1 ? "Internal" : "External";
+  const kind = cellIndex === 2 ? "Internal" : "External";
   const trigger = within(cell as HTMLElement).getByLabelText(`${goodName} — ${kind}`);
   await hoverUntilLocked(user, trigger);
 }
@@ -81,7 +83,7 @@ describe("LogisticsPanel — bar cell dwell popovers", () => {
     };
     renderPanel();
 
-    await openBarCell(user, "Metals", 1);
+    await openBarCell(user, "Metals", 2);
     expect(await screen.findByText("Produces")).toBeInTheDocument();
     expect(screen.getByText("Consumes")).toBeInTheDocument();
   });
@@ -101,7 +103,7 @@ describe("LogisticsPanel — bar cell dwell popovers", () => {
 
     const row = screen.getByText("Metals").closest("tr");
     // The external cell (index 3) renders the untraded placeholder, not a focusable bar trigger.
-    expect(row?.children[3]?.querySelector("[tabindex]")).toBeNull();
+    expect(row?.children[4]?.querySelector("[tabindex]")).toBeNull();
   });
 
   it("opens the external bar's popover on a traded good, showing its source/destination partners", async () => {
@@ -128,9 +130,100 @@ describe("LogisticsPanel — bar cell dwell popovers", () => {
     };
     renderPanel();
 
-    await openBarCell(user, "Metals", 3);
+    await openBarCell(user, "Metals", 4);
     expect(await screen.findByText("Sources")).toBeInTheDocument();
     expect(screen.getByText("Alpha")).toBeInTheDocument();
+  });
+});
+
+describe("LogisticsPanel — role and its lines", () => {
+  it("shows a supplier's role word plus its two deciding numbers", () => {
+    dataValue = {
+      visibility: "visible",
+      rows: [
+        goodRow({
+          goodId: "metals", goodName: "Metals", role: "supplier",
+          givesDownToCycles: 10, wantCycles: 12,
+          steadyInbound: 4.2, lateInboundShare: 0.04,
+        }),
+      ],
+      internalMax: 10, externalMax: 1, activeGoodCount: 1, tradedGoodCount: 0, volumeHistory: [],
+      transit: { inbound: [], outbound: [] },
+    };
+    renderPanel();
+
+    const row = screen.getByText("Metals").closest("tr");
+    if (!row) throw new Error("no <tr> ancestor for Metals");
+    expect(within(row as HTMLElement).getByText("Supplier")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("4.2/cyc")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("4%")).toBeInTheDocument();
+  });
+
+  it("shows a consumer row's cycle lines but neither of the supplier's deciding numbers", () => {
+    dataValue = {
+      visibility: "visible",
+      rows: [
+        goodRow({
+          goodId: "metals", goodName: "Metals", role: "consumer",
+          givesDownToCycles: 40, wantCycles: 45,
+          // Set as if stale/inconsistent data reached the panel — the role gate, not the data's
+          // own absence, is what must keep a consumer row from showing the supplier's numbers.
+          steadyInbound: 4.2, lateInboundShare: 0.04,
+        }),
+      ],
+      internalMax: 10, externalMax: 1, activeGoodCount: 1, tradedGoodCount: 0, volumeHistory: [],
+      transit: { inbound: [], outbound: [] },
+    };
+    renderPanel();
+
+    const row = screen.getByText("Metals").closest("tr");
+    if (!row) throw new Error("no <tr> ancestor for Metals");
+    expect(within(row as HTMLElement).getByText("Consumer")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("40.0 cycles")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("45.0 cycles")).toBeInTheDocument();
+    expect(within(row as HTMLElement).queryByText(/\/cyc/)).not.toBeInTheDocument();
+    expect(within(row as HTMLElement).queryByText(/%/)).not.toBeInTheDocument();
+  });
+
+  it("renders an unknown-rate market as a consumer with no placeholder in its numbers", () => {
+    dataValue = {
+      visibility: "visible",
+      // No demand-derived fields set at all — the same reading a market with an unknown rolling
+      // rate gets: role falls back to consumer, and every cycle figure stays absent.
+      rows: [goodRow({ goodId: "metals", goodName: "Metals", role: "consumer" })],
+      internalMax: 10, externalMax: 1, activeGoodCount: 1, tradedGoodCount: 0, volumeHistory: [],
+      transit: { inbound: [], outbound: [] },
+    };
+    renderPanel();
+
+    const row = screen.getByText("Metals").closest("tr");
+    if (!row) throw new Error("no <tr> ancestor for Metals");
+    expect(within(row as HTMLElement).getByText("Consumer")).toBeInTheDocument();
+    expect(within(row as HTMLElement).queryByText("—")).not.toBeInTheDocument();
+    expect(within(row as HTMLElement).queryByText("n/a")).not.toBeInTheDocument();
+    expect(within(row as HTMLElement).queryByText(/cycles/)).not.toBeInTheDocument();
+  });
+
+  it("shows an idle row's realised use against full-rate use, not the supplier's numbers", () => {
+    dataValue = {
+      visibility: "visible",
+      rows: [
+        goodRow({
+          goodId: "metals", goodName: "Metals", role: "idle",
+          consumption: 4, inputDemand: 6, givesDownToCycles: 10, wantCycles: 9.6,
+          realisedUse: 1.2,
+        }),
+      ],
+      internalMax: 10, externalMax: 1, activeGoodCount: 1, tradedGoodCount: 0, volumeHistory: [],
+      transit: { inbound: [], outbound: [] },
+    };
+    renderPanel();
+
+    const row = screen.getByText("Metals").closest("tr");
+    if (!row) throw new Error("no <tr> ancestor for Metals");
+    expect(within(row as HTMLElement).getByText("Idle")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("12% of full rate")).toBeInTheDocument();
+    expect(within(row as HTMLElement).queryByText(/\/cyc/)).not.toBeInTheDocument();
   });
 });
 

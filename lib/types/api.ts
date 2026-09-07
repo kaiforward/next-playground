@@ -3,6 +3,7 @@ import type { SubstrateGoodRate, ConsumptionBreakdown } from "@/lib/engine/physi
 import type { SupplyRegime } from "@/lib/engine/population";
 import type { FillOrderRow, PotentialYieldRowView } from "@/lib/utils/substrate";
 import type { ConstructionProjectLaneRow } from "@/lib/engine/construction-readout";
+import type { LogisticsRole } from "@/lib/engine/directed-logistics";
 
 /**
  * One directed hop of in-flight freight over a single lane — the map overlay's edge unit. Unlike
@@ -128,6 +129,26 @@ export interface LogisticsGoodRow {
   goodId: string;
   goodName: string;
   tier: GoodTier;
+  /** What this good's role classifies this world as (`classifyLogisticsRole`) — decides which
+   *  pair of lines below the two cycle figures are read against. A good with no market row here
+   *  (traded only) reads as "consumer", the same as an unknown rolling rate does. */
+  role: LogisticsRole;
+  /** `donorReserve / demand`, in cycles of full-rate use — the give-down-to line. Absent when
+   *  `demand` is 0 (never `Infinity`/`NaN`). */
+  givesDownToCycles?: number;
+  /** `logisticsTarget / demand`, in cycles of full-rate use — the want line. Absent when `demand`
+   *  is 0. */
+  wantCycles?: number;
+  /** Rolling steady-inbound rate, units per cycle. Absent ⇒ unknown, never 0 — see
+   *  `GoodMarketState.steadyInbound`. One of the two numbers that decided a supplier role. */
+  steadyInbound?: number;
+  /** Rolling realised-use rate, units per cycle. Absent ⇒ unknown, never 0 — see
+   *  `GoodMarketState.realisedUse`. Read against full-rate `consumption + inputDemand` on an idle
+   *  row, the number that decided it. */
+  realisedUse?: number;
+  /** Rolling late-inbound share, in [0,1]. Absent ⇒ unknown, never 0 — see
+   *  `GoodMarketState.lateInboundShare`. The other of the two numbers that decided a supplier role. */
+  lateInboundShare?: number;
   /** Staffed production capacity scaled by the strike/maintenance suppression the economy
    *  applied — the operating rate, on the same basis as `inputDemand`. */
   production: number;

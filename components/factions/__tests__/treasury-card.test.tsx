@@ -1,20 +1,24 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { TreasuryCard } from "@/components/factions/treasury-card";
 import type { FactionTreasuryData } from "@/lib/types/api";
+import type { TreasuryPolicyInput } from "@/lib/schemas/treasury";
 
 // Both hooks are thin wrappers, so mocking them at the module edge is enough — no
 // QueryClientProvider, and no fetch for jsdom to fail on.
-const { treasuryValue } = vi.hoisted(() => ({
+const { treasuryValue, mutateMock } = vi.hoisted(() => ({
   treasuryValue: { current: null as FactionTreasuryData | null },
+  mutateMock: vi.fn(),
 }));
 
 vi.mock("@/lib/hooks/use-faction-treasury", () => ({
   useFactionTreasury: () => treasuryValue.current,
-  useUpdateTreasuryPolicy: () => ({ mutate: vi.fn() }),
+  useUpdateTreasuryPolicy: () => ({ mutate: mutateMock }),
 }));
 
-function renderCard(treasury: Partial<FactionTreasuryData>) {
+function renderCard(treasury: Partial<FactionTreasuryData>, interactive = true) {
+  mutateMock.mockClear();
   treasuryValue.current = {
     factionId: "f1", balance: 1000, taxLevel: "normal",
     bands: { maintenance: 1, logistics: 1, construction: 1 },
@@ -23,7 +27,7 @@ function renderCard(treasury: Partial<FactionTreasuryData>) {
     stockpileScale: 1,
     ...treasury,
   };
-  return render(<TreasuryCard factionId="f1" interactive />);
+  return render(<TreasuryCard factionId="f1" interactive={interactive} />);
 }
 
 describe("TreasuryCard — available money leads, committed founding reconciles", () => {
@@ -39,5 +43,37 @@ describe("TreasuryCard — available money leads, committed founding reconciles"
     renderCard({ balance: 1000, foundingCommitted: 0 });
     expect(screen.getByText("1000")).toBeInTheDocument();
     expect(screen.queryByText(/committed to founding/)).not.toBeInTheDocument();
+  });
+});
+
+describe("TreasuryCard — stockpile control", () => {
+  it("offers exactly the Lean / Normal / Deep step list", () => {
+    renderCard({ stockpileScale: 1 });
+    const group = screen.getByRole("radiogroup", { name: "Stockpile" });
+    const radios = within(group).getAllByRole("radio");
+    expect(radios.map((r) => r.getAttribute("value"))).toEqual(["0.75", "1", "1.5"]);
+    expect(within(group).getByRole("radio", { name: "Lean" })).toBeInTheDocument();
+    expect(within(group).getByRole("radio", { name: "Normal" })).toBeInTheDocument();
+    expect(within(group).getByRole("radio", { name: "Deep" })).toBeInTheDocument();
+  });
+
+  it("commits one policy write carrying only stockpileScale when a step is picked", async () => {
+    const user = userEvent.setup();
+    renderCard({ stockpileScale: 1 });
+
+    await user.click(screen.getByRole("radio", { name: "Deep" }));
+
+    expect(mutateMock).toHaveBeenCalledTimes(1);
+    const input: TreasuryPolicyInput = mutateMock.mock.calls[0][0];
+    expect(input).toEqual({ stockpileScale: 1.5 });
+  });
+
+  it("does not respond to a click on an AI faction's card", async () => {
+    const user = userEvent.setup();
+    renderCard({ stockpileScale: 1 }, false);
+
+    await user.click(screen.getByRole("radio", { name: "Deep" }));
+
+    expect(mutateMock).not.toHaveBeenCalled();
   });
 });

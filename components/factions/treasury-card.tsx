@@ -6,13 +6,30 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FundingSlider } from "@/components/form/funding-slider";
 import { TaxLevelStepper } from "@/components/factions/tax-level-stepper";
+import { SegmentedControl } from "@/components/form/segmented-control";
 import { useFactionTreasury, useUpdateTreasuryPolicy } from "@/lib/hooks/use-faction-treasury";
 import { TREASURY } from "@/lib/constants/treasury";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { buildingLabel } from "@/lib/engine/construction-readout";
 import { formatMagnitude, formatSignedMagnitude } from "@/lib/utils/format";
 import type { TaxLevel } from "@/lib/types/game";
 import { bandShortfall, foundingWorkingBalance, type TreasuryBands } from "@/lib/engine/treasury";
 import { TermLabel } from "@/components/ui/term-label";
+
+/** The three stepped stockpile-scale bands, keyed to their step value's string form (the
+ *  control's own `value` type must extend `string`, so the numeric steps round-trip through it).
+ *  Band names only — the multiplier behind each is never shown to the player. */
+const STOCKPILE_SCALE_LABELS: Record<string, string> = { "0.75": "Lean", "1": "Normal", "1.5": "Deep" };
+const STOCKPILE_SCALE_OPTIONS = DIRECTED_LOGISTICS.STOCKPILE_SCALE_STEPS.map((step) => ({
+  value: String(step),
+  label: STOCKPILE_SCALE_LABELS[String(step)] ?? String(step),
+}));
+
+/** The step whose string form matches `value`, falling back to the default (Normal, 1) — never an
+ *  assertion, since `Array.prototype.find` already returns a member of the literal union. */
+function stockpileScaleStepFor(value: string): (typeof DIRECTED_LOGISTICS.STOCKPILE_SCALE_STEPS)[number] {
+  return DIRECTED_LOGISTICS.STOCKPILE_SCALE_STEPS.find((step) => String(step) === value) ?? 1;
+}
 
 function money(n: number): string {
   return formatMagnitude(n);
@@ -143,6 +160,24 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
           interactive={interactive}
           onCommit={commitBand("construction")}
         />
+
+        <div className="mt-3 flex items-center justify-between">
+          <span className="text-sm text-text-secondary">
+            <TermLabel id="stockpile">Stockpile</TermLabel>
+          </span>
+          <div className={`w-40 ${interactive ? "" : "pointer-events-none opacity-60"}`}>
+            <SegmentedControl
+              name="stockpile-scale"
+              ariaLabel="Stockpile"
+              value={String(data.stockpileScale)}
+              onChange={(value) => {
+                if (!interactive) return;
+                update.mutate({ stockpileScale: stockpileScaleStepFor(value) });
+              }}
+              options={STOCKPILE_SCALE_OPTIONS}
+            />
+          </div>
+        </div>
 
         <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
           <span className="text-sm text-text-secondary">
