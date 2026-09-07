@@ -29,7 +29,7 @@ import { CONSTRUCTION_INTERVAL, CYCLE_LENGTH } from "@/lib/constants/tick-cadenc
 import {
   charterFee, referenceMaintenanceBill, type FoundingSourceSupply,
 } from "@/lib/engine/founding-cost";
-import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
+import { toGoodMarketStates, stockpileScaleFor } from "@/lib/tick/processors/good-market-state";
 import { marketRowsBySystem } from "@/lib/world/tick";
 import type { World, WorldConstructionProject } from "@/lib/world/types";
 import type { SystemConstructionData, FactionConstructionData } from "@/lib/types/api";
@@ -52,16 +52,22 @@ function foundingSupplyBySource(
   if (sourceIds.size === 0) return supply;
 
   const marketRows = marketRowsBySystem(world.markets);
+  const stockpileScaleByFaction = new Map(
+    world.treasuries.map((t) => [t.factionId, t.stockpileScale ?? 1]),
+  );
   for (const sourceId of sourceIds) {
     const source = world.systems.find((s) => s.id === sourceId);
     if (source === undefined) continue;
-    const states = toGoodMarketStates({
-      buildings: buildings.get(sourceId) ?? {},
-      population: source.population,
-      yields: yieldsOf(source),
-      extractionEff: effOf(source),
-      markets: marketRows.get(sourceId) ?? [],
-    });
+    const states = toGoodMarketStates(
+      {
+        buildings: buildings.get(sourceId) ?? {},
+        population: source.population,
+        yields: yieldsOf(source),
+        extractionEff: effOf(source),
+        markets: marketRows.get(sourceId) ?? [],
+      },
+      { stockpileScale: stockpileScaleFor(source.factionId, stockpileScaleByFaction) },
+    );
     supply.set(
       sourceId,
       states.map((g) => ({ goodId: g.goodId, sparable: foundingDrawableAt(g) })),

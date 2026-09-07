@@ -8,7 +8,8 @@ import {
 } from "../tick";
 import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import { serialiseWorld, deserialiseWorld } from "../save";
-import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
+import { toGoodMarketStates, stockpileScaleFor } from "@/lib/tick/processors/good-market-state";
+import { logisticsTargetsByKey } from "@/lib/tick-harness/cohort-analysis";
 import { unitResourceVector, yieldsOf } from "@/lib/engine/resources";
 import { catchUpFactor } from "@/lib/tick/shard";
 import { RELATIONS_FREQUENCY, RELATION_HISTORY_MAX } from "@/lib/constants/relations";
@@ -2764,12 +2765,10 @@ describe("runWorldTick — the unserved shortfall level end to end", () => {
     for (const b of world.buildings) if (b.systemId === systemId) buildings[b.buildingType] = b.count;
     const rows = marketRowsBySystem(world.markets.filter((m) => m.systemId === systemId)).get(systemId);
     if (!rows) throw new Error(`no market rows for ${systemId}`);
-    const state = toGoodMarketStates({
-      buildings,
-      population: system.population,
-      yields: yieldsOf(system),
-      markets: rows,
-    }).find((g) => g.goodId === goodId);
+    const state = toGoodMarketStates(
+      { buildings, population: system.population, yields: yieldsOf(system), markets: rows },
+      { stockpileScale: 1 },
+    ).find((g) => g.goodId === goodId);
     if (!state) throw new Error(`no ${goodId} state at ${systemId}`);
     return state.logisticsTarget;
   }
@@ -2926,6 +2925,72 @@ describe("runWorldTick — the unserved shortfall level end to end", () => {
     expect(dirty.events).toEqual(clean.events);
     expect(dirty.instrumentation).toEqual(clean.instrumentation);
   }, 60_000);
+});
+
+describe("runWorldTick — stockpileScale reaches every toGoodMarketStates caller identically", () => {
+  it("scales a market's give line by the owning faction's treasury row, and the harness reads the same figure the tick did", async () => {
+    const base = generateWorld({ systemCount: 20, seed: 7 });
+    const factionId = base.factions[0].id;
+    const systemId = base.factions[0].homeworldId;
+    const scaled: World = {
+      ...base,
+      treasuries: base.treasuries.map((t) =>
+        t.factionId === factionId ? { ...t, stockpileScale: 1.5 } : t,
+      ),
+    };
+    const cadence = { cycle: 1, logistics: 1, construction: 99 };
+    const after = (await runWorldTick(scaled, { cadence })).world;
+
+    const system = after.systems.find((s) => s.id === systemId);
+    if (!system) throw new Error(`no system ${systemId}`);
+    const buildings: Record<string, number> = {};
+    for (const b of after.buildings) if (b.systemId === systemId) buildings[b.buildingType] = b.count;
+    const rows = marketRowsBySystem(after.markets.filter((m) => m.systemId === systemId)).get(systemId);
+    if (!rows) throw new Error(`no market rows for ${systemId}`);
+    const source = { buildings, population: system.population, yields: yieldsOf(system), markets: rows };
+
+    // The tick path: the faction's own persisted stockpileScale, resolved exactly as
+    // `stockpileScaleByFaction` is built in `runWorldTick` itself.
+    const tickState = toGoodMarketStates(source, { stockpileScale: 1.5 })
+      .find((g) => g.goodId === "water");
+    if (!tickState) throw new Error("no water state");
+
+    // The harness path: cohort-analysis's own call site, given the same treasury-derived map.
+    const tickSystems = toTickSystems(after);
+    const stockpileScaleByFaction = new Map(
+      after.treasuries.map((t) => [t.factionId, t.stockpileScale ?? 1]),
+    );
+    const harnessTargets = logisticsTargetsByKey(tickSystems, after.markets, stockpileScaleByFaction);
+
+    expect(harnessTargets.get(`${systemId}|water`)).toBeCloseTo(tickState.logisticsTarget, 9);
+
+    // Both read 1.5× the k=1 figure on the identical row data — the multiplier reaching this site
+    // at all, not merely the two paths agreeing with each other.
+    const unscaledState = toGoodMarketStates(source, { stockpileScale: 1 })
+      .find((g) => g.goodId === "water");
+    if (!unscaledState) throw new Error("no water state");
+    expect(tickState.logisticsTarget).toBeCloseTo(unscaledState.logisticsTarget * 1.5, 9);
+    expect(tickState.donorReserve).toBeCloseTo(unscaledState.donorReserve * 1.5, 9);
+  });
+
+  it("leaves an independent (unowned) system's lines unscaled whatever any faction's stockpileScale is set to", () => {
+    // Not read from a generated galaxy: an unclaimed system there carries no population and no
+    // market rows, which would let this assertion pass vacuously on an empty state array. This
+    // fixture parks a real consumer row on a `factionId: null` source instead.
+    const rows = marketRowsBySystem([
+      { systemId: "independent", goodId: "water", stock: 10, anchorMult: 1, demandRate: 5, storageCapacity: 20 },
+    ]).get("independent") ?? [];
+    const source = { buildings: {}, population: 100, yields: unitResourceVector(), markets: rows };
+
+    // Every faction in scope is set to 1.5 — an independent system has no treasury row of its own
+    // to read regardless of what the map holds.
+    const stockpileScaleByFaction = new Map([["f1", 1.5], ["f2", 1.5]]);
+    const scaled = toGoodMarketStates(
+      source, { stockpileScale: stockpileScaleFor(null, stockpileScaleByFaction) },
+    );
+    const unscaled = toGoodMarketStates(source, { stockpileScale: 1 });
+    expect(scaled).toEqual(unscaled);
+  });
 });
 
 // ── Build blocked (WorldSystem.buildBlocked) ─────────────────────────
@@ -3221,7 +3286,7 @@ describe("marketRowsBySystem → toGoodMarketStates: the persisted-figure seam",
     if (rows === undefined) throw new Error("Expected rows for s1");
     const state = toGoodMarketStates(
       { buildings: SEAM_BUILDINGS, population: SEAM_POPULATION, yields: unitResourceVector(), markets: rows },
-      { withDraw },
+      { withDraw, stockpileScale: 1 },
     ).find((g) => g.goodId === "ore");
     if (state === undefined) throw new Error("Expected an ore state");
     return state;

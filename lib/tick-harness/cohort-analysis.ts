@@ -10,7 +10,7 @@ import { MIN_DEMAND } from "@/lib/constants/market-economy";
 import { GOODS } from "@/lib/constants/goods";
 import { effectiveSpaceCost, HOUSING_TYPE } from "@/lib/constants/industry";
 import { curveForRow, marketBandForRow, midPriceAt } from "@/lib/engine/market-pricing";
-import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
+import { toGoodMarketStates, stockpileScaleFor } from "@/lib/tick/processors/good-market-state";
 import { marketRowsBySystem } from "@/lib/world/tick";
 import { median } from "@/lib/utils/math";
 import { nearBandFloor } from "./market-analysis";
@@ -70,21 +70,26 @@ export interface MarketRoleInfo {
   demand: number;
 }
 
-/** Every market's role and demand, keyed `systemId|goodId`. One pass over the galaxy. */
+/** Every market's role and demand, keyed `systemId|goodId`. One pass over the galaxy.
+ *  `stockpileScaleByFaction` resolves each system's owning faction exactly as the tick's own
+ *  callers do (`stockpileScaleFor`); an unowned system or a missing row reads 1. */
 export function marketRolesByKey(
   systems: TickSystem[],
   markets: WorldMarket[],
+  stockpileScaleByFaction?: ReadonlyMap<string, number>,
 ): Map<string, MarketRoleInfo> {
   const rowsBySystem = marketRowsBySystem(markets);
   const demandRateByKey = new Map(markets.map((m) => [`${m.systemId}|${m.goodId}`, m.demandRate]));
   const roles = new Map<string, MarketRoleInfo>();
+  const scaleByFaction = stockpileScaleByFaction ?? new Map<string, number>();
 
   for (const s of systems) {
     const rows = rowsBySystem.get(s.id);
     if (!rows) continue;
-    const states = toGoodMarketStates({
-      buildings: s.buildings, population: s.population, yields: s.yields, markets: rows,
-    });
+    const states = toGoodMarketStates(
+      { buildings: s.buildings, population: s.population, yields: s.yields, markets: rows },
+      { stockpileScale: stockpileScaleFor(s.factionId, scaleByFaction) },
+    );
     for (const state of states) {
       const key = `${s.id}|${state.goodId}`;
       const demandRate = demandRateByKey.get(key) ?? 0;
@@ -99,21 +104,25 @@ export function marketRolesByKey(
  * `systemId|goodId` — the figure `classifyMarketState` measures a deficit against. It cannot be
  * read off a market row alone: the row carries only the `MIN_DEMAND`-floored `demandRate`, so the
  * real demand has to come back through `toGoodMarketStates` from the system's population and
- * industry. A market whose system is absent from `systems` gets no entry.
+ * industry. A market whose system is absent from `systems` gets no entry. `stockpileScaleByFaction`
+ * resolves the same way `marketRolesByKey` does.
  */
 export function logisticsTargetsByKey(
   systems: TickSystem[],
   markets: WorldMarket[],
+  stockpileScaleByFaction?: ReadonlyMap<string, number>,
 ): Map<string, number> {
   const rowsBySystem = marketRowsBySystem(markets);
   const targets = new Map<string, number>();
+  const scaleByFaction = stockpileScaleByFaction ?? new Map<string, number>();
 
   for (const s of systems) {
     const rows = rowsBySystem.get(s.id);
     if (!rows) continue;
-    const states = toGoodMarketStates({
-      buildings: s.buildings, population: s.population, yields: s.yields, markets: rows,
-    });
+    const states = toGoodMarketStates(
+      { buildings: s.buildings, population: s.population, yields: s.yields, markets: rows },
+      { stockpileScale: stockpileScaleFor(s.factionId, scaleByFaction) },
+    );
     for (const state of states) targets.set(`${s.id}|${state.goodId}`, state.logisticsTarget);
   }
   return targets;

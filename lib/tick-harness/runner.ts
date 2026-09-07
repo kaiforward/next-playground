@@ -553,18 +553,24 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     goodsArrivalsShare: tickMsSum > 0 ? goodsArrivalsMsSum / tickMsSum : 0,
   };
 
+  // Every treasury's stockpile scale, resolved exactly as the tick's own callers resolve it — the
+  // harness reads through this so a faction's lines never drift from what the tick itself computed.
+  const stockpileScaleByFaction = new Map(
+    world.treasuries.map((t) => [t.factionId, t.stockpileScale ?? 1]),
+  );
+
   // The deficit share is measured against the warehousing target, which needs the systems'
   // real demand — a market row carries only the MIN_DEMAND-floored rate.
   const marketHealth = computeMarketHealth(
     currentMarkets,
-    logisticsTargetsByKey(finalTickSystems, currentMarkets),
+    logisticsTargetsByKey(finalTickSystems, currentMarkets, stockpileScaleByFaction),
   );
 
   const homeworldIds = new Set(world.factions.map((f) => f.homeworldId));
   // The live partition — what this arm actually classified — published so a later arm can pin to
   // it. Taken before the pin is applied below, so a pinned run still reports its own membership
   // and the drift between arms stays visible.
-  const roleInfoByKey = marketRolesByKey(finalTickSystems, currentMarkets);
+  const roleInfoByKey = marketRolesByKey(finalTickSystems, currentMarkets, stockpileScaleByFaction);
   const marketRoles: Record<string, MarketRole> = {};
   for (const [key, info] of roleInfoByKey) {
     marketRoles[key] = info.role;
@@ -579,7 +585,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     finalTickSystems, currentMarkets, homeworldIds, STRIKE_PARAMS.threshold, world.events,
     startPopulationBySystem, colonistDeliveryTotals,
   );
-  const kneeBinding = computeKneeBinding(finalTickSystems, currentMarkets);
+  const kneeBinding = computeKneeBinding(finalTickSystems, currentMarkets, stockpileScaleByFaction);
 
   const systemNames = new Map(world.systems.map((s) => [s.id, s.name]));
   const eventImpacts = computeEventImpacts(completedEvents, systemNames);

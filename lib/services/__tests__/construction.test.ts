@@ -397,13 +397,16 @@ describe("getSystemConstruction", () => {
     // between, and the one this test pins.
     const reserveMidCover =
       DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * (1 + DIRECTED_LOGISTICS.SURPLUS_MARGIN) / 2;
-    const richStates = toGoodMarketStates({
-      buildings: buildingsBySystem().get(dev.id) ?? {},
-      population: dev.population,
-      yields: yieldsOf(dev),
-      extractionEff: effOf(dev),
-      markets: marketRowsBySystem(world.markets).get(dev.id) ?? [],
-    });
+    const richStates = toGoodMarketStates(
+      {
+        buildings: buildingsBySystem().get(dev.id) ?? {},
+        population: dev.population,
+        yields: yieldsOf(dev),
+        extractionEff: effOf(dev),
+        markets: marketRowsBySystem(world.markets).get(dev.id) ?? [],
+      },
+      { stockpileScale: 1 },
+    );
     const stockByGood = new Map(richStates.map((s) => [s.goodId, s.demand * reserveMidCover]));
     const reading = (over: Partial<World>) => {
       setWorld({
@@ -444,13 +447,16 @@ describe("getSystemConstruction", () => {
     // cycle asks for. Parked between the source's give line and the deep line a full-rate consumer
     // would keep, the export rule alone offers stock the tick will refuse to move — so the readout
     // must quote nothing there, and above that line must quote exactly the excess.
-    const statesOf = (w: World) => toGoodMarketStates({
-      buildings: buildingsBySystem().get(dev.id) ?? {},
-      population: dev.population,
-      yields: yieldsOf(dev),
-      extractionEff: effOf(dev),
-      markets: marketRowsBySystem(w.markets).get(dev.id) ?? [],
-    });
+    const statesOf = (w: World) => toGoodMarketStates(
+      {
+        buildings: buildingsBySystem().get(dev.id) ?? {},
+        population: dev.population,
+        yields: yieldsOf(dev),
+        extractionEff: effOf(dev),
+        markets: marketRowsBySystem(w.markets).get(dev.id) ?? [],
+      },
+      { stockpileScale: 1 },
+    );
     const readAt = (coverOf: (deepLine: number) => number) => {
       const base = new Map(statesOf(world).map((g) => [g.goodId, g]));
       const staged: World = {

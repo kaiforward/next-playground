@@ -1343,8 +1343,10 @@ const HOME_POP = 1000;
  *  read off the same market state the staging plan derives, so a fixture parked "at the line" is
  *  parked at the line the tick will actually apply. */
 function foodDrawableAt(stock: number, exportRate: number): number {
-  const good = toGoodMarketStates(stockedHome({ food: stock }, { food: exportRate }))
-    .find((g) => g.goodId === "food");
+  const good = toGoodMarketStates(
+    stockedHome({ food: stock }, { food: exportRate }),
+    { stockpileScale: 1 },
+  ).find((g) => g.goodId === "food");
   if (good === undefined) throw new Error("no food market on the founder");
   return foundingDrawableAt(good);
 }
@@ -1485,7 +1487,7 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     const headroom = foundingWant("food") / 4;
     const stock = DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand + headroom;
     const home = stockedHome({ food: stock }, { food: partProduction });
-    const good = toGoodMarketStates(home).find((g) => g.goodId === "food");
+    const good = toGoodMarketStates(home, { stockpileScale: 1 }).find((g) => g.goodId === "food");
     if (good === undefined) throw new Error("no food market on the founder");
     expect(good.role).toBe("supplier");
     expect(good.donorReserve).toBeCloseTo(DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * homeDemand, 6);
@@ -1514,7 +1516,7 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     const producerHome = stockedHome({ food: stock }, { food: 2 * homeDemand });
     const consumerHome = stockedHome({ food: stock });
     const roleOf = (home: SystemBuildRow) => {
-      const good = toGoodMarketStates(home).find((g) => g.goodId === "food");
+      const good = toGoodMarketStates(home, { stockpileScale: 1 }).find((g) => g.goodId === "food");
       if (good === undefined) throw new Error("no food market on the founder");
       return good;
     };

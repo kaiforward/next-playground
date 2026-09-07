@@ -35,6 +35,7 @@ export function getFactionTreasury(factionId: string): FactionTreasuryData {
     net,
     foundingCommitted: treasury.pendingFounding,
     lastSettlement: s,
+    stockpileScale: treasury.stockpileScale ?? 1,
   };
 }
 
@@ -68,12 +69,13 @@ export function updateTreasuryPolicy(
       }
     : treasury.bands;
   const taxLevel = input.taxLevel ?? treasury.taxLevel;
+  const stockpileScale = input.stockpileScale ?? treasury.stockpileScale ?? 1;
 
   setWorld({
     ...world,
     treasuries: world.treasuries.map((t) =>
-      t.factionId === factionId ? { ...t, taxLevel, bands } : t,
+      t.factionId === factionId ? { ...t, taxLevel, bands, stockpileScale } : t,
     ),
   });
-  return { ok: true, data: { taxLevel, bands } };
+  return { ok: true, data: { taxLevel, bands, stockpileScale } };
 }

@@ -406,6 +406,24 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     expect(world.stockUpdates.get("mA")).toBeCloseTo(95 - dispatched, 6);
   });
 
+  it("dispatches a bigger fill once the deficit's own faction's stockpileScale widens its want line", async () => {
+    // A's stock is generous at either scale — the donor's own reserve widens with the same
+    // stockpileScale, so a tight donor fixture would cap the 1.5x run on drawable rather than on
+    // B's want line, which is the thing this test means to isolate.
+    const systems = [
+      { systemId: "A", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mA", "food", 5000, 1000)] },
+      { systemId: "B", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10, 20)] },
+    ];
+    const atK1 = new MemoryDirectedLogisticsWorld(systems);
+    await runDirectedLogisticsProcessor(atK1, { tick: DUE_TICK }, baseParams(() => 1));
+    const atK15 = new MemoryDirectedLogisticsWorld(systems);
+    await runDirectedLogisticsProcessor(atK15, { tick: DUE_TICK }, baseParams(() => 1, {
+      stockpileScaleByFaction: new Map([["f1", 1.5]]),
+    }));
+    expect(atK1.pendingArrivals[0].quantity).toBeCloseTo(FOOD_TARGET - 10, 6);
+    expect(atK15.pendingArrivals[0].quantity).toBeCloseTo(1.5 * FOOD_TARGET - 10, 6);
+  });
+
   it("dispatches a fractional transfer without quantizing (scale-invariance guard)", async () => {
     // The engine matcher works in continuous goods units; the processor must dispatch the
     // transfer as-is. A fractional deficit stock (10.3) makes the shortfall fractional

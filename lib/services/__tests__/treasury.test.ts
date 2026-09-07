@@ -116,6 +116,13 @@ describe("getFactionTreasury", () => {
     const other = getWorld().factions.find((f) => f.id !== playerFactionId())!;
     expect(getFactionTreasury(other.id).factionId).toBe(other.id);
   });
+
+  it("resolves an absent stockpileScale to 1 — a treasury minted at world-gen or an old save carries no field", () => {
+    const factionId = playerFactionId();
+    const row = getWorld().treasuries.find((t) => t.factionId === factionId)!;
+    expect(row.stockpileScale).toBeUndefined();
+    expect(getFactionTreasury(factionId).stockpileScale).toBe(1);
+  });
 });
 
 describe("updateTreasuryPolicy", () => {
@@ -205,5 +212,33 @@ describe("updateTreasuryPolicy", () => {
     expect(result.ok).toBe(true);
     const row = getWorld().treasuries.find((t) => t.factionId === factionId)!;
     expect(row.bands).toEqual({ maintenance: 0.5, logistics: 1, construction: 0 });
+  });
+
+  it("accepts and persists a policy update carrying only stockpileScale", () => {
+    const factionId = playerFactionId();
+    const before = getWorld().treasuries.find((t) => t.factionId === factionId)!;
+    const result = updateTreasuryPolicy(factionId, { stockpileScale: 1.5 });
+    expect(result).toEqual({ ok: true, data: expect.objectContaining({ stockpileScale: 1.5 }) });
+    const after = getWorld().treasuries.find((t) => t.factionId === factionId)!;
+    expect(after.stockpileScale).toBe(1.5);
+    // The rest of the pair is untouched by a stockpileScale-only update.
+    expect(after.taxLevel).toBe(before.taxLevel);
+    expect(after.bands).toEqual(before.bands);
+  });
+
+  it("falls back to the faction's own persisted stockpileScale when none is given", () => {
+    const factionId = playerFactionId();
+    const w = getWorld();
+    setWorld({
+      ...w,
+      treasuries: w.treasuries.map((t) =>
+        t.factionId === factionId ? { ...t, stockpileScale: 0.75 } : t,
+      ),
+    });
+    const result = updateTreasuryPolicy(factionId, { taxLevel: "low" });
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({ taxLevel: "low", stockpileScale: 0.75 }),
+    });
   });
 });

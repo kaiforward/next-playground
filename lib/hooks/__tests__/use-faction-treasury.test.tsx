@@ -18,6 +18,7 @@ function treasury(bands: FactionTreasuryData["bands"]): FactionTreasuryData {
     net: 0,
     foundingCommitted: 0,
     lastSettlement: null,
+    stockpileScale: 1,
   };
 }
 
@@ -25,7 +26,7 @@ afterEach(() => {
   configureCommandTransport(null);
 });
 
-// Proves 2 (client-runtime build plan Task 8): two rapid treasury band commits — the second is
+// Two rapid treasury band commits — the second is
 // built from the first's COMMITTED state, not a stale pre-commit snapshot (census C4's silent-
 // revert kill). `TreasuryCard`'s real `commitBand` spreads whatever `useFactionTreasury` currently
 // returns (`components/factions/treasury-card.tsx:51-52`); this test reproduces that exact call
@@ -55,7 +56,14 @@ describe("useUpdateTreasuryPolicy — the read-modify-write hazard (census C4)",
       deliverCommandResult({
         type: "commandResult",
         id: posted[0].id,
-        result: { ok: true, data: { taxLevel: "normal", bands: { maintenance: 0.9, logistics: 0.2, construction: 0.2 } } },
+        result: {
+          ok: true,
+          data: {
+            taxLevel: "normal",
+            bands: { maintenance: 0.9, logistics: 0.2, construction: 0.2 },
+            stockpileScale: 1,
+          },
+        },
       });
     });
 
@@ -72,5 +80,38 @@ describe("useUpdateTreasuryPolicy — the read-modify-write hazard (census C4)",
     expect(posted[1].payload).toMatchObject({
       bands: { maintenance: 0.9, logistics: 0.6, construction: 0.2 },
     });
+  });
+});
+
+describe("useFactionTreasury — stockpileScale", () => {
+  it("defaults to 1 for a faction with no slice yet", () => {
+    const { result } = renderHook(() => useFactionTreasury("unknown-faction"));
+    expect(result.current.stockpileScale).toBe(1);
+  });
+
+  it("overlays a committed stockpileScale-only update immediately", async () => {
+    const { posted } = installFakeCommandTransport();
+    seedSlices({ factionTreasury: { [FACTION_ID]: treasury({ maintenance: 0.5, logistics: 0.2, construction: 0.2 }) } });
+
+    const { result } = renderHook(() => ({
+      data: useFactionTreasury(FACTION_ID),
+      update: useUpdateTreasuryPolicy(FACTION_ID),
+    }));
+
+    act(() => {
+      result.current.update.mutate({ stockpileScale: 1.5 });
+    });
+    await act(async () => {
+      deliverCommandResult({
+        type: "commandResult",
+        id: posted[0].id,
+        result: {
+          ok: true,
+          data: { taxLevel: "normal", bands: result.current.data.bands, stockpileScale: 1.5 },
+        },
+      });
+    });
+
+    expect(result.current.data.stockpileScale).toBe(1.5);
   });
 });

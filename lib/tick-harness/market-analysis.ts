@@ -16,7 +16,7 @@ import { GOODS } from "@/lib/constants/goods";
 import { GOOD_RECIPE_CONSUMERS } from "@/lib/constants/recipes";
 import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { median, quantile } from "@/lib/utils/math";
-import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
+import { toGoodMarketStates, stockpileScaleFor } from "@/lib/tick/processors/good-market-state";
 import { marketRowsBySystem } from "@/lib/world/tick";
 import type {
   MarketSnapshot, MarketHealthSummary,
@@ -485,17 +485,20 @@ export function summariseSpellDistribution(acc: SpellAccumulator): SpellDistribu
 export function computeKneeBinding(
   systems: TickSystem[],
   markets: WorldMarket[],
+  stockpileScaleByFaction?: ReadonlyMap<string, number>,
 ): KneeBindingEntry[] {
   const rowsBySystem = marketRowsBySystem(markets);
+  const scaleByFaction = stockpileScaleByFaction ?? new Map<string, number>();
   const byGood = new Map<string, { use: number; output: number }>();
   for (const s of systems) {
     if (!isEconomicallyActive(s.control)) continue;
     const rows = rowsBySystem.get(s.id);
     if (!rows) continue;
     const rowByGood = new Map(rows.map((r) => [r.goodId, r]));
-    const states = toGoodMarketStates({
-      buildings: s.buildings, population: s.population, yields: s.yields, markets: rows,
-    });
+    const states = toGoodMarketStates(
+      { buildings: s.buildings, population: s.population, yields: s.yields, markets: rows },
+      { stockpileScale: stockpileScaleFor(s.factionId, scaleByFaction) },
+    );
     for (const state of states) {
       // `!(x > 0)` rather than `x <= 0`: a NaN capacityProduction fails BOTH comparisons, and the
       // `<=` form let it fall through into the "producing" branch the census sizes itself against.

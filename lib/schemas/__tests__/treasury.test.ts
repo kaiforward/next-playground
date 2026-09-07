@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { treasuryPolicySchema } from "@/lib/schemas/treasury";
 import { ALL_TAX_LEVELS } from "@/lib/types/guards";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 
 const validBands = { maintenance: 0.8, logistics: 1, construction: 0.5 };
 
@@ -30,5 +31,16 @@ describe("treasuryPolicySchema", () => {
 
   it("rejects a partial bands object", () => {
     expect(treasuryPolicySchema.safeParse({ bands: { maintenance: 0.8 } }).success).toBe(false);
+  });
+
+  it("accepts stockpileScale alone", () => {
+    expect(treasuryPolicySchema.safeParse({ stockpileScale: 1.5 }).success).toBe(true);
+  });
+
+  it("accepts every step of STOCKPILE_SCALE_STEPS and rejects a value off it", () => {
+    for (const step of DIRECTED_LOGISTICS.STOCKPILE_SCALE_STEPS) {
+      expect(treasuryPolicySchema.safeParse({ stockpileScale: step }).success).toBe(true);
+    }
+    expect(treasuryPolicySchema.safeParse({ stockpileScale: 2 }).success).toBe(false);
   });
 });

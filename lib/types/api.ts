@@ -653,12 +653,16 @@ export interface FactionTreasuryData {
    *  still inside `balance` until the settlement charges it off, but no longer spendable. */
   foundingCommitted: number;
   lastSettlement: WorldTreasurySettlement | null;
+  /** Multiplies every give-line and want-line of this faction's markets, for every logistics role.
+   *  The service resolves an absent persisted value to 1 — the row itself may omit the field. */
+  stockpileScale: number;
 }
 
 /** The mutable policy pair the PATCH route returns after a successful write. */
 export interface TreasuryPolicyData {
   taxLevel: TaxLevel;
   bands: TreasuryBands;
+  stockpileScale: number;
 }
 
 // ── Alert bar ──────────────────────────────────────────────────────────────

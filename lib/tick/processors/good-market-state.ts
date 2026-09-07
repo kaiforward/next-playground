@@ -61,6 +61,19 @@ export const DRAW_BRAKE_CEILINGS = ["live", "anchor"] as const;
 export type DrawBrakeCeiling = (typeof DRAW_BRAKE_CEILINGS)[number];
 
 /**
+ * The one resolution of a system's faction to its stockpile scale — every `toGoodMarketStates`
+ * caller (the tick processors and the harness alike) reads this rather than indexing the map
+ * itself, so the "independent reads 1, missing row reads 1" rule cannot drift between call sites.
+ * `factionId === null` is an unowned system, which has no treasury row to begin with.
+ */
+export function stockpileScaleFor(
+  factionId: string | null,
+  byFaction: ReadonlyMap<string, number>,
+): number {
+  return factionId === null ? 1 : (byFaction.get(factionId) ?? 1);
+}
+
+/**
  * The retired anchor brake's hold cover at retirement — BRAKE_RAMP's value on the day this brake
  * was pinned as the third-arm control. Deliberately a fixed historical literal, NOT a live read of
  * `ECONOMY_CONSTANTS.BRAKE_RAMP`: the two happen to agree today, but the control must stay fixed
@@ -95,7 +108,7 @@ export interface MarketStateSource {
 
 export function toGoodMarketStates(
   row: MarketStateSource,
-  opts?: {
+  opts: {
     withDraw?: boolean;
     drawBrakeCeiling?: DrawBrakeCeiling;
     /** Goods already dispatched toward this system for this good, not yet arrived
@@ -104,12 +117,14 @@ export function toGoodMarketStates(
      *  (docs/active/gameplay/logistics-lanes.md §3). The build planner's call site omits this hook
      *  entirely, keeping physical stock alone for its own structural-deficit reads. */
     scheduledInboundFor?: (goodId: string) => number;
-    /** The owning faction's stockpile scale, multiplying every line of every role. Absent ⇒ a
-     *  neutral 1 — an unowned system, or a caller with no faction in scope. */
-    stockpileScale?: number;
+    /** The owning faction's stockpile scale, multiplying every line of every role. Every caller
+     *  resolves this explicitly (via `stockpileScaleFor`) — 1 for an unowned system or a faction
+     *  with no treasury row — a REQUIRED option so a caller that forgets it fails `tsc` rather than
+     *  silently reading the neutral default. */
+    stockpileScale: number;
   },
 ): GoodMarketState[] {
-  const stockpileScale = opts?.stockpileScale ?? 1;
+  const stockpileScale = opts.stockpileScale;
   const rates = capacityGoodRates(row.buildings, row.population, row.yields, row.extractionEff);
   const consByKey = new Map(rates.map((r) => [r.goodId, r.consumption]));
   const prodByKey = new Map(rates.map((r) => [r.goodId, r.production]));
@@ -150,7 +165,7 @@ export function toGoodMarketStates(
   // net gain (pop 100-1K supplied +11.8pp, electronics cover +0.43, B′−C′). Simplifying
   // `brakeCeilingOf` out of the draw figure would silently give those gains back.
   let drawRates: Map<string, number> | undefined;
-  if (opts?.withDraw) {
+  if (opts.withDraw) {
     // Each good's own output brake at its own current stock, plus its live event multiplier — the
     // two gates that separate "wants this eventually" from "could use this right now". A good with
     // no row here reads as unbraked: no row means no stock and no yard, which is not a stopped
@@ -227,7 +242,7 @@ export function toGoodMarketStates(
       squeezeCycles: m.squeezeCycles,
       proposalCycles: m.proposalCycles,
       logisticsFundingBound: m.logisticsFundingBound,
-      scheduledInbound: opts?.scheduledInboundFor?.(m.goodId),
+      scheduledInbound: opts.scheduledInboundFor?.(m.goodId),
       // Straight pass-through — absent on the row must stay absent here, never read as 0 (an unknown
       // rolling rate is not the same claim as a measured zero).
       realisedUse: m.realisedUse,

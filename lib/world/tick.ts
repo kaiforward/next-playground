@@ -1361,6 +1361,13 @@ export async function runWorldTick(
       ? new Map(treasuries.map((t) => [t.factionId, t.funded]))
       : undefined;
 
+  // Every directed-logistics and directed-build line this faction's markets author, multiplied by
+  // this — read at the same two processors `fundedByFaction` feeds, and by the harness call sites
+  // through the same treasury rows. Absent faction or omitted map resolves to 1 (`stockpileScaleFor`).
+  const stockpileScaleByFaction = new Map(
+    treasuries.map((t) => [t.factionId, t.stockpileScale ?? 1]),
+  );
+
   // Per-system effect maps for the cycle-start stages (economy malus, decay
   // buffer, unrest tax pressure). Only built when those stages resolve.
   let maintenanceMalusBySystem: Map<string, number> | undefined;
@@ -1772,6 +1779,7 @@ export async function runWorldTick(
         scheduledInbound: computeScheduledInbound(pendingArrivals),
         fundingByFaction:
           fundedByFaction && new Map([...fundedByFaction].map(([id, f]) => [id, f.logistics])),
+        stockpileScaleByFaction,
         drawBrakeCeiling: opts?.drawBrakeCeiling,
         freightSpeed: effectiveFreightSpeed,
         mintId: () => `haul-${nextId++}`,
@@ -1945,6 +1953,7 @@ export async function runWorldTick(
           : undefined,
         fundingByFaction:
           fundedByFaction && new Map([...fundedByFaction].map(([id, f]) => [id, f.construction])),
+        stockpileScaleByFaction,
         // The purse founding is committed against. Read at tick start like the funding latch, so a
         // faction commits against the balance its last settlement left it, minus what it has already
         // committed since. No maintenance bill yet (pre-first-settlement) reads as 0 — the charter

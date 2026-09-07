@@ -365,6 +365,19 @@ describe("logisticsTargetsByKey", () => {
 
     expect([...targets.keys()]).toEqual(["s1|water"]);
   });
+
+  it("scales the owning faction's target by its stockpile scale, and leaves an independent's unscaled", () => {
+    const systems = [sys("owned", { factionId: "f1" }), sys("independent", { factionId: null })];
+    const markets = [mkt("owned", "water", 50, 10), mkt("independent", "water", 50, 10)];
+
+    const unscaled = logisticsTargetsByKey(systems, markets);
+    const scaled = logisticsTargetsByKey(systems, markets, new Map([["f1", 1.5]]));
+
+    expect(scaled.get("owned|water")).toBeCloseTo(unscaled.get("owned|water")! * 1.5, 9);
+    // Set on f1, but the independent system has no treasury row to read regardless of what any
+    // faction's own scale is set to.
+    expect(scaled.get("independent|water")).toBeCloseTo(unscaled.get("independent|water")!, 9);
+  });
 });
 
 describe("cohortsForSystem", () => {

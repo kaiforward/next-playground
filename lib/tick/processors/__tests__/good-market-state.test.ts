@@ -35,7 +35,10 @@ function rowAtPopulation(goodId: string, population: number, stock: number, anch
 }
 
 const statesFor = (row: MarketRowForLogistics, population: number) =>
-  toGoodMarketStates({ buildings: {}, population, yields: unitResourceVector(), markets: [row] });
+  toGoodMarketStates(
+    { buildings: {}, population, yields: unitResourceVector(), markets: [row] },
+    { stockpileScale: 1 },
+  );
 
 // ── anchorCeiling — the retired third-arm control ──────────────────
 // Full rate to the price anchor, taper to 0 at RETIRED_HOLD_COVER(1.3) × anchor — a fixed
@@ -67,9 +70,10 @@ describe("anchorCeiling", () => {
 describe("toGoodMarketStates", () => {
   it("passes stock + goodId through and derives demand from the system's own basis", () => {
     const m = foodMarket(7, 40);
-    const out = toGoodMarketStates({
-      buildings: {}, population: 100, yields: unitResourceVector(), markets: [m],
-    });
+    const out = toGoodMarketStates(
+      { buildings: {}, population: 100, yields: unitResourceVector(), markets: [m] },
+      { stockpileScale: 1 },
+    );
     expect(out).toHaveLength(1);
     expect(out[0].goodId).toBe("food");
     expect(out[0].stock).toBe(7);
@@ -91,9 +95,10 @@ describe("toGoodMarketStates", () => {
       id: "A|ore", goodId: "ore", stock: 10, anchorMult: 1, demandRate: 5, storageCapacity: 0,
     };
     const buildings = { metals: 3, vocational_school: 1 };
-    const out = toGoodMarketStates({
-      buildings, population: 100, yields: unitResourceVector(), markets: [ore],
-    });
+    const out = toGoodMarketStates(
+      { buildings, population: 100, yields: unitResourceVector(), markets: [ore] },
+      { stockpileScale: 1 },
+    );
     const basis = computeSystemLabourSnapshot(buildings, 100).basis;
     expect(out[0].civilianDemand).toBeCloseTo(consumptionRate("ore", basis), 10);
     // The smelter's ore draw rides on top, so the total is strictly the larger of the two.
@@ -101,40 +106,49 @@ describe("toGoodMarketStates", () => {
   });
 
   it("returns one entry per market row", () => {
-    const out = toGoodMarketStates({
-      buildings: {}, population: 100, yields: unitResourceVector(),
-      markets: [foodMarket(5, 20), { ...foodMarket(5, 20), id: "A|water", goodId: "water" }],
-    });
+    const out = toGoodMarketStates(
+      {
+        buildings: {}, population: 100, yields: unitResourceVector(),
+        markets: [foodMarket(5, 20), { ...foodMarket(5, 20), id: "A|water", goodId: "water" }],
+      },
+      { stockpileScale: 1 },
+    );
     expect(out.map((g) => g.goodId)).toEqual(["food", "water"]);
   });
 
   it("surfaces local production per good (powers the matcher's self-supply gate)", () => {
     // A system with gas extractors produces gas → production must be reported > 0.
-    const out = toGoodMarketStates({
-      buildings: { gas: 3 }, population: 100, yields: unitResourceVector(),
-      markets: [{ ...foodMarket(100, 5), id: "A|gas", goodId: "gas" }],
-    });
+    const out = toGoodMarketStates(
+      {
+        buildings: { gas: 3 }, population: 100, yields: unitResourceVector(),
+        markets: [{ ...foodMarket(100, 5), id: "A|gas", goodId: "gas" }],
+      },
+      { stockpileScale: 1 },
+    );
     const gas = out.find((g) => g.goodId === "gas")!;
     expect(gas.production).toBeGreaterThan(0);
   });
 
   it("reports zero production for a good the system does not make", () => {
-    const out = toGoodMarketStates({
-      buildings: {}, population: 100, yields: unitResourceVector(), markets: [foodMarket(50, 20)],
-    });
+    const out = toGoodMarketStates(
+      { buildings: {}, population: 100, yields: unitResourceVector(), markets: [foodMarket(50, 20)] },
+      { stockpileScale: 1 },
+    );
     expect(out[0].production).toBe(0);
   });
 
   it("threads the persisted satisfaction through to GoodMarketState", () => {
     const withSatisfaction = { ...foodMarket(20, 40), satisfaction: 0.7 };
-    const [withValue] = toGoodMarketStates({
-      buildings: {}, population: 100, yields: unitResourceVector(), markets: [withSatisfaction],
-    });
+    const [withValue] = toGoodMarketStates(
+      { buildings: {}, population: 100, yields: unitResourceVector(), markets: [withSatisfaction] },
+      { stockpileScale: 1 },
+    );
     expect(withValue.satisfaction).toBe(0.7);
 
-    const [withoutValue] = toGoodMarketStates({
-      buildings: {}, population: 100, yields: unitResourceVector(), markets: [foodMarket(20, 40)],
-    });
+    const [withoutValue] = toGoodMarketStates(
+      { buildings: {}, population: 100, yields: unitResourceVector(), markets: [foodMarket(20, 40)] },
+      { stockpileScale: 1 },
+    );
     expect(withoutValue.satisfaction).toBeUndefined();
   });
 
@@ -143,14 +157,14 @@ describe("toGoodMarketStates", () => {
       buildings: { food: 3 }, population: 100,
       yields: unitResourceVector(), markets: [{ ...foodMarket(20, 40), realisedProductionRate: 0 }],
     };
-    const [assessed] = toGoodMarketStates(base);
+    const [assessed] = toGoodMarketStates(base, { stockpileScale: 1 });
     expect(assessed.capacityProduction).toBeGreaterThan(0);
     expect(assessed.production).toBe(0);
 
-    const [legacy] = toGoodMarketStates({
-      ...base,
-      markets: [{ ...foodMarket(20, 40), realisedProductionRate: undefined }],
-    });
+    const [legacy] = toGoodMarketStates(
+      { ...base, markets: [{ ...foodMarket(20, 40), realisedProductionRate: undefined }] },
+      { stockpileScale: 1 },
+    );
     expect(legacy.production).toBe(legacy.capacityProduction);
   });
 
@@ -211,13 +225,16 @@ describe("toGoodMarketStates", () => {
   });
 
   it("threads assessment policy fields through the one shared market derivation", () => {
-    const [state] = toGoodMarketStates({
-      buildings: {}, population: 100, yields: unitResourceVector(),
-      markets: [{
-        ...foodMarket(20, 40), satisfaction: 0.5, productionSuppressed: true,
-        squeezeCycles: 2, proposalCycles: 1, logisticsFundingBound: true,
-      }],
-    });
+    const [state] = toGoodMarketStates(
+      {
+        buildings: {}, population: 100, yields: unitResourceVector(),
+        markets: [{
+          ...foodMarket(20, 40), satisfaction: 0.5, productionSuppressed: true,
+          squeezeCycles: 2, proposalCycles: 1, logisticsFundingBound: true,
+        }],
+      },
+      { stockpileScale: 1 },
+    );
     expect(state).toMatchObject({
       satisfaction: 0.5, productionSuppressed: true, squeezeCycles: 2,
       proposalCycles: 1, logisticsFundingBound: true,
@@ -249,7 +266,7 @@ describe("toGoodMarketStates: the two demand figures", () => {
   const statesOf = (markets: MarketRowForLogistics[]) =>
     toGoodMarketStates(
       { buildings: BUILDINGS, population: POPULATION, yields: unitResourceVector(), markets },
-      { withDraw: true },
+      { withDraw: true, stockpileScale: 1 },
     );
 
   const stateOf = (markets: MarketRowForLogistics[], goodId: string) => {
@@ -350,7 +367,7 @@ describe("toGoodMarketStates: the two demand figures", () => {
     const live = stateOf(markets, "ore");
     const pinned = toGoodMarketStates(
       { buildings: BUILDINGS, population: POPULATION, yields: unitResourceVector(), markets },
-      { withDraw: true, drawBrakeCeiling: "anchor" },
+      { withDraw: true, drawBrakeCeiling: "anchor", stockpileScale: 1 },
     ).find((g) => g.goodId === "ore");
     if (pinned === undefined) throw new Error("Expected an ore state");
 
@@ -379,6 +396,7 @@ describe("toGoodMarketStates: the two demand figures", () => {
     const markets = [oreRow({ honestUseRate: 12.5 }), metalsRow({ stock: METALS_BRAKE_SHUT })];
     const ore = toGoodMarketStates(
       { buildings: BUILDINGS, population: POPULATION, yields: unitResourceVector(), markets },
+      { stockpileScale: 1 },
     ).find((g) => g.goodId === "ore");
     if (ore === undefined) throw new Error("Expected an ore state");
     expect(ore.drawDemand).toBe(12.5);
@@ -393,9 +411,10 @@ describe("toGoodMarketStates: the two demand figures", () => {
 describe("toGoodMarketStates: the supplier-floor rolling figures", () => {
   it("carries a present rolling figure through onto GoodMarketState", () => {
     const m = { ...foodMarket(10, 40), realisedUse: 6, steadyInbound: 3, lateInboundShare: 0.25 };
-    const out = toGoodMarketStates({
-      buildings: {}, population: 100, yields: unitResourceVector(), markets: [m],
-    });
+    const out = toGoodMarketStates(
+      { buildings: {}, population: 100, yields: unitResourceVector(), markets: [m] },
+      { stockpileScale: 1 },
+    );
     expect(out[0].realisedUse).toBe(6);
     expect(out[0].steadyInbound).toBe(3);
     expect(out[0].lateInboundShare).toBeCloseTo(0.25, 10);
@@ -406,9 +425,10 @@ describe("toGoodMarketStates: the supplier-floor rolling figures", () => {
     expect("realisedUse" in m).toBe(false);
     expect("steadyInbound" in m).toBe(false);
     expect("lateInboundShare" in m).toBe(false);
-    const out = toGoodMarketStates({
-      buildings: {}, population: 100, yields: unitResourceVector(), markets: [m],
-    });
+    const out = toGoodMarketStates(
+      { buildings: {}, population: 100, yields: unitResourceVector(), markets: [m] },
+      { stockpileScale: 1 },
+    );
     expect(out[0].realisedUse).toBeUndefined();
     expect(out[0].steadyInbound).toBeUndefined();
     expect(out[0].lateInboundShare).toBeUndefined();
@@ -418,9 +438,10 @@ describe("toGoodMarketStates: the supplier-floor rolling figures", () => {
     // Unknown realised use reads as full rate, so an untreated row is an ordinary consumer whose
     // deep line IS its give line — the vacuity check that an old save behaves as it always did.
     const m = foodMarket(10, 40);
-    const out = toGoodMarketStates({
-      buildings: {}, population: 100, yields: unitResourceVector(), markets: [m],
-    });
+    const out = toGoodMarketStates(
+      { buildings: {}, population: 100, yields: unitResourceVector(), markets: [m] },
+      { stockpileScale: 1 },
+    );
     expect(out[0].role).toBe("consumer");
     expect(out[0].marginFree).toBe(false);
     expect(out[0].consumerDeepLine).toBe(out[0].donorReserve);
@@ -443,10 +464,10 @@ function roleRow(over: Partial<MarketRowForLogistics> = {}): MarketRowForLogisti
   };
 }
 
-const linesOf = (over: Partial<MarketRowForLogistics> = {}, stockpileScale?: number) =>
+const linesOf = (over: Partial<MarketRowForLogistics> = {}, stockpileScale = 1) =>
   toGoodMarketStates(
     { buildings: {}, population: 100, yields: unitResourceVector(), markets: [roleRow(over)] },
-    stockpileScale === undefined ? undefined : { stockpileScale },
+    { stockpileScale },
   )[0];
 
 describe("toGoodMarketStates: roles and the two lines", () => {

@@ -11,7 +11,9 @@ import {
   type PlannedTransfer,
 } from "@/lib/engine/directed-logistics";
 import type { LaneLoad, LogisticsBlockedEntry } from "@/lib/engine/lane-routing";
-import { toGoodMarketStates, type DrawBrakeCeiling } from "@/lib/tick/processors/good-market-state";
+import {
+  toGoodMarketStates, stockpileScaleFor, type DrawBrakeCeiling,
+} from "@/lib/tick/processors/good-market-state";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { freightArrivalTick } from "@/lib/engine/freight";
 import { LANES } from "@/lib/constants/lanes";
@@ -45,6 +47,9 @@ export interface DirectedLogisticsProcessorParams {
   /** Latched funded.logistics per faction (0–1) — scales the haul budget. Missing
    *  faction or omitted map → 1 (ungated: engine tests, independents). */
   fundingByFaction?: ReadonlyMap<string, number>;
+  /** The owning faction's `stockpileScale`, multiplying every logistics line of every role.
+   *  Missing faction or omitted map → 1 (unowned systems, and callers with no faction in scope). */
+  stockpileScaleByFaction?: ReadonlyMap<string, number>;
   /** Harness-only third-arm pin for the draw figure's brake (see `DrawBrakeCeiling`);
    *  absent ⇒ "live", the only value the live game ever passes. */
   drawBrakeCeiling?: DrawBrakeCeiling;
@@ -65,6 +70,7 @@ function toLogisticsState(
   row: SystemLogisticsRow,
   catchUp: number,
   funded: number,
+  stockpileScale: number,
   drawBrakeCeiling: DrawBrakeCeiling | undefined,
   scheduledInbound: ReadonlyMap<string, number> | undefined,
 ): SystemLogisticsState {
@@ -80,6 +86,7 @@ function toLogisticsState(
       scheduledInboundFor: scheduledInbound
         ? (goodId) => scheduledInbound.get(`${row.systemId}|${goodId}`) ?? 0
         : undefined,
+      stockpileScale,
     }),
   };
 }
@@ -177,12 +184,14 @@ export async function runDirectedLogisticsProcessor(
   // Calibration instrumentation only: every faction's `RouteBlocked` entries this cycle, tagged with
   // the hauling faction key — the harness's `contentionShortfallByFaction` reading.
   const logisticsBlocked: LogisticsBlockedEntry[] = [];
+  const stockpileScaleByFaction = params.stockpileScaleByFaction ?? new Map<string, number>();
   for (const factionId of orderedFactionKeys(byFaction.keys())) {
     const group = byFaction.get(factionId);
     if (!group) continue; // unreachable: factionId is drawn from byFaction's own keys
     const funded = factionId === null ? 1 : params.fundingByFaction?.get(factionId) ?? 1;
+    const stockpileScale = stockpileScaleFor(factionId, stockpileScaleByFaction);
     const states = group.map((r) =>
-      toLogisticsState(r, catchUp, funded, params.drawBrakeCeiling, params.scheduledInbound),
+      toLogisticsState(r, catchUp, funded, stockpileScale, params.drawBrakeCeiling, params.scheduledInbound),
     );
     for (const state of states) {
       for (const g of state.goods) {
