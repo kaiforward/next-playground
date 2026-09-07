@@ -20,6 +20,7 @@ import { SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import { classifyLogisticsRole } from "@/lib/engine/directed-logistics";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { brakeKnee } from "@/lib/engine/tick";
@@ -1431,9 +1432,9 @@ describe("economy processor: reserve-rate folding", () => {
     expect(world.markets[0].steadyInbound).toBeCloseTo(expected, 6);
   });
 
-  it("seeds steadyInbound from this cycle's observation when no prior rate is stored", async () => {
-    // No stored steadyInbound at all: the fold must take this cycle's reading outright
-    // (80) rather than averaging it against an assumed 0 (which would read 80/40 = 2).
+  it("starts an unseen steadyInbound at zero, so one haul cannot buy the supplier role", async () => {
+    // No stored steadyInbound at all: the rate the supplier role is earned on climbs from 0 by one
+    // window-weight of the observation (80/40 = 2), never jumping to the whole haul.
     const world = new InMemoryEconomyWorld({
       systems: [makeConsumerSystem("sys-fresh", 0)],
       markets: [{
@@ -1443,7 +1444,51 @@ describe("economy processor: reserve-rate folding", () => {
       modifiers: [],
     });
     await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
-    expect(world.markets[0].steadyInbound).toBeCloseTo(80, 6);
+    const seeded = world.markets[0].steadyInbound ?? 0;
+    expect(seeded).toBeCloseTo(80 / DIRECTED_LOGISTICS.RESERVE_WINDOW_CYCLES, 6);
+
+    // ...and the role that rate exists to grant is out of reach on it: the replenishment bar is
+    // SUPPLIER_REPLENISHMENT of the market's use, and one haul's worth of rate does not clear it.
+    const use = world.markets[0].honestUseRate ?? 0;
+    expect(use).toBeGreaterThan(0); // the fixture premise: a market that uses the good
+    expect(
+      classifyLogisticsRole({ demand: use, production: 0, steadyInbound: seeded, anchorMult: 1 }),
+    ).not.toBe("supplier");
+    // The same market handed a settled rate DOES qualify — so the assertion above is the seeding,
+    // not a fixture that could never be a supplier at all.
+    expect(
+      classifyLogisticsRole({
+        demand: use,
+        production: 0,
+        steadyInbound: use,
+        lateInboundShare: 0,
+        anchorMult: 1,
+      }),
+    ).toBe("supplier");
+  });
+
+  it("seeds realisedUse from this cycle's observation, so a fresh consumer reserves against what it used", async () => {
+    // The measurement half of the same fold: a market with no stored realised-use history takes its
+    // first reading outright rather than averaging it against a zero nobody measured, which would
+    // collapse a brand-new consumer onto the restart buffer for a whole window. Read against the
+    // identical fixture carrying a stored 0 — same cycle, same draw, so the only difference is the
+    // seed, and the fresh market's rate is a whole window's worth larger.
+    const runOne = async (name: string, prior: number | undefined): Promise<number> => {
+      const world = new InMemoryEconomyWorld({
+        systems: [makeConsumerSystem(name, 0)],
+        markets: [{
+          ...makeMarket(name, "food", FIXTURE_BAND.targetStock),
+          realisedUse: prior,
+        }],
+        modifiers: [],
+      });
+      await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
+      return world.markets[0].realisedUse ?? 0;
+    };
+    const fromZero = await runOne("sys-use-zero", 0);
+    expect(fromZero).toBeGreaterThan(0); // the fixture premise: this market actually drew something
+    expect(await runOne("sys-use-fresh", undefined))
+      .toBeCloseTo(fromZero * DIRECTED_LOGISTICS.RESERVE_WINDOW_CYCLES, 6);
   });
 
   it("records the credited inbound the fold consumed, so a later stage on the same tick can still see it", async () => {

@@ -36,13 +36,21 @@ const DEBUG = resolveHostConfig().debugEconomy;
 const RESERVE_FOLD_WEIGHT = 1 / DIRECTED_LOGISTICS.RESERVE_WINDOW_CYCLES;
 
 /**
- * Fold one reference-cycle observation into a persisted rolling rate. Absent `prev` means the
- * rate has never been observed — seed from this cycle's reading outright rather than averaging
- * it against an assumed 0, which would understate every market's rate for its first
- * `RESERVE_WINDOW_CYCLES` of life.
+ * Fold one reference-cycle observation into a rolling rate that starts at `base` — the stored rate
+ * where one exists, and otherwise whatever the caller says a market with no history should be read
+ * as. The two answers differ by what the rate is for:
+ *
+ *  - A MEASUREMENT of what this market did (`realisedUse`, and the late share, a ratio of one
+ *    cycle's own credited volume) seeds from this cycle's own reading. Averaging it against an
+ *    assumed 0 would understate every market's rate for its first `RESERVE_WINDOW_CYCLES` of life,
+ *    collapsing a fresh consumer's reserve to the restart buffer on a figure nobody measured.
+ *  - A rate a market EARNS a role with (`steadyInbound`) starts at 0 and climbs. A role is granted
+ *    for living through a window of activity, so a market with no history that is served once must
+ *    read as a consumer that got a delivery, never as a supplier
+ *    (docs/active/gameplay/economy-autonomic-agency.md → "Losing the role is fast; qualifying is slow").
  */
-function foldReserveRate(prev: number | undefined, observation: number): number {
-  return prev === undefined ? observation : prev + (observation - prev) * RESERVE_FOLD_WEIGHT;
+function foldReserveRate(base: number, observation: number): number {
+  return base + (observation - base) * RESERVE_FOLD_WEIGHT;
 }
 
 /**
@@ -203,13 +211,19 @@ export async function runEconomyProcessor(
     // the rate it feeds.
     const inboundSinceFold = m.inboundSinceFold ?? 0;
     const lateInboundSinceFold = m.lateInboundSinceFold ?? 0;
-    const realisedUse = foldReserveRate(m.realisedUse, simulated[i].used / catchUp);
-    const steadyInbound = foldReserveRate(m.steadyInbound, inboundSinceFold / catchUp);
+    const usedObservation = simulated[i].used / catchUp;
+    const realisedUse = foldReserveRate(m.realisedUse ?? usedObservation, usedObservation);
+    // Seeded at 0, never at the observation: one haul into a market with no history is a delivery,
+    // not a steady stream, and must not qualify it as a supplier on the spot.
+    const steadyInbound = foldReserveRate(m.steadyInbound ?? 0, inboundSinceFold / catchUp);
     // A cycle that credited nothing has no late-share observation — 0 credited volume can't be
     // split into an on-time/late ratio, so folding it in would drag a real rate toward a false 0.
     const lateInboundShare =
       inboundSinceFold > 0
-        ? foldReserveRate(m.lateInboundShare, lateInboundSinceFold / inboundSinceFold)
+        ? foldReserveRate(
+          m.lateInboundShare ?? lateInboundSinceFold / inboundSinceFold,
+          lateInboundSinceFold / inboundSinceFold,
+        )
         : m.lateInboundShare;
 
     return {

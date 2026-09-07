@@ -180,6 +180,12 @@ deep reserve, exactly as every market does today, so an old save or a freshly fo
 unchanged and only earns a role after living through a real window of activity. Abandonment clears all
 three.
 
+What a market with no stored rate starts its first window from differs by what the rate is for. Realised
+use is a measurement of what this market did, so it starts from its first reading — a fresh consumer
+reserves against what it actually used, not against a zero nobody measured. Steady inbound is what earns
+the supplier role, so it starts at zero and climbs: a market served once is a consumer that got a
+delivery, and it takes a real window of deliveries to read as a supplier.
+
 ### Losing the role is fast; qualifying is slow
 
 Qualifying as a supplier takes a real window of steady replenishment — one refill moves the average only

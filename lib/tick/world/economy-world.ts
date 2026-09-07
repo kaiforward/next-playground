@@ -45,7 +45,8 @@ export interface MarketView {
   /** Prior-cycle rolling realised-use rate (`WorldMarket.realisedUse`). Absent = unknown — the fold
    *  seeds from this cycle's observation rather than averaging against 0. */
   realisedUse?: number;
-  /** Prior-cycle rolling steady-inbound rate (`WorldMarket.steadyInbound`). Absent = unknown. */
+  /** Prior-cycle rolling steady-inbound rate (`WorldMarket.steadyInbound`). Absent = unknown — the
+   *  fold starts such a market's rate at 0 and climbs it, so one delivery cannot buy a role. */
   steadyInbound?: number;
   /** Prior-cycle rolling late-inbound share (`WorldMarket.lateInboundShare`). Absent = unknown. */
   lateInboundShare?: number;
@@ -79,7 +80,8 @@ export interface MarketUpdate {
   /** Folded rolling realised-use rate (`WorldMarket.realisedUse`), per reference cycle. Always written —
    *  seeded from this cycle's observation when no prior rate is stored. */
   realisedUse: number;
-  /** Folded rolling steady-inbound rate (`WorldMarket.steadyInbound`), per reference cycle. Always written. */
+  /** Folded rolling steady-inbound rate (`WorldMarket.steadyInbound`), per reference cycle. Always
+   *  written — seeded at 0, not at this cycle's observation, when no prior rate is stored. */
   steadyInbound: number;
   /** Folded rolling late-inbound share (`WorldMarket.lateInboundShare`). `undefined` when this cycle
    *  credited nothing and no prior share exists — a 0/0 that must not be folded into a false 0. */

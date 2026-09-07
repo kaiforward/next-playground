@@ -706,8 +706,10 @@ export interface WorldMarket {
   /**
    * Reference-cycle steady inbound — goods this market's outbound arrivals credited (never the
    * `return`-leg early credit), as the same kind of rolling average as `realisedUse`. Folded by the
-   * economy processor from `inboundSinceFold` at the cycle boundary. Absent means unknown, not 0, for
-   * the same reason `realisedUse` does. Cleared on abandonment.
+   * economy processor from `inboundSinceFold` at the cycle boundary. Absent means unknown, not 0, to
+   * every reader of the rate — but the fold itself starts an absent rate at 0 and climbs it, unlike
+   * `realisedUse` above: this is the figure the supplier role is earned on, and a market served once
+   * is a consumer that got a delivery. Cleared on abandonment.
    */
   steadyInbound?: number;
   /**
