@@ -40,15 +40,15 @@ function renderPanel() {
 /** Locates a bar cell's trigger by its own accessible name (`"<good> — Internal"`/
  *  `"<good> — External"`, the `BarCell` `title`) rather than a bare `[tabindex]` selector, so a
  *  markup change that preserves focusability but drops the trigger's name still fails here.
- *  `cellIndex` picks which `<td>` in the good's row carries the bar (2 = internal, 4 = external —
- *  Good and Role are the two cells ahead of the Internal bar). */
+ *  `cellIndex` picks which `<td>` in the good's row carries the bar (1 = internal, 3 = external —
+ *  Good is the one cell ahead of the Internal bar). */
 async function openBarCell(user: ReturnType<typeof userEvent.setup>, goodName: string, cellIndex: number) {
   const nameCell = screen.getByText(goodName);
   const row = nameCell.closest("tr");
   if (!row) throw new Error(`no <tr> ancestor for "${goodName}"`);
   const cell = row.children[cellIndex];
   if (!cell) throw new Error(`no cell ${cellIndex} in "${goodName}"'s row`);
-  const kind = cellIndex === 2 ? "Internal" : "External";
+  const kind = cellIndex === 1 ? "Internal" : "External";
   const trigger = within(cell as HTMLElement).getByLabelText(`${goodName} — ${kind}`);
   await hoverUntilLocked(user, trigger);
 }
@@ -83,7 +83,7 @@ describe("LogisticsPanel — bar cell dwell popovers", () => {
     };
     renderPanel();
 
-    await openBarCell(user, "Metals", 2);
+    await openBarCell(user, "Metals", 1);
     expect(await screen.findByText("Produces")).toBeInTheDocument();
     expect(screen.getByText("Consumes")).toBeInTheDocument();
   });
@@ -103,7 +103,7 @@ describe("LogisticsPanel — bar cell dwell popovers", () => {
 
     const row = screen.getByText("Metals").closest("tr");
     // The external cell (index 3) renders the untraded placeholder, not a focusable bar trigger.
-    expect(row?.children[4]?.querySelector("[tabindex]")).toBeNull();
+    expect(row?.children[3]?.querySelector("[tabindex]")).toBeNull();
   });
 
   it("opens the external bar's popover on a traded good, showing its source/destination partners", async () => {
@@ -130,14 +130,15 @@ describe("LogisticsPanel — bar cell dwell popovers", () => {
     };
     renderPanel();
 
-    await openBarCell(user, "Metals", 4);
+    await openBarCell(user, "Metals", 3);
     expect(await screen.findByText("Sources")).toBeInTheDocument();
     expect(screen.getByText("Alpha")).toBeInTheDocument();
   });
 });
 
-describe("LogisticsPanel — role and its lines", () => {
-  it("shows a supplier's role word plus its two deciding numbers", () => {
+describe("LogisticsPanel — role and its lines (in the Internal bar's popover)", () => {
+  it("shows a supplier's role word plus its two deciding numbers", async () => {
+    const user = userEvent.setup({ delay: null });
     dataValue = {
       visibility: "visible",
       rows: [
@@ -152,14 +153,14 @@ describe("LogisticsPanel — role and its lines", () => {
     };
     renderPanel();
 
-    const row = screen.getByText("Metals").closest("tr");
-    if (!row) throw new Error("no <tr> ancestor for Metals");
-    expect(within(row as HTMLElement).getByText("Supplier")).toBeInTheDocument();
-    expect(within(row as HTMLElement).getByText("4.2/cyc")).toBeInTheDocument();
-    expect(within(row as HTMLElement).getByText("4%")).toBeInTheDocument();
+    await openBarCell(user, "Metals", 1);
+    expect(await screen.findByText("Supplier")).toBeInTheDocument();
+    expect(screen.getByText("4.2/cyc")).toBeInTheDocument();
+    expect(screen.getByText("4%")).toBeInTheDocument();
   });
 
-  it("shows a consumer row's cycle lines but neither of the supplier's deciding numbers", () => {
+  it("shows a consumer row's cycle lines but neither of the supplier's deciding numbers", async () => {
+    const user = userEvent.setup({ delay: null });
     dataValue = {
       visibility: "visible",
       rows: [
@@ -176,16 +177,16 @@ describe("LogisticsPanel — role and its lines", () => {
     };
     renderPanel();
 
-    const row = screen.getByText("Metals").closest("tr");
-    if (!row) throw new Error("no <tr> ancestor for Metals");
-    expect(within(row as HTMLElement).getByText("Consumer")).toBeInTheDocument();
-    expect(within(row as HTMLElement).getByText("40.0 cycles")).toBeInTheDocument();
-    expect(within(row as HTMLElement).getByText("45.0 cycles")).toBeInTheDocument();
-    expect(within(row as HTMLElement).queryByText(/\/cyc/)).not.toBeInTheDocument();
-    expect(within(row as HTMLElement).queryByText(/%/)).not.toBeInTheDocument();
+    await openBarCell(user, "Metals", 1);
+    expect(await screen.findByText("Consumer")).toBeInTheDocument();
+    expect(screen.getByText("40.0 cycles")).toBeInTheDocument();
+    expect(screen.getByText("45.0 cycles")).toBeInTheDocument();
+    expect(screen.queryByText("4.2/cyc")).not.toBeInTheDocument();
+    expect(screen.queryByText("4%")).not.toBeInTheDocument();
   });
 
-  it("renders an unknown-rate market as a consumer with no placeholder in its numbers", () => {
+  it("renders an unknown-rate market as a consumer with no placeholder in its numbers", async () => {
+    const user = userEvent.setup({ delay: null });
     dataValue = {
       visibility: "visible",
       // No demand-derived fields set at all — the same reading a market with an unknown rolling
@@ -196,15 +197,15 @@ describe("LogisticsPanel — role and its lines", () => {
     };
     renderPanel();
 
-    const row = screen.getByText("Metals").closest("tr");
-    if (!row) throw new Error("no <tr> ancestor for Metals");
-    expect(within(row as HTMLElement).getByText("Consumer")).toBeInTheDocument();
-    expect(within(row as HTMLElement).queryByText("—")).not.toBeInTheDocument();
-    expect(within(row as HTMLElement).queryByText("n/a")).not.toBeInTheDocument();
-    expect(within(row as HTMLElement).queryByText(/cycles/)).not.toBeInTheDocument();
+    await openBarCell(user, "Metals", 1);
+    expect(await screen.findByText("Consumer")).toBeInTheDocument();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+    expect(screen.queryByText("n/a")).not.toBeInTheDocument();
+    expect(screen.queryByText(/cycles/)).not.toBeInTheDocument();
   });
 
-  it("shows an idle row's realised use against full-rate use, not the supplier's numbers", () => {
+  it("shows an idle row's realised use against full-rate use, not the supplier's numbers", async () => {
+    const user = userEvent.setup({ delay: null });
     dataValue = {
       visibility: "visible",
       rows: [
@@ -219,11 +220,11 @@ describe("LogisticsPanel — role and its lines", () => {
     };
     renderPanel();
 
-    const row = screen.getByText("Metals").closest("tr");
-    if (!row) throw new Error("no <tr> ancestor for Metals");
-    expect(within(row as HTMLElement).getByText("Idle")).toBeInTheDocument();
-    expect(within(row as HTMLElement).getByText("12% of full rate")).toBeInTheDocument();
-    expect(within(row as HTMLElement).queryByText(/\/cyc/)).not.toBeInTheDocument();
+    await openBarCell(user, "Metals", 1);
+    expect(await screen.findByText("Idle")).toBeInTheDocument();
+    expect(screen.getByText("12% of full rate")).toBeInTheDocument();
+    expect(screen.queryByText("Steady inbound")).not.toBeInTheDocument();
+    expect(screen.queryByText("Late deliveries")).not.toBeInTheDocument();
   });
 });
 

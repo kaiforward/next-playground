@@ -87,32 +87,63 @@ function externalSegments(g: LogisticsGoodRow): BarSegment[] {
   ];
 }
 
-/** Internal bar popover body: the produces/consumes totals and the civilian/manufacturing consumption split. */
+/** Internal bar popover body: the role word and the cycle figures that decided it, then the
+ *  produces/consumes totals and the civilian/manufacturing consumption split. The role block
+ *  reuses the same StatList/StatRow markup the rest of the panel's stat sections use — every
+ *  row with demand shows the give-down-to and want lines; a supplier additionally shows the two
+ *  numbers that qualified it (steady inbound, late deliveries), and an idle row shows realised
+ *  use against the full rate it has fallen away from. A consumer or producer row shows neither,
+ *  since nothing else decided its role. Steady inbound is shown as a per-cycle rate rather than a
+ *  percentage of full-rate use: unlike late deliveries, that ratio can run past 100% (a supplier
+ *  fed faster than it uses), which a clamped percentage would misstate. */
 function internalPopoverBody(g: LogisticsGoodRow): React.ReactNode {
   const totalConsumption = g.consumption + g.inputDemand;
+  const fullRate = totalConsumption;
   return (
-    <dl className="space-y-0.5 whitespace-nowrap">
-      <div className="flex justify-between gap-3">
-        <dt className="text-text-tertiary">Produces</dt>
-        <dd className="font-mono text-status-green-light">{g.production.toFixed(1)}/cyc</dd>
+    <div className="space-y-1.5">
+      <div className="text-text-secondary">
+        <TermLabel id={g.role} />
       </div>
-      <div className="flex justify-between gap-3">
-        <dt className="text-text-tertiary">Consumes</dt>
-        <dd className="font-mono text-status-red-light">{totalConsumption.toFixed(1)}/cyc</dd>
-      </div>
-      {g.inputDemand > 0 && (
-        <>
-          <div className="flex justify-between gap-3 pl-2">
-            <dt className="text-text-tertiary">&middot; civilian</dt>
-            <dd className="font-mono text-text-secondary">{g.consumption.toFixed(1)}/cyc</dd>
-          </div>
-          <div className="flex justify-between gap-3 pl-2">
-            <dt className="text-text-tertiary">&middot; manufacturing</dt>
-            <dd className="font-mono text-text-secondary">{g.inputDemand.toFixed(1)}/cyc</dd>
-          </div>
-        </>
-      )}
-    </dl>
+      <StatList className="space-y-0">
+        {g.givesDownToCycles !== undefined && (
+          <StatRow label="Gives down to">{`${g.givesDownToCycles.toFixed(1)} cycles`}</StatRow>
+        )}
+        {g.wantCycles !== undefined && <StatRow label="Wants">{`${g.wantCycles.toFixed(1)} cycles`}</StatRow>}
+        {g.role === "supplier" && g.steadyInbound !== undefined && (
+          <StatRow label="Steady inbound">{`${g.steadyInbound.toFixed(1)}/cyc`}</StatRow>
+        )}
+        {g.role === "supplier" && g.lateInboundShare !== undefined && (
+          <StatRow label="Late deliveries">{`${Math.round(g.lateInboundShare * 100)}%`}</StatRow>
+        )}
+        {g.role === "idle" && g.realisedUse !== undefined && fullRate > 0 && (
+          <StatRow label="Realised use">
+            {`${Math.round((g.realisedUse / fullRate) * 100)}% of full rate`}
+          </StatRow>
+        )}
+      </StatList>
+      <dl className="space-y-0.5 whitespace-nowrap">
+        <div className="flex justify-between gap-3">
+          <dt className="text-text-tertiary">Produces</dt>
+          <dd className="font-mono text-status-green-light">{g.production.toFixed(1)}/cyc</dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt className="text-text-tertiary">Consumes</dt>
+          <dd className="font-mono text-status-red-light">{totalConsumption.toFixed(1)}/cyc</dd>
+        </div>
+        {g.inputDemand > 0 && (
+          <>
+            <div className="flex justify-between gap-3 pl-2">
+              <dt className="text-text-tertiary">&middot; civilian</dt>
+              <dd className="font-mono text-text-secondary">{g.consumption.toFixed(1)}/cyc</dd>
+            </div>
+            <div className="flex justify-between gap-3 pl-2">
+              <dt className="text-text-tertiary">&middot; manufacturing</dt>
+              <dd className="font-mono text-text-secondary">{g.inputDemand.toFixed(1)}/cyc</dd>
+            </div>
+          </>
+        )}
+      </dl>
+    </div>
   );
 }
 
@@ -160,42 +191,7 @@ function BarCell({
   );
 }
 
-/** Role word + the cycle figures that decided it, one good = one cell. Every row with demand
- *  shows the give-down-to and want lines; a supplier additionally shows the two numbers that
- *  qualified it (steady inbound, late deliveries) and an idle row shows realised use against the
- *  full rate it has fallen away from — a consumer or producer row shows neither, since nothing
- *  else decided its role. Steady inbound is shown as a per-cycle rate rather than a percentage of
- *  full-rate use: unlike late deliveries, that ratio can run past 100% (a supplier fed faster than
- *  it uses), which a clamped percentage would misstate. */
-function RoleCell({ g }: { g: LogisticsGoodRow }) {
-  const fullRate = g.consumption + g.inputDemand;
-  return (
-    <td className="px-1.5 py-1 align-top text-xs">
-      <div className="text-text-secondary">
-        <TermLabel id={g.role} />
-      </div>
-      <StatList className="mt-0.5 space-y-0">
-        {g.givesDownToCycles !== undefined && (
-          <StatRow label="Gives down to">{`${g.givesDownToCycles.toFixed(1)} cycles`}</StatRow>
-        )}
-        {g.wantCycles !== undefined && <StatRow label="Wants">{`${g.wantCycles.toFixed(1)} cycles`}</StatRow>}
-        {g.role === "supplier" && g.steadyInbound !== undefined && (
-          <StatRow label="Steady inbound">{`${g.steadyInbound.toFixed(1)}/cyc`}</StatRow>
-        )}
-        {g.role === "supplier" && g.lateInboundShare !== undefined && (
-          <StatRow label="Late deliveries">{`${Math.round(g.lateInboundShare * 100)}%`}</StatRow>
-        )}
-        {g.role === "idle" && g.realisedUse !== undefined && fullRate > 0 && (
-          <StatRow label="Realised use">
-            {`${Math.round((g.realisedUse / fullRate) * 100)}% of full rate`}
-          </StatRow>
-        )}
-      </StatList>
-    </td>
-  );
-}
-
-/** One good = one table row: name, role, internal bar + net, external bar + net. */
+/** One good = one table row: name, internal bar + net, external bar + net. */
 function GoodRow({
   g,
   internalMax,
@@ -210,7 +206,6 @@ function GoodRow({
       <td title={g.goodName} className="truncate px-1.5 py-1 align-middle text-xs text-text-secondary">
         {g.goodName}
       </td>
-      <RoleCell g={g} />
       <td className="px-1.5 py-1 align-middle">
         <BarCell
           segments={internalSegments(g)}
@@ -378,7 +373,6 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
         <table className="w-full table-fixed border-collapse">
           <colgroup>
             <col className="w-[84px]" />
-            <col className="w-[150px]" />
             <col />
             <col className="w-[50px]" />
             <col />
@@ -386,7 +380,6 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
           </colgroup>
           <thead>
             <tr>
-              <th aria-hidden />
               <th aria-hidden />
               <th
                 colSpan={2}
@@ -404,9 +397,6 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
             <tr>
               <th className="border-b border-border-strong px-1.5 py-1 text-left font-display text-xs font-normal uppercase tracking-wider text-text-tertiary">
                 Good
-              </th>
-              <th className="border-b border-border-strong px-1.5 py-1 text-left font-display text-xs font-normal uppercase tracking-wider text-text-tertiary">
-                Role
               </th>
               <th className="border-b border-border-strong px-1.5 py-1 text-center font-mono text-xs text-text-tertiary">
                 &#9664; Cons &middot; Prod &#9654;
@@ -429,7 +419,7 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
               return (
                 <Fragment key={tier}>
                   <tr>
-                    <td colSpan={6} className="px-1.5 pb-1 pt-3">
+                    <td colSpan={5} className="px-1.5 pb-1 pt-3">
                       <div className="flex items-center gap-2">
                         <span
                           className="h-2 w-2 shrink-0"
