@@ -204,15 +204,18 @@ describe("LogisticsPanel — role and its lines (in the Internal bar's popover)"
     expect(screen.queryByText(/cycles/)).not.toBeInTheDocument();
   });
 
-  it("shows an idle row's realised use against full-rate use, not the supplier's numbers", async () => {
+  it("shows an idle row's realised use against the use figure its role was decided on", async () => {
     const user = userEvent.setup({ delay: null });
     dataValue = {
       visibility: "visible",
       rows: [
         goodRow({
           goodId: "metals", goodName: "Metals", role: "idle",
-          consumption: 4, inputDemand: 6, givesDownToCycles: 10, wantCycles: 9.6,
-          realisedUse: 1.2,
+          // The row's own consumption + input demand is 10, but the classification ran against a
+          // strike-gated use of 4 — the share has to be read against the latter (30%), or the panel
+          // states a figure (12%) nothing in the mechanic ever computed.
+          consumption: 1, inputDemand: 9, givesDownToCycles: 10, wantCycles: 9.6,
+          realisedUse: 1.2, useRate: 4,
         }),
       ],
       internalMax: 10, externalMax: 1, activeGoodCount: 1, tradedGoodCount: 0, volumeHistory: [],
@@ -222,9 +225,29 @@ describe("LogisticsPanel — role and its lines (in the Internal bar's popover)"
 
     await openBarCell(user, "Metals", 1);
     expect(await screen.findByText("Idle")).toBeInTheDocument();
-    expect(screen.getByText("12% of full rate")).toBeInTheDocument();
+    expect(screen.getByText("30% of full rate")).toBeInTheDocument();
     expect(screen.queryByText("Steady inbound")).not.toBeInTheDocument();
     expect(screen.queryByText("Late deliveries")).not.toBeInTheDocument();
+  });
+
+  it("omits the realised-use share on an idle row with no use figure to read it against", async () => {
+    const user = userEvent.setup({ delay: null });
+    dataValue = {
+      visibility: "visible",
+      rows: [
+        goodRow({
+          goodId: "metals", goodName: "Metals", role: "idle",
+          consumption: 4, inputDemand: 6, realisedUse: 1.2,
+        }),
+      ],
+      internalMax: 10, externalMax: 1, activeGoodCount: 1, tradedGoodCount: 0, volumeHistory: [],
+      transit: { inbound: [], outbound: [] },
+    };
+    renderPanel();
+
+    await openBarCell(user, "Metals", 1);
+    expect(await screen.findByText("Idle")).toBeInTheDocument();
+    expect(screen.queryByText(/of full rate/)).not.toBeInTheDocument();
   });
 });
 

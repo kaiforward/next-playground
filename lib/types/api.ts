@@ -143,9 +143,14 @@ export interface LogisticsGoodRow {
    *  `GoodMarketState.steadyInbound`. One of the two numbers that decided a supplier role. */
   steadyInbound?: number;
   /** Rolling realised-use rate, units per cycle. Absent ⇒ unknown, never 0 — see
-   *  `GoodMarketState.realisedUse`. Read against full-rate `consumption + inputDemand` on an idle
-   *  row, the number that decided it. */
+   *  `GoodMarketState.realisedUse`. Read against `useRate` below on an idle row, the number that
+   *  decided it. */
   realisedUse?: number;
+  /** The USE figure the role test was made against — `GoodMarketState.demand`, civilian want plus
+   *  the staffing- and strike-gated recipe draw. The denominator `realisedUse` is a share of:
+   *  `consumption + inputDemand` on this row is ungated, so dividing by it would state a share the
+   *  classification never read, and one that can exceed 100%. Absent when there is no market row. */
+  useRate?: number;
   /** Rolling late-inbound share, in [0,1]. Absent ⇒ unknown, never 0 — see
    *  `GoodMarketState.lateInboundShare`. The other of the two numbers that decided a supplier role. */
   lateInboundShare?: number;

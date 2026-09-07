@@ -26,6 +26,10 @@ export interface LogisticsRoleInfo {
   wantCycles?: number;
   steadyInbound?: number;
   realisedUse?: number;
+  /** The USE figure the role test was made against (`GoodMarketState.demand`) — the denominator
+   *  `realisedUse` is a share OF, and never the panel's own `consumption + inputDemand`, which is
+   *  ungated by staffing and strikes and so states a larger full rate than the classification used. */
+  useRate?: number;
   lateInboundShare?: number;
 }
 
@@ -140,6 +144,7 @@ export function buildLogisticsRows(
       wantCycles: roleInfo.wantCycles,
       steadyInbound: roleInfo.steadyInbound,
       realisedUse: roleInfo.realisedUse,
+      useRate: roleInfo.useRate,
       lateInboundShare: roleInfo.lateInboundShare,
     });
   }

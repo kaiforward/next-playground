@@ -98,7 +98,10 @@ function externalSegments(g: LogisticsGoodRow): BarSegment[] {
  *  fed faster than it uses), which a clamped percentage would misstate. */
 function internalPopoverBody(g: LogisticsGoodRow): React.ReactNode {
   const totalConsumption = g.consumption + g.inputDemand;
-  const fullRate = totalConsumption;
+  // The classification's own denominator, not the ungated `consumption + inputDemand` beside it:
+  // the share has to be the one the role was decided on, and against the ungated figure a world
+  // drawing everything it uses can read over 100%.
+  const fullRate = g.useRate ?? 0;
   return (
     <div className="space-y-1.5">
       <div className="text-text-secondary">

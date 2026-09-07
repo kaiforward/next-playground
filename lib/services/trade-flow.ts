@@ -118,6 +118,7 @@ function logisticsRoleInfoByGood(
         wantCycles: s.demand > 0 ? s.logisticsTarget / s.demand : undefined,
         steadyInbound: s.steadyInbound,
         realisedUse: s.realisedUse,
+        useRate: s.demand,
         lateInboundShare: s.lateInboundShare,
       } satisfies LogisticsRoleInfo,
     ]),
