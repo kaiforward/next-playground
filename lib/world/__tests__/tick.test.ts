@@ -2668,6 +2668,7 @@ describe("marketRowsBySystem carries the supplier-floor rolling figures through 
       steadyInbound: 8,
       lateInboundShare: 0.4,
       supplierShortRuns: 2,
+      inboundSinceFold: 5,
     };
     const rows = marketRowsBySystem([flagged]).get(flagged.systemId);
     const row = rows?.find((r) => r.goodId === flagged.goodId);
@@ -2675,6 +2676,8 @@ describe("marketRowsBySystem carries the supplier-floor rolling figures through 
     expect(row?.steadyInbound).toBe(8);
     expect(row?.lateInboundShare).toBeCloseTo(0.4, 10);
     expect(row?.supplierShortRuns).toBe(2);
+    // The drop rule asks "was anything credited here at all", which only the raw accumulator answers.
+    expect(row?.inboundSinceFold).toBe(5);
   });
 
   it("carries absence through as undefined, never as 0 — matching unservedShortfall's own projection", () => {
@@ -2684,12 +2687,14 @@ describe("marketRowsBySystem carries the supplier-floor rolling figures through 
     delete untouched.steadyInbound;
     delete untouched.lateInboundShare;
     delete untouched.supplierShortRuns;
+    delete untouched.inboundSinceFold;
     const rows = marketRowsBySystem([untouched]).get(untouched.systemId);
     const row = rows?.find((r) => r.goodId === untouched.goodId);
     expect(row?.realisedUse).toBeUndefined();
     expect(row?.steadyInbound).toBeUndefined();
     expect(row?.lateInboundShare).toBeUndefined();
     expect(row?.supplierShortRuns).toBeUndefined();
+    expect(row?.inboundSinceFold).toBeUndefined();
   });
 });
 

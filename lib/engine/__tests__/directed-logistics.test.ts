@@ -112,8 +112,9 @@ function sys(
       // The matcher never reads it (only the build planner's fed-gate does); these fixtures are
       // pure consumers, so all of their demand is civilian.
       civilianDemand: good.civilianDemand ?? good.demand,
-      // No role split exercised by these fixtures — every case here predates it, so the flag stays
-      // unset and the deep line mirrors whatever donorReserve this fixture already states.
+      // No role split exercised by these fixtures — every case here predates it, so they read as
+      // plain consumers and the deep line mirrors whatever donorReserve the fixture already states.
+      role: "consumer",
       marginFree: false,
       consumerDeepLine: good.donorReserve
         ?? good.logisticsTarget * (DIRECTED_LOGISTICS.DONOR_RESERVE_COVER / DIRECTED_LOGISTICS.WAREHOUSE_COVER),
@@ -1242,7 +1243,7 @@ describe("matchFactionTransfers — the unservable result (structural vs. fundin
       goods: ["food", "water", "ore"].map((goodId) => ({
         goodId, stock: 0, logisticsTarget: targets[goodId], demand: 5, drawDemand: 5, civilianDemand: 5,
         donorReserve: 10, production: 0, capacityProduction: 0,
-        marginFree: false, consumerDeepLine: 10,
+        role: "consumer", marginFree: false, consumerDeepLine: 10,
       })),
     };
 
@@ -1388,7 +1389,7 @@ describe("countedStock / orderCover / levelCover", () => {
     const g: GoodMarketState = {
       goodId: "ore", stock: 15, logisticsTarget: 400, donorReserve: 400, demand: 10,
       drawDemand: 10, civilianDemand: 10, production: 0, capacityProduction: 0,
-      scheduledInbound: 50, marginFree: false, consumerDeepLine: 400,
+      scheduledInbound: 50, role: "consumer", marginFree: false, consumerDeepLine: 400,
     };
     expect(countedStock(g)).toBe(15);
   });
@@ -1398,7 +1399,7 @@ describe("countedStock / orderCover / levelCover", () => {
     const g: GoodMarketState = {
       goodId: "ore", stock: 25, logisticsTarget: 400, donorReserve: 400, demand: 10,
       drawDemand: 10, civilianDemand: 10, production: 0, capacityProduction: 0,
-      scheduledInbound: 50, marginFree: false, consumerDeepLine: 400,
+      scheduledInbound: 50, role: "consumer", marginFree: false, consumerDeepLine: 400,
     };
     expect(countedStock(g)).toBe(75);
   });
@@ -1408,7 +1409,7 @@ describe("countedStock / orderCover / levelCover", () => {
     const g: GoodMarketState = {
       goodId: "ore", stock: 20, logisticsTarget: 400, donorReserve: 400, demand: 10,
       drawDemand: 10, civilianDemand: 10, production: 0, capacityProduction: 0,
-      scheduledInbound: 50, marginFree: false, consumerDeepLine: 400,
+      scheduledInbound: 50, role: "consumer", marginFree: false, consumerDeepLine: 400,
     };
     expect(countedStock(g)).toBe(70);
   });
@@ -1417,7 +1418,7 @@ describe("countedStock / orderCover / levelCover", () => {
     const g: GoodMarketState = {
       goodId: "ore", stock: 100, logisticsTarget: 400, donorReserve: 400, demand: 10,
       drawDemand: 0, civilianDemand: 10, production: 0, capacityProduction: 0,
-      marginFree: false, consumerDeepLine: 400,
+      role: "consumer", marginFree: false, consumerDeepLine: 400,
     };
     expect(orderCover(g)).toBe(Infinity);
 
@@ -1430,7 +1431,7 @@ describe("countedStock / orderCover / levelCover", () => {
     const unbraked: GoodMarketState = {
       goodId: "ore", stock: 100, logisticsTarget: 400, donorReserve: 400, demand: 10,
       drawDemand: 10, civilianDemand: 10, production: 0, capacityProduction: 0,
-      marginFree: false, consumerDeepLine: 400,
+      role: "consumer", marginFree: false, consumerDeepLine: 400,
     };
     const braked: GoodMarketState = { ...unbraked, drawDemand: 5 };
     expect(orderCover(braked)).toBeGreaterThan(orderCover(unbraked));

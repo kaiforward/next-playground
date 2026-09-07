@@ -484,7 +484,7 @@ describe("runTickHarness: episode costs, founding trajectory, the ratchet check"
     // `totalTeardownLevels` and asserts the total. Together they cover both hops of the wire this
     // test cannot exercise on a dormant galaxy.
     const results = await runBusy();
-    expect(results.episodeCosts.totalTeardownLevels).toBe(194);
+    expect(results.episodeCosts.totalTeardownLevels).toBe(193);
     expect(results.foundingTrajectory.buckets[0].n).toBeGreaterThan(0); // colonies founded in-window
     expect(results.provisionRatchet.buckets.length).toBeGreaterThan(0);
 

@@ -16,7 +16,7 @@ import { LANES } from "@/lib/constants/lanes";
 import { DIRECTED_BUILD, SPECULATIVE_BASICS } from "@/lib/constants/directed-build";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { systemDevelopment, type DevelopmentRefs } from "@/lib/engine/development";
-import { surplusDrawable } from "@/lib/engine/directed-logistics";
+import { surplusDrawable, type LogisticsRole } from "@/lib/engine/directed-logistics";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { clamp } from "@/lib/utils/math";
 import { hasSurvivalShortfall } from "@/lib/engine/population";
@@ -62,11 +62,12 @@ function isSurvivalGood(goodId: string): boolean {
 export interface BuildGoodState {
   goodId: string;
   stock: number;
-  /** Cycles-of-supply DONOR floor (DONOR_RESERVE_COVER × demand × anchorMult) — what an ordinary
-   *  donor keeps for itself, so the input-supply gate reads "surplus" exactly as the logistics
-   *  matcher does. Optional for engine-test fixtures; the tick path always supplies it via
-   *  toGoodMarketStates. Absent, the gate reconstructs it from `demand` without `anchorMult`, so a
-   *  fixture that omits the field is governed by the same demand-denominated rule as the live path. */
+  /** Cycles-of-supply DONOR floor — what this market keeps for itself before it gives anything
+   *  away, authored from its role (`GoodMarketState.donorReserve`), so the input-supply gate reads
+   *  "surplus" exactly as the logistics matcher does. Optional for engine-test fixtures; the tick
+   *  path always supplies it via toGoodMarketStates. Absent, the gate reconstructs the full-rate
+   *  consumer's deep line from `demand` without `anchorMult`, so a fixture that omits the field is
+   *  governed by the same demand-denominated rule the live path applies to that role. */
   donorReserve?: number;
   /** Total local demand rate (civilian + industrial); the matcher's ordering cover, which decides
    *  which shelf is served first, plus the self-supply gate (vs production). */
@@ -101,6 +102,10 @@ export interface BuildGoodState {
   proposalCycles?: number;
   /** A reachable logistics match was constrained by the faction's funded haul work. */
   logisticsFundingBound?: boolean;
+  /** What this world is doing with the good — see `GoodMarketState.role`. Carried through so the
+   *  input gate can read "producer or supplier" instead of "producer" alone. Optional for
+   *  engine-test fixtures; the tick path always supplies it via `toGoodMarketStates`. */
+  role?: LogisticsRole;
   /** Rolling steady-inbound rate — see `GoodMarketState.steadyInbound`. Carried through so the input
    *  gate can read "producer or supplier" instead of "producer" alone. Optional for engine-test
    *  fixtures, exactly like `production`. */

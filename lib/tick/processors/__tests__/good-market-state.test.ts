@@ -8,7 +8,7 @@ import { computeSystemLabourSnapshot, inputDemandForGood, buildingProduction } f
 import { surplusDrawable } from "@/lib/engine/directed-logistics";
 import { brakeKnee } from "@/lib/engine/tick";
 import { MIN_DEMAND, TARGET_COVER } from "@/lib/constants/market-economy";
-import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
+import { ECONOMY_CONSTANTS, ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 
@@ -382,9 +382,9 @@ describe("toGoodMarketStates: the two demand figures", () => {
   });
 });
 
-// ── The supplier-floor read path: realisedUse / steadyInbound / lateInboundShare, marginFree,
-// consumerDeepLine — the three rolling rates pass through unchanged (absent stays absent) and the
-// two role-authored fields are authored as today's behaviour (no role split yet).
+// ── The supplier-floor read path: realisedUse / steadyInbound / lateInboundShare — the three
+// rolling rates pass through unchanged (absent stays absent), and the role test they feed authors
+// the two lines, the margin-free flag and the deep line every colony's staging draw is capped at.
 
 describe("toGoodMarketStates: the supplier-floor rolling figures", () => {
   it("carries a present rolling figure through onto GoodMarketState", () => {
@@ -410,12 +410,162 @@ describe("toGoodMarketStates: the supplier-floor rolling figures", () => {
     expect(out[0].lateInboundShare).toBeUndefined();
   });
 
-  it("authors marginFree false and consumerDeepLine equal to donorReserve — the vacuity check: nothing has moved yet", () => {
+  it("authors marginFree false and consumerDeepLine equal to donorReserve for a market with no rolling figures at all", () => {
+    // Unknown realised use reads as full rate, so an untreated row is an ordinary consumer whose
+    // deep line IS its give line — the vacuity check that an old save behaves as it always did.
     const m = foodMarket(10, 40);
     const out = toGoodMarketStates({
       buildings: {}, population: 100, yields: unitResourceVector(), markets: [m],
     });
+    expect(out[0].role).toBe("consumer");
     expect(out[0].marginFree).toBe(false);
     expect(out[0].consumerDeepLine).toBe(out[0].donorReserve);
+  });
+});
+
+// ── Roles and the two lines. Every fixture below pins the use figure on the row (`honestUseRate`)
+// and states production explicitly, so `u` and `production` are the fixture's own numbers rather
+// than a population recompute, and each case differs from its neighbour in exactly one input.
+
+const U = 10;
+const { EXPORT_RESERVE_COVER: F, SUPPLIER_WANT_COVER: S, DONOR_RESERVE_COVER: R, WAREHOUSE_COVER: W } =
+  DIRECTED_LOGISTICS;
+
+function roleRow(over: Partial<MarketRowForLogistics> = {}): MarketRowForLogistics {
+  return {
+    id: "A|food", goodId: "food", stock: 0, anchorMult: 1, demandRate: 40, storageCapacity: 0,
+    honestUseRate: U, realisedProductionRate: 0,
+    ...over,
+  };
+}
+
+const linesOf = (over: Partial<MarketRowForLogistics> = {}, stockpileScale?: number) =>
+  toGoodMarketStates(
+    { buildings: {}, population: 100, yields: unitResourceVector(), markets: [roleRow(over)] },
+    stockpileScale === undefined ? undefined : { stockpileScale },
+  )[0];
+
+describe("toGoodMarketStates: roles and the two lines", () => {
+  it("gives a full-rate consumer exactly the lines it has today", () => {
+    // r = u, nothing inbound: the deep terms bind and read 40 cycles either side, which is what
+    // every market in the game read before roles existed.
+    const state = linesOf({ realisedUse: U });
+    expect(state.role).toBe("consumer");
+    expect(state.donorReserve).toBeCloseTo(R * U, 9);
+    expect(state.logisticsTarget).toBeCloseTo(W * U, 9);
+    expect(state.marginFree).toBe(false);
+    // And the same market with no measured rate at all lands on the identical pair.
+    const unknown = linesOf();
+    expect(unknown.donorReserve).toBeCloseTo(state.donorReserve, 9);
+    expect(unknown.logisticsTarget).toBeCloseTo(state.logisticsTarget, 9);
+  });
+
+  it("makes a part-producer a supplier on its own production, unblocked by an unknown late share", () => {
+    // production 0.95u clears SUPPLIER_REPLENISHMENT without any inbound, so there is no transit
+    // exposure to bound and the never-measured late share must not deny the role.
+    const state = linesOf({ realisedProductionRate: 0.95 * U });
+    expect(state.lateInboundShare).toBeUndefined();
+    expect(state.role).toBe("supplier");
+    expect(state.donorReserve).toBeCloseTo(F * U, 9);
+    expect(state.logisticsTarget).toBeCloseTo(S * U, 9);
+    expect(state.marginFree).toBe(true);
+  });
+
+  it("denies the role to a world whose test is carried by inbound arriving one step too late", () => {
+    const gated = linesOf({ steadyInbound: U, lateInboundShare: DIRECTED_LOGISTICS.SUPPLIER_LATE_SHARE + 0.01 });
+    expect(gated.role).toBe("consumer");
+    expect(gated.donorReserve).toBeCloseTo(R * U, 9);
+    expect(gated.logisticsTarget).toBeCloseTo(W * U, 9);
+    expect(gated.marginFree).toBe(false);
+    // The gate is at-or-under, not strictly under: a world sitting exactly on the line qualifies.
+    const onTheLine = linesOf({ steadyInbound: U, lateInboundShare: DIRECTED_LOGISTICS.SUPPLIER_LATE_SHARE });
+    expect(onTheLine.role).toBe("supplier");
+    // And an inbound-carried world with no late share measured at all is denied, unlike the
+    // production-carried case above.
+    expect(linesOf({ steadyInbound: U }).role).toBe("consumer");
+  });
+
+  it("collapses a refinery that has stopped drawing onto the margin-free restart buffer", () => {
+    // r = 0.1u: the deep reserve (4 cycles of full-rate use) falls under the 10-cycle buffer, so
+    // the buffer binds on both lines and everything above it is drawable without a dead-band.
+    const state = linesOf({ realisedUse: 0.1 * U });
+    expect(state.role).toBe("idle");
+    expect(state.donorReserve).toBeCloseTo(F * U, 9);
+    expect(state.logisticsTarget).toBeCloseTo(S * U, 9);
+    expect(state.marginFree).toBe(true);
+  });
+
+  it("scales a producer's lines by the stockpile scale, not only a consumer's", () => {
+    const producer = linesOf({ realisedProductionRate: 2 * U }, 0.75);
+    expect(producer.role).toBe("producer");
+    expect(producer.donorReserve).toBeCloseTo(F * U * 0.75, 9);
+    expect(producer.logisticsTarget).toBeCloseTo(S * U * 0.75, 9);
+    const consumer = linesOf({ realisedUse: U }, 0.75);
+    expect(consumer.donorReserve).toBeCloseTo(R * U * 0.75, 9);
+    expect(consumer.logisticsTarget).toBeCloseTo(W * U * 0.75, 9);
+    // Absent, the scale is a neutral 1 — the eight callers that do not resolve a faction yet.
+    expect(linesOf({ realisedProductionRate: 2 * U }).donorReserve).toBeCloseTo(F * U, 9);
+  });
+
+  it("rides the deep terms on an anchor shift and leaves the buffer terms where they are", () => {
+    const shifted = linesOf({ realisedUse: U, anchorMult: 0.5 });
+    expect(shifted.donorReserve).toBeCloseTo(R * U * 0.5, 9);
+    expect(shifted.logisticsTarget).toBeCloseTo(W * U * 0.5, 9);
+    expect(shifted.consumerDeepLine).toBeCloseTo(R * U * 0.5, 9);
+    // The same event over a supplier moves nothing: its pair is the anchor-immune buffer.
+    const supplier = linesOf({ realisedProductionRate: 0.95 * U, anchorMult: 0.5 });
+    expect(supplier.role).toBe("supplier");
+    expect(supplier.donorReserve).toBeCloseTo(F * U, 9);
+    expect(supplier.logisticsTarget).toBeCloseTo(S * U, 9);
+    // ...and an idle world's give line is the buffer, so the cut reaches only its deep line.
+    const idle = linesOf({ realisedUse: 0.1 * U, anchorMult: 0.5 });
+    expect(idle.donorReserve).toBeCloseTo(F * U, 9);
+    expect(idle.consumerDeepLine).toBeCloseTo(R * U * 0.5, 9);
+  });
+
+  it("publishes the full-rate consumer's deep line for every role, whatever that role gives down to", () => {
+    for (const row of [
+      { realisedProductionRate: 2 * U },
+      { realisedProductionRate: 0.95 * U },
+      { realisedUse: U },
+      { realisedUse: 0.1 * U },
+    ]) {
+      expect(linesOf(row, 1.5).consumerDeepLine).toBeCloseTo(R * U * 1.5, 9);
+    }
+  });
+
+  it("drops a supplier back to the consumer's lines once the drop counter reaches its bound", () => {
+    const short = { realisedProductionRate: 0.95 * U };
+    expect(linesOf({ ...short, supplierShortRuns: DIRECTED_LOGISTICS.SUPPLIER_DROP_RUNS - 1 }).role).toBe("supplier");
+    const dropped = linesOf({ ...short, supplierShortRuns: DIRECTED_LOGISTICS.SUPPLIER_DROP_RUNS });
+    expect(dropped.role).toBe("consumer");
+    expect(dropped.donorReserve).toBeCloseTo(R * U, 9);
+    expect(dropped.logisticsTarget).toBeCloseTo(W * U, 9);
+  });
+
+  it("keeps every line at zero where the system uses none of the good", () => {
+    const state = linesOf({ honestUseRate: 0, realisedProductionRate: 0 });
+    expect(state.demand).toBe(0);
+    expect(state.role).toBe("consumer");
+    expect(state.donorReserve).toBe(0);
+    expect(state.logisticsTarget).toBe(0);
+    expect(state.consumerDeepLine).toBe(0);
+    expect(state.marginFree).toBe(false);
+    // A world that makes the good with nobody using it is still read as its producer.
+    expect(linesOf({ honestUseRate: 0, realisedProductionRate: 5 }).role).toBe("producer");
+  });
+
+  it("keeps the production brake's ceiling under the donation line at full rate, and accepts the inversion below it", () => {
+    // The shipped constants pairing (BRAKE_RAMP × BRAKE_USE_COVER ≤ SURPLUS_MARGIN ×
+    // DONOR_RESERVE_COVER) is the full-rate statement: a world that produces less than it uses
+    // should not dump stock it cannot replace.
+    const brakeCeiling = ECONOMY_CONSTANTS.BRAKE_RAMP * ECONOMY_CONSTANTS.BRAKE_USE_COVER * U;
+    const fullRate = linesOf({ realisedUse: U });
+    expect(brakeCeiling).toBeLessThanOrEqual(fullRate.donorReserve * DIRECTED_LOGISTICS.SURPLUS_MARGIN);
+    // Below full rate the donation line is denominated in the smaller realised-use figure and drops
+    // under the brake ceiling. The inversion is accepted: such a world runs a net loss every cycle,
+    // so nothing of its own accumulates above its line and what it passes on is inbound.
+    const halfRate = linesOf({ realisedUse: 0.5 * U });
+    expect(halfRate.donorReserve * DIRECTED_LOGISTICS.SURPLUS_MARGIN).toBeLessThan(brakeCeiling);
   });
 });

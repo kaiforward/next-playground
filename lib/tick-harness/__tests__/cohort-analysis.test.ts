@@ -26,6 +26,7 @@ function state(over: Partial<GoodMarketState> = {}): GoodMarketState {
     civilianDemand: 10,
     production: 0,
     capacityProduction: 0,
+    role: "consumer",
     marginFree: false,
     consumerDeepLine: 100,
     ...over,

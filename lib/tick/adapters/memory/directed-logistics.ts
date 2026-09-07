@@ -4,6 +4,7 @@ import type {
   LogisticsMarketUpdate,
   LogisticsFundingBoundUpdate,
   UnservedShortfallUpdate,
+  SupplierShortRunsUpdate,
   LaneLoadUpdate,
   PendingArrivalInsert,
 } from "@/lib/tick/world/directed-logistics-world";
@@ -16,6 +17,9 @@ export class MemoryDirectedLogisticsWorld implements DirectedLogisticsWorld {
   /** Market id → this run's structural-shortfall level: positive means unservable, 0 means the row
    *  was assessed servable and the world layer should clear the key. Absent means untouched. */
   readonly unservedShortfallUpdates = new Map<string, number>();
+  /** Market id → this run's drop-rule counter: a rising count means the market is a supplier
+   *  sitting short with nothing credited, 0 means the run cleared it. Absent means untouched. */
+  readonly supplierShortRunsUpdates = new Map<string, number>();
   /** laneKey → this run's booked/blocked load, written for every lane in the network. */
   readonly laneUpdates = new Map<string, { bookedLoad: number; blockedVolume: number }>();
   readonly pendingArrivals: PendingArrivalInsert[] = [];
@@ -41,6 +45,10 @@ export class MemoryDirectedLogisticsWorld implements DirectedLogisticsWorld {
 
   async applyUnservedShortfallUpdates(updates: UnservedShortfallUpdate[]): Promise<void> {
     for (const u of updates) this.unservedShortfallUpdates.set(u.id, u.unservedShortfall);
+  }
+
+  async applySupplierShortRunsUpdates(updates: SupplierShortRunsUpdate[]): Promise<void> {
+    for (const u of updates) this.supplierShortRunsUpdates.set(u.id, u.supplierShortRuns);
   }
 
   async applyLaneLoadUpdates(updates: LaneLoadUpdate[]): Promise<void> {
