@@ -101,16 +101,144 @@ invisible at equilibrium: over the first 42 cycles it took **24.7%** of delivere
 of the haul of the scarce advanced goods, against 0.3% by 417 cycles. A target of zero means nobody there
 wants the good at all, and the market leaves the match entirely.
 
-`WAREHOUSE_COVER` is held equal to `TARGET_COVER` (40) but is free to move: how much a warehouse holds is
-a different question from where a good prices at par. It is the sibling of `EXPORT_RESERVE_COVER` — both
-are warehouse policy stated in cycles of real demand.
+`WAREHOUSE_COVER` and `DONOR_RESERVE_COVER` are held equal to `TARGET_COVER` (40) but are free to move:
+how much a warehouse holds is a different question from where a good prices at par. Both are the
+sibling of `EXPORT_RESERVE_COVER` (10) — warehouse policy stated in cycles of real demand, never the
+price anchor.
 
-`DONOR_RESERVE_COVER` (40) is the same policy on the giving side: cycles of its own real demand an
-ordinary donor keeps before it parts with anything. It is authored separately from `WAREHOUSE_COVER`
-and the two are free to diverge, subject to one invariant — `DONOR_RESERVE_COVER ≥ WAREHOUSE_COVER ×
-DEFICIT_FRACTION`, since a donor drained below the deficit line would read as a sink and be refilled
-on the next cycle. Both ride `anchorMult`, so an anchor-shifting event moves the floor a donor stops
-at and the target a sink fills to together.
+### Roles: what a world is doing with a good decides its lines
+
+A world's give line and want line follow how it is actually supplied, not one floor for every
+non-producer. A **producer** — makes more than it uses, unchanged — gives down to a thin
+`EXPORT_RESERVE_COVER`-cycle restart buffer. A **supplier** — not a producer, but kept topped up by its
+own part-production, by a steady stream of deliveries, or by both together — trades on the same thin
+buffer: what refills a producer's stock and what refills a supplier's stock look the same from the
+warehouse's point of view, so steady inbound counts like production. A **consumer** — neither — reserves
+`DONOR_RESERVE_COVER` (40) cycles of what it *actually* uses, never below the buffer, and asks back up
+to `WAREHOUSE_COVER` (40) cycles of the same. **Idle** is a consumer whose realised use has fallen so far
+that the buffer term is now the larger of its two lines — a refinery sitting on input it has stopped
+drawing, which collapses onto the same thin buffer a supplier holds rather than a forty-cycle reserve
+against a draw that is not happening. One faction-wide dial, the **stockpile scale**, multiplies every
+line above for every role at once, so the ratios between them — and every invariant that depends on
+those ratios — hold at every step.
+
+Why this shape: almost every world logistics serves gets its goods more than a cycle after they are
+dispatched — multi-cycle transit is the norm here, not a rare tail — and the near supplier a late world
+sits beside is usually not drained; it is holding stock it is allowed to keep. That held stock splits by
+good: for processed and consumer goods it sits on worlds that deliveries or their own part-production
+keep replenished, which a production-plus-inbound test reaches directly; for ore and minerals it sits at
+refineries that are still producing but have stopped drawing that very input, so a deep reserve sized
+against realised use — not against what a factory would draw if it were running — is what releases it. A
+synthetic relayed-demand policy (a depot) would reach the same late neighbourhoods, but through-traffic
+itself turns out too diffuse and unstable a signal to size or place one by, even though depot-eligible
+sites are common and most of them already sit beside a near, un-drained supplier — so that direction
+stays open (see Deferred) while this mechanic targets the floor the near supplier is already sitting on.
+
+Roles, side by side:
+
+| Role | Qualifies when | Gives down to | Re-orders under | Margin |
+|---|---|---|---|---|
+| Producer | makes more than it uses, not strike-suppressed (unchanged) | `EXPORT_RESERVE_COVER` × use (10) | never a sink | none — buffer |
+| Supplier | not a producer; production + steady inbound covers `SUPPLIER_REPLENISHMENT` (0.9) of use — gated on the late-inbound tail only where inbound itself is load-bearing to that test (`production < SUPPLIER_REPLENISHMENT × use`) | `EXPORT_RESERVE_COVER` × use (10) | `SUPPLIER_WANT_COVER` × use (12) | none — buffer |
+| Consumer | otherwise | `DONOR_RESERVE_COVER` × realised use, floored at the buffer (40) | `WAREHOUSE_COVER` × realised use, floored at the supplier want (40) | `SURPLUS_MARGIN` (1.4×) dead-band above the deep line |
+| Idle | a consumer whose buffer term now exceeds its deep term | as consumer — collapses to the buffer | as consumer — collapses to the buffer | none once the buffer binds |
+
+A world eating a good at full rate — realised use equal to use — gets exactly today's two lines (40 and
+40), so nothing changes anywhere the new signals are not telling a different story.
+
+A structural producer is drained straight to its buffer rather than to par because the production brake
+rests a producer's stock at its own warehouse knee, and the knee is not one fixed number: at most
+`BRAKE_RAMP × BRAKE_USE_COVER` = 52 cycles of the use figure where the use term binds it, but an
+output-bound exporter's knee is sized off its own capacity instead (`BRAKE_OUTPUT_COVER ×
+capacityProduction`) and can sit above the donation line — a dedicated exporter with negligible local use
+rests above the line on capacity alone, and giving down to the buffer is what still lets it form a
+surplus there. Without this, a structural exporter could never form a surplus, and directed logistics
+would go dead for every good its producers also consume (food, water, biomass). A producer idles against
+its **warehouse knee** — the larger of 40 cycles of its use figure and 8 cycles of its own capacity (see
+[economy-equilibrium-rework](./economy-equilibrium-rework.md)).
+
+### Three per-market quantities, and how they fold
+
+Every line above reads from three numbers tracked per (world, good), each an exponential rolling average
+folded once per economy cycle with weight `1 / RESERVE_WINDOW_CYCLES` (40): one ordinary 8-cycle refill
+moves the average by 0.2 of it, and a world whose draw has stopped takes roughly 55 cycles to fall from
+the deep reserve to the buffer.
+
+- **Use** — the existing full-rate use figure (civilian want plus the staffing- and strike-gated recipe
+  draw when running); every line above is denominated in it, unchanged.
+- **Realised use** — what the economy actually removed from this good's stock over the window: civilian
+  deliveries plus the input every local factory actually drew, never what it wanted to draw. A refinery
+  whose output has stopped selling sees this fall toward zero while its use figure — what it would draw
+  if it were running — has not moved at all.
+- **Steady inbound** — goods this market has actually been credited with by the arrivals stage over the
+  same window, plus a tail statistic (the share of that inbound whose transit took longer than
+  `SUPPLIER_MAX_LATENCY_CYCLES` to arrive) that gates the supplier role wherever inbound alone is what
+  qualifies it.
+
+Absent reads as unknown, never as zero: a market with no history behaves as a plain consumer on the full
+deep reserve, exactly as every market does today, so an old save or a freshly founded colony opens
+unchanged and only earns a role after living through a real window of activity. Abandonment clears all
+three.
+
+### Losing the role is fast; qualifying is slow
+
+Qualifying as a supplier takes a real window of steady replenishment — one refill moves the average only
+0.2 of the way, so a consumer served once is not a supplier. Losing the role is immediate: a supplier
+that sits short for `SUPPLIER_DROP_RUNS` (4) consecutive runs with nothing credited reverts to consumer
+on the spot, whatever its rolling average still says. The counter that tracks this is a latch: it stops
+advancing once it reaches the threshold, and only a run that actually credits something resets it to
+zero — so a world cut off from its supply reverts once and stays reverted, rather than pulsing back into
+the role the moment its short streak would otherwise wrap around. This bounds the cascade in a chain of
+producer → supplier → supplier → supplier: if the producer stops, each link gives down to its buffer and
+then holds it — a supplier's reserve against a stopped supply is 10-12 cycles, not 40, but the reversion
+still lands above the ration line at every stockpile-scale step.
+
+### The stockpile lever
+
+**Stockpile scale** — one multiplier per faction, stepped 0.75 / 1 / 1.5, default 1 — is "my worlds hold
+more" or "my worlds hold less". It multiplies every line above, for every role, so the ratios between
+them (and every safety invariant that depends on those ratios) hold at every step.
+
+### Physical exposure
+
+A supplier re-orders on a *counted* figure that includes stock already scheduled to arrive, so its
+warning is not the same as stock actually in hand — what the buffer has to survive is the single refill
+haul, not the world's average delivery time. `SUPPLIER_MAX_LATENCY_CYCLES` (4) and the buffer's own size
+are set so a buffer drawn to its line and re-ordered still covers the ration knee plus one gated haul,
+and the supplier's re-order line can never be pushed under the ration knee by an anchor-shift event, at
+every stockpile-scale step (`lib/constants/directed-logistics.ts`).
+
+### The brake-ceiling pairing, re-scoped
+
+The production brake's own ceiling sits at or below a donor's donation line only where both are measured
+on the *same* full-rate world — the one case the pairing still holds. A part-producer kept topped up by
+inbound now qualifies as a supplier on its ten-cycle buffer, far under its own brake ceiling, and gives
+from there: nothing of its own is accumulating above that line for the brake to guard, so the pairing
+does not apply to a buffer, or to a consumer whose realised use has fallen below full rate.
+
+### The planner gate and the founding cap
+
+The build planner's "could a factory here be fed" gate only ever licenses a factory off a market that is
+actually a **flow** — a producer or a supplier — never off an idle world's one-off released stock, which
+is a level, not a rate, and would license capacity nothing keeps refilling.
+
+A founding colony's staging draw is capped at the **deep line a full-rate consumer of the good would
+keep**, whatever the donor market's own role: a colony can never draw a relay, a producer, or an idle
+world below what an ordinary consumer would have held onto for itself. `founderCover` — the post-draw
+stock a founder is left with, divided by that same deep line — reads the same physical stock the same
+way for a producer founder and a consumer founder alike.
+
+### What the harness reads
+
+Alongside the four-role cover table (producer / supplier / consumer / idle, side by side — role
+migration alone can move the read, so the consumer cohort's median is never read alone), the metric this
+mechanic exists to move is the share of served sinks whose volume-weighted mean inbound latency exceeds
+one cycle, read with its own guards beside it — served-sink count, raise size, hauls per served sink, the
+share of sinks the late-inbound gate excludes — so a fall driven by smaller, nearer raises reads
+differently from stock actually released nearer. The harness's price-anchor-denominated cover figures
+fall by construction on every fed market once resting stock drops to 10-12 cycles, and are never read as
+a regression; the release itself is read as first-cycle tonnage against the stock a blanket floor would
+otherwise be holding back.
 
 **Logistics classification** (stock-based):
 
@@ -118,30 +246,19 @@ at and the target a sink fills to together.
   dead-band). Import order runs by cover against the **draw figure** — a factory stopped by its own
   full yard is not close to running out right now and is not raised ahead of one idle for want of the
   delivery, while its warehousing target stands unchanged.
-- **Surplus** — a source of drawable stock by either path, and the two paths stop at different
-  floors: **(a)** `stock ≥ donorReserve × SURPLUS_MARGIN` — any holder of excess inventory (margin > 1
-  leaves the deliberate residual) — donating only `stock − donorReserve`, never below the reserve it
-  keeps for itself; or **(b)** a **structural producer** (`production > demand`) shipping down to
-  `EXPORT_RESERVE_COVER` cycles of its own demand, which sits far *below* the reserve and is where
-  96.5% of hauls come from — an exporter is drained to its reserve, not to par. Path (b)
-  mirrors the deficit-side self-supply gate and is required because the production brake rests a
-  producer's stock at its warehouse knee, and the knee is not one fixed number: at most `BRAKE_RAMP ×
-  BRAKE_USE_COVER` = 52 cycles of the use figure *where the use term binds the knee* — below the
-  56-cycle donation line (`SURPLUS_MARGIN × DONOR_RESERVE_COVER`) — but an output-bound exporter's
-  knee is sized off its own capacity instead (`BRAKE_OUTPUT_COVER × capacityProduction`) and can sit
-  *above* the donation line. That is the intended outcome of path (b), not a gap in it: a dedicated
-  exporter with negligible local use rests above the line on capacity alone, and (b) is what still lets
-  it form a surplus there. Without path (b) at all, a structural exporter could never form a surplus,
-  and directed logistics went dead for every good its producers also consume (food, water, biomass).
-  Both ends of the match are denominated in real demand, and no price-anchor quantity reaches
-  logistics or the brake: a producer idles against its **warehouse knee** — the larger of 40 cycles
-  of its use figure and 8 cycles of its own capacity (see
-  [economy-equilibrium-rework](./economy-equilibrium-rework.md)). Moving the donor side was measured
-  end to end first: equilibrium is unchanged on every tracked good, galaxy production −0.3%, and the
-  accepted cost is transient — stock the anchor used to over-shelter on small markets now feeds the
-  front of the import queue, so mid-game consumer shelves fill ~1,000–2,000 ticks later.
-  At demand 0 the reserve is 0 and the whole pile is drawable: nobody there consumes the good, so
-  there is nothing to hold it for.
+- **Surplus** — a source of drawable stock by either path, and the two paths stop at different floors:
+  **(a)** `stock ≥ donorReserve × SURPLUS_MARGIN`, applied only where the give line is a deep reserve
+  (a consumer, not margin-free) — donating only `stock − donorReserve`, never below the reserve it keeps
+  for itself; a buffer-role market (producer, supplier, or idle) gives everything above its line with no
+  dead-band; or **(b)** a **structural producer** (`production > demand`) shipping down to
+  `EXPORT_RESERVE_COVER` cycles of its own demand, which sits far *below* the consumer reserve and is
+  where 96.5% of hauls come from — an exporter is drained to its reserve, not to par. Both ends of the
+  match are denominated in real demand, and no price-anchor quantity reaches logistics or the brake.
+  Moving the donor side was measured end to end first: equilibrium is unchanged on every tracked good,
+  galaxy production −0.3%, and the accepted cost is transient — stock the anchor used to over-shelter on
+  small markets now feeds the front of the import queue, so mid-game consumer shelves fill ~1,000–2,000
+  ticks later. At demand 0 the reserve is 0 and the whole pile is drawable: nobody there consumes the
+  good, so there is nothing to hold it for.
 - **Balanced** — the dead-band between, and anything with no demand at all (a zero warehousing target
   is never a sink).
 

@@ -19,14 +19,15 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   no priority scheme) — decide after play whether a priority tier is wanted.
   *Next step:* play with both for a few sessions, then decide.
 - **[L] Logistics gameplay pass — the surface war will interdict, and what remains after cost and
-  the supplier floor.** Hauling cost turned out to be shipped already (work × route cost, billed
-  at `LOGISTICS_RATE_PER_WORK` in the Logistics funding band — that constant is the knob). The
-  **supplier floor** (a third market role: steady inbound counts like production, so a supplier
-  gives down to the producer floor; consumer reserve depth is the player's stockpile lever) is
-  in spec, with its evidence, in
-  [logistics-gameplay-pass.md](./build-plans/logistics-gameplay-pass.md); the **depot** (synthetic
-  relayed demand for neighbourhoods short together) is deferred there pending a re-measure once the
-  floor ships. This row keeps the rest.
+  the supplier floor.** Hauling cost is already billed (work × route cost, at
+  `LOGISTICS_RATE_PER_WORK` in the Logistics funding band — that constant is the knob). The
+  **supplier floor** ships — a third market role, supplier, alongside producer and consumer (plus
+  idle, a consumer whose realised use has fallen away): steady inbound counts like production, so
+  a supplier gives down to the producer floor, a consumer's deep reserve reads against realised
+  use, and one faction-wide **stockpile scale** sets how deep every line runs — see
+  [economy-autonomic-agency.md](./active/gameplay/economy-autonomic-agency.md). The **depot**
+  (synthetic relayed demand for neighbourhoods short together) stays deferred, pending the
+  re-measure below. This row keeps the rest.
   Absorbs the former depth-check audit row: the pillar is still shallow — e.g. penalised
   cross-unowned-space
   logistics was inherited from a retired umbrella and never built. Its own pass before calling the

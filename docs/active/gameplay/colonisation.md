@@ -300,9 +300,11 @@ is funded:
 1. **Pay the charters.** Every unpaid colony in the queue tries, in queue order, against the running working
    balance (see above).
 2. **Plan what is stageable.** For each in-flight establish with its charter paid, per good: the least of what
-   is still wanted this cycle, what the source can spare (`surplusDrawable`, further bounded by the row's live
-   stock and by a running per-(source, good) balance so two colonies drawing on one founder share a shrinking
-   pile), and what the faction's remaining working balance buys through the valuation seam. Plans are drawn in
+   is still wanted this cycle, what the source can spare (`surplusDrawable`, additionally capped at the deep
+   line a full-rate consumer of the good would keep — whatever the source's own role, a colony never draws a
+   relay, a producer, or an idle world below what an ordinary consumer would have held onto — further bounded
+   by the row's live stock and by a running per-(source, good) balance so two colonies drawing on one founder
+   share a shrinking pile), and what the faction's remaining working balance buys through the valuation seam. Plans are drawn in
    queue order against the same balance the charters just spent from, so two colonies can never commit one
    faction's money twice.
 3. **Convert the plan to a work ceiling.** The ordinary absorption cap is scaled by the value-weighted fraction

@@ -373,6 +373,21 @@ budget bands divide anything.
 **Manifest** — The goods a colony is stocked with while it is being colonised, staged and paid for
 cycle by cycle and credited to its market when it opens.
 
+**Producer** — A world that makes more of this good than it uses. It keeps a short restart buffer
+and ships the rest.
+
+**Supplier** — A world kept topped up by steady deliveries or its own part-production. It holds a
+thin buffer like a producer and passes the rest on.
+
+**Consumer** — A world that uses this good and has no steady refill. It keeps a deep reserve sized
+to what it actually uses.
+
+**Idle** — A world whose use of this good has fallen away. It holds only a restart buffer until use
+returns.
+
+**Stockpile** — How deep every system in a faction holds goods, in three steps a player sets once
+for the whole faction: lean holds less, deep holds more.
+
 ### Territory and politics
 
 **Unclaimed, controlled, developed** — The three states a system can be in. Unclaimed is open
