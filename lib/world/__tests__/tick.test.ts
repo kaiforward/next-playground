@@ -8,7 +8,8 @@ import {
 } from "../tick";
 import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import { serialiseWorld, deserialiseWorld } from "../save";
-import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
+import { toGoodMarketStates, stockpileScaleFor } from "@/lib/tick/processors/good-market-state";
+import { logisticsTargetsByKey } from "@/lib/tick-harness/cohort-analysis";
 import { unitResourceVector, yieldsOf } from "@/lib/engine/resources";
 import { catchUpFactor } from "@/lib/tick/shard";
 import { RELATIONS_FREQUENCY, RELATION_HISTORY_MAX } from "@/lib/constants/relations";
@@ -25,6 +26,7 @@ import {
 import { CROWDING, POPULATION_PARAMS, STRIKE_PARAMS, UNREST_PARAMS } from "@/lib/constants/population";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { EXPANSION } from "@/lib/constants/expansion";
 import type { TaxLevel } from "@/lib/types/game";
 import type { SystemDevelopment } from "@/lib/tick/world/directed-build-world";
@@ -2659,6 +2661,46 @@ describe("marketRowsBySystem carries unservedShortfall through the market join",
   });
 });
 
+describe("marketRowsBySystem carries the supplier-floor rolling figures through the market join", () => {
+  it("carries every present value onto the projected row", () => {
+    const base = generateWorld({ systemCount: 20, seed: 3 }).markets[0];
+    const flagged: WorldMarket = {
+      ...base,
+      realisedUse: 12,
+      steadyInbound: 8,
+      lateInboundShare: 0.4,
+      supplierShortRuns: 2,
+      inboundCreditedLastCycle: 5,
+    };
+    const rows = marketRowsBySystem([flagged]).get(flagged.systemId);
+    const row = rows?.find((r) => r.goodId === flagged.goodId);
+    expect(row?.realisedUse).toBe(12);
+    expect(row?.steadyInbound).toBe(8);
+    expect(row?.lateInboundShare).toBeCloseTo(0.4, 10);
+    expect(row?.supplierShortRuns).toBe(2);
+    // The drop rule asks "was anything credited here at all over the cycle just folded", which only
+    // this record answers — the live accumulator is zero by the time logistics reads the row.
+    expect(row?.inboundCreditedLastCycle).toBe(5);
+  });
+
+  it("carries absence through as undefined, never as 0 — matching unservedShortfall's own projection", () => {
+    const base = generateWorld({ systemCount: 20, seed: 3 }).markets[0];
+    const untouched: WorldMarket = { ...base };
+    delete untouched.realisedUse;
+    delete untouched.steadyInbound;
+    delete untouched.lateInboundShare;
+    delete untouched.supplierShortRuns;
+    delete untouched.inboundCreditedLastCycle;
+    const rows = marketRowsBySystem([untouched]).get(untouched.systemId);
+    const row = rows?.find((r) => r.goodId === untouched.goodId);
+    expect(row?.realisedUse).toBeUndefined();
+    expect(row?.steadyInbound).toBeUndefined();
+    expect(row?.lateInboundShare).toBeUndefined();
+    expect(row?.supplierShortRuns).toBeUndefined();
+    expect(row?.inboundCreditedLastCycle).toBeUndefined();
+  });
+});
+
 describe("resetAbandonedMarkets clears unservedShortfall", () => {
   it("deletes a stale level on abandonment, leaving stock untouched", () => {
     const base = generateWorld({ systemCount: 20, seed: 3 }).markets[0];
@@ -2669,6 +2711,97 @@ describe("resetAbandonedMarkets clears unservedShortfall", () => {
     expect(reset.unservedShortfall).toBeUndefined();
     expect("unservedShortfall" in reset).toBe(false);
     expect(reset.stock).toBe(777);
+  });
+});
+
+describe("resetAbandonedMarkets clears the supplier-floor rolling figures", () => {
+  it("deletes all seven new fields on abandonment, leaving stock untouched — a resettled world opens unknown, not as an idle market on a ten-cycle line", () => {
+    const base = generateWorld({ systemCount: 20, seed: 3 }).markets[0];
+    const stale: WorldMarket = {
+      ...base,
+      realisedUse: 12,
+      steadyInbound: 8,
+      lateInboundShare: 0.4,
+      inboundSinceFold: 3,
+      lateInboundSinceFold: 1,
+      inboundCreditedLastCycle: 9,
+      supplierShortRuns: 2,
+      stock: 777,
+    };
+
+    const [reset] = resetAbandonedMarkets([stale], [stale.systemId]);
+
+    expect("realisedUse" in reset).toBe(false);
+    expect("steadyInbound" in reset).toBe(false);
+    expect("lateInboundShare" in reset).toBe(false);
+    expect("inboundSinceFold" in reset).toBe(false);
+    expect("lateInboundSinceFold" in reset).toBe(false);
+    expect("inboundCreditedLastCycle" in reset).toBe(false);
+    expect("supplierShortRuns" in reset).toBe(false);
+    expect(reset.stock).toBe(777);
+  });
+
+  it("leaves an untouched (non-abandoned) system's rolling figures alone", () => {
+    const base = generateWorld({ systemCount: 20, seed: 3 }).markets[0];
+    const other = generateWorld({ systemCount: 20, seed: 3 }).markets[1];
+    const stale: WorldMarket = { ...base, realisedUse: 12, steadyInbound: 8 };
+    const untouched: WorldMarket = { ...other, realisedUse: 9, systemId: `${base.systemId}-not-abandoned` };
+
+    const [, keptUntouched] = resetAbandonedMarkets([stale, untouched], [stale.systemId]);
+
+    expect(keptUntouched.realisedUse).toBe(9);
+  });
+});
+
+// The drop latch's clear runs INSIDE one tick's stage order: the economy folds this cycle's credited
+// inbound (zeroing the accumulator it consumed) and directed logistics reads the fold's record
+// afterwards, on the same tick. Pinned end to end through `runWorldTick` rather than by handing the
+// processor a hand-built row, because the vacuity the fix exists to close is exactly a row shape the
+// real order never presents.
+describe("runWorldTick — a credited cycle clears the supplier drop latch", () => {
+  const LATCH_CADENCE: TickCadence = { cycle: 1, logistics: 1, construction: 999 };
+
+  /** A world whose first owned market carries a fully-latched counter, plus whatever inbound the
+   *  arrivals stage is supposed to have credited it since the last fold. */
+  function latchedWorld(inboundSinceFold: number): { world: World; marketId: string } {
+    const base = generateWorld({ systemCount: 20, seed: 3 });
+    const owned = base.systems.find((s) => s.factionId !== null);
+    if (!owned) throw new Error("no owned system");
+    const target = base.markets.find((m) => m.systemId === owned.id);
+    if (!target) throw new Error("no market on the owned system");
+    return {
+      marketId: `${target.systemId}|${target.goodId}`,
+      world: {
+        ...base,
+        markets: base.markets.map((m) =>
+          m.systemId === target.systemId && m.goodId === target.goodId
+            ? {
+              ...m,
+              supplierShortRuns: DIRECTED_LOGISTICS.SUPPLIER_DROP_RUNS,
+              inboundSinceFold,
+              lateInboundSinceFold: 0,
+            }
+            : m,
+        ),
+      },
+    };
+  }
+
+  const counterAfterOneTick = async (inboundSinceFold: number): Promise<number | undefined> => {
+    const { world, marketId } = latchedWorld(inboundSinceFold);
+    const after = (await runWorldTick(world, { cadence: LATCH_CADENCE })).world;
+    const [systemId, goodId] = marketId.split("|");
+    return after.markets.find((m) => m.systemId === systemId && m.goodId === goodId)?.supplierShortRuns;
+  };
+
+  it("clears a latched counter on the cycle its arrivals were credited", async () => {
+    // The economy zeroes `inboundSinceFold` before logistics ever sees the row, so the clear can
+    // only fire off the record the fold leaves behind.
+    expect(await counterAfterOneTick(6)).toBeUndefined();
+  });
+
+  it("holds the latch through a cycle that credited nothing", async () => {
+    expect(await counterAfterOneTick(0)).toBe(DIRECTED_LOGISTICS.SUPPLIER_DROP_RUNS);
   });
 });
 
@@ -2688,12 +2821,10 @@ describe("runWorldTick — the unserved shortfall level end to end", () => {
     for (const b of world.buildings) if (b.systemId === systemId) buildings[b.buildingType] = b.count;
     const rows = marketRowsBySystem(world.markets.filter((m) => m.systemId === systemId)).get(systemId);
     if (!rows) throw new Error(`no market rows for ${systemId}`);
-    const state = toGoodMarketStates({
-      buildings,
-      population: system.population,
-      yields: yieldsOf(system),
-      markets: rows,
-    }).find((g) => g.goodId === goodId);
+    const state = toGoodMarketStates(
+      { buildings, population: system.population, yields: yieldsOf(system), markets: rows },
+      { stockpileScale: 1 },
+    ).find((g) => g.goodId === goodId);
     if (!state) throw new Error(`no ${goodId} state at ${systemId}`);
     return state.logisticsTarget;
   }
@@ -2850,6 +2981,75 @@ describe("runWorldTick — the unserved shortfall level end to end", () => {
     expect(dirty.events).toEqual(clean.events);
     expect(dirty.instrumentation).toEqual(clean.instrumentation);
   }, 60_000);
+});
+
+describe("runWorldTick — stockpileScale reaches every toGoodMarketStates caller identically", () => {
+  it("scales a market's give line by the owning faction's treasury row, and the harness reads the same figure the tick did", async () => {
+    const base = generateWorld({ systemCount: 20, seed: 7 });
+    const factionId = base.factions[0].id;
+    const systemId = base.factions[0].homeworldId;
+    const scaled: World = {
+      ...base,
+      treasuries: base.treasuries.map((t) =>
+        t.factionId === factionId ? { ...t, stockpileScale: 1.5 } : t,
+      ),
+    };
+    const cadence = { cycle: 1, logistics: 1, construction: 99 };
+    const after = (await runWorldTick(scaled, { cadence })).world;
+
+    const system = after.systems.find((s) => s.id === systemId);
+    if (!system) throw new Error(`no system ${systemId}`);
+    const buildings: Record<string, number> = {};
+    for (const b of after.buildings) if (b.systemId === systemId) buildings[b.buildingType] = b.count;
+    const rows = marketRowsBySystem(after.markets.filter((m) => m.systemId === systemId)).get(systemId);
+    if (!rows) throw new Error(`no market rows for ${systemId}`);
+    const source = { buildings, population: system.population, yields: yieldsOf(system), markets: rows };
+
+    // The tick path: the faction's own persisted stockpileScale, resolved exactly as
+    // `stockpileScaleByFaction` is built in `runWorldTick` itself.
+    const tickState = toGoodMarketStates(source, { stockpileScale: 1.5 })
+      .find((g) => g.goodId === "water");
+    if (!tickState) throw new Error("no water state");
+
+    // The harness path: cohort-analysis's own call site, given the same treasury-derived map.
+    const tickSystems = toTickSystems(after);
+    const stockpileScaleByFaction = new Map(
+      after.treasuries.map((t) => [t.factionId, t.stockpileScale ?? 1]),
+    );
+    const harnessTargets = logisticsTargetsByKey(tickSystems, after.markets, stockpileScaleByFaction);
+
+    const harnessWater = harnessTargets.get(`${systemId}|water`);
+    if (!harnessWater) throw new Error("no harness water target");
+    expect(harnessWater.logisticsTarget).toBeCloseTo(tickState.logisticsTarget, 9);
+    expect(harnessWater.donorReserve).toBeCloseTo(tickState.donorReserve, 9);
+
+    // Both read 1.5× the k=1 figure on the identical row data — the multiplier reaching this site
+    // at all, not merely the two paths agreeing with each other.
+    const unscaledState = toGoodMarketStates(source, { stockpileScale: 1 })
+      .find((g) => g.goodId === "water");
+    if (!unscaledState) throw new Error("no water state");
+    expect(tickState.logisticsTarget).toBeCloseTo(unscaledState.logisticsTarget * 1.5, 9);
+    expect(tickState.donorReserve).toBeCloseTo(unscaledState.donorReserve * 1.5, 9);
+  });
+
+  it("leaves an independent (unowned) system's lines unscaled whatever any faction's stockpileScale is set to", () => {
+    // Not read from a generated galaxy: an unclaimed system there carries no population and no
+    // market rows, which would let this assertion pass vacuously on an empty state array. This
+    // fixture parks a real consumer row on a `factionId: null` source instead.
+    const rows = marketRowsBySystem([
+      { systemId: "independent", goodId: "water", stock: 10, anchorMult: 1, demandRate: 5, storageCapacity: 20 },
+    ]).get("independent") ?? [];
+    const source = { buildings: {}, population: 100, yields: unitResourceVector(), markets: rows };
+
+    // Every faction in scope is set to 1.5 — an independent system has no treasury row of its own
+    // to read regardless of what the map holds.
+    const stockpileScaleByFaction = new Map([["f1", 1.5], ["f2", 1.5]]);
+    const scaled = toGoodMarketStates(
+      source, { stockpileScale: stockpileScaleFor(null, stockpileScaleByFaction) },
+    );
+    const unscaled = toGoodMarketStates(source, { stockpileScale: 1 });
+    expect(scaled).toEqual(unscaled);
+  });
 });
 
 // ── Build blocked (WorldSystem.buildBlocked) ─────────────────────────
@@ -3145,7 +3345,7 @@ describe("marketRowsBySystem → toGoodMarketStates: the persisted-figure seam",
     if (rows === undefined) throw new Error("Expected rows for s1");
     const state = toGoodMarketStates(
       { buildings: SEAM_BUILDINGS, population: SEAM_POPULATION, yields: unitResourceVector(), markets: rows },
-      { withDraw },
+      { withDraw, stockpileScale: 1 },
     ).find((g) => g.goodId === "ore");
     if (state === undefined) throw new Error("Expected an ore state");
     return state;

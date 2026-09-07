@@ -19,6 +19,8 @@ import { strikeMultiplier } from "@/lib/engine/population";
 import { SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import { classifyLogisticsRole } from "@/lib/engine/directed-logistics";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { brakeKnee } from "@/lib/engine/tick";
@@ -1402,5 +1404,200 @@ describe("economy processor: the shard debug log", () => {
       else process.env.DEBUG_ECONOMY = previous;
       vi.resetModules();
     }
+  });
+});
+
+// ── Reserve-rate folding: realisedUse, steadyInbound, lateInboundShare ────
+
+describe("economy processor: reserve-rate folding", () => {
+  it("moves a settled steadyInbound by 0.2 of the gap for one ordinary 8-cycle refill, not to it", async () => {
+    // A reference-interval run (catchUp = 1) so the accumulated inbound this cycle equals the
+    // per-reference-cycle observation directly. An 8-cycle refill of a rate-10 stream credits
+    // 80 in one run; folded at weight 1/40 against a settled prior of 10, the result is
+    // 10 + (80 − 10)/40 = 11.75 = 1.175 × the prior rate — not jumped to the 80 observation.
+    const priorRate = 10;
+    const inboundSinceFold = 8 * priorRate;
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-supplied", 0)],
+      markets: [{
+        ...makeMarket("sys-supplied", "food", FIXTURE_BAND.targetStock),
+        steadyInbound: priorRate,
+        inboundSinceFold,
+      }],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
+    const expected = priorRate + (inboundSinceFold - priorRate) / DIRECTED_LOGISTICS.RESERVE_WINDOW_CYCLES;
+    expect(expected).toBeCloseTo(1.175 * priorRate, 6); // pins the constant's current value (40)
+    expect(world.markets[0].steadyInbound).toBeCloseTo(expected, 6);
+  });
+
+  it("starts an unseen steadyInbound at zero, so one haul cannot buy the supplier role", async () => {
+    // No stored steadyInbound at all: the rate the supplier role is earned on climbs from 0 by one
+    // window-weight of the observation (80/40 = 2), never jumping to the whole haul.
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-fresh", 0)],
+      markets: [{
+        ...makeMarket("sys-fresh", "food", FIXTURE_BAND.targetStock),
+        inboundSinceFold: 80,
+      }],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
+    const seeded = world.markets[0].steadyInbound ?? 0;
+    expect(seeded).toBeCloseTo(80 / DIRECTED_LOGISTICS.RESERVE_WINDOW_CYCLES, 6);
+
+    // ...and the role that rate exists to grant is out of reach on it: the replenishment bar is
+    // SUPPLIER_REPLENISHMENT of the market's use, and one haul's worth of rate does not clear it.
+    const use = world.markets[0].honestUseRate ?? 0;
+    expect(use).toBeGreaterThan(0); // the fixture premise: a market that uses the good
+    expect(
+      classifyLogisticsRole({ demand: use, production: 0, steadyInbound: seeded, anchorMult: 1 }),
+    ).not.toBe("supplier");
+    // The same market handed a settled rate DOES qualify — so the assertion above is the seeding,
+    // not a fixture that could never be a supplier at all.
+    expect(
+      classifyLogisticsRole({
+        demand: use,
+        production: 0,
+        steadyInbound: use,
+        lateInboundShare: 0,
+        anchorMult: 1,
+      }),
+    ).toBe("supplier");
+  });
+
+  it("seeds realisedUse from this cycle's observation, so a fresh consumer reserves against what it used", async () => {
+    // The measurement half of the same fold: a market with no stored realised-use history takes its
+    // first reading outright rather than averaging it against a zero nobody measured, which would
+    // collapse a brand-new consumer onto the restart buffer for a whole window. Read against the
+    // identical fixture carrying a stored 0 — same cycle, same draw, so the only difference is the
+    // seed, and the fresh market's rate is a whole window's worth larger.
+    const runOne = async (name: string, prior: number | undefined): Promise<number> => {
+      const world = new InMemoryEconomyWorld({
+        systems: [makeConsumerSystem(name, 0)],
+        markets: [{
+          ...makeMarket(name, "food", FIXTURE_BAND.targetStock),
+          realisedUse: prior,
+        }],
+        modifiers: [],
+      });
+      await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
+      return world.markets[0].realisedUse ?? 0;
+    };
+    const fromZero = await runOne("sys-use-zero", 0);
+    expect(fromZero).toBeGreaterThan(0); // the fixture premise: this market actually drew something
+    expect(await runOne("sys-use-fresh", undefined))
+      .toBeCloseTo(fromZero * DIRECTED_LOGISTICS.RESERVE_WINDOW_CYCLES, 6);
+  });
+
+  it("records the credited inbound the fold consumed, so a later stage on the same tick can still see it", async () => {
+    // The directed-logistics run that follows on every cycle boundary asks "did anything arrive here
+    // over the cycle just closed?" — a question the zeroed accumulator can no longer answer.
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-record", 0)],
+      markets: [{
+        ...makeMarket("sys-record", "food", FIXTURE_BAND.targetStock),
+        inboundSinceFold: 40,
+      }],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
+    expect(world.markets[0].inboundSinceFold).toBe(0);
+    expect(world.markets[0].inboundCreditedLastCycle).toBe(40);
+  });
+
+  it("records a zero for a cycle that credited nothing, clearing a prior cycle's record", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-record-none", 0)],
+      markets: [{
+        ...makeMarket("sys-record-none", "food", FIXTURE_BAND.targetStock),
+        inboundCreditedLastCycle: 40,
+      }],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
+    expect(world.markets[0].inboundCreditedLastCycle).toBe(0);
+  });
+
+  it("zeroes inboundSinceFold and lateInboundSinceFold after folding them", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-zero", 0)],
+      markets: [{
+        ...makeMarket("sys-zero", "food", FIXTURE_BAND.targetStock),
+        inboundSinceFold: 40,
+        lateInboundSinceFold: 10,
+      }],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
+    expect(world.markets[0].inboundSinceFold).toBe(0);
+    expect(world.markets[0].lateInboundSinceFold).toBe(0);
+  });
+
+  it("folds lateInboundShare from the credited late fraction, and leaves it untouched when nothing was credited", async () => {
+    // 10 credited, 4 late this cycle → observed share 0.4, folded from a settled 0.1 at
+    // weight 1/40: 0.1 + (0.4 − 0.1)/40 = 0.1075.
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-late", 0)],
+      markets: [{
+        ...makeMarket("sys-late", "food", FIXTURE_BAND.targetStock),
+        lateInboundShare: 0.1,
+        inboundSinceFold: 10,
+        lateInboundSinceFold: 4,
+      }],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
+    expect(world.markets[0].lateInboundShare).toBeCloseTo(0.1075, 6);
+
+    // Nothing credited this cycle: a 0/0 observation must not fold in, so the stored share
+    // is left exactly where it was rather than dragged toward a false 0.
+    const untouched = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-idle", 0)],
+      markets: [{
+        ...makeMarket("sys-idle", "food", FIXTURE_BAND.targetStock),
+        lateInboundShare: 0.1,
+      }],
+      modifiers: [],
+    });
+    await runEconomyProcessor(untouched, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
+    expect(untouched.markets[0].lateInboundShare).toBe(0.1);
+  });
+
+  it("seeds realisedUse from the metals cascade's own applied draw, per reference cycle", async () => {
+    // A metals factory whose recipe draw is fully satisfied by ore in stock: the ore
+    // market's realisedUse should seed to a positive observation (its own drawnByGood),
+    // never sit at 0, and never at 0's average with a real draw.
+    const smelter: TickSystem = {
+      id: "smelter",
+      name: "smelter",
+      economyType: "industrial",
+      regionId: "r1",
+      factionId: "f1",
+      control: "developed",
+      governmentType: "federation",
+      population: 65,
+      popCap: 200,
+      unrest: 0,
+      buildings: { metals: 2, vocational_school: 1 },
+      buildingIdleCycles: {},
+      collapseDebt: 0,
+      yields: unitResourceVector(),
+      extractionEff: unitResourceVector(),
+      depositCounts: emptyResourceVector(),
+      peopleLand: 0,
+    };
+    const world = new InMemoryEconomyWorld({
+      systems: [smelter],
+      markets: [
+        makeMarket("smelter", "ore", FIXTURE_BAND.targetStock * 4),
+        makeMarket("smelter", "metals", FIXTURE_BAND.minStock + 10),
+      ],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
+    const ore = world.markets.find((m) => m.goodId === "ore")!;
+    expect(ore.realisedUse).toBeGreaterThan(0);
   });
 });

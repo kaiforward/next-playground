@@ -21,7 +21,7 @@ import {
   type SystemConstructionRow,
 } from "@/lib/engine/construction-readout";
 import { orderOpenProjects } from "@/lib/engine/construction";
-import { surplusDrawable } from "@/lib/engine/directed-logistics";
+import { foundingDrawableAt } from "@/lib/engine/directed-build";
 import { yieldsOf, effOf } from "@/lib/engine/resources";
 import { foundingWorkingBalance } from "@/lib/engine/treasury";
 import { catchUpFactor } from "@/lib/tick/shard";
@@ -29,16 +29,16 @@ import { CONSTRUCTION_INTERVAL, CYCLE_LENGTH } from "@/lib/constants/tick-cadenc
 import {
   charterFee, referenceMaintenanceBill, type FoundingSourceSupply,
 } from "@/lib/engine/founding-cost";
-import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
+import { toGoodMarketStates, stockpileScaleFor } from "@/lib/tick/processors/good-market-state";
 import { marketRowsBySystem } from "@/lib/world/tick";
 import type { World, WorldConstructionProject } from "@/lib/world/types";
 import type { SystemConstructionData, FactionConstructionData } from "@/lib/types/api";
 
 /**
  * What each in-flight colony's source can spare it, read exactly as the staging draw reads it: the
- * shared market-state derivation, then the export rule, then the row's live stock (a plan may never
- * promise more goods than physically sit there). Only the sources of open colonies are derived —
- * on the common queue that is nothing at all.
+ * shared market-state derivation, then the one founding-drawable rule the tick's plan runs, so the
+ * readout and the plan cannot quote two different figures for the same shelf. Only the sources of
+ * open colonies are derived — on the common queue that is nothing at all.
  */
 function foundingSupplyBySource(
   world: World,
@@ -52,25 +52,25 @@ function foundingSupplyBySource(
   if (sourceIds.size === 0) return supply;
 
   const marketRows = marketRowsBySystem(world.markets);
+  const stockpileScaleByFaction = new Map(
+    world.treasuries.map((t) => [t.factionId, t.stockpileScale ?? 1]),
+  );
   for (const sourceId of sourceIds) {
     const source = world.systems.find((s) => s.id === sourceId);
     if (source === undefined) continue;
-    const states = toGoodMarketStates({
-      buildings: buildings.get(sourceId) ?? {},
-      population: source.population,
-      yields: yieldsOf(source),
-      extractionEff: effOf(source),
-      markets: marketRows.get(sourceId) ?? [],
-    });
+    const states = toGoodMarketStates(
+      {
+        buildings: buildings.get(sourceId) ?? {},
+        population: source.population,
+        yields: yieldsOf(source),
+        extractionEff: effOf(source),
+        markets: marketRows.get(sourceId) ?? [],
+      },
+      { stockpileScale: stockpileScaleFor(source.factionId, stockpileScaleByFaction) },
+    );
     supply.set(
       sourceId,
-      states.map((g) => ({
-        goodId: g.goodId,
-        sparable: Math.min(
-          surplusDrawable(g.stock, g.donorReserve, g.demand, g.production, g.productionSuppressed),
-          Math.max(0, g.stock),
-        ),
-      })),
+      states.map((g) => ({ goodId: g.goodId, sparable: foundingDrawableAt(g) })),
     );
   }
   return supply;

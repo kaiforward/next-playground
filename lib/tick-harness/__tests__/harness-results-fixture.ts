@@ -118,6 +118,16 @@ export function minimalHarnessResults(): HarnessResults {
       overshootVolume: 0,
       budgetSkipped: 0,
       survivalStockFalling: { count: 0, share: 0 },
+      inboundLatency: {
+        servedSinks: 0, shareOver24Ticks: 0, shareOver24TreatedCohort: 0, treatedSinks: 0,
+        gateExcludedShare: 0, gateExcludedSinks: 0, medianRaiseSize: 0, haulsPerServedSink: 0,
+        perHaulLatencyP50: 0, perHaulLatencyP90: 0,
+      },
+      logisticsWorkPerDeliveredUnit: 0,
+      fundingBoundIncidenceByFaction: [],
+      physicalCoverAtRationByRole: [],
+      anchorEventCohort: [],
+      releasedTonnageFirstCycle: { tick: null, total: 0, byGood: [] },
     },
     survivalSpellDistribution: { n: 0, median: 0, p90: 0, singleRunShare: 0 },
     stageTiming: {

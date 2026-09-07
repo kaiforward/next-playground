@@ -18,10 +18,16 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   `MapData.laneBandBySystem`. Tight clusters hide most names until zoomed well in (cell-fit rule,
   no priority scheme) — decide after play whether a priority tier is wanted.
   *Next step:* play with both for a few sessions, then decide.
-- **[L] Logistics gameplay pass — real cost, hub/chain depth, the surface war will interdict.**
-  Logistics works mechanically but hauling costs nothing and nothing can threaten it — no game in
-  the pillar yet. This pass prices movement (the markets row below needs transport cost to make
-  per-system prices mean anything) and shapes the adversarial surface war later attacks.
+- **[L] Logistics gameplay pass — the surface war will interdict, and what remains after cost and
+  the supplier floor.** Hauling cost is already billed (work × route cost, at
+  `LOGISTICS_RATE_PER_WORK` in the Logistics funding band — that constant is the knob). The
+  **supplier floor** ships — a third market role, supplier, alongside producer and consumer (plus
+  idle, a consumer whose realised use has fallen away): steady inbound counts like production, so
+  a supplier gives down to the producer floor, a consumer's deep reserve reads against realised
+  use, and one faction-wide **stockpile scale** sets how deep every line runs — see
+  [economy-autonomic-agency.md](./active/gameplay/economy-autonomic-agency.md). The **depot**
+  (synthetic relayed demand for neighbourhoods short together) stays deferred, pending the
+  re-measure below. This row keeps the rest.
   Absorbs the former depth-check audit row: the pillar is still shallow — e.g. penalised
   cross-unowned-space
   logistics was inherited from a retired umbrella and never built. Its own pass before calling the
@@ -32,11 +38,6 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   system when logistics carries people (decided at the abandonment measurement, 2026-08-10; the
   interim famine gate on delivery is explicitly temporary scaffolding for this). Kai's design
   leanings for the pass (all leanings, not decisions):
-  - **Hub/chain is the real hard part** (2026-08-03): difficulty should come from being part of a
-    *chain* — infrastructure, cost, labour, distance — not per-world stock thresholds. A
-    throughput/entrepôt world would request more inbound when its exports hit their limit (demand
-    propagating upstream through hubs) while producers near consumers ship direct. The point-to-point
-    matcher today has no hub concept.
   - **Player priority lever** (2026-08-03, reworded 2026-09-06): logistics levels the emptiest
     shelf first; a per-system priority flag would let the player put a world ahead of that.
     Deferred — the default behaviour ships without it.
@@ -71,10 +72,19 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   **Route dictionary / per-source path cache** — not needed at 600 systems (the wall-clock share
   held under the ~3× line); the 10,000-system read was never run (projected ~2h). Book this only if
   that larger read fails the line.
-  *Next step:* lane mechanics and their map/panel surfaces have shipped on `shared/logistics-lanes`
-  (`docs/active/gameplay/logistics-lanes.md`) — real routing, capacity, scheduled transit,
-  investment and claiming, the lane layer and card, in-transit rows. What remains is the unbuilt
-  leanings above.
+  *Next step:* decide the depot from the supplier-floor gate read (seed 42, 600 systems, same
+  instrument both arms): the share of served sinks with mean inbound latency > 24 ticks went
+  0.965 → 0.925 at 10K and 0.963 → 0.896 at 16K; on the treated cohort (supplier / idle sinks) the
+  branch reads 0.919 at 10K (n=148) and 0.867 at 16K (n=165), with 8-11% of served sinks
+  gate-excluded by the late-inbound share. The kill line (≥ 0.90 at both horizons) was not hit, but
+  the fall is modest — most served worlds still wait more than a cycle, which is the depot's
+  case. The haul-cost retune (`LOGISTICS_RATE_PER_WORK`) reads logistics work per delivered unit
+  at 39.9 (10K) / 37.9 (16K) on the branch — transfers 54.3K → 136.9K at 10K for the same tonnage
+  moved (mean size 97 → 40), budget spent fraction 0.002 on both arms, funding-bound 0 — no
+  baseline figure exists (main's harness prints no work total). Then the four open items
+  above — founding freight on real ships, people-movement unification, input-proximity weighting,
+  the player priority lever. Who owns production and movement (companies, strata) is the
+  faction-direction pass's question, not this row's.
 - **[M] Map drawing tool — player paints where stars generate.** Second author of the map-gen
   density grid (`docs/active/gameplay/universe.md`): a New Game canvas writes the same 0–1 grid
   the procedural clusters produce, so galaxy shape becomes paintable with no second generation
@@ -289,6 +299,9 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   (`temp/stage3-gate-report.md`).
   Kai's leaning (2026-08-05): industry pricing probably lands here too — it touches the same
   ROI/build-planner surface, so the ROI ordering gets retuned once, not twice.
+  **Depots** (logistics gameplay pass, 2026-09-06) are a market policy needing no building; when
+  this row makes storage a built product, a depot's held cover is its warehouse build target — one
+  building, not two.
   *Next step:* design pass + `/spec-review` (cross-mechanic: brake, pricing band `maxStock`,
   autonomic build, decay, Industry UI).
   *Don't:* re-size the existing constants to make a brake cap work — no single multiplier fits a

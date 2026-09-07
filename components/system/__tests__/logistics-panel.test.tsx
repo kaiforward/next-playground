@@ -18,6 +18,7 @@ vi.mock("@/lib/hooks/use-system-logistics", () => ({
 function goodRow(overrides: Partial<LogisticsGoodRow> & { goodId: string; goodName: string }): LogisticsGoodRow {
   return {
     tier: 0,
+    role: "consumer",
     production: 10,
     consumption: 4,
     inputDemand: 0,
@@ -39,7 +40,8 @@ function renderPanel() {
 /** Locates a bar cell's trigger by its own accessible name (`"<good> — Internal"`/
  *  `"<good> — External"`, the `BarCell` `title`) rather than a bare `[tabindex]` selector, so a
  *  markup change that preserves focusability but drops the trigger's name still fails here.
- *  `cellIndex` picks which `<td>` in the good's row carries the bar (1 = internal, 3 = external). */
+ *  `cellIndex` picks which `<td>` in the good's row carries the bar (1 = internal, 3 = external —
+ *  Good is the one cell ahead of the Internal bar). */
 async function openBarCell(user: ReturnType<typeof userEvent.setup>, goodName: string, cellIndex: number) {
   const nameCell = screen.getByText(goodName);
   const row = nameCell.closest("tr");
@@ -131,6 +133,121 @@ describe("LogisticsPanel — bar cell dwell popovers", () => {
     await openBarCell(user, "Metals", 3);
     expect(await screen.findByText("Sources")).toBeInTheDocument();
     expect(screen.getByText("Alpha")).toBeInTheDocument();
+  });
+});
+
+describe("LogisticsPanel — role and its lines (in the Internal bar's popover)", () => {
+  it("shows a supplier's role word plus its two deciding numbers", async () => {
+    const user = userEvent.setup({ delay: null });
+    dataValue = {
+      visibility: "visible",
+      rows: [
+        goodRow({
+          goodId: "metals", goodName: "Metals", role: "supplier",
+          givesDownToCycles: 10, wantCycles: 12,
+          steadyInbound: 4.2, lateInboundShare: 0.04,
+        }),
+      ],
+      internalMax: 10, externalMax: 1, activeGoodCount: 1, tradedGoodCount: 0, volumeHistory: [],
+      transit: { inbound: [], outbound: [] },
+    };
+    renderPanel();
+
+    await openBarCell(user, "Metals", 1);
+    expect(await screen.findByText("Supplier")).toBeInTheDocument();
+    expect(screen.getByText("4.2/cyc")).toBeInTheDocument();
+    expect(screen.getByText("4%")).toBeInTheDocument();
+  });
+
+  it("shows a consumer row's cycle lines but neither of the supplier's deciding numbers", async () => {
+    const user = userEvent.setup({ delay: null });
+    dataValue = {
+      visibility: "visible",
+      rows: [
+        goodRow({
+          goodId: "metals", goodName: "Metals", role: "consumer",
+          givesDownToCycles: 40, wantCycles: 45,
+          // Set as if stale/inconsistent data reached the panel — the role gate, not the data's
+          // own absence, is what must keep a consumer row from showing the supplier's numbers.
+          steadyInbound: 4.2, lateInboundShare: 0.04,
+        }),
+      ],
+      internalMax: 10, externalMax: 1, activeGoodCount: 1, tradedGoodCount: 0, volumeHistory: [],
+      transit: { inbound: [], outbound: [] },
+    };
+    renderPanel();
+
+    await openBarCell(user, "Metals", 1);
+    expect(await screen.findByText("Consumer")).toBeInTheDocument();
+    expect(screen.getByText("40.0 cycles")).toBeInTheDocument();
+    expect(screen.getByText("45.0 cycles")).toBeInTheDocument();
+    expect(screen.queryByText("4.2/cyc")).not.toBeInTheDocument();
+    expect(screen.queryByText("4%")).not.toBeInTheDocument();
+  });
+
+  it("renders an unknown-rate market as a consumer with no placeholder in its numbers", async () => {
+    const user = userEvent.setup({ delay: null });
+    dataValue = {
+      visibility: "visible",
+      // No demand-derived fields set at all — the same reading a market with an unknown rolling
+      // rate gets: role falls back to consumer, and every cycle figure stays absent.
+      rows: [goodRow({ goodId: "metals", goodName: "Metals", role: "consumer" })],
+      internalMax: 10, externalMax: 1, activeGoodCount: 1, tradedGoodCount: 0, volumeHistory: [],
+      transit: { inbound: [], outbound: [] },
+    };
+    renderPanel();
+
+    await openBarCell(user, "Metals", 1);
+    expect(await screen.findByText("Consumer")).toBeInTheDocument();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+    expect(screen.queryByText("n/a")).not.toBeInTheDocument();
+    expect(screen.queryByText(/cycles/)).not.toBeInTheDocument();
+  });
+
+  it("shows an idle row's realised use against the use figure its role was decided on", async () => {
+    const user = userEvent.setup({ delay: null });
+    dataValue = {
+      visibility: "visible",
+      rows: [
+        goodRow({
+          goodId: "metals", goodName: "Metals", role: "idle",
+          // The row's own consumption + input demand is 10, but the classification ran against a
+          // strike-gated use of 4 — the share has to be read against the latter (30%), or the panel
+          // states a figure (12%) nothing in the mechanic ever computed.
+          consumption: 1, inputDemand: 9, givesDownToCycles: 10, wantCycles: 9.6,
+          realisedUse: 1.2, useRate: 4,
+        }),
+      ],
+      internalMax: 10, externalMax: 1, activeGoodCount: 1, tradedGoodCount: 0, volumeHistory: [],
+      transit: { inbound: [], outbound: [] },
+    };
+    renderPanel();
+
+    await openBarCell(user, "Metals", 1);
+    expect(await screen.findByText("Idle")).toBeInTheDocument();
+    expect(screen.getByText("30% of full rate")).toBeInTheDocument();
+    expect(screen.queryByText("Steady inbound")).not.toBeInTheDocument();
+    expect(screen.queryByText("Late deliveries")).not.toBeInTheDocument();
+  });
+
+  it("omits the realised-use share on an idle row with no use figure to read it against", async () => {
+    const user = userEvent.setup({ delay: null });
+    dataValue = {
+      visibility: "visible",
+      rows: [
+        goodRow({
+          goodId: "metals", goodName: "Metals", role: "idle",
+          consumption: 4, inputDemand: 6, realisedUse: 1.2,
+        }),
+      ],
+      internalMax: 10, externalMax: 1, activeGoodCount: 1, tradedGoodCount: 0, volumeHistory: [],
+      transit: { inbound: [], outbound: [] },
+    };
+    renderPanel();
+
+    await openBarCell(user, "Metals", 1);
+    expect(await screen.findByText("Idle")).toBeInTheDocument();
+    expect(screen.queryByText(/of full rate/)).not.toBeInTheDocument();
   });
 });
 

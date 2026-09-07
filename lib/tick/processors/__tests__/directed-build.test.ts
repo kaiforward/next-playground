@@ -27,7 +27,8 @@ import { CONSTRUCTION } from "@/lib/constants/construction";
 import { HOUSING_TYPE, POP_CENTRE_DENSITY, CONSTRUCTION_CENTRE_TYPE, effectiveSpaceCost } from "@/lib/constants/industry";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { mulberry32 } from "@/lib/engine/universe-gen";
-import { surplusDrawable } from "@/lib/engine/directed-logistics";
+import { foundingDrawableAt } from "@/lib/engine/directed-build";
+import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import { consumptionRate, type CivilianDemandBasis } from "@/lib/engine/physical-economy";
 import { foundingGoodsValue } from "@/lib/engine/founding-cost";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
@@ -1338,6 +1339,18 @@ const HOME_POP = 1000;
  * `exportRates` gives a good a realised output; above the home's own demand it becomes a structural
  * exporter, drawable down to its strategic reserve rather than gated on the surplus margin.
  */
+/** What a founding manifest could take of the home system's food at this stock and export rate —
+ *  read off the same market state the staging plan derives, so a fixture parked "at the line" is
+ *  parked at the line the tick will actually apply. */
+function foodDrawableAt(stock: number, exportRate: number): number {
+  const good = toGoodMarketStates(
+    stockedHome({ food: stock }, { food: exportRate }),
+    { stockpileScale: 1 },
+  ).find((g) => g.goodId === "food");
+  if (good === undefined) throw new Error("no food market on the founder");
+  return foundingDrawableAt(good);
+}
+
 function stockedHome(
   goodStocks: Record<string, number>,
   exportRates: Record<string, number> = {},
@@ -1385,6 +1398,7 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     balance: number,
     maxCycles = 40,
     throughputPerPop = 0.05,
+    stockpileScaleByFaction?: ReadonlyMap<string, number>,
   ) {
     let projects: WorldConstructionProject[] = [stagingProject()];
     let committed = 0;
@@ -1404,6 +1418,7 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
         construction: mkConstruction(STAGE_CAP, throughputPerPop),
         develop: { candidateProvider: () => [], params: STAGING_PARAMS },
         treasuryByFaction: new Map([["f1", { balance, pendingFounding: committed, maintenanceBill: 0 }]]),
+        stockpileScaleByFaction,
       });
       committed += r.foundingDebitsByFaction?.get("f1") ?? 0;
       draws.push(...w.foundingStagingDraws);
@@ -1447,10 +1462,10 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     // could only ever take that half, while a per-cycle slice of the want fits inside it every cycle.
     const homeDemand = consumptionRate("food", { population: HOME_POP, technicians: 0, engineers: 0 });
     const exportRate = homeDemand * 2;
-    const stock = DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * homeDemand + foundingWant("food") / 2;
-    const singleDraw = surplusDrawable(
-      stock, DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand, homeDemand, exportRate, false,
-    );
+    // Parked against the founding cap, which is the deep line a full-rate consumer would keep —
+    // the binding rule for a founder, well above the producer's own restart buffer.
+    const stock = DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand + foundingWant("food") / 2;
+    const singleDraw = foodDrawableAt(stock, exportRate);
     expect(singleDraw).toBeCloseTo(foundingWant("food") / 2, 6); // the setup really is half a want
 
     const run = await runEstablish(stockedHome({ food: stock }, { food: exportRate }), 1_000_000);
@@ -1461,6 +1476,110 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     expect(staged).toBeGreaterThan(singleDraw);                // the spread total beats the single raid…
     expect(staged).toBeCloseTo(foundingWant("food"), 6);       // …reaching the whole want
     expect(run.committed).toBeCloseTo(FEE + foundingGoodsValue([{ goodId: "food", quantity: staged }], 1), 6);
+  });
+
+  it("plans no draw that would take a founder under the deep line a consumer would keep", async () => {
+    // A supplier founder: kept topped up by its own part-production, so it gives down to a 10-cycle
+    // restart buffer in ordinary logistics. Founding does not get that line — a colony may only take
+    // what sits above the 40-cycle reserve a full-rate consumer of the good holds, whatever role its
+    // founder trades on. Here that is one quarter of the colony's want, and the export rule alone
+    // would have offered thirty times as much.
+    const homeDemand = consumptionRate("food", { population: HOME_POP, technicians: 0, engineers: 0 });
+    const partProduction = homeDemand * 0.95;
+    const headroom = foundingWant("food") / 4;
+    const stock = DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand + headroom;
+    const home = stockedHome({ food: stock }, { food: partProduction });
+    const good = toGoodMarketStates(home, { stockpileScale: 1 }).find((g) => g.goodId === "food");
+    if (good === undefined) throw new Error("no food market on the founder");
+    expect(good.role).toBe("supplier");
+    expect(good.donorReserve).toBeCloseTo(DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * homeDemand, 6);
+    expect(foundingDrawableAt(good)).toBeCloseTo(headroom, 9);
+
+    const run = await runEstablish(home, 1_000_000);
+
+    expect(run.developed).toBe(true);
+    expect(run.draws.length).toBeGreaterThan(0);
+    for (const draw of run.draws) {
+      // Under the cap, and so — the cap being the tighter of the two — within the live stock
+      // `applyFoundingStagingDraws` refuses a draw for exceeding.
+      expect(draw.quantity).toBeLessThanOrEqual(headroom + 1e-9);
+      expect(draw.quantity).toBeLessThanOrEqual(stock);
+    }
+  });
+
+  it("scales the founder's deep line with the faction's stockpileScale, at k ≠ 1", async () => {
+    // Same fixture as the k=1 case above — a supplier founder parked so its headroom above the
+    // k=1 deep line is exactly a quarter of the colony's want — but run at stockpileScaleByFaction
+    // 1.5. `consumerDeepLine` is `DONOR_RESERVE_COVER × demand × anchorMult × stockpileScale`, so
+    // the deep line itself scales to 1.5× the k=1 figure and the founder's headroom shrinks by the
+    // same amount: the draw must leave the founder at or above 1.5× the k=1 deep line, not just
+    // the (smaller) unscaled line a broken scale resolution would still enforce.
+    const K = 1.5;
+    const homeDemand = consumptionRate("food", { population: HOME_POP, technicians: 0, engineers: 0 });
+    const partProduction = homeDemand * 0.95;
+    const deepLineK1 = DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand;
+    const headroom = foundingWant("food") / 4;
+    const stock = K * deepLineK1 + headroom;
+    const home = stockedHome({ food: stock }, { food: partProduction });
+
+    const good = toGoodMarketStates(home, { stockpileScale: K }).find((g) => g.goodId === "food");
+    if (good === undefined) throw new Error("no food market on the founder");
+    expect(good.role).toBe("supplier");
+    expect(good.consumerDeepLine).toBeCloseTo(K * deepLineK1, 6);
+    expect(foundingDrawableAt(good)).toBeCloseTo(headroom, 9);
+
+    const run = await runEstablish(home, 1_000_000, undefined, undefined, new Map([["f1", K]]));
+
+    expect(run.developed).toBe(true);
+    expect(run.draws.length).toBeGreaterThan(0);
+    // Per-draw, mirroring the k=1 case above: the founder's headroom above the SCALED deep line
+    // is the cap on any single draw. A processor that resolved the scale as 1 regardless of the
+    // map would compute headroom against the unscaled (smaller) deep line instead — a figure
+    // 0.5× deepLineK1 larger than this bound — and a draw would exceed it.
+    for (const draw of run.draws) {
+      expect(draw.quantity).toBeLessThanOrEqual(headroom + 1e-9);
+      expect(draw.quantity).toBeLessThanOrEqual(stock);
+    }
+
+    // founderCover reads against the scaled line too: with headroom this tight against the want,
+    // the last staged cycle leaves the founder within a hair of 1× its OWN (scaled) deep line —
+    // the same reading a broken scale resolution would report against the unscaled line instead,
+    // where it would sit well above 1.
+    const lastEvent = run.manifestEvents[run.manifestEvents.length - 1];
+    if (lastEvent === undefined) throw new Error("no founding manifest recorded");
+    expect(lastEvent.founderCover).toBeCloseTo(1, 1);
+  });
+
+  it("reads the same founder cover for the same physical stock whatever role the founder trades on", async () => {
+    // The cover is denominated on the deep line a full-rate consumer of the good would hold, so two
+    // founders holding the same tonnes of the same good against the same use rate read the same
+    // number — even though one gives down to a 10-cycle buffer and the other to a 40-cycle reserve.
+    // On their own give lines the producer would read four times the consumer's cover for an
+    // identical shelf, and the harness's founder-drain metric would move with role mix alone.
+    const homeDemand = consumptionRate("food", { population: HOME_POP, technicians: 0, engineers: 0 });
+    const stock = 60 * homeDemand;
+    const producerHome = stockedHome({ food: stock }, { food: 2 * homeDemand });
+    const consumerHome = stockedHome({ food: stock });
+    const roleOf = (home: SystemBuildRow) => {
+      const good = toGoodMarketStates(home, { stockpileScale: 1 }).find((g) => g.goodId === "food");
+      if (good === undefined) throw new Error("no food market on the founder");
+      return good;
+    };
+    // The premise: genuinely different roles, genuinely different give lines, identical stock.
+    expect(roleOf(producerHome).role).toBe("producer");
+    expect(roleOf(consumerHome).role).toBe("consumer");
+    expect(roleOf(producerHome).donorReserve).toBeLessThan(roleOf(consumerHome).donorReserve);
+    expect(roleOf(producerHome).stock).toBe(roleOf(consumerHome).stock);
+
+    const producerRun = await runEstablish(producerHome, 1_000_000);
+    const consumerRun = await runEstablish(consumerHome, 1_000_000);
+    const coverOf = (events: NonNullable<TickProcessorResult["foundingManifests"]>) => {
+      const first = events[0];
+      if (first === undefined) throw new Error("no manifest staged");
+      return first.founderCover;
+    };
+    expect(coverOf(producerRun.manifestEvents)).toBeDefined();
+    expect(coverOf(producerRun.manifestEvents)).toBeCloseTo(coverOf(consumerRun.manifestEvents) ?? 0, 9);
   });
 
   it("does not count a pool-starved cycle as a materials stall", async () => {
@@ -1661,10 +1780,8 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     const homeDemand = consumptionRate("food", { population: HOME_POP, technicians: 0, engineers: 0 });
     const exportRate = homeDemand * 2;
     const cycleShare = foundingWant("food") * (STAGE_CAP / STAGE_WORK);
-    const stock = DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * homeDemand + cycleShare;
-    const drawable = surplusDrawable(
-      stock, DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand, homeDemand, exportRate, false,
-    );
+    const stock = DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand + cycleShare;
+    const drawable = foodDrawableAt(stock, exportRate);
     expect(drawable).toBeCloseTo(cycleShare, 6); // each founder holds exactly one colony's slice
 
     const founder = (systemId: string): SystemBuildRow => ({
@@ -1774,10 +1891,8 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     const homeDemand = consumptionRate("food", { population: HOME_POP, technicians: 0, engineers: 0 });
     const exportRate = homeDemand * 2;
     const cycleShare = foundingWant("food") * (STAGE_CAP / STAGE_WORK);
-    const stock = DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * homeDemand + cycleShare * 1.5;
-    const drawable = surplusDrawable(
-      stock, DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand, homeDemand, exportRate, false,
-    );
+    const stock = DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand + cycleShare * 1.5;
+    const drawable = foodDrawableAt(stock, exportRate);
     expect(drawable).toBeCloseTo(cycleShare * 1.5, 6); // the setup really is one and a half slices
 
     const paid = (id: string, systemId: string): WorldColonyEstablishProject => ({

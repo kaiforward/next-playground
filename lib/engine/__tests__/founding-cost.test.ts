@@ -34,6 +34,9 @@ function market(goodId: string): GoodMarketState {
     civilianDemand: 5,
     production: 5,
     capacityProduction: 5,
+    role: "consumer",
+    marginFree: false,
+    consumerDeepLine: 20,
   };
 }
 

@@ -88,7 +88,7 @@ export function referenceMaintenanceBill(
 /**
  * The manifest a colony seed WANTS, uncapped — one line per good the seed consumes, `cover` cycles
  * of that good's raw civilian rate at the seed population. Same want expression the per-cycle
- * staging draw uses, with the founder's `surplusDrawable` cap deliberately left off: what a founder
+ * staging draw uses, with the founder's `foundingDrawableAt` cap deliberately left off: what a founder
  * will actually be able to spare over the ~17 cycles of an establish is not knowable at proposal
  * time, so the projection is an upper bound and over-reserving is the safe direction.
  *

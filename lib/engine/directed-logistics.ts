@@ -64,15 +64,20 @@ export function classifyMarketState(stock: number, target: number): MarketClassi
 }
 
 /**
- * Drawable directed-logistics surplus for one (system, good). A structural exporter
- * (production > demand) may ship down to EXPORT_RESERVE_COVER cycles of its own demand; every other
- * donor must clear SURPLUS_MARGIN and stops at `donorReserve`, DONOR_RESERVE_COVER cycles of its own
- * real demand. Realised production keeps suppressed or input-starved former exporters on the
- * ordinary-donor path.
+ * Drawable directed-logistics surplus for one (system, good), against the give-down-to line its
+ * role authored (`logisticsLinesFor`). A structural exporter (production > demand) ships everything
+ * above that line; every other donor stops at it, and clears `SURPLUS_MARGIN` above it first unless
+ * `marginFree` says the line is a restart buffer rather than a deep reserve. Realised production
+ * keeps suppressed or input-starved former exporters on the ordinary-donor path.
  * One definition, shared by the logistics matcher and the build planner so both read
  * "surplus" alike.
  *
- * The exporter's reserve is denominated in cycles of demand, not as a fraction of `targetStock`: the
+ * The line is passed in rather than rebuilt here, on either branch: a producer's buffer, a
+ * supplier's buffer and a consumer's deep reserve are all authored at one site from the market's
+ * role, its realised use and its faction's stockpile scale, so a scale or a role the author applied
+ * would be silently discarded by any branch that recomputed a floor from a constant.
+ *
+ * The lines are denominated in cycles of demand, not as a fraction of `targetStock`: the
  * anchor is a price-curve reference (TARGET_COVER = 40 cycles), and borrowing it as a shipping
  * threshold set the bar at 30 cycles — which a producer built to demand + PROVISION_MARGIN reaches
  * only to be drained straight back to it, so it exported its thin margin and nothing more.
@@ -89,9 +94,8 @@ export function classifyMarketState(stock: number, target: number): MarketClassi
  * sits inside the transient for high-tier consumer cover, which is why any A/B of it is taken at
  * 12,000+ or as a trajectory.
  *
- * At `demand === 0` the reserve is 0, the SURPLUS_MARGIN test is vacuous and the market's entire
- * stock is drawable. Deliberate: there is no local consumption to hold stock for, and it mirrors
- * what the exporter branch already does at demand 0.
+ * At `demand === 0` the line is 0, the SURPLUS_MARGIN test is vacuous and the market's entire
+ * stock is drawable on either branch. Deliberate: there is no local consumption to hold stock for.
  *
  * `productionSuppressed` here is NOT the same test the build planner's structural
  * assessment makes, and the two must not be collapsed into one. This is a DRAWDOWN
@@ -103,18 +107,156 @@ export function classifyMarketState(stock: number, target: number): MarketClassi
  */
 export function surplusDrawable(
   stock: number,
-  donorReserve: number,
+  giveLine: number,
+  marginFree: boolean,
   demand: number,
   production: number,
   productionSuppressed = false,
 ): number {
-  const exporterReserve = DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * Math.max(0, demand);
-  if (production > demand && !productionSuppressed) return Math.max(0, stock - exporterReserve);
+  if (production > demand && !productionSuppressed) return Math.max(0, stock - giveLine);
 
-  const aboveReserve = stock - donorReserve;
-  if (aboveReserve <= 0) return 0;
-  const clearsMargin = stock >= donorReserve * DIRECTED_LOGISTICS.SURPLUS_MARGIN;
-  return clearsMargin ? aboveReserve : 0;
+  const aboveLine = stock - giveLine;
+  if (aboveLine <= 0) return 0;
+  if (marginFree) return aboveLine;
+  return stock >= giveLine * DIRECTED_LOGISTICS.SURPLUS_MARGIN ? aboveLine : 0;
+}
+
+/**
+ * What a (world, good) is doing with the good, which decides the two lines it trades on:
+ * `producer` makes more than it uses, `supplier` is kept topped up by its own part-production or by
+ * steady deliveries, `consumer` is eating the good at a rate worth reserving against, and `idle` is
+ * a consumer whose realised use has fallen so far that the restart buffer is the larger of its two
+ * give-line terms — the refinery sitting on input it is no longer drawing.
+ */
+export type LogisticsRole = "producer" | "supplier" | "consumer" | "idle";
+
+/** What the role test and the line author read off one market. All rates are units per reference
+ *  cycle, denominated exactly as `demand`; an absent rolling rate is UNKNOWN, never 0. */
+export interface MarketRoleInputs {
+  /** The USE figure `u` — full-rate civilian want plus the gated recipe draw. */
+  demand: number;
+  production: number;
+  productionSuppressed?: boolean;
+  /** Rolling realised use `r`; unknown ⇒ the world is read at full rate, today's behaviour. */
+  realisedUse?: number;
+  /** Rolling steady inbound `i`; unknown ⇒ nothing counted, so only production can carry the test. */
+  steadyInbound?: number;
+  /** Rolling late-inbound share `l`; unknown blocks the supplier role only where inbound carries it. */
+  lateInboundShare?: number;
+  /** Consecutive short runs with nothing credited — at `SUPPLIER_DROP_RUNS` the role is gone. */
+  supplierShortRuns?: number;
+  anchorMult: number;
+}
+
+/** The two lines a market trades on, plus what authored them. */
+export interface LogisticsLines {
+  role: LogisticsRole;
+  /** The want (`GoodMarketState.logisticsTarget`). */
+  logisticsTarget: number;
+  /** The give-down-to line (`GoodMarketState.donorReserve`). */
+  donorReserve: number;
+  /** Whether the give line is a buffer, which is given down to without clearing `SURPLUS_MARGIN`. */
+  marginFree: boolean;
+  /** `GoodMarketState.consumerDeepLine` — what a full-rate consumer of this good would keep. */
+  consumerDeepLine: number;
+}
+
+/** A rolling rate that was actually measured; anything else is unknown and must not read as 0. */
+function knownRate(rate: number | undefined): number | undefined {
+  return typeof rate === "number" && Number.isFinite(rate) ? rate : undefined;
+}
+
+/**
+ * Is this world's supply of the good replenished — its own part-production, a steady inbound
+ * stream, or the two together covering `SUPPLIER_REPLENISHMENT` of what it uses? Gated on the
+ * late-inbound tail ONLY where inbound is load-bearing: a world that clears the bar on production
+ * alone has no transit exposure to bound, so an unknown late share cannot deny it the role.
+ *
+ * A production-suppressed world is refused outright, whatever the arithmetic says — the same
+ * drawdown question `surplusDrawable` refuses a struck producer on, asked one step earlier. The
+ * producer test above already excludes a struck world; without this it fell straight through to the
+ * supplier test and picked up a margin-free ten-cycle give line on output that has stopped arriving,
+ * which is the opposite of what a strike should do to a world's willingness to export. It keeps the
+ * consumer's deep reserve instead, and re-earns the role when its output comes back.
+ */
+function replenished(m: MarketRoleInputs, use: number): boolean {
+  if (m.productionSuppressed) return false;
+  if ((m.supplierShortRuns ?? 0) >= DIRECTED_LOGISTICS.SUPPLIER_DROP_RUNS) return false;
+  const inbound = knownRate(m.steadyInbound) ?? 0;
+  const bar = DIRECTED_LOGISTICS.SUPPLIER_REPLENISHMENT * use;
+  if (m.production + inbound < bar) return false;
+  if (m.production >= bar) return true;
+  const late = knownRate(m.lateInboundShare);
+  return late !== undefined && late <= DIRECTED_LOGISTICS.SUPPLIER_LATE_SHARE;
+}
+
+/**
+ * The role test, in order: producer, then supplier, then the consumer branch — where a world whose
+ * restart buffer is the larger of its two give-line terms is `idle` rather than `consumer`.
+ *
+ * Lives here rather than at the line-authoring site because the build planner's input gate asks the
+ * identical question of the identical inputs ("is this stock a flow or a one-off level?"), and the
+ * two answers must never drift apart.
+ */
+export function classifyLogisticsRole(m: MarketRoleInputs): LogisticsRole {
+  const use = Math.max(0, m.demand);
+  const producing = m.production > use && !m.productionSuppressed;
+  // No local use at all: nothing to reserve against and no test to pass — the world is whatever its
+  // own output makes it (`surplusDrawable` already treats its whole stock as drawable).
+  if (use <= 0) return producing ? "producer" : "consumer";
+  if (producing) return "producer";
+  if (replenished(m, use)) return "supplier";
+  const realised = knownRate(m.realisedUse) ?? use;
+  const buffer = DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * use;
+  const deep = DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * Math.max(0, realised) * m.anchorMult;
+  return buffer >= deep ? "idle" : "consumer";
+}
+
+/**
+ * The want and the give-down-to line for one market, from its role.
+ *
+ * A producer and a supplier trade on the same pair — a restart buffer of `EXPORT_RESERVE_COVER`
+ * cycles of full-rate use, re-ordering under `SUPPLIER_WANT_COVER` cycles of it — because both are
+ * refilled: one by its own output, the other by what is delivered to it. A consumer reserves
+ * `DONOR_RESERVE_COVER` cycles of what it ACTUALLY uses and asks back up to `WAREHOUSE_COVER`
+ * cycles of the same, never below that buffer, so a world eating the good at full rate keeps
+ * exactly the lines it has always kept and a world that has stopped drawing collapses to the
+ * buffer.
+ *
+ * The buffer terms are anchor-immune, as the producer's floor has always been (warehouse policy has
+ * no business moving with a price-anchor event); the deep terms ride `anchorMult` as they do today.
+ * `stockpileScale` multiplies every line of every role, so the ratios between them — and with them
+ * the band invariant — are untouched by it.
+ */
+export function logisticsLinesFor(m: MarketRoleInputs, stockpileScale: number): LogisticsLines {
+  const role = classifyLogisticsRole(m);
+  const use = Math.max(0, m.demand);
+  if (use <= 0) {
+    return { role, logisticsTarget: 0, donorReserve: 0, marginFree: false, consumerDeepLine: 0 };
+  }
+  const deepAtFullRate =
+    DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * use * stockpileScale * m.anchorMult;
+  const buffer = DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * use * stockpileScale;
+  const bufferWant = DIRECTED_LOGISTICS.SUPPLIER_WANT_COVER * use * stockpileScale;
+  if (role === "producer" || role === "supplier") {
+    return {
+      role,
+      logisticsTarget: bufferWant,
+      donorReserve: buffer,
+      marginFree: true,
+      consumerDeepLine: deepAtFullRate,
+    };
+  }
+  const realised = Math.max(0, knownRate(m.realisedUse) ?? use);
+  const deep = DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * realised * stockpileScale * m.anchorMult;
+  const deepWant = DIRECTED_LOGISTICS.WAREHOUSE_COVER * realised * stockpileScale * m.anchorMult;
+  return {
+    role,
+    logisticsTarget: Math.max(bufferWant, deepWant),
+    donorReserve: Math.max(buffer, deep),
+    marginFree: buffer >= deep,
+    consumerDeepLine: deepAtFullRate,
+  };
 }
 
 /** This system's per-cycle logistics work-budget contribution (free, population-scaled in v1). */
@@ -125,17 +267,20 @@ export function systemLogisticsGeneration(population: number): number {
 export interface GoodMarketState {
   goodId: string;
   stock: number;
-  /** Cycles-of-supply WAREHOUSING target (WAREHOUSE_COVER × demand × anchorMult) — how much of the
-   *  good this system tries to keep on hand. Deficit ⇔ stock < logisticsTarget × DEFICIT_FRACTION.
+  /** Cycles-of-supply WAREHOUSING target — how much of the good this system tries to keep on hand.
+   *  Deficit ⇔ stock < logisticsTarget × DEFICIT_FRACTION. Authored from the market's role
+   *  (`logisticsLinesFor`): a refilled world asks back to `SUPPLIER_WANT_COVER` cycles of full-rate
+   *  use, a consumer to `WAREHOUSE_COVER` cycles of its realised use, never below the former.
    *  Denominated in the system's REAL demand, unfloored, so a market whose demand sits under
    *  `MIN_DEMAND` asks for what it uses rather than what the pricing guard implies. 0 where nothing
    *  here wants the good, which drops the market out of the match as a sink. */
   logisticsTarget: number;
-  /** Cycles-of-supply DONOR floor (DONOR_RESERVE_COVER × demand × anchorMult) — what an ordinary
-   *  (non-exporter) donor keeps for itself, and the base its SURPLUS_MARGIN test is taken against.
-   *  Same denominator and the same `anchorMult` ride as `logisticsTarget`, so the floor a donor stops
-   *  at and the target the deficit side fills to move together. 0 where nothing here wants the good,
-   *  which makes the whole stock drawable — see `surplusDrawable`. */
+  /** Cycles-of-supply DONOR floor — what this market keeps for itself before it gives anything
+   *  away, and the base its SURPLUS_MARGIN test is taken against where `marginFree` is false. Same
+   *  role authoring as `logisticsTarget`: a restart buffer of `EXPORT_RESERVE_COVER` cycles of
+   *  full-rate use for a refilled world, `DONOR_RESERVE_COVER` cycles of realised use for a
+   *  consumer, never below that buffer. 0 where nothing here wants the good, which makes the whole
+   *  stock drawable — see `surplusDrawable`. */
   donorReserve: number;
   /** The USE figure: what this system's population and industry draw when running — civilian want at
    *  full rate plus the staffing- and strike-gated recipe draw. Every warehousing quantity above is
@@ -177,6 +322,34 @@ export interface GoodMarketState {
    *  in flight is counted exactly once and a world still lacking goods still reads as needing them
    *  for welfare purposes. */
   scheduledInbound?: number;
+  /** Rolling realised-use rate — see `WorldMarket.realisedUse`. Absent ⇒ unknown, never 0. Threaded
+   *  through so the read path carries it end to end to the role classification. */
+  realisedUse?: number;
+  /** Rolling steady-inbound rate — see `WorldMarket.steadyInbound`. Absent ⇒ unknown, never 0. Read
+   *  by the planner's input gate so a supplier's flow, not just a producer's, licenses a
+   *  factory downstream. */
+  steadyInbound?: number;
+  /** Rolling late-inbound share — see `WorldMarket.lateInboundShare`. Absent ⇒ unknown, never 0. */
+  lateInboundShare?: number;
+  /** What this world is doing with this good, and so which pair of lines above it trades on — see
+   *  `classifyLogisticsRole`, which authors both from the same inputs. */
+  role: LogisticsRole;
+  /**
+   * Whether this market's give-line for this good is the restart buffer rather than the deep
+   * reserve `surplusDrawable`'s ordinary-donor branch clears `SURPLUS_MARGIN` above before it
+   * donates — the margin-free flag `surplusDrawable` reads at every call site. A world holding the
+   * buffer gives everything above it; a world holding the deep reserve gives only what clears
+   * 1.4× it.
+   */
+  marginFree: boolean;
+  /**
+   * The deep line a full-rate consumer of this good would keep — `DONOR_RESERVE_COVER × demand ×
+   * anchorMult × stockpileScale` — read by the founding staging cap regardless of this market's own
+   * role, so a colony never draws a relay or idle world below what a consumer would have held. It
+   * coincides with `donorReserve` only for a full-rate consumer; for every other role the give line
+   * is its own.
+   */
+  consumerDeepLine: number;
 }
 
 /**
@@ -489,7 +662,9 @@ export function matchFactionTransfers(
       }
       // Surplus source — standing excess inventory above the donor's own reserve OR a structural
       // producer (see surplusDrawable; the latter is what the production throttle would otherwise suppress).
-      const drawable = surplusDrawable(g.stock, g.donorReserve, g.demand, g.production, g.productionSuppressed);
+      const drawable = surplusDrawable(
+        g.stock, g.donorReserve, g.marginFree, g.demand, g.production, g.productionSuppressed,
+      );
       if (drawable > 0) {
         const bySystem = surplusesByGood.get(g.goodId) ?? new Map<string, Surplus>();
         bySystem.set(s.systemId, {

@@ -18,9 +18,9 @@ describe("runTickHarness: the cycle-gated samplers", () => {
     // `firstRunWhere` above), so search forward for the first tickCount where at least one colony
     // has founded and been sampled but at least one other founded colony has not yet met its first
     // economy cycle, rather than hardcode the boundary tick.
-    // Under the recut habitability tables the earliest two-colony window (one sampled, one still
-    // waiting) lands at tick 5,260 — the pre-5,000 prefix never satisfies the condition, so starting
-    // the search there wastes ~50 no-op harness runs and blows the timeout below. Start just ahead
+    // Under role-authored reserve lines the earliest two-colony window (one sampled, one still
+    // waiting) lands at tick 6,660 — the prefix before it never satisfies the condition, so starting
+    // the search there wastes no-op harness runs and blows the timeout below. Start just ahead
     // of that dead prefix instead of at the first colony's own opening tick (~4,128).
     const results = await firstRunWhere(
       { systemCount: 60, seed: 7 },
@@ -28,7 +28,7 @@ describe("runTickHarness: the cycle-gated samplers", () => {
         r.foundingStock.foundedCount > 0 &&
         r.foundingStock.sampledCount > 0 &&
         r.foundingStock.sampledCount < r.foundingStock.foundedCount,
-      { start: 5_000, step: 20, maxTickCount: 6_000 },
+      { start: 6_600, step: 20, maxTickCount: 7_000 },
     );
     const stock = results.foundingStock;
 
@@ -47,19 +47,22 @@ describe("runTickHarness: the cycle-gated samplers", () => {
     // that a per-tick sampler cannot land in the band asserted below, not the rate's own magnitude.
     //
     // Read at a fixed 20,000 ticks — BUSY's own horizon plus 10,000 — and pin the measured band as
-    // a spread around the settled rate. Under lane-routed, scheduled hauls the rate has read 0.0011
-    // (inbound-aware ordering alone) and 0.0047 (with lane upkeep, decay and adjacency claiming),
-    // so the band spans both regimes. Above 0.0004: a per-tick sampler diluted by CYCLE_LENGTH
-    // would read ~0.00004 and can never clear it — the sampling-cadence discrimination this test
-    // exists for. Below 0.0075: comfortably above the settled rate; drifting past it means
-    // demand-hunting pressure has shifted regime again and the band needs re-deriving.
+    // a spread around the settled rate. Under lane-routed, scheduled hauls the rate read 0.0011
+    // (inbound-aware ordering alone) and 0.0047 (with lane upkeep, decay and adjacency claiming);
+    // under role-authored reserve lines it reads 0.020, because a supplier is classified against
+    // its twelve-cycle want and re-orders every time it dips under its buffer, so its reading
+    // reverses far more often than a deep-reserve consumer's. Above 0.0004: a per-tick sampler
+    // diluted by CYCLE_LENGTH would read ~0.00004 and can never clear it — the sampling-cadence
+    // discrimination this test exists for. Below 0.03: comfortably above the settled rate;
+    // drifting past it means demand-hunting pressure has shifted regime again and the band needs
+    // re-deriving.
     const results = await runTickHarness({
       systemCount: BUSY.systemCount,
       seed: BUSY.seed,
       tickCount: BUSY.tickCount + 10_000,
     });
     expect(results.demandHunting.flipRate).toBeGreaterThan(0.0004);
-    expect(results.demandHunting.flipRate).toBeLessThan(0.0075);
+    expect(results.demandHunting.flipRate).toBeLessThan(0.03);
   }, 180_000);
 });
 

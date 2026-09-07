@@ -18,7 +18,7 @@ import { GOOD_NAMES } from "@/lib/constants/goods";
 import { GOOD_NECESSITY, SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
 import type { EventPhaseDefinition } from "@/lib/constants/events";
-import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
+import { CYCLE_LENGTH, LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
 import { BODY_ARCHETYPES, ORBIT_ROLL_SPREAD } from "@/lib/constants/bodies";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import {
@@ -75,14 +75,19 @@ describe("band constant dependencies", () => {
     // under MIN_DEMAND. Moving one without the other is a deliberate act that should land here.
     expect(DIRECTED_LOGISTICS.WAREHOUSE_COVER).toBe(TARGET_COVER);
   });
-  it("keeps the production brake's ceiling at or below the donation line", () => {
-    // The dead zone between them is chosen conservatism: a self-supplier whose stock lands between
-    // the brake ceiling (production halted) and the donation line (giving refused) can only drain
-    // back down — a world that produces less than it uses should not dump stock it cannot replace.
-    // Flip the two lines and every self-sufficient world becomes a continuous exporter instead.
-    // Both sides are now cycles of the same use figure (BRAKE_RAMP × BRAKE_USE_COVER = 52 vs
-    // SURPLUS_MARGIN × DONOR_RESERVE_COVER = 56, on the knee's use term): moving either constant
-    // across the other should land here.
+  it("keeps the production brake's ceiling at or below the donation line — the full-rate statement only", () => {
+    // This pairing no longer holds for every donor: it is retired by owner decision for every
+    // role-authored give-line whose denominator can sit below full-rate use — the buffer
+    // (EXPORT_RESERVE_COVER × u, any role) and a consumer whose realised use has fallen below
+    // full rate (the deep line drops under the brake ceiling once r < 0.93u). What survives is the
+    // case it was written about: a full-rate world on the deep line (realised use r = full-rate use
+    // u), where the dead zone between the two lines is chosen conservatism — a self-supplier
+    // whose stock lands between the brake ceiling (production halted) and the donation line (giving
+    // refused) can only drain back down, never dump stock it cannot replace. Both sides are cycles
+    // of the same use figure at r = u (BRAKE_RAMP × BRAKE_USE_COVER = 52 vs SURPLUS_MARGIN ×
+    // DONOR_RESERVE_COVER = 56, on the knee's use term): moving either constant across the other
+    // should land here. The per-market cases at r < u — where the inversion is accepted — live
+    // in lib/tick/processors/__tests__/good-market-state.test.ts.
     expect(ECONOMY_CONSTANTS.BRAKE_RAMP * ECONOMY_CONSTANTS.BRAKE_USE_COVER)
       .toBeLessThanOrEqual(DIRECTED_LOGISTICS.SURPLUS_MARGIN * DIRECTED_LOGISTICS.DONOR_RESERVE_COVER);
   });
@@ -111,6 +116,50 @@ describe("band constant dependencies", () => {
     // at exactly 1.0. Turning the knob requires threading it into the physical draw too;
     // this pin makes that a deliberate act rather than a silent divergence.
     expect(INPUT_DEMAND_MULTIPLIER).toBe(1);
+  });
+});
+
+describe("supplier-floor constant dependencies (docs/active/gameplay/economy-autonomic-agency.md, reserves by role)", () => {
+  const kMin = Math.min(...DIRECTED_LOGISTICS.STOCKPILE_SCALE_STEPS);
+  const runCycles = LOGISTICS_INTERVAL / CYCLE_LENGTH;
+
+  it("leaves a supplier drawn to its give line above the line that would make it a sink — the band invariant on the new pair", () => {
+    // Same shape as the shipped WAREHOUSE_COVER/DONOR_RESERVE_COVER pair above, on the supplier's own
+    // give line and want: EXPORT_RESERVE_COVER ≥ DEFICIT_FRACTION × SUPPLIER_WANT_COVER (10 ≥ 9.6).
+    // Below that line a supplier drawn to its give line immediately reads as short and is refilled —
+    // the per-cycle drain/refill loop the first build-plan cut hit at 10 under 11.2.
+    expect(DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER)
+      .toBeGreaterThanOrEqual(DIRECTED_LOGISTICS.DEFICIT_FRACTION * DIRECTED_LOGISTICS.SUPPLIER_WANT_COVER);
+  });
+
+  it("keeps a supplier's re-order line above the ration knee at the lowest stockpile-scale step", () => {
+    // The re-order line is anchor-immune (it rides neither anchorMult term), so an event can never
+    // push it under the ration knee — the constraint has to hold at the SMALLEST scale step, not the
+    // default: DEFICIT_FRACTION × SUPPLIER_WANT_COVER × k_min > RATION_COVER (7.2 > 2).
+    expect(DIRECTED_LOGISTICS.DEFICIT_FRACTION * DIRECTED_LOGISTICS.SUPPLIER_WANT_COVER * kMin)
+      .toBeGreaterThan(ECONOMY_CONSTANTS.RATION_COVER);
+  });
+
+  it("keeps a re-ordered supplier buffer above the ration knee plus one gated haul — the physical exposure constraint", () => {
+    // A supplier re-orders on a COUNTED figure that includes stock still in flight, so the buffer
+    // itself is the physical guarantee: drawn to its line and re-ordered, it must still cover the
+    // ration knee plus one haul no slower than SUPPLIER_MAX_LATENCY_CYCLES —
+    // EXPORT_RESERVE_COVER × k_min > RATION_COVER + SUPPLIER_MAX_LATENCY_CYCLES (7.5 > 6), again at
+    // the lowest stockpile-scale step since the buffer is anchor-immune.
+    expect(DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * kMin)
+      .toBeGreaterThan(ECONOMY_CONSTANTS.RATION_COVER + DIRECTED_LOGISTICS.SUPPLIER_MAX_LATENCY_CYCLES);
+  });
+
+  it("leaves a dropped supplier holding above the ration knee after SUPPLIER_DROP_RUNS short runs — the cascade constraint", () => {
+    // In a producer-less relay, each hop holds its buffer, keeps giving down to it, then reverts to
+    // consumer after SUPPLIER_DROP_RUNS consecutive short runs with nothing credited — consuming at
+    // most that many run-cycles of use from the floor before it stops giving:
+    // EXPORT_RESERVE_COVER × k_min − SUPPLIER_DROP_RUNS × (LOGISTICS_INTERVAL / CYCLE_LENGTH) >
+    // RATION_COVER (7.5 − 4 = 3.5 > 2), at the lowest stockpile-scale step.
+    expect(
+      DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * kMin -
+        DIRECTED_LOGISTICS.SUPPLIER_DROP_RUNS * runCycles,
+    ).toBeGreaterThan(ECONOMY_CONSTANTS.RATION_COVER);
   });
 });
 

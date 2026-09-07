@@ -1,10 +1,20 @@
 /**
  * Shared per-system market-state derivation for the directed-logistics matcher and
  * the directed-build planner. Given one system's buildings/population/yields and its
- * market rows, produce the engine's GoodMarketState[]: per good, current stock, the cycles-of-supply
- * warehousing target the deficit test measures against (logisticsTarget), the donor floor an
- * ordinary source stops at (donorReserve), and the two demand figures. One definition so both
- * processors read markets identically.
+ * market rows, produce the engine's GoodMarketState[]: per good, current stock, the two lines the
+ * match trades on (the want `logisticsTarget` and the give-down-to `donorReserve`), and the two
+ * demand figures. One definition so both processors read markets identically.
+ *
+ * The two lines are authored from the market's ROLE (`classifyLogisticsRole`), which this is the
+ * one site to resolve: a producer and a supplier — a world its own part-production or a steady,
+ * punctual inbound stream keeps topped up — hold a thin restart buffer and re-order just above it,
+ * both immune to anchor shifts; a consumer reserves against what it has ACTUALLY been using, never
+ * below that buffer, so a world eating the good at full rate keeps the lines it always kept and a
+ * refinery that has stopped drawing collapses onto the buffer. The role rides out on the state
+ * alongside `marginFree` (the give line is a buffer, so it is given down to without a dead-band)
+ * and `consumerDeepLine` (what a full-rate consumer here would have kept, whatever this market's
+ * own role, which is what a colony's staging draw is capped at). Every line is multiplied by the
+ * owning faction's `stockpileScale`, which leaves the ratios between them untouched.
  *
  * `demand` is the USE figure — what this system's population and industry draw when running. It
  * moves only as buildings, population and strike state move, which is what every warehousing
@@ -17,14 +27,14 @@
  * Everything here divides by REAL demand — deliberately not the row's `demandRate`, which floors at
  * `MIN_DEMAND` (a divide-by-zero guard on *pricing*) and below that floor describes the guard rather
  * than anything consumed locally. One anchor-derived quantity is read deliberately, and only one:
- * `anchorMult` scales the warehousing target and the donor floor together (an anchor-shifting event
- * moves both) and rides the brake knee's use term. The draw figure's brake measures each consumer's
+ * `anchorMult` scales a consumer's deep terms — the want and the give line move together under an
+ * anchor-shifting event, while the buffer terms every role floors at stay immune to it — and rides
+ * the brake knee's use term. The draw figure's brake measures each consumer's
  * stock against the same warehouse knee (`brakeKnee` — use figure and capacity) the economy
  * actually brakes production with — urgency mirrors the brake as applied. The pricing
  * `demandRate` itself reaches nothing here.
  */
 import type { ResourceVector } from "@/lib/types/game";
-import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { GOODS } from "@/lib/constants/goods";
 import { capacityGoodRates } from "@/lib/engine/industry";
@@ -32,7 +42,7 @@ import { drawRatesByGood, useRatesByGood } from "@/lib/engine/honest-demand";
 import type { UseRate } from "@/lib/engine/honest-demand";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { brakeKnee, productionCeiling } from "@/lib/engine/tick";
-import type { GoodMarketState } from "@/lib/engine/directed-logistics";
+import { logisticsLinesFor, type GoodMarketState } from "@/lib/engine/directed-logistics";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 
 /**
@@ -49,6 +59,19 @@ import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-
  */
 export const DRAW_BRAKE_CEILINGS = ["live", "anchor"] as const;
 export type DrawBrakeCeiling = (typeof DRAW_BRAKE_CEILINGS)[number];
+
+/**
+ * The one resolution of a system's faction to its stockpile scale — every `toGoodMarketStates`
+ * caller (the tick processors and the harness alike) reads this rather than indexing the map
+ * itself, so the "independent reads 1, missing row reads 1" rule cannot drift between call sites.
+ * `factionId === null` is an unowned system, which has no treasury row to begin with.
+ */
+export function stockpileScaleFor(
+  factionId: string | null,
+  byFaction: ReadonlyMap<string, number>,
+): number {
+  return factionId === null ? 1 : (byFaction.get(factionId) ?? 1);
+}
 
 /**
  * The retired anchor brake's hold cover at retirement — BRAKE_RAMP's value on the day this brake
@@ -85,7 +108,7 @@ export interface MarketStateSource {
 
 export function toGoodMarketStates(
   row: MarketStateSource,
-  opts?: {
+  opts: {
     withDraw?: boolean;
     drawBrakeCeiling?: DrawBrakeCeiling;
     /** Goods already dispatched toward this system for this good, not yet arrived
@@ -94,8 +117,14 @@ export function toGoodMarketStates(
      *  (docs/active/gameplay/logistics-lanes.md §3). The build planner's call site omits this hook
      *  entirely, keeping physical stock alone for its own structural-deficit reads. */
     scheduledInboundFor?: (goodId: string) => number;
+    /** The owning faction's stockpile scale, multiplying every line of every role. Every caller
+     *  resolves this explicitly (via `stockpileScaleFor`) — 1 for an unowned system or a faction
+     *  with no treasury row — a REQUIRED option so a caller that forgets it fails `tsc` rather than
+     *  silently reading the neutral default. */
+    stockpileScale: number;
   },
 ): GoodMarketState[] {
+  const stockpileScale = opts.stockpileScale;
   const rates = capacityGoodRates(row.buildings, row.population, row.yields, row.extractionEff);
   const consByKey = new Map(rates.map((r) => [r.goodId, r.consumption]));
   const prodByKey = new Map(rates.map((r) => [r.goodId, r.production]));
@@ -136,7 +165,7 @@ export function toGoodMarketStates(
   // net gain (pop 100-1K supplied +11.8pp, electronics cover +0.43, B′−C′). Simplifying
   // `brakeCeilingOf` out of the draw figure would silently give those gains back.
   let drawRates: Map<string, number> | undefined;
-  if (opts?.withDraw) {
+  if (opts.withDraw) {
     // Each good's own output brake at its own current stock, plus its live event multiplier — the
     // two gates that separate "wants this eventually" from "could use this right now". A good with
     // no row here reads as unbraked: no row means no stock and no yard, which is not a stopped
@@ -179,28 +208,49 @@ export function toGoodMarketStates(
   for (const m of row.markets) {
     const civ = consByKey.get(m.goodId) ?? 0;
     const demand = useRateOf(m);
+    // An explicit zero is a completed assessment and must remain a sink. Capacity is
+    // only a legacy-save fallback while the persisted rate is genuinely absent.
+    const production = m.realisedProductionRate ?? (prodByKey.get(m.goodId) ?? 0);
+    // The role decides both lines, the margin-free flag and the deep line the founding cap reads.
+    const lines = logisticsLinesFor(
+      {
+        demand,
+        production,
+        productionSuppressed: m.productionSuppressed,
+        realisedUse: m.realisedUse,
+        steadyInbound: m.steadyInbound,
+        lateInboundShare: m.lateInboundShare,
+        supplierShortRuns: m.supplierShortRuns,
+        anchorMult: m.anchorMult,
+      },
+      stockpileScale,
+    );
     goods.push({
       goodId: m.goodId,
       stock: m.stock,
-      // Cycles of the demand this system actually has. Both carry `anchorMult` so an event that
-      // shifts a market's anchor moves the warehousing target and the donor floor together.
-      logisticsTarget: DIRECTED_LOGISTICS.WAREHOUSE_COVER * Math.max(0, demand) * m.anchorMult,
-      donorReserve: DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * Math.max(0, demand) * m.anchorMult,
+      logisticsTarget: lines.logisticsTarget,
+      donorReserve: lines.donorReserve,
       demand,
       // A good with no draw entry keeps its standing want as its urgency rather than sinking to
       // the back of the import queue; callers that never read urgency get the same fallback.
       drawDemand: drawRates?.get(m.goodId) ?? demand,
       civilianDemand: civ,
-      // An explicit zero is a completed assessment and must remain a sink. Capacity is
-      // only a legacy-save fallback while the persisted rate is genuinely absent.
-      production: m.realisedProductionRate ?? (prodByKey.get(m.goodId) ?? 0),
+      production,
       capacityProduction: prodByKey.get(m.goodId) ?? 0,
       satisfaction: m.satisfaction,
       productionSuppressed: m.productionSuppressed,
       squeezeCycles: m.squeezeCycles,
       proposalCycles: m.proposalCycles,
       logisticsFundingBound: m.logisticsFundingBound,
-      scheduledInbound: opts?.scheduledInboundFor?.(m.goodId),
+      scheduledInbound: opts.scheduledInboundFor?.(m.goodId),
+      // Straight pass-through — absent on the row must stay absent here, never read as 0 (an unknown
+      // rolling rate is not the same claim as a measured zero).
+      realisedUse: m.realisedUse,
+      steadyInbound: m.steadyInbound,
+      lateInboundShare: m.lateInboundShare,
+      role: lines.role,
+      marginFree: lines.marginFree,
+      consumerDeepLine: lines.consumerDeepLine,
     });
   }
   return goods;

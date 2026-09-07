@@ -42,6 +42,19 @@ export interface MarketView {
   storageCapacity: number;
   /** Reference-cycles the previous rationed economy streak had persisted (finite, [0,2]); missing reads as 0. */
   squeezeCycles?: number;
+  /** Prior-cycle rolling realised-use rate (`WorldMarket.realisedUse`). Absent = unknown — the fold
+   *  seeds from this cycle's observation rather than averaging against 0. */
+  realisedUse?: number;
+  /** Prior-cycle rolling steady-inbound rate (`WorldMarket.steadyInbound`). Absent = unknown — the
+   *  fold starts such a market's rate at 0 and climbs it, so one delivery cannot buy a role. */
+  steadyInbound?: number;
+  /** Prior-cycle rolling late-inbound share (`WorldMarket.lateInboundShare`). Absent = unknown. */
+  lateInboundShare?: number;
+  /** Inbound credited since the last fold (`WorldMarket.inboundSinceFold`), written every tick by the
+   *  goods-arrivals stage. A tick-scoped accumulator, not a rate: absent reads as 0. */
+  inboundSinceFold?: number;
+  /** The late-arriving share of `inboundSinceFold` (`WorldMarket.lateInboundSinceFold`). Absent reads as 0. */
+  lateInboundSinceFold?: number;
 }
 
 /** Result of one market simulation step — written back via applyMarketUpdates. */
@@ -64,6 +77,24 @@ export interface MarketUpdate {
   /** Reference-cycles a rationed economy assessment has persisted — a finite value in [0,2] advanced per
    *  assessment by the economy interval's catchUpFactor (2 = two reference cycles). */
   squeezeCycles: number;
+  /** Folded rolling realised-use rate (`WorldMarket.realisedUse`), per reference cycle. Always written —
+   *  seeded from this cycle's observation when no prior rate is stored. */
+  realisedUse: number;
+  /** Folded rolling steady-inbound rate (`WorldMarket.steadyInbound`), per reference cycle. Always
+   *  written — seeded at 0, not at this cycle's observation, when no prior rate is stored. */
+  steadyInbound: number;
+  /** Folded rolling late-inbound share (`WorldMarket.lateInboundShare`). `undefined` when this cycle
+   *  credited nothing and no prior share exists — a 0/0 that must not be folded into a false 0. */
+  lateInboundShare?: number;
+  /** Zeroes `WorldMarket.inboundSinceFold` — this cycle's accumulator has just been folded into
+   *  `steadyInbound`/`lateInboundShare` above. */
+  inboundSinceFold: number;
+  /** Zeroes `WorldMarket.lateInboundSinceFold`, alongside `inboundSinceFold`. */
+  lateInboundSinceFold: number;
+  /** What `inboundSinceFold` held immediately before the zeroing above — `WorldMarket
+   *  .inboundCreditedLastCycle`, the record of this cycle's credited arrivals that outlives the
+   *  accumulator the fold consumed. Always written. */
+  inboundCreditedLastCycle: number;
 }
 
 export interface EconomyWorld {

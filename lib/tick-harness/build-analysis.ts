@@ -89,11 +89,12 @@ export interface FoundedColonyRecord {
   /** What the faction paid for those materials through the founding valuation seam, over the whole
    *  establish (the charter is not part of it); absent when it staged nothing. */
   foundingMoneyCost?: number;
-  /** The founder's remaining cover on the binding good — post-draw stock ÷ that good's donor floor —
-   *  taken as the MINIMUM ACROSS THE COLONY'S STAGING DRAWS, i.e. the deepest any one cycle's draw
-   *  left it. Below 1 means founding drew the founder under the floor it is meant to keep for
-   *  itself. Absent when no draw gave a measurable reading (no staged good with a positive donor
-   *  floor).
+  /** The founder's remaining cover on the binding good — post-draw stock ÷ the deep line a full-rate
+   *  consumer of that good would hold — taken as the MINIMUM ACROSS THE COLONY'S STAGING DRAWS, i.e.
+   *  the deepest any one cycle's draw left it. Below 1 means founding left a founder holding less of
+   *  the binding good than a full-rate consumer keeps, which is not the same as under its own floor:
+   *  a producer's and a supplier's floor is a restart buffer well below that line. Absent when no
+   *  draw gave a measurable reading (no staged good with a positive deep line).
    *
    *  A different unit from the pre-staging reading of the same name, which measured one whole
    *  manifest taken in a single draw at the founding tick: a run's figure here is not comparable
@@ -142,7 +143,7 @@ export function recordFoundingManifest(
   // later sum with a NaN. The tonnage still stands.
   if (Number.isFinite(draw.moneyCost)) totals.moneyCost += Math.max(0, draw.moneyCost);
   // A cover with nothing measurable behind it stays absent — folding a placeholder 0 into the
-  // median would read as a founder drained flat, the opposite of "there was no floor to draw
+  // median would read as a founder drained flat, the opposite of "there was no line to draw
   // under". Same rule for a corrupt (non-finite) reading.
   if (draw.founderCover !== undefined && Number.isFinite(draw.founderCover)) {
     const cover = Math.max(0, draw.founderCover);

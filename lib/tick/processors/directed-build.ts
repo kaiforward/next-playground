@@ -4,6 +4,7 @@ import type {
 import { cycleStartShard, catchUpFactor } from "@/lib/tick/shard";
 import {
   planFactionProposals, planFactionColonyProposals, assessColonyCandidates, planLaneUpgradeProposals,
+  foundingDrawableAt,
   type BuildSystemState, type ColonyProposal, type ColonyEstablishCandidate, type ColonyEstablishParams,
   type LaneUpgradeProposal,
 } from "@/lib/engine/directed-build";
@@ -14,7 +15,7 @@ import { GOODS } from "@/lib/constants/goods";
 import { systemDevelopment } from "@/lib/engine/development";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { workCostPerLevel } from "@/lib/constants/construction";
-import { surplusDrawable, type GoodMarketState } from "@/lib/engine/directed-logistics";
+import type { GoodMarketState } from "@/lib/engine/directed-logistics";
 import type { RouteCost } from "@/lib/engine/directed-build";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { charterFee, foundingGoodsValue, stagingShareLines } from "@/lib/engine/founding-cost";
@@ -23,7 +24,7 @@ import { clamp } from "@/lib/utils/math";
 import type { WorldConstructionProject, WorldColonyEstablishProject, WorldPlayer } from "@/lib/world/types";
 import { LANES } from "@/lib/constants/lanes";
 import type { LaneEndpointOwner, LaneLevelIncrease } from "@/lib/engine/lanes";
-import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
+import { toGoodMarketStates, stockpileScaleFor } from "@/lib/tick/processors/good-market-state";
 import type {
   DirectedBuildWorld,
   SystemBuildRow,
@@ -87,6 +88,10 @@ export interface DirectedBuildProcessorParams {
   /** Latched funded.construction per faction (0–1) — scales the funded pool. Missing
    *  faction or omitted map → 1 (ungated: engine tests, independents). */
   fundingByFaction?: ReadonlyMap<string, number>;
+  /** The owning faction's `stockpileScale`, multiplying every logistics line of every role — read
+   *  here for the founding staging draw and its founder-cover reading. Missing faction or omitted
+   *  map → 1 (unowned systems, and callers with no faction in scope). */
+  stockpileScaleByFaction?: ReadonlyMap<string, number>;
   /** The treasury position founding is priced against. Missing faction or omitted map → founding is
    *  UNPRICED for that faction: no charter is charged and no colony waits on one (the build-only
    *  engine/adapter path, and independents, which never colonise anyway). */
@@ -129,7 +134,7 @@ interface StagingDraw {
  * a 2-pop seed flattens nearly every good to one figure and erases the basket's shape. It is drawn in
  * slices rather than in one raid at completion: `workShare` is the fraction of the whole establish the
  * ordinary absorption cap would build this cycle, so the materials arrive in step with the work. Per
- * good the draw is the least of what is still wanted, what the source can spare (`surplusDrawable`,
+ * good the draw is the least of what is still wanted, what the source can spare (`foundingDrawableAt`,
  * under the running per-(source, good) balance so two colonies drawing on one founder share a
  * shrinking pile), and what the faction's money buys through the valuation seam.
  *
@@ -150,12 +155,13 @@ function planStagingDraw(
   moneyLeft: number,
   cover: number,
   economyScale: number,
+  stockpileScale: number,
 ): StagingDraw {
   if (project.seedPop <= 0 || !(workShare > 0)) {
     return { lines: [], cost: 0, achievableFraction: 1, materialsShort: false };
   }
 
-  const goods = toGoodMarketStates(source);
+  const goods = toGoodMarketStates(source, { stockpileScale });
   // This cycle's slice, from the ONE share derivation the readout's quote also runs — so what a
   // colony is told the next cycle asks for is what it is actually charged for.
   const shareByGood = new Map(
@@ -180,16 +186,13 @@ function planStagingDraw(
     targetValue += target * unitValue;
 
     const key = `${source.systemId}|${good.goodId}`;
-    // Bounded by the row's LIVE stock as well as by the export rule, because this plan is written
-    // straight into the project's ledger and that ledger is what the colony is credited on delivery.
-    // A plan promising more than the row physically holds would record goods that never left the
-    // founder; `applyFoundingStagingDraws` refuses such a draw outright rather than shorten it, so
-    // overshooting here fails the tick. Bounding keeps the ledger equal to what is actually debited.
-    const remaining = stockBalance.get(key)
-      ?? Math.min(
-        surplusDrawable(good.stock, good.donorReserve, good.demand, good.production ?? 0, good.productionSuppressed),
-        Math.max(0, good.stock),
-      );
+    // Bounded by the founder's deep line as well as by the export rule, and so by the row's LIVE
+    // stock, because this plan is written straight into the project's ledger and that ledger is what
+    // the colony is credited on delivery. A plan promising more than the row physically holds would
+    // record goods that never left the founder; `applyFoundingStagingDraws` refuses such a draw
+    // outright rather than shorten it, so overshooting here fails the tick. Bounding keeps the
+    // ledger equal to what is actually debited.
+    const remaining = stockBalance.get(key) ?? foundingDrawableAt(good);
     // An unreadable headroom spares nothing rather than poisoning the ledger: staged quantities are
     // world state, and `JSON.stringify` turns a NaN into null.
     const headroom = Number.isFinite(remaining) ? Math.max(0, remaining) : 0;
@@ -278,7 +281,7 @@ function mergeStaged(
 }
 
 /** Build the engine's per-system build state: capacity + per-good market state (shared derivation). */
-function toBuildState(row: SystemBuildRow): BuildSystemState {
+function toBuildState(row: SystemBuildRow, stockpileScale: number): BuildSystemState {
   return {
     systemId: row.systemId,
     factionId: row.factionId,
@@ -287,7 +290,7 @@ function toBuildState(row: SystemBuildRow): BuildSystemState {
     buildings: row.buildings,
     depositCounts: row.depositCounts,
     peopleLand: row.peopleLand,
-    goods: toGoodMarketStates(row),
+    goods: toGoodMarketStates(row, { stockpileScale }),
   };
 }
 
@@ -397,10 +400,14 @@ export async function runDirectedBuildProcessor(
   // Per-source good state, derived once per cycle: the opening stock and donor floor every draw on
   // that founder is measured against.
   const founderStates = new Map<string, Map<string, GoodMarketState>>();
-  const founderGoodState = (row: SystemBuildRow, goodId: string): GoodMarketState | undefined => {
+  const founderGoodState = (
+    row: SystemBuildRow,
+    goodId: string,
+    stockpileScale: number,
+  ): GoodMarketState | undefined => {
     let byGood = founderStates.get(row.systemId);
     if (byGood === undefined) {
-      byGood = new Map(toGoodMarketStates(row).map((g) => [g.goodId, g]));
+      byGood = new Map(toGoodMarketStates(row, { stockpileScale }).map((g) => [g.goodId, g]));
       founderStates.set(row.systemId, byGood);
     }
     return byGood.get(goodId);
@@ -458,8 +465,10 @@ export async function runDirectedBuildProcessor(
   // `TickBroadcastRaw`/SSE/world — `runWorldTick().instrumentation` is its only reader.
   let strikeSuppressed = 0;
   let strikeEligible = 0;
+  const stockpileScaleByFaction = params.stockpileScaleByFaction ?? new Map<string, number>();
 
   for (const [factionId, group] of byFaction) {
+    const stockpileScale = stockpileScaleFor(factionId, stockpileScaleByFaction);
     // The faction's per-cycle pool: eligible heads + centre output over developed systems
     // (controlled/unclaimed are inert). Valuation reads the unscaled reference-cycle pool;
     // funding scales it by catchUp like every cycle income. The pool drains the queue; it
@@ -495,7 +504,7 @@ export async function runDirectedBuildProcessor(
     // value-order ranking (housing-leads, then descending bundle-ROI) reorders them before funding.
     // The assessment runs for every due faction so the proposal-pressure counter advances even when
     // build automation is off — the switch gates PROPOSAL EMISSION, not the construction clock.
-    const buildStates = group.map(toBuildState);
+    const buildStates = group.map((r) => toBuildState(r, stockpileScale));
     // Advance the proposal-pressure counter by this cycle's reference-time, so "two reference cycles
     // of persistence" is the same wall-clock latency at any construction cadence (not two cycles).
     const buildPlan = planFactionProposals(buildStates, params.routeCost, existing, developmentRefs, catchUp);
@@ -689,7 +698,7 @@ export async function runDirectedBuildProcessor(
         const workShare = p.workTotal > 0 ? plannedWork / p.workTotal : 0;
         const draw = planStagingDraw(
           source, p, workShare, foundingStockBalance, workingBalance,
-          charterParams.foundingStockCover, charterParams.economyScale,
+          charterParams.foundingStockCover, charterParams.economyScale, stockpileScale,
         );
         workingBalance = safeMoney(workingBalance - draw.cost);
         stagingPlans.set(p.id, {
@@ -765,8 +774,11 @@ export async function runDirectedBuildProcessor(
       const source = rowBySystem.get(p.sourceSystemId);
       let tonnage = 0;
       // The founder's own remaining cover on the good this draw binds hardest: post-draw stock over
-      // that good's donor floor, minimum across the goods it moved. A good the founder has no use
-      // for has no floor to be drawn under, so it is skipped rather than counted as a cover of 0.
+      // the deep line a full-rate consumer of that good would keep, minimum across the goods it
+      // moved. Denominated on that line rather than on the founder's own give line so the reading
+      // means one thing across roles — a producer's give line is a restart buffer and would read
+      // four times the cover for the same physical stock. A good the founder has no use for has no
+      // line to be drawn under, so it is skipped rather than counted as a cover of 0.
       let binding = Infinity;
       for (const line of staged) {
         stagingDraws.push({ sourceSystemId: p.sourceSystemId, goodId: line.goodId, quantity: line.quantity });
@@ -774,9 +786,10 @@ export async function runDirectedBuildProcessor(
         const key = `${p.sourceSystemId}|${line.goodId}`;
         const drawn = (founderDrawn.get(key) ?? 0) + line.quantity;
         founderDrawn.set(key, drawn);
-        const good = source === undefined ? undefined : founderGoodState(source, line.goodId);
-        if (good === undefined || !(good.donorReserve > 0)) continue;
-        binding = Math.min(binding, (good.stock - drawn) / good.donorReserve);
+        const good =
+          source === undefined ? undefined : founderGoodState(source, line.goodId, stockpileScale);
+        if (good === undefined || !(good.consumerDeepLine > 0)) continue;
+        binding = Math.min(binding, (good.stock - drawn) / good.consumerDeepLine);
       }
       const spent = (plan?.cost ?? 0) * share;
       if (spent > 0 && factionId !== null) {

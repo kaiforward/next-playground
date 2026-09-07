@@ -283,6 +283,49 @@ describe("simulateSystemEconomyTick — delivered flow", () => {
   });
 });
 
+describe("simulateSystemEconomyTick — used (realised removal from a good's own stock)", () => {
+  it("attributes a metals factory's draw to the ore row's used, never the metals row", () => {
+    const out = simulateSystemEconomyTick([entry("ore", 50, 0), entry("metals", 50, 20)], PARAMS);
+    const ore = out.find((e) => e.goodId === "ore")!;
+    const metals = out.find((e) => e.goodId === "metals")!;
+    expect(ore.used).toBeGreaterThan(0);
+    // metals' own recipe draw lands on ore's used; nothing draws metals and it delivers
+    // nothing to civilians here, so metals' own used stays 0.
+    expect(metals.used).toBe(0);
+  });
+
+  it("equals what was actually removed, not the sum of desired draws, when two consumers share a scarce input", () => {
+    // chemicals { gas, minerals } and components { minerals, metals } both want 0.5×10=5
+    // minerals — 10 desired against a stock of 6. The gate throttles the second draw on
+    // the ramp, so the physically removed total is well under the naive 10.
+    const out = simulateSystemEconomyTick(
+      [
+        entry("minerals", 6, 0),
+        entry("gas", 200, 0),
+        entry("metals", 200, 0),
+        entry("chemicals", 50, 10),
+        entry("components", 50, 10),
+      ],
+      PARAMS,
+    );
+    const minerals = out.find((e) => e.goodId === "minerals")!;
+    const actuallyRemoved = 6 - minerals.stock;
+    expect(minerals.used).toBeCloseTo(actuallyRemoved, 6);
+    expect(minerals.used).toBeLessThan(10); // below the naive sum of desired draws
+  });
+
+  it("excludes the maxStock clamp — overflow discarded above the ceiling is not use", () => {
+    // stock 95 sits at/under the knee (100 = brakeUseCover 40 × honestUseRate 2.5), so
+    // production runs at full rate (ceiling 1): 95 + 20 = 115, clamped down to the tight
+    // maxStock of 100. Pure producer, no consumers of its own good and no civilian
+    // demand: whatever the clamp throws away is not a removal from stock, so used stays 0.
+    const out = simulateSystemEconomyTick([entry("ore", 95, 20, undefined, 100)], PARAMS);
+    const ore = out.find((e) => e.goodId === "ore")!;
+    expect(ore.stock).toBe(100); // clamped down — production overshot the ceiling
+    expect(ore.used).toBe(0);
+  });
+});
+
 describe("simulateCoupledEconomyTick", () => {
   it("isolates systems — system A's ore does not feed system B's metals", () => {
     // A: ore-rich + metals. B: ore-starved + metals. Same flat array.

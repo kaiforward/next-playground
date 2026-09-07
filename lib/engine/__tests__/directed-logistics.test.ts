@@ -112,6 +112,12 @@ function sys(
       // The matcher never reads it (only the build planner's fed-gate does); these fixtures are
       // pure consumers, so all of their demand is civilian.
       civilianDemand: good.civilianDemand ?? good.demand,
+      // No role split exercised by these fixtures — every case here predates it, so they read as
+      // plain consumers and the deep line mirrors whatever donorReserve the fixture already states.
+      role: "consumer",
+      marginFree: false,
+      consumerDeepLine: good.donorReserve
+        ?? good.logisticsTarget * (DIRECTED_LOGISTICS.DONOR_RESERVE_COVER / DIRECTED_LOGISTICS.WAREHOUSE_COVER),
     }],
   };
 }
@@ -1237,6 +1243,7 @@ describe("matchFactionTransfers — the unservable result (structural vs. fundin
       goods: ["food", "water", "ore"].map((goodId) => ({
         goodId, stock: 0, logisticsTarget: targets[goodId], demand: 5, drawDemand: 5, civilianDemand: 5,
         donorReserve: 10, production: 0, capacityProduction: 0,
+        role: "consumer", marginFree: false, consumerDeepLine: 10,
       })),
     };
 
@@ -1250,65 +1257,88 @@ describe("matchFactionTransfers — the unservable result (structural vs. fundin
 });
 
 // Direct coverage of the donor test shared by the logistics matcher AND the build planner.
-// The two-path rule (clears-margin OR structural-producer-above-reserve) and its guards are
+// The two-path rule (clears-margin OR structural-producer-above-its-line) and its guards are
 // pinned here so a boundary mutation — e.g. the structural-producer `>` softening to `>=` —
 // fails a test rather than silently regressing directed logistics. Every figure the function
 // takes is demand-denominated; the price anchor does not appear in its signature at all, which
 // is what makes the donor rule structurally immune to `anchor_shift` events.
-/** What a structural exporter holds back: EXPORT_RESERVE_COVER cycles of its own demand. */
-const exporterReserve = (demand: number) => DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * demand;
+/** A producer's or a supplier's restart buffer: EXPORT_RESERVE_COVER cycles of its own use. */
+const bufferLine = (use: number) => DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * use;
+/** A full-rate consumer's deep reserve: DONOR_RESERVE_COVER cycles of its own use. */
+const deepLine = (use: number) => DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * use;
 
 describe("surplusDrawable", () => {
   const margin = DIRECTED_LOGISTICS.SURPLUS_MARGIN; // 1.4
 
-  it("keeps ordinary stock-holders at their reserve", () => {
-    expect(surplusDrawable(100, 100, 5, 0)).toBe(0);
-    expect(surplusDrawable(90, 100, 5, 0)).toBe(0);
+  it("keeps ordinary stock-holders at their line", () => {
+    expect(surplusDrawable(100, 100, false, 5, 0)).toBe(0);
+    expect(surplusDrawable(90, 100, false, 5, 0)).toBe(0);
   });
 
-  it("path (a): any holder clearing the surplus margin donates stock above its reserve", () => {
+  it("path (a): any holder clearing the surplus margin donates stock above its line", () => {
     // stock 150 ≥ 100 × 1.4 = 140 → clears margin; non-producer still donates 150 − 100 = 50.
-    expect(surplusDrawable(100 * margin + 10, 100, 5, 0)).toBe(100 * margin + 10 - 100);
+    expect(surplusDrawable(100 * margin + 10, 100, false, 5, 0)).toBe(100 * margin + 10 - 100);
   });
 
-  it("path (b): a structural producer above its reserve donates even below the 1.4× margin", () => {
-    // stock 110 = 1.1× reserve (below 140), production 30 > demand 5 → drawable is everything above
-    // the exporter's own reserve (EXPORT_RESERVE_COVER cycles of demand 5).
-    expect(surplusDrawable(110, 100, 5, 30)).toBe(110 - exporterReserve(5));
+  it("path (b): a structural producer above its line donates even below the 1.4× margin", () => {
+    // stock 110 = 2.2× the line (below its 1.4× margin), production 30 > demand 5 → drawable is
+    // everything above the line the caller authored, with no dead-band.
+    expect(surplusDrawable(110, bufferLine(5), true, 5, 30)).toBe(110 - bufferLine(5));
+  });
+
+  it("moves a producer's drawable with the line it is passed, never with a line of its own", () => {
+    // The stockpile lever and the role author both reach a producer only through this parameter:
+    // a branch that rebuilt EXPORT_RESERVE_COVER × demand here would read the same figure twice.
+    const scaled = bufferLine(5) * 0.75;
+    expect(surplusDrawable(110, scaled, true, 5, 30)).toBe(110 - scaled);
+    expect(surplusDrawable(110, scaled, true, 5, 30))
+      .toBeGreaterThan(surplusDrawable(110, bufferLine(5), true, 5, 30));
+  });
+
+  it("draws a margin-free holder down to its buffer where a deep-reserve holder gives nothing", () => {
+    // Both hold the same physical stock against the same use rate; only the line and the flag its
+    // role authored differ. A supplier at 15 cycles of use is 5 cycles above its buffer and gives
+    // them; a full-rate consumer at 50 cycles is above its 40-cycle reserve but inside the 1.4×
+    // dead-band (56), so it gives nothing.
+    expect(surplusDrawable(15, bufferLine(1), true, 1, 0)).toBe(5);
+    // And down into the dead-band a deep line would impose: 12 is inside 1.4x its buffer.
+    expect(surplusDrawable(12, bufferLine(1), true, 1, 0)).toBe(2);
+    expect(surplusDrawable(50, deepLine(1), false, 1, 0)).toBe(0);
+    // The flag alone is what separates them: the same consumer stock read as margin-free donates.
+    expect(surplusDrawable(50, deepLine(1), true, 1, 0)).toBe(10);
   });
 
   it("excludes a non-producer sitting in the 1.0–1.4× band (no re-export churn)", () => {
     // stock 110 in-band, production 0 ≤ demand 5, doesn't clear the margin → not drawable.
-    expect(surplusDrawable(110, 100, 5, 0)).toBe(0);
+    expect(surplusDrawable(110, 100, false, 5, 0)).toBe(0);
   });
 
   it("excludes the production == demand boundary in-band (a balanced self-supplier is not a donor)", () => {
     // Pins the strict `production > demand`: equal production must NOT qualify as path (b).
-    expect(surplusDrawable(110, 100, 5, 5)).toBe(0);
+    expect(surplusDrawable(110, 100, false, 5, 5)).toBe(0);
     // A hair above demand DOES qualify — confirms the boundary sits exactly at equality.
-    expect(surplusDrawable(110, 100, 5, 5.01)).toBe(110 - exporterReserve(5));
+    expect(surplusDrawable(110, 100, false, 5, 5.01)).toBe(10);
   });
 });
 
 describe("strategic exporter reserve", () => {
-  it("draws a structural exporter below its donor floor down to its own reserve, keeping exactly the reserve", () => {
-    const floor = 100;
+  it("ships a structural exporter down to exactly the buffer it was given, keeping the buffer", () => {
     const demand = 5;
-    const stock = floor * 0.9;
-    const drawable = surplusDrawable(stock, floor, demand, 30);
-    expect(drawable).toBeCloseTo(stock - exporterReserve(demand));
-    expect(stock - drawable).toBeCloseTo(exporterReserve(demand));
+    const line = bufferLine(demand);
+    const stock = line * 1.9;
+    const drawable = surplusDrawable(stock, line, true, demand, 30);
+    expect(drawable).toBeCloseTo(stock - line);
+    expect(stock - drawable).toBeCloseTo(line);
   });
 
-  it("draws a producer below its donor floor down to the reserve, where a non-producer draws nothing", () => {
-    const floor = 100;
+  it("ships a producer down to a buffer a consumer holding the same stock would not give from", () => {
     const demand = 5;
-    const stock = exporterReserve(demand) + 30; // between the exporter reserve and the donor floor
-    // A producer above demand deep-draws past the donor floor down to its reserve — it stops AT the
-    // reserve, not the floor an ordinary donor would keep.
-    expect(surplusDrawable(stock, floor, demand, 30)).toBeCloseTo(30);
-    // The same stock with no production draws nothing — the ordinary path needs stock above its reserve.
-    expect(surplusDrawable(stock, floor, demand, 0)).toBe(0);
+    const stock = bufferLine(demand) + 30;
+    // A producer on its restart buffer ships everything above it: its own output refills the buffer.
+    expect(surplusDrawable(stock, bufferLine(demand), true, demand, 30)).toBeCloseTo(30);
+    // The same stock at a consumer — the deep reserve, no production — is under its own line and
+    // gives nothing.
+    expect(surplusDrawable(stock, deepLine(demand), false, demand, 0)).toBe(0);
   });
 
   it("does not deep-draw an input-starved former exporter despite its capacity", () => {
@@ -1321,7 +1351,9 @@ describe("strategic exporter reserve", () => {
   });
 
   it("does not deep-draw a suppressed structural producer", () => {
-    expect(surplusDrawable(110, 100, 5, 30, true)).toBe(0);
+    // Suppressed, it falls to the ordinary branch against the deep line its role then authors, and
+    // 110 does not clear the 1.4x dead-band above 100.
+    expect(surplusDrawable(110, 100, false, 5, 30, true)).toBe(0);
   });
 
   it("keeps its own suppression meaning, distinct from the build planner's", () => {
@@ -1332,12 +1364,13 @@ describe("strategic exporter reserve", () => {
     // capacity in the good; a struck system with no capacity is still given the industry it lacks.
     // Collapsing the two would either deep-draw a striking exporter or freeze a striking world out of
     // construction entirely.
-    const unsuppressed = surplusDrawable(110, 100, 5, 30, false);
-    expect(unsuppressed).toBeGreaterThan(0);         // structural exporter: ships to its reserve
-    expect(surplusDrawable(110, 100, 5, 30, true)).toBeLessThan(unsuppressed);
+    const unsuppressed = surplusDrawable(110, 100, false, 5, 30, false);
+    expect(unsuppressed).toBeGreaterThan(0);         // structural exporter: ships down to its line
+    expect(surplusDrawable(110, 100, false, 5, 30, true)).toBeLessThan(unsuppressed);
     // The flag only ever gates the structural-exporter fast path: a donor whose production does not
     // exceed its demand is on the ordinary path either way, so suppression changes nothing there.
-    expect(surplusDrawable(150, 100, 5, 0, true)).toBe(surplusDrawable(150, 100, 5, 0, false));
+    expect(surplusDrawable(150, 100, false, 5, 0, true))
+      .toBe(surplusDrawable(150, 100, false, 5, 0, false));
   });
 
   it("keeps suppressed and realised-zero former exporters on the ordinary excess path", () => {
@@ -1362,8 +1395,8 @@ describe("strategic exporter reserve", () => {
     // reserves nothing and the whole pile is drawable — on either branch. Reachable in the lag window
     // after a good's last local consumer decays away. Correct — there is no local population to hold
     // stock for — but pinned so a future change cannot flip it silently.
-    expect(surplusDrawable(500, 0, 0, 30)).toBe(500);
-    expect(surplusDrawable(500, 0, 0, 0)).toBe(500); // ordinary donor: margin on 0 is vacuous
+    expect(surplusDrawable(500, 0, true, 0, 30)).toBe(500);
+    expect(surplusDrawable(500, 0, false, 0, 0)).toBe(500); // ordinary donor: margin on 0 is vacuous
   });
 
   it("keeps the strategic reserve safely above ration cover", () => {
@@ -1382,7 +1415,7 @@ describe("countedStock / orderCover / levelCover", () => {
     const g: GoodMarketState = {
       goodId: "ore", stock: 15, logisticsTarget: 400, donorReserve: 400, demand: 10,
       drawDemand: 10, civilianDemand: 10, production: 0, capacityProduction: 0,
-      scheduledInbound: 50,
+      scheduledInbound: 50, role: "consumer", marginFree: false, consumerDeepLine: 400,
     };
     expect(countedStock(g)).toBe(15);
   });
@@ -1392,7 +1425,7 @@ describe("countedStock / orderCover / levelCover", () => {
     const g: GoodMarketState = {
       goodId: "ore", stock: 25, logisticsTarget: 400, donorReserve: 400, demand: 10,
       drawDemand: 10, civilianDemand: 10, production: 0, capacityProduction: 0,
-      scheduledInbound: 50,
+      scheduledInbound: 50, role: "consumer", marginFree: false, consumerDeepLine: 400,
     };
     expect(countedStock(g)).toBe(75);
   });
@@ -1402,7 +1435,7 @@ describe("countedStock / orderCover / levelCover", () => {
     const g: GoodMarketState = {
       goodId: "ore", stock: 20, logisticsTarget: 400, donorReserve: 400, demand: 10,
       drawDemand: 10, civilianDemand: 10, production: 0, capacityProduction: 0,
-      scheduledInbound: 50,
+      scheduledInbound: 50, role: "consumer", marginFree: false, consumerDeepLine: 400,
     };
     expect(countedStock(g)).toBe(70);
   });
@@ -1411,6 +1444,7 @@ describe("countedStock / orderCover / levelCover", () => {
     const g: GoodMarketState = {
       goodId: "ore", stock: 100, logisticsTarget: 400, donorReserve: 400, demand: 10,
       drawDemand: 0, civilianDemand: 10, production: 0, capacityProduction: 0,
+      role: "consumer", marginFree: false, consumerDeepLine: 400,
     };
     expect(orderCover(g)).toBe(Infinity);
 
@@ -1423,6 +1457,7 @@ describe("countedStock / orderCover / levelCover", () => {
     const unbraked: GoodMarketState = {
       goodId: "ore", stock: 100, logisticsTarget: 400, donorReserve: 400, demand: 10,
       drawDemand: 10, civilianDemand: 10, production: 0, capacityProduction: 0,
+      role: "consumer", marginFree: false, consumerDeepLine: 400,
     };
     const braked: GoodMarketState = { ...unbraked, drawDemand: 5 };
     expect(orderCover(braked)).toBeGreaterThan(orderCover(unbraked));

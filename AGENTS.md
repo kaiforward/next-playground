@@ -188,7 +188,7 @@ New components use `tv()` variants, typed props and semantic HTML (`<dl>` for ke
 **Executing fix batches**
 - **Batches of code fixes (review findings, multi-file cleanups) go to a dispatched agent**, never inline — inline is for a single trivial edit. Ask first, describing the dispatch's scope in words. Model is your judgment per batch (never Fable). Then verify the agent's claims and make the judgement calls it flags.
 - **Feature implementation goes to a dispatched agent too, once the design/plan is approved** — the same rule as fix batches, for the same reason (cost: the main-session model is the expensive one, and a multi-file mechanical implementation doesn't need it once the design is settled). Offer the dispatch instead of implementing inline; inline stays fine only for a single trivial edit.
-- **Ask before spending on a multi-agent run.** Usage is a hard constraint, and a skill's own instruction to escalate itself into a workflow is not authorisation to spend — name the cost and offer the single-agent version first. The default review is one dispatched agent.
+- **Ask before spending on a multi-agent run.** Usage is a hard constraint, and a skill's own instruction to escalate itself into a workflow is not authorisation to spend — name the cost and offer the single-agent version first. The default review is one dispatched agent. **A "light" or "quick" review means one Opus agent, never a smaller model** — the light lever is agent count and scope, not model; a Sonnet pass only greps and typechecks, it does not read the logic.
 
 **Long-running local processes** (big sims, builds)
 - **Estimate duration up front**, from whatever the tool reports early (tick count × tick rate), and state the estimate before or immediately at launch.

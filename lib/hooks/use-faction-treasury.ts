@@ -16,7 +16,7 @@ type UpdateTreasuryPolicyData = Extract<UpdateTreasuryPolicyResult, { ok: true }
 /**
  * `FactionTreasuryData` carries no discriminant to reuse and its only caller
  * (`components/factions/treasury-card.tsx`) reads its fields directly with no absence check — the
- * same Task 7 judgment call `useFactionVitals`/`useFactionConstruction` made (see those hooks'
+ * same judgment call `useFactionVitals`/`useFactionConstruction` made (see those hooks'
  * docstrings): an absent factionId reads as a zero-valued treasury rather than a new union member
  * that caller would need to narrow.
  */
@@ -29,6 +29,7 @@ const NOT_FOUND: FactionTreasuryData = {
   net: 0,
   foundingCommitted: 0,
   lastSettlement: null,
+  stockpileScale: 1,
 };
 
 /** One overlay per faction id — treasury policy is the only per-id (not single-player-global)
@@ -50,7 +51,9 @@ export function useFactionTreasury(factionId: string): FactionTreasuryData {
   const slice = useGameSlice((state) => state.slices.factionTreasury?.[factionId]);
   const overlay = useOverlay(treasuryPolicyOverlay, factionId);
   const base = slice ?? NOT_FOUND;
-  return overlay ? { ...base, taxLevel: overlay.taxLevel, bands: overlay.bands } : base;
+  return overlay
+    ? { ...base, taxLevel: overlay.taxLevel, bands: overlay.bands, stockpileScale: overlay.stockpileScale }
+    : base;
 }
 
 function sendUpdateTreasuryPolicy(

@@ -27,8 +27,31 @@ import {
 } from "@/lib/engine/population";
 import { cycleStartShard, isCycleStart, catchUpFactor } from "@/lib/tick/shard";
 import { resolveHostConfig } from "@/lib/constants/economy-scale";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 
 const DEBUG = resolveHostConfig().debugEconomy;
+
+// Per-cycle weight of the exponential rolling average behind realisedUse, steadyInbound and
+// lateInboundShare — see RESERVE_WINDOW_CYCLES's docstring for the time constant it sets.
+const RESERVE_FOLD_WEIGHT = 1 / DIRECTED_LOGISTICS.RESERVE_WINDOW_CYCLES;
+
+/**
+ * Fold one reference-cycle observation into a rolling rate that starts at `base` — the stored rate
+ * where one exists, and otherwise whatever the caller says a market with no history should be read
+ * as. The two answers differ by what the rate is for:
+ *
+ *  - A MEASUREMENT of what this market did (`realisedUse`, and the late share, a ratio of one
+ *    cycle's own credited volume) seeds from this cycle's own reading. Averaging it against an
+ *    assumed 0 would understate every market's rate for its first `RESERVE_WINDOW_CYCLES` of life,
+ *    collapsing a fresh consumer's reserve to the restart buffer on a figure nobody measured.
+ *  - A rate a market EARNS a role with (`steadyInbound`) starts at 0 and climbs. A role is granted
+ *    for living through a window of activity, so a market with no history that is served once must
+ *    read as a consumer that got a delivery, never as a supplier
+ *    (docs/active/gameplay/economy-autonomic-agency.md → "Losing the role is fast; qualifying is slow").
+ */
+function foldReserveRate(base: number, observation: number): number {
+  return base + (observation - base) * RESERVE_FOLD_WEIGHT;
+}
 
 /**
  * The broadcast this processor emits on a tick where it resolves nothing.
@@ -181,6 +204,28 @@ export async function runEconomyProcessor(
     const squeezeCycles = satisfactionByIndex[i] < 1
       ? Math.min(2, Math.max(0, m.squeezeCycles ?? 0) + catchUp)
       : 0;
+
+    // The three rolling rates, folded once at the cycle boundary. `used` and the credited-inbound
+    // accumulators are this run's raw reference-cycle quantities; dividing by catchUp normalises
+    // them to a per-reference-cycle observation before folding, so a longer interval never inflates
+    // the rate it feeds.
+    const inboundSinceFold = m.inboundSinceFold ?? 0;
+    const lateInboundSinceFold = m.lateInboundSinceFold ?? 0;
+    const usedObservation = simulated[i].used / catchUp;
+    const realisedUse = foldReserveRate(m.realisedUse ?? usedObservation, usedObservation);
+    // Seeded at 0, never at the observation: one haul into a market with no history is a delivery,
+    // not a steady stream, and must not qualify it as a supplier on the spot.
+    const steadyInbound = foldReserveRate(m.steadyInbound ?? 0, inboundSinceFold / catchUp);
+    // A cycle that credited nothing has no late-share observation — 0 credited volume can't be
+    // split into an on-time/late ratio, so folding it in would drag a real rate toward a false 0.
+    const lateInboundShare =
+      inboundSinceFold > 0
+        ? foldReserveRate(
+          m.lateInboundShare ?? lateInboundSinceFold / inboundSinceFold,
+          lateInboundSinceFold / inboundSinceFold,
+        )
+        : m.lateInboundShare;
+
     return {
       id: m.id,
       stock: simulated[i].stock,
@@ -197,6 +242,18 @@ export async function runEconomyProcessor(
         : 1,
       productionMult: Number.isFinite(productionMult) && productionMult >= 0 ? productionMult : 1,
       squeezeCycles,
+      realisedUse: Number.isFinite(realisedUse) && realisedUse >= 0 ? realisedUse : 0,
+      steadyInbound: Number.isFinite(steadyInbound) && steadyInbound >= 0 ? steadyInbound : 0,
+      lateInboundShare:
+        lateInboundShare !== undefined && Number.isFinite(lateInboundShare)
+          ? Math.max(0, Math.min(1, lateInboundShare))
+          : undefined,
+      // The fold above just consumed both accumulators — zero them so the next cycle starts fresh,
+      // and keep what the inbound one held, so a stage running later on this same tick can still
+      // see that something arrived over the cycle just closed.
+      inboundSinceFold: 0,
+      lateInboundSinceFold: 0,
+      inboundCreditedLastCycle: inboundSinceFold,
     };
   });
 

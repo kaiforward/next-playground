@@ -3,6 +3,7 @@ import type { SubstrateGoodRate, ConsumptionBreakdown } from "@/lib/engine/physi
 import type { SupplyRegime } from "@/lib/engine/population";
 import type { FillOrderRow, PotentialYieldRowView } from "@/lib/utils/substrate";
 import type { ConstructionProjectLaneRow } from "@/lib/engine/construction-readout";
+import type { LogisticsRole } from "@/lib/engine/directed-logistics";
 
 /**
  * One directed hop of in-flight freight over a single lane — the map overlay's edge unit. Unlike
@@ -128,6 +129,31 @@ export interface LogisticsGoodRow {
   goodId: string;
   goodName: string;
   tier: GoodTier;
+  /** What this good's role classifies this world as (`classifyLogisticsRole`) — decides which
+   *  pair of lines below the two cycle figures are read against. A good with no market row here
+   *  (traded only) reads as "consumer", the same as an unknown rolling rate does. */
+  role: LogisticsRole;
+  /** `donorReserve / demand`, in cycles of full-rate use — the give-down-to line. Absent when
+   *  `demand` is 0 (never `Infinity`/`NaN`). */
+  givesDownToCycles?: number;
+  /** `logisticsTarget / demand`, in cycles of full-rate use — the want line. Absent when `demand`
+   *  is 0. */
+  wantCycles?: number;
+  /** Rolling steady-inbound rate, units per cycle. Absent ⇒ unknown, never 0 — see
+   *  `GoodMarketState.steadyInbound`. One of the two numbers that decided a supplier role. */
+  steadyInbound?: number;
+  /** Rolling realised-use rate, units per cycle. Absent ⇒ unknown, never 0 — see
+   *  `GoodMarketState.realisedUse`. Read against `useRate` below on an idle row, the number that
+   *  decided it. */
+  realisedUse?: number;
+  /** The USE figure the role test was made against — `GoodMarketState.demand`, civilian want plus
+   *  the staffing- and strike-gated recipe draw. The denominator `realisedUse` is a share of:
+   *  `consumption + inputDemand` on this row is ungated, so dividing by it would state a share the
+   *  classification never read, and one that can exceed 100%. Absent when there is no market row. */
+  useRate?: number;
+  /** Rolling late-inbound share, in [0,1]. Absent ⇒ unknown, never 0 — see
+   *  `GoodMarketState.lateInboundShare`. The other of the two numbers that decided a supplier role. */
+  lateInboundShare?: number;
   /** Staffed production capacity scaled by the strike/maintenance suppression the economy
    *  applied — the operating rate, on the same basis as `inputDemand`. */
   production: number;
@@ -653,12 +679,16 @@ export interface FactionTreasuryData {
    *  still inside `balance` until the settlement charges it off, but no longer spendable. */
   foundingCommitted: number;
   lastSettlement: WorldTreasurySettlement | null;
+  /** Multiplies every give-line and want-line of this faction's markets, for every logistics role.
+   *  The service resolves an absent persisted value to 1 — the row itself may omit the field. */
+  stockpileScale: number;
 }
 
 /** The mutable policy pair the PATCH route returns after a successful write. */
 export interface TreasuryPolicyData {
   taxLevel: TaxLevel;
   bands: TreasuryBands;
+  stockpileScale: number;
 }
 
 // ── Alert bar ──────────────────────────────────────────────────────────────

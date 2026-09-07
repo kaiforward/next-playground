@@ -10,44 +10,43 @@ import { MIN_DEMAND } from "@/lib/constants/market-economy";
 import { GOODS } from "@/lib/constants/goods";
 import { effectiveSpaceCost, HOUSING_TYPE } from "@/lib/constants/industry";
 import { curveForRow, marketBandForRow, midPriceAt } from "@/lib/engine/market-pricing";
-import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
+import { toGoodMarketStates, stockpileScaleFor } from "@/lib/tick/processors/good-market-state";
 import { marketRowsBySystem } from "@/lib/world/tick";
 import { median } from "@/lib/utils/math";
 import { nearBandFloor } from "./market-analysis";
 import { perSystemSupplyState, quantileLevels, worstGoodSatisfaction } from "./population-analysis";
 import type { EpisodeCostTotals } from "./population-analysis";
-import type { GoodMarketState } from "@/lib/engine/directed-logistics";
+import type { GoodMarketState, LogisticsRole } from "@/lib/engine/directed-logistics";
 import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldEvent, WorldMarket } from "@/lib/world/types";
+import { MARKET_ROLES } from "./types";
 import type {
   EpisodeCostCohortEntry, EpisodeCostSummary, MarketRole, RatchetBucketEntry, RatchetCheckSummary,
   RoleCoverEntry, StockedRole, WorldCohort, WorldCohortEntry,
 } from "./types";
 
 /**
- * A market's role, tested in a fixed order because one market can satisfy several
- * descriptions. `state.demand` is the unfloored logistics demand and decides exporter
- * status; `demandRate` is the MIN_DEMAND-floored pricing anchor and is the only thing
- * that can identify an inert market. They are different numbers and answer different
- * questions — MIN_DEMAND's own docstring calls it a floor on the cycles-of-supply
- * denominator "so a near-empty system yields a finite cover instead of a divide-by-zero",
- * i.e. a pricing guard, not demand.
+ * A market's role. `state.role` is the logistics engine's own classification
+ * (`classifyLogisticsRole`) — producer, supplier, idle or consumer — and is trusted directly for
+ * the first three: whatever the matcher itself would call a market, this harness calls it too, by
+ * construction, since both read the same `GoodMarketState`. Only the engine's `"consumer"` needs a
+ * further split, because that single engine role covers two harness-only distinctions the matcher
+ * has no reason to make: a world that still produces something (just not enough to be a producer
+ * or a supplier) versus one that makes nothing at all, and — among the latter — one nobody wants
+ * anything from versus one whose real demand merely sits under the `MIN_DEMAND` pricing floor.
  *
- * Precedence matters at one junction: a mining world producing ore nobody there consumes
- * has a floored demandRate and real production. It is an exporter — it genuinely ships the
- * good — so the production tests run first and `inert` means "no production, and local
- * demand below the MIN_DEMAND pricing floor" — its cover denominator is the pricing floor,
- * not real need. That is NOT the same as zero demand: a small world can have genuine demand
- * that still sits under the floor (below ~7 population for water, ~50 for electronics, ~167
- * for ship_frames) and lands here too, indistinguishable from a market nobody wants anything
- * from unless the caller also reads `state.demand` (0 vs. > 0).
+ * `demandRate` is the MIN_DEMAND-floored pricing anchor and is the only thing that can identify an
+ * inert market; MIN_DEMAND's own docstring calls it a floor on the cycles-of-supply denominator "so
+ * a near-empty system yields a finite cover instead of a divide-by-zero", i.e. a pricing guard, not
+ * demand.
  */
 export function classifyMarketRole(state: GoodMarketState, demandRate: number): MarketRole {
-  const production = state.production;
-  // Mirrors surplusDrawable's own exporter branch, so a market this calls an exporter is
-  // exactly one directed logistics would draw from.
-  if (production > state.demand && !state.productionSuppressed) return "exporter";
-  if (production > 0) return "self-supplier";
+  if (state.role === "producer" || state.role === "supplier" || state.role === "idle") {
+    return state.role;
+  }
+  // The engine's own consumer branch, which can still carry real production not enough to
+  // qualify as a supplier or idle — the old self-supplier test, renamed.
+  if (state.production > 0) return "part-producer";
   // The floor is assigned from the same constant, not computed, so a floored row lands on
   // it exactly; the epsilon only guards against accumulated float drift in the industrial term.
   if (demandRate > MIN_DEMAND * (1 + 1e-9)) return "consumer";
@@ -57,7 +56,10 @@ export function classifyMarketRole(state: GoodMarketState, demandRate: number): 
   return "inert";
 }
 
-const STOCKED_ROLES: StockedRole[] = ["exporter", "self-supplier", "consumer"];
+/** Every stocked role, in `MARKET_ROLES` order — `inert` alone is excluded (see `StockedRole`). */
+const STOCKED_ROLES: StockedRole[] = MARKET_ROLES.filter(
+  (role): role is StockedRole => role !== "inert",
+);
 
 /**
  * A market's role, plus the unfloored `state.demand` that fed the classification. Carried
@@ -70,21 +72,26 @@ export interface MarketRoleInfo {
   demand: number;
 }
 
-/** Every market's role and demand, keyed `systemId|goodId`. One pass over the galaxy. */
+/** Every market's role and demand, keyed `systemId|goodId`. One pass over the galaxy.
+ *  `stockpileScaleByFaction` resolves each system's owning faction exactly as the tick's own
+ *  callers do (`stockpileScaleFor`); an unowned system or a missing row reads 1. */
 export function marketRolesByKey(
   systems: TickSystem[],
   markets: WorldMarket[],
+  stockpileScaleByFaction?: ReadonlyMap<string, number>,
 ): Map<string, MarketRoleInfo> {
   const rowsBySystem = marketRowsBySystem(markets);
   const demandRateByKey = new Map(markets.map((m) => [`${m.systemId}|${m.goodId}`, m.demandRate]));
   const roles = new Map<string, MarketRoleInfo>();
+  const scaleByFaction = stockpileScaleByFaction ?? new Map<string, number>();
 
   for (const s of systems) {
     const rows = rowsBySystem.get(s.id);
     if (!rows) continue;
-    const states = toGoodMarketStates({
-      buildings: s.buildings, population: s.population, yields: s.yields, markets: rows,
-    });
+    const states = toGoodMarketStates(
+      { buildings: s.buildings, population: s.population, yields: s.yields, markets: rows },
+      { stockpileScale: stockpileScaleFor(s.factionId, scaleByFaction) },
+    );
     for (const state of states) {
       const key = `${s.id}|${state.goodId}`;
       const demandRate = demandRateByKey.get(key) ?? 0;
@@ -95,26 +102,74 @@ export function marketRolesByKey(
 }
 
 /**
- * Every market's warehousing target (`WAREHOUSE_COVER × real demand × anchorMult`), keyed
- * `systemId|goodId` — the figure `classifyMarketState` measures a deficit against. It cannot be
- * read off a market row alone: the row carries only the `MIN_DEMAND`-floored `demandRate`, so the
- * real demand has to come back through `toGoodMarketStates` from the system's population and
- * industry. A market whose system is absent from `systems` gets no entry.
+ * What `computeCoverLevels` needs to test one market against the matcher's own rules: the want
+ * line (`logisticsTarget`, the deficit test), and the give line plus everything `surplusDrawable`
+ * reads to decide the surplus test the same way the matcher does — `donorReserve`, `marginFree`,
+ * and the role-authoring `demand`/`production`/`productionSuppressed` triple. Carrying the whole
+ * tuple (rather than just the two lines) is what lets the harness call `surplusDrawable` itself
+ * instead of reconstructing its branches from constants, so the two can never silently disagree.
+ */
+export interface LogisticsTargetInfo {
+  logisticsTarget: number;
+  donorReserve: number;
+  marginFree: boolean;
+  demand: number;
+  production: number;
+  productionSuppressed: boolean;
+  /** The engine's own four-way role (`GoodMarketState.role`) — the re-measure metric's treated
+   *  cohort (supplier/idle) and the founding-cap/drop-rule readers all key off this, not the
+   *  harness's six-way `MarketRole`. */
+  role: LogisticsRole;
+  /** `GoodMarketState.capacityProduction` — the brake knee's output term, read by the harness's
+   *  anchor-event cohort (`brakeKnee`). */
+  capacityProduction: number;
+  /** `GoodMarketState.consumerDeepLine` — what a full-rate consumer of this good would keep,
+   *  regardless of this market's own role. The first-release transient read
+   *  (`releasedTonnageFirstCycle`) measures a supplier/idle market's give line against this. */
+  consumerDeepLine: number;
+  /** `GoodMarketState.lateInboundShare` — absent means never measured, never 0; the re-measure
+   *  metric's gate-excluded cohort reads it directly. */
+  lateInboundShare?: number;
+}
+
+/**
+ * Every market's want and give lines, keyed `systemId|goodId` — the figures `classifyMarketState`
+ * and `surplusDrawable` measure a deficit and a surplus against. Neither can be read off a market
+ * row alone: the row carries only the `MIN_DEMAND`-floored `demandRate`, so the role-authored
+ * lines have to come back through `toGoodMarketStates` from the system's population and industry.
+ * A market whose system is absent from `systems` gets no entry. `stockpileScaleByFaction` resolves
+ * the same way `marketRolesByKey` does.
  */
 export function logisticsTargetsByKey(
   systems: TickSystem[],
   markets: WorldMarket[],
-): Map<string, number> {
+  stockpileScaleByFaction?: ReadonlyMap<string, number>,
+): Map<string, LogisticsTargetInfo> {
   const rowsBySystem = marketRowsBySystem(markets);
-  const targets = new Map<string, number>();
+  const targets = new Map<string, LogisticsTargetInfo>();
+  const scaleByFaction = stockpileScaleByFaction ?? new Map<string, number>();
 
   for (const s of systems) {
     const rows = rowsBySystem.get(s.id);
     if (!rows) continue;
-    const states = toGoodMarketStates({
-      buildings: s.buildings, population: s.population, yields: s.yields, markets: rows,
-    });
-    for (const state of states) targets.set(`${s.id}|${state.goodId}`, state.logisticsTarget);
+    const states = toGoodMarketStates(
+      { buildings: s.buildings, population: s.population, yields: s.yields, markets: rows },
+      { stockpileScale: stockpileScaleFor(s.factionId, scaleByFaction) },
+    );
+    for (const state of states) {
+      targets.set(`${s.id}|${state.goodId}`, {
+        logisticsTarget: state.logisticsTarget,
+        donorReserve: state.donorReserve,
+        marginFree: state.marginFree,
+        demand: state.demand,
+        production: state.production,
+        productionSuppressed: state.productionSuppressed ?? false,
+        role: state.role,
+        capacityProduction: state.capacityProduction,
+        consumerDeepLine: state.consumerDeepLine,
+        lateInboundShare: state.lateInboundShare,
+      });
+    }
   }
   return targets;
 }
@@ -125,9 +180,9 @@ export function logisticsTargetsByKey(
  * cannot make, because it medians both populations together.
  *
  * `pinnedRoles` holds cohort MEMBERSHIP fixed against a partition measured elsewhere — the
- * baseline arm of an A/B. The classifier reads `state.demand` in its exporter branch, so any
- * change to the demand figure moves membership by construction, and a cover median then moves
- * with the cohort mix rather than with anything about supply. A market the pinned partition
+ * baseline arm of an A/B. The classifier reads `state.demand` (through `state.role`'s own tests),
+ * so any change to the demand figure moves membership by construction, and a cover median then
+ * moves with the cohort mix rather than with anything about supply. A market the pinned partition
  * never saw (a colony founded after the baseline) is classified live, so the later arm's
  * population is never silently smaller. `countByRole` is the membership table to print per arm.
  *
@@ -160,7 +215,7 @@ export function computeRoleCoverLevels(
   const counts = new Map<string, Record<MarketRole, number>>();
   const covers = new Map<string, Record<StockedRole, number[]>>();
   const consumerEmpty = new Map<string, number>();
-  const exporterPrices = new Map<string, number[]>();
+  const producerPrices = new Map<string, number[]>();
   const trulyInertCounts = new Map<string, number>();
 
   for (const m of markets) {
@@ -174,11 +229,11 @@ export function computeRoleCoverLevels(
 
     let count = counts.get(m.goodId);
     if (!count) {
-      count = { exporter: 0, "self-supplier": 0, consumer: 0, inert: 0 };
+      count = { producer: 0, supplier: 0, consumer: 0, idle: 0, "part-producer": 0, inert: 0 };
       counts.set(m.goodId, count);
-      covers.set(m.goodId, { exporter: [], "self-supplier": [], consumer: [] });
+      covers.set(m.goodId, { producer: [], supplier: [], consumer: [], idle: [], "part-producer": [] });
       consumerEmpty.set(m.goodId, 0);
-      exporterPrices.set(m.goodId, []);
+      producerPrices.set(m.goodId, []);
       trulyInertCounts.set(m.goodId, 0);
     }
     count[role] += 1;
@@ -195,8 +250,8 @@ export function computeRoleCoverLevels(
     if (role === "consumer" && nearBandFloor(m, marketBandForRow(m, good))) {
       consumerEmpty.set(m.goodId, (consumerEmpty.get(m.goodId) ?? 0) + 1);
     }
-    if (role === "exporter") {
-      exporterPrices.get(m.goodId)?.push(midPriceAt(curve, m.stock) / good.basePrice);
+    if (role === "producer") {
+      producerPrices.get(m.goodId)?.push(midPriceAt(curve, m.stock) / good.basePrice);
     }
   }
 
@@ -204,7 +259,7 @@ export function computeRoleCoverLevels(
   for (const [goodId, countByRole] of counts) {
     const coverLists = covers.get(goodId);
     const medianCoverByRole: Record<StockedRole, number> = {
-      exporter: 0, "self-supplier": 0, consumer: 0,
+      producer: 0, supplier: 0, consumer: 0, idle: 0, "part-producer": 0,
     };
     for (const role of STOCKED_ROLES) medianCoverByRole[role] = median(coverLists?.[role] ?? []);
 
@@ -216,7 +271,7 @@ export function computeRoleCoverLevels(
       trulyInertCount: trulyInertCounts.get(goodId) ?? 0,
       // Guarded: a good with no consumer markets reports 0, never NaN.
       consumerEmptyFrac: consumers > 0 ? (consumerEmpty.get(goodId) ?? 0) / consumers : 0,
-      exporterMedianPriceRatio: median(exporterPrices.get(goodId) ?? []),
+      producerMedianPriceRatio: median(producerPrices.get(goodId) ?? []),
     });
   }
   return result.sort((a, b) => a.goodId.localeCompare(b.goodId));

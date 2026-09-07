@@ -7,10 +7,12 @@ import {
   newEpisodeCostTotals, perSystemSupplyState, recordEpisodeCosts, summarisePopulation,
   summariseSupplyRegimes,
 } from "../population-analysis";
+import { MARKET_ROLES } from "../types";
 import type { MarketRole } from "../types";
 import { MIN_DEMAND, TARGET_COVER } from "@/lib/constants/market-economy";
 import { CROWDING } from "@/lib/constants/population";
 import type { GoodMarketState } from "@/lib/engine/directed-logistics";
+import type { LogisticsTargetInfo } from "../cohort-analysis";
 import type { WorldMarket } from "@/lib/world/types";
 import type { TickSystem } from "@/lib/tick/rows";
 
@@ -26,39 +28,45 @@ function state(over: Partial<GoodMarketState> = {}): GoodMarketState {
     civilianDemand: 10,
     production: 0,
     capacityProduction: 0,
+    role: "consumer",
+    marginFree: false,
+    consumerDeepLine: 100,
     ...over,
   };
 }
 
 describe("classifyMarketRole", () => {
-  it("calls a market an exporter when production exceeds demand", () => {
-    expect(classifyMarketRole(state({ production: 20, demand: 10 }), 10)).toBe("exporter");
+  it("trusts the engine's producer role directly", () => {
+    expect(classifyMarketRole(state({ role: "producer", production: 20, demand: 10 }), 10)).toBe("producer");
   });
 
-  it("does not call a suppressed producer an exporter", () => {
-    // Strike or maintenance cut output — surplusDrawable excludes it, so this must too.
-    expect(
-      classifyMarketRole(state({ production: 20, demand: 10, productionSuppressed: true }), 10),
-    ).toBe("self-supplier");
+  it("trusts the engine's supplier role directly", () => {
+    expect(classifyMarketRole(state({ role: "supplier", production: 0, demand: 10 }), 10)).toBe("supplier");
   });
 
-  it("calls a producer that cannot cover its own demand a self-supplier", () => {
-    expect(classifyMarketRole(state({ production: 5, demand: 10 }), 10)).toBe("self-supplier");
+  it("trusts the engine's idle role directly", () => {
+    expect(classifyMarketRole(state({ role: "idle", production: 0, demand: 10 }), 10)).toBe("idle");
   });
 
-  it("calls a non-producer with real demand a consumer", () => {
-    expect(classifyMarketRole(state({ production: 0, demand: 10 }), 10)).toBe("consumer");
+  it("calls a producer role a producer even when its local demand is floored — the pricing guard never overrides the engine's own role", () => {
+    // A mining world producing ore nobody there consumes: floored demandRate AND the engine's
+    // own producer role. Precedence must resolve this to producer — it genuinely ships the good.
+    expect(classifyMarketRole(state({ role: "producer", production: 20, demand: 0 }), MIN_DEMAND)).toBe("producer");
   });
 
-  it("calls a market with neither production nor real demand inert", () => {
+  it("calls the engine's consumer role a part-producer when it still carries real production", () => {
+    // A world that makes something, just not enough to clear the producer or supplier bar — the
+    // old self-supplier test, against the engine's own "consumer" role rather than raw production.
+    expect(classifyMarketRole(state({ role: "consumer", production: 5, demand: 10 }), 10)).toBe("part-producer");
+  });
+
+  it("calls a non-producing engine-consumer with real demand a consumer", () => {
+    expect(classifyMarketRole(state({ role: "consumer", production: 0, demand: 10 }), 10)).toBe("consumer");
+  });
+
+  it("calls a non-producing engine-consumer with neither production nor real demand inert", () => {
     // demandRate sitting exactly on the MIN_DEMAND floor is the pricing guard, not demand.
-    expect(classifyMarketRole(state({ production: 0, demand: 0 }), MIN_DEMAND)).toBe("inert");
-  });
-
-  it("calls a producer whose local demand is floored an exporter, not inert", () => {
-    // A mining world producing ore nobody there consumes: floored demandRate AND real
-    // production. Precedence must resolve this to exporter — it genuinely ships the good.
-    expect(classifyMarketRole(state({ production: 20, demand: 0 }), MIN_DEMAND)).toBe("exporter");
+    expect(classifyMarketRole(state({ role: "consumer", production: 0, demand: 0 }), MIN_DEMAND)).toBe("inert");
   });
 });
 
@@ -94,8 +102,69 @@ describe("computeRoleCoverLevels", () => {
     expect(entry.goodId).toBe("water");
     expect(entry.countByRole.consumer).toBe(1);
     expect(entry.countByRole.inert).toBe(1);
-    expect(entry.countByRole.exporter).toBe(0);
-    expect(entry.countByRole["self-supplier"]).toBe(0);
+    expect(entry.countByRole.producer).toBe(0);
+    expect(entry.countByRole.supplier).toBe(0);
+    expect(entry.countByRole.idle).toBe(0);
+    expect(entry.countByRole["part-producer"]).toBe(0);
+  });
+
+  it("counts every classified market into exactly one role bucket, across the whole taxonomy", () => {
+    // Spans all six roles at once: a real producer, a replenished-by-inbound supplier, a
+    // producing-but-not-replenished part-producer, a full-rate consumer, a consumer whose realised
+    // use has collapsed to idle, and a market nobody wants (inert). Summing countByRole over every
+    // role and getting exactly the market count is the "no market counted twice, none dropped"
+    // invariant this instrument exists to keep.
+    const producerYields = { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 1, radioactive: 0 };
+    const systems = [
+      sys("prod", { population: 10, buildings: { water: 1 }, yields: producerYields }),
+      sys("supp", { population: 10 }),
+      sys("part", { population: 500, buildings: { water: 1 }, yields: producerYields }),
+      sys("cons", { population: 100 }),
+      sys("idl", { population: 10 }),
+      sys("dead", { population: 0 }),
+    ];
+    const markets = [
+      mkt("prod", "water", 50, 1),
+      { systemId: "supp", goodId: "water", stock: 50, anchorMult: 1, demandRate: 1, storageCapacity: 0,
+        honestUseRate: 1, steadyInbound: 1, lateInboundShare: 0 },
+      mkt("part", "water", 50, 1),
+      mkt("cons", "water", 50, 1),
+      { systemId: "idl", goodId: "water", stock: 50, anchorMult: 1, demandRate: 1, storageCapacity: 0,
+        honestUseRate: 10, realisedUse: 0.01 },
+      mkt("dead", "water", 50, MIN_DEMAND),
+    ];
+
+    const [entry] = computeRoleCoverLevels(systems, markets);
+    const total = MARKET_ROLES.reduce((n, role) => n + entry.countByRole[role], 0);
+
+    expect(total).toBe(markets.length);
+    expect(entry.countByRole.producer).toBe(1);
+    expect(entry.countByRole.supplier).toBe(1);
+    expect(entry.countByRole["part-producer"]).toBe(1);
+    expect(entry.countByRole.consumer).toBe(1);
+    expect(entry.countByRole.idle).toBe(1);
+    expect(entry.countByRole.inert).toBe(1);
+  });
+
+  it("keeps a producing-but-replenished world in supplier, never double-counted as part-producer", () => {
+    // Same production figure the self-supplier/part-producer test below reads (2.0, against a
+    // population-500 use of 3.5) — but now topped up by 2 units/cycle of steady, punctual inbound,
+    // which clears the SUPPLIER_REPLENISHMENT bar (0.9 × 3.5 = 3.15 ≤ 2.0 + 2). The engine's own
+    // role for this market is "supplier"; the harness must trust it and never ALSO count the same
+    // row's real production toward part-producer.
+    const producerYields = { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 1, radioactive: 0 };
+    const systems = [sys("s1", { population: 500, buildings: { water: 1 }, yields: producerYields })];
+    const markets = [{
+      systemId: "s1", goodId: "water", stock: 50, anchorMult: 1, demandRate: 1, storageCapacity: 0,
+      steadyInbound: 2, lateInboundShare: 0,
+    }];
+
+    const liveInfo = marketRolesByKey(systems, markets).get("s1|water");
+    expect(liveInfo?.role).toBe("supplier"); // premise: real production, but the engine calls it supplier
+
+    const [entry] = computeRoleCoverLevels(systems, markets);
+    expect(entry.countByRole.supplier).toBe(1);
+    expect(entry.countByRole["part-producer"]).toBe(0);
   });
 
   it("is unchanged when pinned to the partition it would have computed itself", () => {
@@ -112,21 +181,21 @@ describe("computeRoleCoverLevels", () => {
   });
 
   it("holds cohort membership fixed against the pinned partition, not the live classification", () => {
-    // The classifier reads `state.demand` in its exporter branch, so membership moves in any stage
-    // that changes the demand figure — and a cover median then moves with the cohort MIX rather than
-    // with anything about supply. Pinning is what makes two arms comparable. The fixture is a
-    // staffed extractor on a live water deposit — a genuine exporter (the scoping test below pins
+    // The classifier reads `state.role`, which itself moves with the demand figure, so membership
+    // moves in any stage that changes it — and a cover median then moves with the cohort MIX rather
+    // than with anything about supply. Pinning is what makes two arms comparable. The fixture is a
+    // staffed extractor on a live water deposit — a genuine producer (the scoping test below pins
     // the arithmetic) — so the pin demonstrably overrides a real producer classification.
     const producerYields = { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 1, radioactive: 0 };
     const systems = [sys("s1", { population: 10, buildings: { water: 1 }, yields: producerYields })];
     const markets = [mkt("s1", "water", 50, 1)];
 
     const liveInfo = marketRolesByKey(systems, markets).get("s1|water");
-    expect(liveInfo?.role).toBe("exporter"); // non-vacuous: the pin overrides a role really held
+    expect(liveInfo?.role).toBe("producer"); // non-vacuous: the pin overrides a role really held
 
     const pinned = computeRoleCoverLevels(systems, markets, new Map([["s1|water", "consumer"]]));
     expect(pinned[0].countByRole.consumer).toBe(1);
-    expect(pinned[0].countByRole.exporter).toBe(0);
+    expect(pinned[0].countByRole.producer).toBe(0);
   });
 
   it("refuses a pin that matches no live market — another world's partition", () => {
@@ -154,9 +223,9 @@ describe("computeRoleCoverLevels", () => {
   it("reports 0 rather than NaN for a role with no markets", () => {
     const [entry] = computeRoleCoverLevels([sys("s1")], [mkt("s1", "water", 50, 10)]);
 
-    expect(entry.medianCoverByRole.exporter).toBe(0);
-    expect(Number.isNaN(entry.medianCoverByRole.exporter)).toBe(false);
-    expect(entry.exporterMedianPriceRatio).toBe(0);
+    expect(entry.medianCoverByRole.producer).toBe(0);
+    expect(Number.isNaN(entry.medianCoverByRole.producer)).toBe(false);
+    expect(entry.producerMedianPriceRatio).toBe(0);
   });
 
   it("counts an empty consumer market in consumerEmptyFrac", () => {
@@ -172,27 +241,27 @@ describe("computeRoleCoverLevels", () => {
     expect(entry.consumerEmptyFrac).toBe(0.5);
   });
 
-  it("keeps each role's median cover and the exporter price ratio scoped to only its own markets", () => {
+  it("keeps each role's median cover and the producer price ratio scoped to only its own markets", () => {
     // A single fully-staffed water extractor: population 10 covers its 10-unit labour
     // demand exactly (LABOUR_BY_TIER[0].unskilled), so it produces at full rate — 2.0
     // (OUTPUT_PER_UNIT.water at ECONOMY_SCALE 1) against a population-10 civilian want of
-    // only 0.007 × 10 = 0.07 (nothing else consumes water) — a real exporter, not one
+    // only 0.007 × 10 = 0.07 (nothing else consumes water) — a real producer, not one
     // merely sitting on the MIN_DEMAND floor.
     const producerYields = { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 1, radioactive: 0 };
     const systems = [
-      sys("exp-a", { population: 10, buildings: { water: 1 }, yields: producerYields }),
-      sys("exp-b", { population: 10, buildings: { water: 1 }, yields: producerYields }),
+      sys("prod-a", { population: 10, buildings: { water: 1 }, yields: producerYields }),
+      sys("prod-b", { population: 10, buildings: { water: 1 }, yields: producerYields }),
       // Same extractor and the same fixed 2.0 production, but population 500 lifts
-      // civilian consumption to 0.007 × 500 = 3.5 — still a producer, just not a net
-      // exporter, so this must land as self-supplier.
-      sys("self", { population: 500, buildings: { water: 1 }, yields: producerYields }),
+      // civilian consumption to 0.007 × 500 = 3.5 — still producing, just not enough to be a
+      // producer and with no inbound to qualify as a supplier, so this must land as part-producer.
+      sys("part", { population: 500, buildings: { water: 1 }, yields: producerYields }),
       // No buildings anywhere ⇒ production 0; demandRate above MIN_DEMAND makes it a consumer.
       sys("con"),
     ];
     // demandRate 1 everywhere makes every market's targetStock exactly TARGET_COVER (the
     // same trick market-analysis.test.ts's fixtures use), so stock alone fixes each
-    // market's cover, and — for the exporters — its price ratio too (k=1 default elasticity
-    // on water ⇒ price ratio = targetStock / stock = 1 / cover). exp-a and exp-b are chosen
+    // market's cover, and — for the producers — its price ratio too (k=1 default elasticity
+    // on water ⇒ price ratio = targetStock / stock = 1 / cover). prod-a and prod-b are chosen
     // so the cover set {2.0, 0.8} and the price-ratio set {0.5, 1.25} are DIFFERENT sets with
     // DIFFERENT medians (1.4 vs 0.875) — an implementation that pushed a cover value into the
     // price list, or vice versa, would fail at least one of the two assertions below instead
@@ -200,29 +269,29 @@ describe("computeRoleCoverLevels", () => {
     // price curve's graded band (floor 0.5, ceiling 2.0 on water) rather than on a clamp
     // boundary, unlike 0.5 and 2.0 which both sit exactly on one.
     const markets = [
-      mkt("exp-a", "water", TARGET_COVER * 2, 1),   // cover 2.0, price ratio 0.5
-      mkt("exp-b", "water", TARGET_COVER * 0.8, 1), // cover 0.8, price ratio 1.25
-      mkt("self", "water", TARGET_COVER * 0.8, 1),  // cover 0.8
-      mkt("con", "water", TARGET_COVER * 0.2, 1),   // cover 0.2
+      mkt("prod-a", "water", TARGET_COVER * 2, 1),   // cover 2.0, price ratio 0.5
+      mkt("prod-b", "water", TARGET_COVER * 0.8, 1), // cover 0.8, price ratio 1.25
+      mkt("part", "water", TARGET_COVER * 0.8, 1),   // cover 0.8
+      mkt("con", "water", TARGET_COVER * 0.2, 1),    // cover 0.2
     ];
 
     const [water] = computeRoleCoverLevels(systems, markets);
 
-    expect(water.countByRole.exporter).toBe(2);
-    expect(water.countByRole["self-supplier"]).toBe(1);
+    expect(water.countByRole.producer).toBe(2);
+    expect(water.countByRole["part-producer"]).toBe(1);
     expect(water.countByRole.consumer).toBe(1);
 
-    // Median of {2.0, 0.8} (1.4) — distinct from the self-supplier's 0.8, the consumer's
+    // Median of {2.0, 0.8} (1.4) — distinct from the part-producer's 0.8, the consumer's
     // 0.2, and the price-ratio median below, so either list absorbing the wrong market's
     // values would fail this.
-    expect(water.medianCoverByRole.exporter).toBeCloseTo(1.4, 5);
-    expect(water.medianCoverByRole["self-supplier"]).toBeCloseTo(0.8, 5);
+    expect(water.medianCoverByRole.producer).toBeCloseTo(1.4, 5);
+    expect(water.medianCoverByRole["part-producer"]).toBeCloseTo(0.8, 5);
     expect(water.medianCoverByRole.consumer).toBeCloseTo(0.2, 5);
 
-    // Median of {0.5, 1.25} across the exporter markets only (0.875) — distinct from the
-    // exporter cover median (1.4) above, so a cover value crossed into this list, or vice
+    // Median of {0.5, 1.25} across the producer markets only (0.875) — distinct from the
+    // producer cover median (1.4) above, so a cover value crossed into this list, or vice
     // versa, changes one assertion without the other.
-    expect(water.exporterMedianPriceRatio).toBeCloseTo(0.875, 5);
+    expect(water.producerMedianPriceRatio).toBeCloseTo(0.875, 5);
   });
 
   it("separates a genuinely-empty inert market from one with real sub-floor demand", () => {
@@ -290,35 +359,35 @@ describe("computeRoleCoverLevels", () => {
 
   it("does not read a cover off a market with no target stock to divide by", () => {
     // targetStock is TARGET_COVER × demandRate, so a row whose demand rate is 0 has no target at
-    // all. An exporter is the shape that reaches the cover fold with one — it is classified on its
+    // all. A producer is the shape that reaches the cover fold with one — it is classified on its
     // production, not its demand rate — and dividing by that zero pushes Infinity into the cover
     // list, which is not a cover reading at all.
     const producerYields = { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 1, radioactive: 0 };
-    const systems = [sys("exp", { population: 10, buildings: { water: 1 }, yields: producerYields })];
-    const markets = [mkt("exp", "water", 50, 0)];
+    const systems = [sys("prod", { population: 10, buildings: { water: 1 }, yields: producerYields })];
+    const markets = [mkt("prod", "water", 50, 0)];
 
     const [entry] = computeRoleCoverLevels(systems, markets);
-    expect(entry.countByRole.exporter).toBe(1); // premise: the row really did reach the cover fold
-    for (const role of ["exporter", "self-supplier", "consumer"] as const) {
+    expect(entry.countByRole.producer).toBe(1); // premise: the row really did reach the cover fold
+    for (const role of ["producer", "supplier", "consumer", "idle", "part-producer"] as const) {
       expect(Number.isFinite(entry.medianCoverByRole[role])).toBe(true);
     }
   });
 
   it("counts only consumer markets as empty, not every market sitting at its band floor", () => {
     // consumerEmptyFrac is a claim about the markets that are meant to hold stock for people.
-    // An exporter drawn down to its floor is a supply story, not an empty shop.
+    // A producer drawn down to its floor is a supply story, not an empty shop.
     const producerYields = { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 1, radioactive: 0 };
     const systems = [
-      sys("exp", { population: 10, buildings: { water: 1 }, yields: producerYields }),
+      sys("prod", { population: 10, buildings: { water: 1 }, yields: producerYields }),
       sys("con", { population: 100 }),
     ];
     const markets = [
-      mkt("exp", "water", 0, 1),          // exporter, drawn flat
+      mkt("prod", "water", 0, 1),          // producer, drawn flat
       mkt("con", "water", TARGET_COVER, 1), // consumer, well stocked
     ];
 
     const [entry] = computeRoleCoverLevels(systems, markets);
-    expect(entry.countByRole.exporter).toBe(1);
+    expect(entry.countByRole.producer).toBe(1);
     expect(entry.countByRole.consumer).toBe(1);
     expect(entry.consumerEmptyFrac).toBe(0);
   });
@@ -344,6 +413,13 @@ describe("computeRoleCoverLevels", () => {
 });
 
 describe("logisticsTargetsByKey", () => {
+  /** Reads the want line, failing loudly (rather than reading `undefined` as 0) if the key is missing. */
+  function wantOf(targets: Map<string, LogisticsTargetInfo>, key: string): number {
+    const info = targets.get(key);
+    if (!info) throw new Error(`no logistics target for ${key}`);
+    return info.logisticsTarget;
+  }
+
   it("reads a warehousing target for every market the systems it was given actually hold", () => {
     // The deficit share is measured against these targets; an empty map silently turns that
     // whole reading into "no deficit anywhere".
@@ -352,8 +428,8 @@ describe("logisticsTargetsByKey", () => {
 
     const targets = logisticsTargetsByKey(systems, markets);
     expect(targets.size).toBe(2);
-    expect(targets.get("s1|water")).toBeGreaterThan(0);
-    expect(targets.get("s2|water")).toBeGreaterThan(0);
+    expect(wantOf(targets, "s1|water")).toBeGreaterThan(0);
+    expect(wantOf(targets, "s2|water")).toBeGreaterThan(0);
   });
 
   it("skips a system with no market rows rather than inventing targets for it", () => {
@@ -361,6 +437,36 @@ describe("logisticsTargetsByKey", () => {
     const targets = logisticsTargetsByKey(systems, [mkt("s1", "water", 50, 10)]);
 
     expect([...targets.keys()]).toEqual(["s1|water"]);
+  });
+
+  it("scales the owning faction's want and give lines by its stockpile scale, and leaves an independent's unscaled", () => {
+    const systems = [sys("owned", { factionId: "f1" }), sys("independent", { factionId: null })];
+    const markets = [mkt("owned", "water", 50, 10), mkt("independent", "water", 50, 10)];
+
+    const unscaled = logisticsTargetsByKey(systems, markets);
+    const scaled = logisticsTargetsByKey(systems, markets, new Map([["f1", 1.5]]));
+
+    expect(wantOf(scaled, "owned|water")).toBeCloseTo(wantOf(unscaled, "owned|water") * 1.5, 9);
+    expect(scaled.get("owned|water")?.donorReserve).toBeCloseTo(
+      (unscaled.get("owned|water")?.donorReserve ?? 0) * 1.5, 9,
+    );
+    // Set on f1, but the independent system has no treasury row to read regardless of what any
+    // faction's own scale is set to.
+    expect(wantOf(scaled, "independent|water")).toBeCloseTo(wantOf(unscaled, "independent|water"), 9);
+  });
+
+  it("carries the give line, margin-free flag and role inputs the matcher's own surplusDrawable needs", () => {
+    // Population 0 ⇒ no civilian demand at all ⇒ classifyLogisticsRole's use<=0 branch ⇒ role
+    // "consumer" with every line 0 — the one case where every field on the info is pinned to a
+    // known value, so this reads as a real assertion rather than "some number came back".
+    const systems = [sys("s1", { population: 0 })];
+    const markets = [mkt("s1", "water", 50, 10)];
+
+    const info = logisticsTargetsByKey(systems, markets).get("s1|water");
+    expect(info).toEqual({
+      logisticsTarget: 0, donorReserve: 0, marginFree: false, demand: 0, production: 0,
+      productionSuppressed: false, role: "consumer", capacityProduction: 0, consumerDeepLine: 0,
+    });
   });
 });
 

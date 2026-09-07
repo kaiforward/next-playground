@@ -56,8 +56,10 @@ describe("runTickHarness: the role partition", () => {
 
     const pinned = await runTickHarness({ ...CONFIG, pinnedRoles: allConsumer });
     for (const entry of pinned.roleCoverLevels) {
-      expect(entry.countByRole.exporter).toBe(0);
-      expect(entry.countByRole["self-supplier"]).toBe(0);
+      expect(entry.countByRole.producer).toBe(0);
+      expect(entry.countByRole.supplier).toBe(0);
+      expect(entry.countByRole.idle).toBe(0);
+      expect(entry.countByRole["part-producer"]).toBe(0);
       expect(entry.countByRole.inert).toBe(0);
       expect(entry.countByRole.consumer).toBeGreaterThan(0);
     }

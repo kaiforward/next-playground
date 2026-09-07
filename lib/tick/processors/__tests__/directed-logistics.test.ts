@@ -406,6 +406,24 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     expect(world.stockUpdates.get("mA")).toBeCloseTo(95 - dispatched, 6);
   });
 
+  it("dispatches a bigger fill once the deficit's own faction's stockpileScale widens its want line", async () => {
+    // A's stock is generous at either scale — the donor's own reserve widens with the same
+    // stockpileScale, so a tight donor fixture would cap the 1.5x run on drawable rather than on
+    // B's want line, which is the thing this test means to isolate.
+    const systems = [
+      { systemId: "A", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mA", "food", 5000, 1000)] },
+      { systemId: "B", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10, 20)] },
+    ];
+    const atK1 = new MemoryDirectedLogisticsWorld(systems);
+    await runDirectedLogisticsProcessor(atK1, { tick: DUE_TICK }, baseParams(() => 1));
+    const atK15 = new MemoryDirectedLogisticsWorld(systems);
+    await runDirectedLogisticsProcessor(atK15, { tick: DUE_TICK }, baseParams(() => 1, {
+      stockpileScaleByFaction: new Map([["f1", 1.5]]),
+    }));
+    expect(atK1.pendingArrivals[0].quantity).toBeCloseTo(FOOD_TARGET - 10, 6);
+    expect(atK15.pendingArrivals[0].quantity).toBeCloseTo(1.5 * FOOD_TARGET - 10, 6);
+  });
+
   it("dispatches a fractional transfer without quantizing (scale-invariance guard)", async () => {
     // The engine matcher works in continuous goods units; the processor must dispatch the
     // transfer as-is. A fractional deficit stock (10.3) makes the shortfall fractional
@@ -812,5 +830,102 @@ describe("runDirectedLogisticsProcessor (body)", () => {
       // The divergence the fix exists to protect: identical fixture, only the switch differs.
       expect(oreReceivedBy(live, "R1")).not.toBeCloseTo(oreReceivedBy(pinned, "R1"), 3);
     });
+  });
+});
+
+// ── The drop rule's counter ───────────────────────────────────────
+// A supplier that sits short run after run with nothing credited loses the role, whatever its
+// rolling averages still say. The counter is what remembers that across runs, so it is read back
+// from one processor run and fed into the next exactly as the world layer feeds it.
+
+describe("runDirectedLogisticsProcessor: the supplier drop counter", () => {
+  const DROP_USE = 4; // the row's use figure — every line below is denominated in it
+  const DROP_STOCK = 1; // far under 0.8 × SUPPLIER_WANT_COVER × use, so the market is short every run
+  const MARKET_ID = "mS";
+
+  /** A world of ONE system, so no donor exists and nothing is ever dispatched or credited to it:
+   *  the only thing moving across runs is the counter itself. Its part-production carries the
+   *  replenishment test on its own (0.9 × use, no inbound), which is what makes it a supplier
+   *  without any late-share reading. */
+  function shortSupplierWorld(over: Partial<SystemLogisticsRow["markets"][number]> = {}) {
+    return new MemoryDirectedLogisticsWorld([{
+      systemId: "S", factionId: "f1", population: FIXTURE_POP, buildings: {},
+      yields: emptyResourceVector(), extractionEff: unitResourceVector(),
+      markets: [{
+        id: MARKET_ID, goodId: "ore", stock: DROP_STOCK, anchorMult: 1,
+        demandRate: rateFor("ore"), storageCapacity: 0,
+        honestUseRate: DROP_USE,
+        realisedProductionRate: DIRECTED_LOGISTICS.SUPPLIER_REPLENISHMENT * DROP_USE,
+        ...over,
+      }],
+    }]);
+  }
+
+  /** One run against a market carrying `carried` short runs; returns this run's own writes. */
+  async function runWith(
+    carried: number | undefined,
+    over: Partial<SystemLogisticsRow["markets"][number]> = {},
+  ): Promise<{ counter: number | undefined; shortfall: number | undefined }> {
+    const world = shortSupplierWorld({ supplierShortRuns: carried, ...over });
+    await runDirectedLogisticsProcessor(world, { tick: DUE_TICK }, baseParams(() => 1));
+    return {
+      counter: world.supplierShortRunsUpdates.get(MARKET_ID),
+      shortfall: world.unservedShortfallUpdates.get(MARKET_ID),
+    };
+  }
+
+  // What this market still wants of its own want line — the observable the two roles differ on,
+  // since no donor exists and every unserved deficit reports its whole want.
+  const SUPPLIER_WANT = DIRECTED_LOGISTICS.SUPPLIER_WANT_COVER * DROP_USE - DROP_STOCK;
+  const CONSUMER_WANT = DIRECTED_LOGISTICS.WAREHOUSE_COVER * DROP_USE - DROP_STOCK;
+
+  it("advances one run at a time and then latches, so the role stays gone while nothing arrives", async () => {
+    const counters: number[] = [];
+    const wants: Array<number | undefined> = [];
+    let carried = 0;
+    for (let run = 0; run < 6; run++) {
+      const written = await runWith(carried);
+      carried = written.counter ?? carried;
+      counters.push(carried);
+      wants.push(written.shortfall);
+    }
+    // Four short, uncredited runs reach SUPPLIER_DROP_RUNS; the fifth and sixth hold there rather
+    // than clearing, which is what keeps a cut-off world a consumer instead of pulsing back into
+    // the role every other run.
+    expect(counters).toEqual([1, 2, 3, 4, DIRECTED_LOGISTICS.SUPPLIER_DROP_RUNS, DIRECTED_LOGISTICS.SUPPLIER_DROP_RUNS]);
+    // ...and from the fifth run on the lines are the consumer's: it asks back to WAREHOUSE_COVER
+    // cycles of its use, not to the supplier's twelve.
+    for (const want of wants.slice(0, 4)) expect(want).toBeCloseTo(SUPPLIER_WANT, 6);
+    expect(wants[4]).toBeCloseTo(CONSUMER_WANT, 6);
+    expect(wants[5]).toBeCloseTo(CONSUMER_WANT, 6);
+    expect(CONSUMER_WANT).toBeGreaterThan(SUPPLIER_WANT); // the fixture premise
+  });
+
+  it("clears the counter on a run that credited the market, however short it still is", async () => {
+    // Two short runs, then one whose cycle the arrivals stage credited: the market is still short
+    // and still a supplier, and the count starts again from nothing. The credit is read off
+    // `inboundCreditedLastCycle` — the record the economy's fold leaves on the row earlier in the
+    // same tick — because the live accumulator that fold consumed is always zero by the time this
+    // processor runs. That stage order is pinned end to end in `lib/world/__tests__/tick.test.ts`.
+    expect((await runWith(undefined)).counter).toBe(1);
+    expect((await runWith(1)).counter).toBe(2);
+    expect((await runWith(2, { inboundCreditedLastCycle: 6 })).counter).toBe(0);
+    // And the run after the credited one starts the count over rather than resuming at three.
+    expect((await runWith(0)).counter).toBe(1);
+    // The credited run is still a supplier short of its own want — the reset is the credit, not a
+    // change of role or a comfortable shelf.
+    expect((await runWith(2, { inboundCreditedLastCycle: 6 })).shortfall).toBeCloseTo(SUPPLIER_WANT, 6);
+    // And a credit is the only thing that lifts a LATCHED counter: a world that lost the role gets
+    // it back when its supply comes back, not because it waited.
+    expect((await runWith(DIRECTED_LOGISTICS.SUPPLIER_DROP_RUNS, { inboundCreditedLastCycle: 6 })).counter).toBe(0);
+  });
+
+  it("leaves a comfortable supplier's counter alone rather than writing a zero every run", async () => {
+    // Stock above the deficit line: nothing to count, and no update at all, so an untouched market
+    // keeps its identity through the world layer's patch.
+    const written = await runWith(undefined, {
+      stock: DIRECTED_LOGISTICS.SUPPLIER_WANT_COVER * DROP_USE,
+    });
+    expect(written.counter).toBeUndefined();
   });
 });

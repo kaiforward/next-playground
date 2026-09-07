@@ -12,14 +12,18 @@ import type {
   SystemLogisticsData,
   TransitRow,
 } from "@/lib/types/api";
-import type { World } from "@/lib/world/types";
+import type { World, WorldSystem } from "@/lib/world/types";
+import type { ResourceVector } from "@/lib/types/game";
 import { yieldsOf, effOf } from "@/lib/engine/resources";
 import { capacityGoodRates } from "@/lib/engine/industry";
 import { useRatesByGood } from "@/lib/engine/honest-demand";
 import {
   aggregateLogisticsFlows,
   buildLogisticsRows,
+  type LogisticsRoleInfo,
 } from "@/lib/engine/logistics-readout";
+import { toGoodMarketStates, stockpileScaleFor } from "@/lib/tick/processors/good-market-state";
+import { marketRowsBySystem } from "@/lib/world/tick";
 
 /**
  * Returns the directed-logistics map-overlay edge set: one edge per (lane, direction) PHYSICALLY
@@ -81,6 +85,47 @@ function buildTransitRows(
 }
 
 /**
+ * The role and its deciding cycle figures for every good this system has a market row for — read
+ * through the same shared derivation (`toGoodMarketStates`) the tick and the harness read, so the
+ * panel can never quote a different give/want line than the matcher trades on. The cycle figures
+ * are `donorReserve`/`logisticsTarget` divided by `demand`; a market with no demand (never a sink)
+ * carries no cycle figure rather than a divide-by-zero `Infinity`.
+ */
+function logisticsRoleInfoByGood(
+  world: World,
+  system: WorldSystem,
+  buildings: Record<string, number>,
+  yields: ResourceVector,
+  extractionEff: ResourceVector,
+): Map<string, LogisticsRoleInfo> {
+  // Filtered before the rows are shaped, not after: `marketRowsBySystem` projects every market row
+  // in the galaxy, and this read wants one system's.
+  const marketRows =
+    marketRowsBySystem(world.markets.filter((m) => m.systemId === system.id)).get(system.id) ?? [];
+  const stockpileScaleByFaction = new Map(
+    world.treasuries.map((t) => [t.factionId, t.stockpileScale ?? 1]),
+  );
+  const states = toGoodMarketStates(
+    { buildings, population: system.population, yields, extractionEff, markets: marketRows },
+    { stockpileScale: stockpileScaleFor(system.factionId, stockpileScaleByFaction) },
+  );
+  return new Map(
+    states.map((s) => [
+      s.goodId,
+      {
+        role: s.role,
+        givesDownToCycles: s.demand > 0 ? s.donorReserve / s.demand : undefined,
+        wantCycles: s.demand > 0 ? s.logisticsTarget / s.demand : undefined,
+        steadyInbound: s.steadyInbound,
+        realisedUse: s.realisedUse,
+        useRate: s.demand,
+        lateInboundShare: s.lateInboundShare,
+      } satisfies LogisticsRoleInfo,
+    ]),
+  );
+}
+
+/**
  * Per-system Logistics tab data: internal production/consumption rates +
  * external imports/exports (split by flow type) + the volume-over-time series.
  */
@@ -130,7 +175,8 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
   // Dividing by the logistics (or economy) cycle count instead is correct only while
   // that cadence equals REFERENCE_INTERVAL. See buildLogisticsRows' docstring.
   const referenceCyclesInWindow = TRADE_SIMULATION.FLOW_HISTORY_TICKS / REFERENCE_INTERVAL;
-  const model = buildLogisticsRows(prodCon, flowsByGood, referenceCyclesInWindow, inputDemandByGood);
+  const roleInfoByGood = logisticsRoleInfoByGood(world, system, buildings, yields, extractionEff);
+  const model = buildLogisticsRows(prodCon, flowsByGood, referenceCyclesInWindow, inputDemandByGood, roleInfoByGood);
 
   return {
     visibility: "visible",

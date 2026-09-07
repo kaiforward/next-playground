@@ -14,6 +14,7 @@ import { VolumeSparkline } from "@/components/system/volume-sparkline";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TermLabel } from "@/components/ui/term-label";
+import { StatList, StatRow } from "@/components/ui/stat-row";
 import { TIER_COLOR, TIER_LABEL, pixiHexToCss } from "@/lib/constants/good-colors";
 import { useLinkComponent } from "@/components/ui/link-provider";
 import { formatDuration } from "@/lib/utils/calendar";
@@ -86,32 +87,67 @@ function externalSegments(g: LogisticsGoodRow): BarSegment[] {
   ];
 }
 
-/** Internal bar popover body: the produces/consumes totals and the civilian/manufacturing consumption split. */
+/** Internal bar popover body: the role word and the cycle figures that decided it, then the
+ *  produces/consumes totals and the civilian/manufacturing consumption split. The role block
+ *  reuses the same StatList/StatRow markup the rest of the panel's stat sections use — every
+ *  row with demand shows the give-down-to and want lines; a supplier additionally shows the two
+ *  numbers that qualified it (steady inbound, late deliveries), and an idle row shows realised
+ *  use against the use figure its role was decided on — the gated rate it has fallen away from,
+ *  not the ungated production/consumption totals below. A consumer or producer row shows neither,
+ *  since nothing else decided its role. Steady inbound is shown as a per-cycle rate rather than a
+ *  percentage of full-rate use: unlike late deliveries, that ratio can run past 100% (a supplier
+ *  fed faster than it uses), which a clamped percentage would misstate. */
 function internalPopoverBody(g: LogisticsGoodRow): React.ReactNode {
   const totalConsumption = g.consumption + g.inputDemand;
+  // The classification's own denominator, not the ungated `consumption + inputDemand` beside it:
+  // the share has to be the one the role was decided on, and against the ungated figure a world
+  // drawing everything it uses can read over 100%.
+  const fullRate = g.useRate ?? 0;
   return (
-    <dl className="space-y-0.5 whitespace-nowrap">
-      <div className="flex justify-between gap-3">
-        <dt className="text-text-tertiary">Produces</dt>
-        <dd className="font-mono text-status-green-light">{g.production.toFixed(1)}/cyc</dd>
+    <div className="space-y-1.5">
+      <div className="text-text-secondary">
+        <TermLabel id={g.role} />
       </div>
-      <div className="flex justify-between gap-3">
-        <dt className="text-text-tertiary">Consumes</dt>
-        <dd className="font-mono text-status-red-light">{totalConsumption.toFixed(1)}/cyc</dd>
-      </div>
-      {g.inputDemand > 0 && (
-        <>
-          <div className="flex justify-between gap-3 pl-2">
-            <dt className="text-text-tertiary">&middot; civilian</dt>
-            <dd className="font-mono text-text-secondary">{g.consumption.toFixed(1)}/cyc</dd>
-          </div>
-          <div className="flex justify-between gap-3 pl-2">
-            <dt className="text-text-tertiary">&middot; manufacturing</dt>
-            <dd className="font-mono text-text-secondary">{g.inputDemand.toFixed(1)}/cyc</dd>
-          </div>
-        </>
-      )}
-    </dl>
+      <StatList className="space-y-0">
+        {g.givesDownToCycles !== undefined && (
+          <StatRow label="Gives down to">{`${g.givesDownToCycles.toFixed(1)} cycles`}</StatRow>
+        )}
+        {g.wantCycles !== undefined && <StatRow label="Wants">{`${g.wantCycles.toFixed(1)} cycles`}</StatRow>}
+        {g.role === "supplier" && g.steadyInbound !== undefined && (
+          <StatRow label="Steady inbound">{`${g.steadyInbound.toFixed(1)}/cyc`}</StatRow>
+        )}
+        {g.role === "supplier" && g.lateInboundShare !== undefined && (
+          <StatRow label="Late deliveries">{`${Math.round(g.lateInboundShare * 100)}%`}</StatRow>
+        )}
+        {g.role === "idle" && g.realisedUse !== undefined && fullRate > 0 && (
+          <StatRow label="Realised use">
+            {`${Math.round((g.realisedUse / fullRate) * 100)}% of full rate`}
+          </StatRow>
+        )}
+      </StatList>
+      <dl className="space-y-0.5 whitespace-nowrap">
+        <div className="flex justify-between gap-3">
+          <dt className="text-text-tertiary">Produces</dt>
+          <dd className="font-mono text-status-green-light">{g.production.toFixed(1)}/cyc</dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt className="text-text-tertiary">Consumes</dt>
+          <dd className="font-mono text-status-red-light">{totalConsumption.toFixed(1)}/cyc</dd>
+        </div>
+        {g.inputDemand > 0 && (
+          <>
+            <div className="flex justify-between gap-3 pl-2">
+              <dt className="text-text-tertiary">&middot; civilian</dt>
+              <dd className="font-mono text-text-secondary">{g.consumption.toFixed(1)}/cyc</dd>
+            </div>
+            <div className="flex justify-between gap-3 pl-2">
+              <dt className="text-text-tertiary">&middot; manufacturing</dt>
+              <dd className="font-mono text-text-secondary">{g.inputDemand.toFixed(1)}/cyc</dd>
+            </div>
+          </>
+        )}
+      </dl>
+    </div>
   );
 }
 

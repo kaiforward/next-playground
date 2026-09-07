@@ -41,6 +41,20 @@ export interface MarketRowForLogistics {
    *  matcher itself never reads it as a decision input. See `WorldMarket.unservedShortfall` for the
    *  full contract. */
   unservedShortfall?: number;
+  /** Rolling realised-use rate; see `WorldMarket.realisedUse`. Missing ⇒ unknown, never 0. */
+  realisedUse?: number;
+  /** Rolling steady-inbound rate; see `WorldMarket.steadyInbound`. Missing ⇒ unknown, never 0. */
+  steadyInbound?: number;
+  /** Rolling late-inbound share; see `WorldMarket.lateInboundShare`. Missing ⇒ unknown, never 0. */
+  lateInboundShare?: number;
+  /** Consecutive short supplier runs; see `WorldMarket.supplierShortRuns`. Missing ⇒ 0. */
+  supplierShortRuns?: number;
+  /** Inbound credited over the cycle the economy has just folded; see
+   *  `WorldMarket.inboundCreditedLastCycle`. Missing ⇒ 0. Read only by the drop rule, which needs
+   *  "was anything credited here at all over the last cycle", a question the rolling `steadyInbound`
+   *  average cannot answer — it decays but never reaches 0 — and which the live `inboundSinceFold`
+   *  accumulator cannot answer either, the economy having zeroed it earlier on this very tick. */
+  inboundCreditedLastCycle?: number;
 }
 
 /** One system's logistics-relevant state. */
@@ -79,6 +93,16 @@ export interface UnservedShortfallUpdate {
   unservedShortfall: number;
 }
 
+export interface SupplierShortRunsUpdate {
+  id: string;
+  /** This run's consecutive-short-run count for the drop rule: the prior count plus one where the
+   *  market held the supplier role, was classified short and had nothing credited since the last
+   *  fold; HELD at `SUPPLIER_DROP_RUNS` once it gets there, so a world cut off from its supply stays
+   *  a consumer instead of pulsing back into the role; and `0` on any run that credited the market
+   *  or found it comfortable. Only a credit lifts the latch. */
+  supplierShortRuns: number;
+}
+
 /** One lane's booked/blocked load after this run's matching — `RouteBooker.loads()` written back
  *  for EVERY lane in the network, zero for one no faction touched this run (the reset: a lane
  *  loaded last run and left idle this run must read back to 0, not keep a stale figure). */
@@ -104,6 +128,8 @@ export interface DirectedLogisticsWorld {
   applyFundingBoundUpdates(updates: LogisticsFundingBoundUpdate[]): Promise<void>;
   /** Apply changed structural-unservable assessments without rewriting stock. */
   applyUnservedShortfallUpdates(updates: UnservedShortfallUpdate[]): Promise<void>;
+  /** Apply changed drop-rule counters without rewriting stock. */
+  applySupplierShortRunsUpdates(updates: SupplierShortRunsUpdate[]): Promise<void>;
   /** Write this run's booked/blocked load for every lane in the network. */
   applyLaneLoadUpdates(updates: LaneLoadUpdate[]): Promise<void>;
   /** Append dispatched hauls to the scheduled-freight ledger. */

@@ -263,7 +263,7 @@ export function formatTable(results: HarnessResults): string {
 
   const inertTotal = roleCoverLevels.reduce((n, e) => n + e.countByRole.inert, 0);
   const marketTotal = roleCoverLevels.reduce(
-    (n, e) => n + e.countByRole.exporter + e.countByRole["self-supplier"] + e.countByRole.consumer + e.countByRole.inert,
+    (n, e) => n + MARKET_ROLES.reduce((sum, role) => sum + e.countByRole[role], 0),
     0,
   );
   if (marketTotal > 0) {
@@ -294,7 +294,9 @@ export function formatTable(results: HarnessResults): string {
   );
 
   // Cover by market role — separates "producers drained flat" from "consumers never served",
-  // which the galaxy-wide median cannot distinguish because it medians both together.
+  // which the galaxy-wide median cannot distinguish because it medians both together. The four
+  // logistics roles (producer/supplier/consumer/idle) are the matcher's own; part-producer and
+  // inert are this report's production-only split of the engine's "consumer" role.
   if (roleCoverLevels.length > 0) {
     lines.push("");
     lines.push("Cover & price by market role (end of simulation):");
@@ -302,18 +304,23 @@ export function formatTable(results: HarnessResults): string {
     const cell = (n: number, med: number): string => (n === 0 ? "-" : `${n}/${med.toFixed(2)}`);
 
     lines.push(...renderTable(
-      ["Good", "Exp n/med", "Self n/med", "Cons n/med", "Cons empty%", "Inert n", "Exp price x"],
-      [16, 11, 11, 11, 12, 12, 12],
+      [
+        "Good", "Prod n/med", "Supp n/med", "Cons n/med", "Idle n/med", "Part n/med",
+        "Cons empty%", "Inert n", "Prod price x",
+      ],
+      [14, 10, 10, 10, 10, 10, 12, 10, 12],
       [...roleCoverLevels]
         .sort((a, b) => byDispersion(a.goodId, b.goodId))
         .map((e) => [
           e.goodId,
-          cell(e.countByRole.exporter, e.medianCoverByRole.exporter),
-          cell(e.countByRole["self-supplier"], e.medianCoverByRole["self-supplier"]),
+          cell(e.countByRole.producer, e.medianCoverByRole.producer),
+          cell(e.countByRole.supplier, e.medianCoverByRole.supplier),
           cell(e.countByRole.consumer, e.medianCoverByRole.consumer),
+          cell(e.countByRole.idle, e.medianCoverByRole.idle),
+          cell(e.countByRole["part-producer"], e.medianCoverByRole["part-producer"]),
           e.countByRole.consumer > 0 ? `${(e.consumerEmptyFrac * 100).toFixed(0)}%` : "-",
           `${e.countByRole.inert} (${e.trulyInertCount})`,
-          e.countByRole.exporter > 0 ? e.exporterMedianPriceRatio.toFixed(2) : "-",
+          e.countByRole.producer > 0 ? e.producerMedianPriceRatio.toFixed(2) : "-",
         ]),
     ));
 
@@ -321,14 +328,15 @@ export function formatTable(results: HarnessResults): string {
     // two arms are only comparable if their cohorts hold the same markets — read this before
     // reading any delta, and pin the second arm (--pin) when it does not match.
     const membership: Record<MarketRole, number> = {
-      exporter: 0, "self-supplier": 0, consumer: 0, inert: 0,
+      producer: 0, supplier: 0, consumer: 0, idle: 0, "part-producer": 0, inert: 0,
     };
     for (const entry of roleCoverLevels) {
       for (const role of MARKET_ROLES) membership[role] += entry.countByRole[role];
     }
     lines.push(
-      `  membership: exporter ${membership.exporter}, self-supplier ${membership["self-supplier"]}, ` +
-        `consumer ${membership.consumer}, inert ${membership.inert}` +
+      `  membership: producer ${membership.producer}, supplier ${membership.supplier}, ` +
+        `consumer ${membership.consumer}, idle ${membership.idle}, ` +
+        `part-producer ${membership["part-producer"]}, inert ${membership.inert}` +
         (results.config.pinnedRoles ? "  (PINNED to a baseline partition)" : ""),
     );
     lines.push("  inert = no production, local demand below the MIN_DEMAND pricing floor. Not the same");
@@ -976,6 +984,52 @@ export function formatTable(results: HarnessResults): string {
         `(${(stageTiming.directedLogisticsShare * 100).toFixed(1)}% of Σ tick) | ` +
         `goods-arrivals median ${stageTiming.goodsArrivalsMsMedian.toFixed(2)}ms ` +
         `(${(stageTiming.goodsArrivalsShare * 100).toFixed(1)}% of Σ tick)`,
+    );
+
+    // The supplier-floor re-measure metric and its guards (spec §6/§10): the falsifier's own
+    // instrument, promoted from temp/depot-diag.ts, plus the reads that separate a fall driven by
+    // stock actually released from one driven by smaller, nearer raises.
+    const il = lm.inboundLatency;
+    lines.push("");
+    lines.push("Re-measure metric — inbound latency (last 10 cycles before this horizon):");
+    lines.push(...renderTable(["Metric", "Value"], [30, 20], [
+      ["Served sinks", String(il.servedSinks)],
+      ["Share mean latency > 24 ticks", il.shareOver24Ticks.toFixed(3)],
+      ["  — treated cohort (supplier/idle)", `${il.shareOver24TreatedCohort.toFixed(3)} (n=${il.treatedSinks})`],
+      ["  — gate-excluded share", `${il.gateExcludedShare.toFixed(3)} (n=${il.gateExcludedSinks})`],
+      ["Median raise size", fmtNum(il.medianRaiseSize)],
+      ["Hauls per served sink", il.haulsPerServedSink.toFixed(2)],
+      ["Per-haul latency P50/P90", `${il.perHaulLatencyP50.toFixed(1)} / ${il.perHaulLatencyP90.toFixed(1)}`],
+    ]));
+    lines.push(`  logistics work per delivered unit: ${lm.logisticsWorkPerDeliveredUnit.toFixed(3)}`);
+    if (lm.fundingBoundIncidenceByFaction.length > 0) {
+      lines.push("  funding-bound incidence by faction:");
+      for (const f of lm.fundingBoundIncidenceByFaction) {
+        lines.push(`    ${f.factionId ?? "(independent)"}: ${f.flagged}/${f.marketCount} (${f.rate.toFixed(3)})`);
+      }
+    }
+    if (lm.physicalCoverAtRationByRole.length > 0) {
+      lines.push("  physical cover at the ration line, by role:");
+      for (const r of lm.physicalCoverAtRationByRole) {
+        lines.push(
+          `    ${r.role}: median ${r.medianCoverCycles.toFixed(1)} cycles, ` +
+            `under RATION_COVER ${r.underRationShare.toFixed(3)} (n=${r.n})`,
+        );
+      }
+    }
+    if (lm.anchorEventCohort.some((e) => e.count > 0)) {
+      lines.push("  anchor-event cohort (anchorMult < 0.5), by role, with brake state:");
+      for (const e of lm.anchorEventCohort) {
+        if (e.count === 0) continue;
+        lines.push(`    ${e.role}: ${e.count} markets, ${e.brakedCount} braked`);
+      }
+    }
+    const rt = lm.releasedTonnageFirstCycle;
+    lines.push(
+      rt.tick === null
+        ? "  released tonnage, first cycle: no supplier/idle role ever released stock this run"
+        : `  released tonnage, first cycle: t=${rt.tick}, total ${fmtNum(rt.total)} ` +
+          `(${rt.byGood.slice(0, 5).map((g) => `${g.goodId} ${fmtNum(g.quantity)}`).join(", ")})`,
     );
   }
 

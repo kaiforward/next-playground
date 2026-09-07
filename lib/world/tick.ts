@@ -469,6 +469,11 @@ export function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRo
       proposalCycles: m.proposalCycles,
       logisticsFundingBound: m.logisticsFundingBound,
       unservedShortfall: m.unservedShortfall,
+      realisedUse: m.realisedUse,
+      steadyInbound: m.steadyInbound,
+      lateInboundShare: m.lateInboundShare,
+      supplierShortRuns: m.supplierShortRuns,
+      inboundCreditedLastCycle: m.inboundCreditedLastCycle,
     };
     const list = bySystem.get(m.systemId);
     if (list) list.push(row);
@@ -510,16 +515,39 @@ function buildBuildRows(
   }));
 }
 
-/** The three fields directed-logistics writes back, present in both market row shapes it reaches. */
+/** The four fields directed-logistics writes back, present in both market row shapes it reaches. */
 interface LogisticsWritableRow {
   stock: number;
   logisticsFundingBound?: boolean;
   unservedShortfall?: number;
+  supplierShortRuns?: number;
+}
+
+/** One run's per-market assessments, keyed `${systemId}|${goodId}` — every write the processor
+ *  makes that is not stock itself. */
+interface LogisticsRowWrites {
+  stock: Map<string, number>;
+  fundingBound: Map<string, boolean>;
+  unservedShortfall: Map<string, number>;
+  supplierShortRuns: Map<string, number>;
 }
 
 /** Clear through the constraint, so the generic patch below can delete an optional key. */
 function clearUnservedShortfall(row: LogisticsWritableRow): void {
   delete row.unservedShortfall;
+}
+
+/** As above, for the drop-rule counter: 0 runs is absence, not a persisted zero. */
+function clearSupplierShortRuns(row: LogisticsWritableRow): void {
+  delete row.supplierShortRuns;
+}
+
+/** Whether one run wrote anything at all — every patch below is a no-op otherwise. */
+function hasLogisticsWrites(writes: LogisticsRowWrites): boolean {
+  return writes.stock.size > 0
+    || writes.fundingBound.size > 0
+    || writes.unservedShortfall.size > 0
+    || writes.supplierShortRuns.size > 0;
 }
 
 /**
@@ -531,23 +559,24 @@ function clearUnservedShortfall(row: LogisticsWritableRow): void {
  * stock and logisticsFundingBound stay coupled exactly as they always were: either one changing
  * rewrites both together (`?? next.field` on the untouched one), which is what stamps an
  * explicit-undefined logisticsFundingBound key onto a market whose stock alone moved. That quirk
- * predates unservedShortfall and is deliberately left alone. unservedShortfall is applied as an
- * entirely separate, independently-conditioned spread — never folded into the branch above — so a
- * market whose ONLY change this run is the shortfall does not also pick up a spurious
- * logisticsFundingBound key it never earned, and vice versa.
+ * predates unservedShortfall and is deliberately left alone. unservedShortfall and
+ * supplierShortRuns are each applied as an entirely separate, independently-conditioned spread —
+ * never folded into the branch above — so a market whose ONLY change this run is the shortfall does
+ * not also pick up a spurious logisticsFundingBound key it never earned, and vice versa.
  */
 function patchLogisticsRow<T extends LogisticsWritableRow>(
   row: T,
   key: string,
-  stockUpdates: Map<string, number>,
-  fundingBoundUpdates: Map<string, boolean>,
-  unservedShortfallUpdates: Map<string, number>,
+  writes: LogisticsRowWrites,
 ): T {
-  const newStock = stockUpdates.get(key);
-  const logisticsFundingBound = fundingBoundUpdates.get(key);
-  const unservedShortfall = unservedShortfallUpdates.get(key);
+  const newStock = writes.stock.get(key);
+  const logisticsFundingBound = writes.fundingBound.get(key);
+  const unservedShortfall = writes.unservedShortfall.get(key);
+  const supplierShortRuns = writes.supplierShortRuns.get(key);
   const stockOrFundingChanged = newStock !== undefined || logisticsFundingBound !== undefined;
-  if (!stockOrFundingChanged && unservedShortfall === undefined) return row;
+  if (!stockOrFundingChanged && unservedShortfall === undefined && supplierShortRuns === undefined) {
+    return row;
+  }
   let next: T = row;
   if (stockOrFundingChanged) {
     next = {
@@ -564,31 +593,22 @@ function patchLogisticsRow<T extends LogisticsWritableRow>(
     if (unservedShortfall > 0) next.unservedShortfall = unservedShortfall;
     else clearUnservedShortfall(next);
   }
+  if (supplierShortRuns !== undefined) {
+    // Same rule for the drop-rule counter: a run that credited the market, or found it comfortable,
+    // clears the key rather than persisting a zero.
+    next = { ...next };
+    if (supplierShortRuns > 0) next.supplierShortRuns = supplierShortRuns;
+    else clearSupplierShortRuns(next);
+  }
   return next;
 }
 
 function applyLogisticsMarketUpdates(
   markets: WorldMarket[],
-  stockUpdates: Map<string, number>,
-  fundingBoundUpdates: Map<string, boolean>,
-  unservedShortfallUpdates: Map<string, number>,
+  writes: LogisticsRowWrites,
 ): WorldMarket[] {
-  if (
-    stockUpdates.size === 0
-    && fundingBoundUpdates.size === 0
-    && unservedShortfallUpdates.size === 0
-  ) {
-    return markets;
-  }
-  return markets.map((m) =>
-    patchLogisticsRow(
-      m,
-      `${m.systemId}|${m.goodId}`,
-      stockUpdates,
-      fundingBoundUpdates,
-      unservedShortfallUpdates,
-    ),
-  );
+  if (!hasLogisticsWrites(writes)) return markets;
+  return markets.map((m) => patchLogisticsRow(m, `${m.systemId}|${m.goodId}`, writes));
 }
 
 /**
@@ -600,37 +620,18 @@ function applyLogisticsMarketUpdates(
  */
 function patchLogisticsMarketRows(
   bySystem: Map<string, MarketRowForLogistics[]>,
-  stockUpdates: Map<string, number>,
-  fundingBoundUpdates: Map<string, boolean>,
-  unservedShortfallUpdates: Map<string, number>,
+  writes: LogisticsRowWrites,
 ): Map<string, MarketRowForLogistics[]> {
-  if (
-    stockUpdates.size === 0
-    && fundingBoundUpdates.size === 0
-    && unservedShortfallUpdates.size === 0
-  ) {
-    return bySystem;
-  }
+  if (!hasLogisticsWrites(writes)) return bySystem;
   const touchedSystems = new Set<string>();
-  for (const key of stockUpdates.keys()) {
-    touchedSystems.add(key.slice(0, key.indexOf("|")));
-  }
-  for (const key of fundingBoundUpdates.keys()) {
-    touchedSystems.add(key.slice(0, key.indexOf("|")));
-  }
-  for (const key of unservedShortfallUpdates.keys()) {
-    touchedSystems.add(key.slice(0, key.indexOf("|")));
+  for (const map of [writes.stock, writes.fundingBound, writes.unservedShortfall, writes.supplierShortRuns]) {
+    for (const key of map.keys()) touchedSystems.add(key.slice(0, key.indexOf("|")));
   }
   const patched = new Map(bySystem);
   for (const systemId of touchedSystems) {
     const rows = patched.get(systemId);
     if (!rows) continue;
-    patched.set(
-      systemId,
-      rows.map((r) =>
-        patchLogisticsRow(r, r.id, stockUpdates, fundingBoundUpdates, unservedShortfallUpdates),
-      ),
-    );
+    patched.set(systemId, rows.map((r) => patchLogisticsRow(r, r.id, writes)));
   }
   return patched;
 }
@@ -1009,7 +1010,15 @@ export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: str
  * next — a re-founded colony's warehouse is real, but its predecessor's drain rate and the point
  * it was drained from are not. `unservedShortfall` joins the same clear for the same reason: a
  * structural reading names a shortfall THIS colony's donors and production could not close, and a
- * resettled colony has neither yet — its own local-supply story starts over.
+ * resettled colony has neither yet — its own local-supply story starts over. The same clear covers
+ * the supplier-floor rolling figures — `realisedUse`, `steadyInbound`, `lateInboundShare`, their
+ * since-last-fold accumulators `inboundSinceFold`/`lateInboundSinceFold`, the record of the last
+ * fold's credited inbound `inboundCreditedLastCycle`, and the drop-rule counter
+ * `supplierShortRuns` — for the identical reason: each names what THIS colony's economy actually did
+ * over its rolling window, and a resettled colony has done nothing yet. Absent already reads as
+ * unknown for the three rates (never 0 — an unknown rate reads as a plain consumer on the deep
+ * reserve, the role every world starts in) and as 0 for the three accumulators and the counter, so a
+ * resettled colony opens exactly as a freshly-created market row would.
  */
 export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds: string[]): WorldMarket[] {
   if (abandonedSystemIds.length === 0) return markets;
@@ -1023,6 +1032,13 @@ export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds
     delete next.stockChange;
     delete next.stockAtLastBoundary;
     delete next.unservedShortfall;
+    delete next.realisedUse;
+    delete next.steadyInbound;
+    delete next.lateInboundShare;
+    delete next.inboundSinceFold;
+    delete next.lateInboundSinceFold;
+    delete next.inboundCreditedLastCycle;
+    delete next.supplierShortRuns;
     return next;
   });
 }
@@ -1346,6 +1362,13 @@ export async function runWorldTick(
       isCycleStart(tick, cadence.construction))
       ? new Map(treasuries.map((t) => [t.factionId, t.funded]))
       : undefined;
+
+  // Every directed-logistics and directed-build line this faction's markets author, multiplied by
+  // this — read at the same two processors `fundedByFaction` feeds, and by the harness call sites
+  // through the same treasury rows. Absent faction or omitted map resolves to 1 (`stockpileScaleFor`).
+  const stockpileScaleByFaction = new Map(
+    treasuries.map((t) => [t.factionId, t.stockpileScale ?? 1]),
+  );
 
   // Per-system effect maps for the cycle-start stages (economy malus, decay
   // buffer, unrest tax pressure). Only built when those stages resolve.
@@ -1682,9 +1705,10 @@ export async function runWorldTick(
     // patches just the stock deltas directed-logistics applied instead of
     // remapping every market row a second time (see patchMarketRowStocks).
     const logisticsMarketRows = marketRowsBySystem(markets);
-    let dlStockUpdates: Map<string, number> = new Map();
-    let dlFundingBoundUpdates: Map<string, boolean> = new Map();
-    let dlUnservedShortfallUpdates: Map<string, number> = new Map();
+    let dlWrites: LogisticsRowWrites = {
+      stock: new Map(), fundingBound: new Map(), unservedShortfall: new Map(),
+      supplierShortRuns: new Map(),
+    };
 
     // ── directed-logistics ──
     {
@@ -1757,19 +1781,18 @@ export async function runWorldTick(
         scheduledInbound: computeScheduledInbound(pendingArrivals),
         fundingByFaction:
           fundedByFaction && new Map([...fundedByFaction].map(([id, f]) => [id, f.logistics])),
+        stockpileScaleByFaction,
         drawBrakeCeiling: opts?.drawBrakeCeiling,
         freightSpeed: effectiveFreightSpeed,
         mintId: () => `haul-${nextId++}`,
       });
-      markets = applyLogisticsMarketUpdates(
-        markets,
-        dlWorld.stockUpdates,
-        dlWorld.fundingBoundUpdates,
-        dlWorld.unservedShortfallUpdates,
-      );
-      dlStockUpdates = dlWorld.stockUpdates;
-      dlFundingBoundUpdates = dlWorld.fundingBoundUpdates;
-      dlUnservedShortfallUpdates = dlWorld.unservedShortfallUpdates;
+      dlWrites = {
+        stock: dlWorld.stockUpdates,
+        fundingBound: dlWorld.fundingBoundUpdates,
+        unservedShortfall: dlWorld.unservedShortfallUpdates,
+        supplierShortRuns: dlWorld.supplierShortRunsUpdates,
+      };
+      markets = applyLogisticsMarketUpdates(markets, dlWrites);
       pendingArrivals = [...pendingArrivals, ...dlWorld.pendingArrivals];
       lanes = lanes.map((l) => {
         const u = dlWorld.laneUpdates.get(l.key);
@@ -1882,12 +1905,7 @@ export async function runWorldTick(
 
       const rows = buildBuildRows(
         systems,
-        patchLogisticsMarketRows(
-          logisticsMarketRows,
-          dlStockUpdates,
-          dlFundingBoundUpdates,
-          dlUnservedShortfallUpdates,
-        ),
+        patchLogisticsMarketRows(logisticsMarketRows, dlWrites),
       );
       const dbWorld = new MemoryDirectedBuildWorld(rows, constructionProjects, lanes);
       const dbResult = await runDirectedBuildProcessor(dbWorld, { tick }, {
@@ -1937,6 +1955,7 @@ export async function runWorldTick(
           : undefined,
         fundingByFaction:
           fundedByFaction && new Map([...fundedByFaction].map(([id, f]) => [id, f.construction])),
+        stockpileScaleByFaction,
         // The purse founding is committed against. Read at tick start like the funding latch, so a
         // faction commits against the balance its last settlement left it, minus what it has already
         // committed since. No maintenance bill yet (pre-first-settlement) reads as 0 — the charter

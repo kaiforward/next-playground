@@ -10,7 +10,30 @@
 import { GOODS, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
 import type { SystemFlowRow } from "@/lib/engine/system-trade-flow";
+import type { LogisticsRole } from "@/lib/engine/directed-logistics";
 import type { LogisticsGoodRow, TradeFlowPartner } from "@/lib/types/api";
+
+/**
+ * The role and its deciding lines/numbers for one good, resolved by the caller from
+ * `toGoodMarketStates` (the shared market-state derivation every tick processor and this readout
+ * reads identically) — this module only merges the figures into the row, it never re-derives a
+ * line from a constant. A good with no entry here (no market row at all) reads as "consumer" with
+ * every cycle figure absent, the same reading an unknown rolling rate gets.
+ */
+export interface LogisticsRoleInfo {
+  role: LogisticsRole;
+  givesDownToCycles?: number;
+  wantCycles?: number;
+  steadyInbound?: number;
+  realisedUse?: number;
+  /** The USE figure the role test was made against (`GoodMarketState.demand`) — the denominator
+   *  `realisedUse` is a share OF, and never the panel's own `consumption + inputDemand`, which is
+   *  ungated by staffing and strikes and so states a larger full rate than the classification used. */
+  useRate?: number;
+  lateInboundShare?: number;
+}
+
+const UNKNOWN_ROLE: LogisticsRoleInfo = { role: "consumer" };
 
 /** Per-good cross-border import/export totals plus top partners. */
 export interface GoodFlowAggregate {
@@ -63,6 +86,7 @@ export function buildLogisticsRows(
   flowsByGood: ReadonlyMap<string, GoodFlowAggregate>,
   referenceCyclesInWindow: number = 1,
   inputDemandByGood: ReadonlyMap<string, number> = new Map(),
+  roleInfoByGood: ReadonlyMap<string, LogisticsRoleInfo> = new Map(),
 ): LogisticsRowModel {
   const norm = referenceCyclesInWindow > 0 ? referenceCyclesInWindow : 1;
   const normPartners = (ps: TradeFlowPartner[]): TradeFlowPartner[] =>
@@ -100,6 +124,7 @@ export function buildLogisticsRows(
     internalMax = Math.max(internalMax, production, totalConsumption);
     externalMax = Math.max(externalMax, importTotal, exportTotal);
 
+    const roleInfo = roleInfoByGood.get(goodId) ?? UNKNOWN_ROLE;
     rows.push({
       goodId,
       goodName: GOODS[goodId]?.name ?? goodId,
@@ -114,6 +139,13 @@ export function buildLogisticsRows(
       traded,
       importPartners: normPartners(a.importPartners),
       exportPartners: normPartners(a.exportPartners),
+      role: roleInfo.role,
+      givesDownToCycles: roleInfo.givesDownToCycles,
+      wantCycles: roleInfo.wantCycles,
+      steadyInbound: roleInfo.steadyInbound,
+      realisedUse: roleInfo.realisedUse,
+      useRate: roleInfo.useRate,
+      lateInboundShare: roleInfo.lateInboundShare,
     });
   }
 

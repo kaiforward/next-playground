@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { summariseLogistics, fundingBoundCensus } from "../logistics-analysis";
+import { summariseLogistics, fundingBoundCensus, fundingBoundIncidenceByFaction } from "../logistics-analysis";
 import type { SystemControl, WorldFlowEvent } from "@/lib/world/types";
 
 const flow = (
@@ -155,5 +155,44 @@ describe("fundingBoundCensus", () => {
 
     expect(census.flagged).toBe(1);
     expect(census.marketCount).toBe(3);
+  });
+});
+
+describe("fundingBoundIncidenceByFaction", () => {
+  const sys = (id: string, control: SystemControl, factionId: string | null) => ({ id, control, factionId });
+  const market = (systemId: string, logisticsFundingBound?: boolean) =>
+    logisticsFundingBound === undefined ? { systemId } : { systemId, logisticsFundingBound };
+
+  it("splits the census per owning faction, folding independents into the null entry", () => {
+    const systems = [
+      sys("f1a", "developed", "f1"),
+      sys("f1b", "developed", "f1"),
+      sys("f2a", "developed", "f2"),
+      sys("indep", "developed", null),
+      sys("outpost", "controlled", "f1"),
+    ];
+    const markets = [
+      market("f1a", true),
+      market("f1b", false),
+      market("f2a", true),
+      market("indep", true),
+      market("outpost", true), // not developed — excluded from every entry
+    ];
+
+    const result = fundingBoundIncidenceByFaction(systems, markets);
+
+    expect(result).toEqual([
+      { factionId: null, flagged: 1, marketCount: 1, rate: 1 },
+      { factionId: "f1", flagged: 1, marketCount: 2, rate: 0.5 },
+      { factionId: "f2", flagged: 1, marketCount: 1, rate: 1 },
+    ]);
+  });
+
+  it("reports a rate of 0, never NaN, for a faction with no developed markets flagged", () => {
+    const result = fundingBoundIncidenceByFaction(
+      [sys("s1", "developed", "f1")],
+      [market("s1", false)],
+    );
+    expect(result).toEqual([{ factionId: "f1", flagged: 0, marketCount: 1, rate: 0 }]);
   });
 });

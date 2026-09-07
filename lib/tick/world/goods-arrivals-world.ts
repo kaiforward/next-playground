@@ -38,10 +38,16 @@ export interface MarketCapView {
   targetStock: number;
 }
 
-/** Bulk absolute stock write (already computed by the caller). */
+/** Bulk absolute stock write (already computed by the caller), alongside this tick's outbound
+ *  credit onto the market's since-fold accumulators. `creditedInbound` is the outbound credit
+ *  applied to this key this tick (never a return-leg credit); `lateInbound` is the part of it
+ *  whose haul took longer than `SUPPLIER_MAX_LATENCY_CYCLES` cycles. Both absent or 0 when the
+ *  key's only credit this tick came from a return leg, or from a fully-returned outbound row. */
 export interface MarketCreditUpdate {
   id: string;
   stock: number;
+  creditedInbound?: number;
+  lateInbound?: number;
 }
 
 /** One ledger row's resolution this tick: how much of its quantity was credited, and — for an

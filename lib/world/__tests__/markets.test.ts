@@ -108,7 +108,7 @@ describe("createSystemMarkets: the seeded use figure", () => {
     const useRate = useRateOf(row);
     const donorReserve = DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * useRate * row.anchorMult;
     const stock = donorReserve * 1.5; // clears SURPLUS_MARGIN, so the reserve is what binds
-    const drawable = surplusDrawable(stock, donorReserve, useRate, 0);
+    const drawable = surplusDrawable(stock, donorReserve, false, useRate, 0);
     expect(drawable).toBeCloseTo(stock - donorReserve, 9);
     expect(drawable).toBeLessThan(stock);
   });

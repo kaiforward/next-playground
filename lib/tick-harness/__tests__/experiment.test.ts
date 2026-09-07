@@ -162,11 +162,11 @@ describe("ExperimentConfig", () => {
       const results = minimalResults();
       results.roleCoverLevels = [{
         goodId: "fuel",
-        countByRole: { exporter: 220, "self-supplier": 14, consumer: 88, inert: 15 },
-        medianCoverByRole: { exporter: 0.25, "self-supplier": 0.9, consumer: 0.87 },
+        countByRole: { producer: 220, supplier: 40, consumer: 88, idle: 6, "part-producer": 14, inert: 15 },
+        medianCoverByRole: { producer: 0.25, supplier: 1.1, consumer: 0.87, idle: 2.4, "part-producer": 0.9 },
         trulyInertCount: 0,
         consumerEmptyFrac: 0.1,
-        exporterMedianPriceRatio: 2.5,
+        producerMedianPriceRatio: 2.5,
       }];
       const saved = buildExperimentResult(results);
       expect(saved.roleCoverLevels).toEqual(results.roleCoverLevels);
@@ -208,7 +208,7 @@ describe("ExperimentConfig", () => {
 
     it("includes the role partition in the saved experiment JSON — the field --pin reads back", () => {
       const results = minimalResults();
-      results.marketRoles = { "s1|ore": "exporter", "s2|ore": "consumer" };
+      results.marketRoles = { "s1|ore": "producer", "s2|ore": "consumer" };
       const saved = buildExperimentResult(results);
       expect(saved.marketRoles).toEqual(results.marketRoles);
     });
@@ -227,6 +227,25 @@ describe("ExperimentConfig", () => {
       const saved = buildExperimentResult(results);
       expect(saved.demandHunting).toEqual(results.demandHunting);
       expect(saved.foundingStock).toEqual(results.foundingStock);
+    });
+
+    it("includes the lane-mechanics re-measure metric and its guards in the saved JSON", () => {
+      const results = minimalResults();
+      results.laneMetrics = {
+        ...results.laneMetrics,
+        inboundLatency: {
+          servedSinks: 40, shareOver24Ticks: 0.55, shareOver24TreatedCohort: 0.3, treatedSinks: 25,
+          gateExcludedShare: 0.1, gateExcludedSinks: 4, medianRaiseSize: 12, haulsPerServedSink: 2.1,
+          perHaulLatencyP50: 30, perHaulLatencyP90: 90,
+        },
+        logisticsWorkPerDeliveredUnit: 1.8,
+        fundingBoundIncidenceByFaction: [{ factionId: "f1", flagged: 3, marketCount: 20, rate: 0.15 }],
+        physicalCoverAtRationByRole: [{ role: "supplier", n: 10, medianCoverCycles: 11, underRationShare: 0.05 }],
+        anchorEventCohort: [{ role: "supplier", count: 2, brakedCount: 1 }],
+        releasedTonnageFirstCycle: { tick: 5600, total: 120, byGood: [{ goodId: "ore", quantity: 120 }] },
+      };
+      const saved = buildExperimentResult(results);
+      expect(saved.laneMetrics).toEqual(results.laneMetrics);
     });
 
     it("includes the founding lifecycle, founder cohort and money bars in the saved JSON", () => {
@@ -253,7 +272,7 @@ describe("ExperimentConfig", () => {
 });
 
 describe("parsePinnedRoles", () => {
-  const roles = { "s1|ore": "exporter", "s2|ore": "consumer" };
+  const roles = { "s1|ore": "producer", "s2|ore": "consumer" };
 
   it("reads the partition off a single saved result", () => {
     const parsed = parsePinnedRoles(JSON.stringify({ marketRoles: roles, elapsedMs: 1 }));
@@ -282,7 +301,7 @@ describe("parsePinnedRoles", () => {
     expect(parsed.error).toContain("marketRoles");
   });
 
-  it("rejects a value that is not one of the four roles", () => {
+  it("rejects a value that is not one of the market roles", () => {
     // A typo'd or stale role would silently create a fifth cohort that counts nothing.
     const parsed = parsePinnedRoles(JSON.stringify({ marketRoles: { "s1|ore": "importer" } }));
     expect(parsed.ok).toBe(false);

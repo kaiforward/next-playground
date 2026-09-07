@@ -14,6 +14,12 @@
  * process). Because processing is topological, a scarce good rations every
  * drawer at the same consumptionFactor curve, reused from lib/engine/tick.ts
  * along with the brake.
+ *
+ * Each returned entry also carries `used` — everything actually removed from
+ * ITS OWN stock this run: civilian delivery plus every consuming recipe's
+ * applied draw against it, attributed to the input good rather than the
+ * producer's output. The economy processor folds `used` into a persisted
+ * rolling `realisedUse` rate per market.
  */
 import { clamp } from "@/lib/utils/math";
 import {
@@ -34,6 +40,13 @@ export interface SimulatedMarketEntry extends MarketTickEntry {
   realised: number;
   /** Civilian consumption actually delivered this run (≤ demanded). 0 for non-consumers. */
   delivered: number;
+  /**
+   * Everything actually removed from THIS good's own stock this run — civilian `delivered`
+   * plus every consuming recipe's applied draw against it (`drawnByGood`), which can differ
+   * from what a producer wanted to draw when a shared input ran short first. Excludes the
+   * `maxStock` clamp: overflow lost above the ceiling is not use.
+   */
+  used: number;
 }
 
 /**
@@ -93,6 +106,12 @@ export function simulateSystemEconomyTick(
   // numerator downstream. Absent good ⇒ delivered nothing.
   const deliveredByGood = new Map<string, number>();
 
+  // Applied industrial draw per INPUT good this run — the removal every consuming recipe
+  // actually took from that good's own stock, summed across every producer that drew it.
+  // Keyed by the input good, not the producer's output, so a metals factory's ore draw
+  // lands on ore's `used`, never on metals'. Absent good ⇒ nothing drawn from it.
+  const drawnByGood = new Map<string, number>();
+
   // Per-good emergency ration stock from the authoritative aggregate draw rate.
   const rationMap = new Map<string, number>();
   for (const e of entries) {
@@ -142,7 +161,13 @@ export function simulateSystemEconomyTick(
       if (recipe) {
         for (const [input, perOutput] of Object.entries(recipe)) {
           const draw = perOutput * actualOutput;
-          stock.set(input, Math.max(0, stockOf(input) - draw));
+          const before = stockOf(input);
+          const after = Math.max(0, before - draw);
+          stock.set(input, after);
+          // The applied removal is before − after, never the desired `draw` — a later
+          // consumer's draw can exceed what an earlier one left on a shared input, and
+          // `used` must be what actually left the stock, not a draw that never happened.
+          drawnByGood.set(input, (drawnByGood.get(input) ?? 0) + (before - after));
         }
       }
     }
@@ -164,6 +189,7 @@ export function simulateSystemEconomyTick(
     stock: stockOf(e.goodId),
     realised: realisedByGood.get(e.goodId) ?? 0,
     delivered: deliveredByGood.get(e.goodId) ?? 0,
+    used: (deliveredByGood.get(e.goodId) ?? 0) + (drawnByGood.get(e.goodId) ?? 0),
   }));
 }
 

@@ -7,7 +7,7 @@
  */
 
 import { spotPrice, curveForRow, marketBandForRow, midPriceAt } from "@/lib/engine/market-pricing";
-import { classifyMarketState } from "@/lib/engine/directed-logistics";
+import { classifyMarketState, surplusDrawable } from "@/lib/engine/directed-logistics";
 import { brakeKnee } from "@/lib/engine/tick";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
@@ -16,8 +16,9 @@ import { GOODS } from "@/lib/constants/goods";
 import { GOOD_RECIPE_CONSUMERS } from "@/lib/constants/recipes";
 import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { median, quantile } from "@/lib/utils/math";
-import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
+import { toGoodMarketStates, stockpileScaleFor } from "@/lib/tick/processors/good-market-state";
 import { marketRowsBySystem } from "@/lib/world/tick";
+import type { LogisticsTargetInfo } from "./cohort-analysis";
 import type {
   MarketSnapshot, MarketHealthSummary,
   PriceLevelSummary, CoverLevelEntry, KneeBindingEntry,
@@ -63,12 +64,12 @@ export function takeMarketSnapshot(markets: WorldMarket[]): MarketSnapshot[] {
 
 /**
  * Compute market health summary from the final market state. `logisticsTargets` carries each
- * market's warehousing target (see `logisticsTargetsByKey`); it is required rather than optional
- * because omitting it would silently report zero deficits everywhere.
+ * market's want and give lines, role-authored (see `logisticsTargetsByKey`); it is required rather
+ * than optional because omitting it would silently report zero deficits and surpluses everywhere.
  */
 export function computeMarketHealth(
   markets: WorldMarket[],
-  logisticsTargets: Map<string, number>,
+  logisticsTargets: Map<string, LogisticsTargetInfo>,
 ): MarketHealthSummary {
   return {
     priceDispersion: computePriceDispersion(markets),
@@ -217,43 +218,43 @@ function computePriceLevels(markets: WorldMarket[]): PriceLevelSummary {
 // ── Cover levels (stock vs the per-good stock targets) ──────────
 /**
  * Per-good distribution of cover = stock / price anchor, plus the share of markets standing
- * below the live logistics deficit line and at/above the ordinary-donor line.
+ * below the live logistics deficit line and at/above each market's own role-authored give line.
  *
- * **`medianCover` reads a different denominator from the two fractions, deliberately.** It measures
- * against the price anchor: cover is the pricing reading the supply/demand UI shows, and holding it
- * there keeps the series comparable across runs. `deficitFrac` and `surplusFrac` measure against the
- * demand-denominated logistics thresholds, because those are what the live rules read: a deficit is
- * `stock < logisticsTarget × DEFICIT_FRACTION` (what `classifyMarketState` sizes a deficit against),
- * a surplus is the ordinary-donor rule `stock ≥ donorReserve × SURPLUS_MARGIN` (with `donorReserve`
- * derived from the warehousing target via the constants' ratio). Anchor and demand denominators
- * coincide wherever real demand clears `MIN_DEMAND` and diverge below it, so a floored market can
- * legitimately show a low `medianCover` while not counting as a deficit — it is stocked for what it
- * actually uses.
+ * **`medianCover` reads a different denominator from the two fractions, deliberately, and stays
+ * that way under the supplier-floor split.** It measures against the price anchor: cover is the
+ * pricing reading the supply/demand UI shows, and holding it there keeps the series comparable
+ * across runs. `deficitFrac` and `surplusFrac` measure against each market's own role-authored
+ * lines, because those are what the live rules read: a deficit is `stock < logisticsTarget ×
+ * DEFICIT_FRACTION` (what `classifyMarketState` sizes a deficit against), a surplus is whatever
+ * `surplusDrawable` — the SAME function the matcher and the build planner call — returns positive
+ * for `donorReserve`/`marginFree`/`demand`/`production`/`productionSuppressed` off that market's
+ * own role. Anchor and demand denominators coincide wherever real demand clears `MIN_DEMAND` and
+ * diverge below it, so a floored market can legitimately show a low `medianCover` while not
+ * counting as a deficit — it is stocked for what it actually uses. Once the resting stock of a
+ * fed market drops to its role's thin buffer (10-12 cycles), `medianCover` and the give-line
+ * fractions fall apart by a wide margin ON PURPOSE — the price anchor did not move, the market's
+ * actual holdings did — and that fall must never be read as a regression by itself.
  *
  * This is a stock-vs-target reading only. It does NOT apply the matcher's self-supply gate
  * (`production < demand`), so a producer standing below its target counts here while the live
  * matcher would skip it as a sink — `deficitFrac` is an upper bound on the markets logistics acts
- * on. Symmetrically, `surplusFrac` ignores the structural-exporter path (`production > demand`,
- * which ships far below the donor line and sources most hauls), so it is a lower bound on donors:
- * the share of markets holding a standing excess, not a haul forecast.
+ * on. Symmetrically, `surplusFrac` ignores `surplusDrawable`'s structural-exporter path
+ * (`production > demand`, which ships far below the give line and sources most hauls), so it is a
+ * lower bound on donors: the share of markets holding a standing excess, not a haul forecast.
  *
  * A market with no entry in `logisticsTargets` (its system absent from the run's system rows)
  * is never counted as a deficit or a surplus — an unknown target is evidence of neither. A KNOWN
- * target of 0 is different: real demand is 0, the donor reserve is 0, and under the live donor rule
- * the market's entire stock is drawable (see `surplusDrawable`'s demand-0 branch) — so it counts as
- * a surplus whenever it holds any stock, and can never be a deficit.
+ * demand of 0 is different: the give line is 0 too, and under the live donor rule the market's
+ * entire stock is drawable (`surplusDrawable`'s demand-0 branch) — so it counts as a surplus
+ * whenever it holds any stock, and can never be a deficit.
  */
 function computeCoverLevels(
   markets: WorldMarket[],
-  logisticsTargets: Map<string, number>,
+  logisticsTargets: Map<string, LogisticsTargetInfo>,
 ): CoverLevelEntry[] {
   const coversByGood = new Map<string, number[]>();
   const deficitsByGood = new Map<string, number>();
   const surplusesByGood = new Map<string, number>();
-  // The donor floor rides the same demand denominator as the warehousing target, so it is
-  // recovered from the target via the constants' ratio rather than threaded separately.
-  const donorPerTarget =
-    DIRECTED_LOGISTICS.DONOR_RESERVE_COVER / DIRECTED_LOGISTICS.WAREHOUSE_COVER;
   for (const m of markets) {
     const target = curveForRow(m, GOODS[m.goodId]).targetStock;
     if (target <= 0) continue;
@@ -261,13 +262,14 @@ function computeCoverLevels(
     list.push(m.stock / target);
     coversByGood.set(m.goodId, list);
 
-    const logisticsTarget = logisticsTargets.get(`${m.systemId}|${m.goodId}`);
-    if (logisticsTarget === undefined) continue;
-    if (logisticsTarget > 0 && m.stock < logisticsTarget * DIRECTED_LOGISTICS.DEFICIT_FRACTION) {
+    const info = logisticsTargets.get(`${m.systemId}|${m.goodId}`);
+    if (info === undefined) continue;
+    if (info.logisticsTarget > 0 && m.stock < info.logisticsTarget * DIRECTED_LOGISTICS.DEFICIT_FRACTION) {
       deficitsByGood.set(m.goodId, (deficitsByGood.get(m.goodId) ?? 0) + 1);
     } else if (
-      m.stock > 0 &&
-      m.stock >= logisticsTarget * donorPerTarget * DIRECTED_LOGISTICS.SURPLUS_MARGIN
+      surplusDrawable(
+        m.stock, info.donorReserve, info.marginFree, info.demand, info.production, info.productionSuppressed,
+      ) > 0
     ) {
       surplusesByGood.set(m.goodId, (surplusesByGood.get(m.goodId) ?? 0) + 1);
     }
@@ -334,25 +336,30 @@ const INDUSTRIAL_INPUT_GOODS = new Set(
 );
 
 /**
- * Fold one cycle's market rows into the flip reading. Classification runs straight off the
- * persisted use figure — the same warehousing target the matcher measures against — so this costs
- * a pass over the rows rather than a galaxy-wide state rebuild. A row with no use figure is skipped
- * rather than classified against a zero target, which would read as permanently balanced.
+ * Fold one cycle's market rows into the flip reading. Classification runs off each row's own
+ * role-authored want (`wantByKey`, keyed `systemId|goodId`) — the caller's per-logistics-cycle
+ * cache of `LogisticsTargetInfo.logisticsTarget`, not rebuilt here — so a supplier or idle
+ * market (want as low as the 10-cycle buffer) is judged against its own line rather than the
+ * full-rate consumer's. A key the cache has never carried (a market that appeared mid-cycle)
+ * falls back to `WAREHOUSE_COVER × useRate × anchorMult`, the pre-role-split formula. A row with
+ * no use figure is skipped rather than classified against a zero target, which would read as
+ * permanently balanced.
  */
 export function sampleDemandHunting(
   acc: DemandHuntingAccumulator,
   markets: ReadonlyArray<WorldMarket>,
+  wantByKey: ReadonlyMap<string, number>,
 ): void {
   for (const m of markets) {
     if (!INDUSTRIAL_INPUT_GOODS.has(m.goodId)) continue;
     const useRate = m.honestUseRate;
     if (typeof useRate !== "number" || !Number.isFinite(useRate) || useRate <= 0) continue;
 
-    const target = DIRECTED_LOGISTICS.WAREHOUSE_COVER * useRate * m.anchorMult;
+    const key = `${m.systemId}|${m.goodId}`;
+    const target = wantByKey.get(key) ?? DIRECTED_LOGISTICS.WAREHOUSE_COVER * useRate * m.anchorMult;
     const { kind } = classifyMarketState(m.stock, target);
     if (kind === "balanced") continue;
 
-    const key = `${m.systemId}|${m.goodId}`;
     acc.decidedReadings++;
     const previous = acc.lastDecidedByKey.get(key);
     if (previous !== undefined && previous !== kind) acc.reversals++;
@@ -432,21 +439,29 @@ export function newSpellAccumulator(): SpellAccumulator {
  * length to be recorded, matching `spellStats`'s own `startTick >= eqStartTick` filter — a spell
  * that began during founding but happens to close after the horizon would otherwise credit the
  * equilibrium reading with founding-era churn.
+ *
+ * Classifies against each row's own role-authored want (`wantByKey`, keyed `systemId|goodId`) —
+ * the caller's per-logistics-cycle cache of `LogisticsTargetInfo.logisticsTarget`, the same cache
+ * `sampleDemandHunting` reads — rather than the full-rate consumer's `WAREHOUSE_COVER × useRate`
+ * line. A key the cache has never carried falls back to that formula. `SURVIVAL_GOODS` markets are
+ * civilian-only, though, so a role split (producer/supplier vs. consumer) matters far less here
+ * than on an industrial input.
  */
 export function sampleSurvivalSpells(
   acc: SpellAccumulator,
   markets: ReadonlyArray<WorldMarket>,
   tick: number,
   eqStartTick: number,
+  wantByKey: ReadonlyMap<string, number>,
 ): void {
   for (const m of markets) {
     if (!SURVIVAL_GOODS.includes(m.goodId)) continue;
     const useRate = m.honestUseRate;
     if (typeof useRate !== "number" || !Number.isFinite(useRate) || useRate <= 0) continue;
 
-    const target = DIRECTED_LOGISTICS.WAREHOUSE_COVER * useRate * m.anchorMult;
-    const { kind } = classifyMarketState(m.stock, target);
     const key = `${m.systemId}|${m.goodId}`;
+    const target = wantByKey.get(key) ?? DIRECTED_LOGISTICS.WAREHOUSE_COVER * useRate * m.anchorMult;
+    const { kind } = classifyMarketState(m.stock, target);
     const active = acc.activeByKey.get(key);
     if (kind === "deficit") {
       if (active) active.length++;
@@ -485,17 +500,20 @@ export function summariseSpellDistribution(acc: SpellAccumulator): SpellDistribu
 export function computeKneeBinding(
   systems: TickSystem[],
   markets: WorldMarket[],
+  stockpileScaleByFaction?: ReadonlyMap<string, number>,
 ): KneeBindingEntry[] {
   const rowsBySystem = marketRowsBySystem(markets);
+  const scaleByFaction = stockpileScaleByFaction ?? new Map<string, number>();
   const byGood = new Map<string, { use: number; output: number }>();
   for (const s of systems) {
     if (!isEconomicallyActive(s.control)) continue;
     const rows = rowsBySystem.get(s.id);
     if (!rows) continue;
     const rowByGood = new Map(rows.map((r) => [r.goodId, r]));
-    const states = toGoodMarketStates({
-      buildings: s.buildings, population: s.population, yields: s.yields, markets: rows,
-    });
+    const states = toGoodMarketStates(
+      { buildings: s.buildings, population: s.population, yields: s.yields, markets: rows },
+      { stockpileScale: stockpileScaleFor(s.factionId, scaleByFaction) },
+    );
     for (const state of states) {
       // `!(x > 0)` rather than `x <= 0`: a NaN capacityProduction fails BOTH comparisons, and the
       // `<=` form let it fall through into the "producing" branch the census sizes itself against.

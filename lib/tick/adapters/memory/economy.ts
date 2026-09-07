@@ -132,6 +132,11 @@ export class InMemoryEconomyWorld implements EconomyWorld {
             : recomputedUseRate(sys, m.goodId),
         storageCapacity: m.storageCapacity,
         squeezeCycles,
+        realisedUse: m.realisedUse,
+        steadyInbound: m.steadyInbound,
+        lateInboundShare: m.lateInboundShare,
+        inboundSinceFold: m.inboundSinceFold,
+        lateInboundSinceFold: m.lateInboundSinceFold,
       });
     }
     return Promise.resolve(views);
@@ -185,6 +190,18 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         productionSuppressRate: isFinite(u.productionSuppressRate) ? Math.max(0, u.productionSuppressRate) : 1,
         productionMult: isFinite(u.productionMult) ? Math.max(0, u.productionMult) : 1,
         squeezeCycles: isFinite(u.squeezeCycles) ? Math.max(0, Math.min(2, u.squeezeCycles)) : 0,
+        realisedUse: isFinite(u.realisedUse) ? Math.max(0, u.realisedUse) : 0,
+        steadyInbound: isFinite(u.steadyInbound) ? Math.max(0, u.steadyInbound) : 0,
+        // `undefined` means the cycle credited nothing and no prior share exists — leave whatever
+        // was stored (itself possibly undefined/unknown) untouched rather than folding a false 0.
+        lateInboundShare:
+          u.lateInboundShare !== undefined && isFinite(u.lateInboundShare)
+            ? Math.max(0, Math.min(1, u.lateInboundShare))
+            : m.lateInboundShare,
+        inboundSinceFold: isFinite(u.inboundSinceFold) ? Math.max(0, u.inboundSinceFold) : 0,
+        lateInboundSinceFold: isFinite(u.lateInboundSinceFold) ? Math.max(0, u.lateInboundSinceFold) : 0,
+        inboundCreditedLastCycle:
+          isFinite(u.inboundCreditedLastCycle) ? Math.max(0, u.inboundCreditedLastCycle) : 0,
       };
     });
     return Promise.resolve();

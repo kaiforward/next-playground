@@ -3,6 +3,7 @@ import { cycleStartShard, catchUpFactor } from "@/lib/tick/shard";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
 import {
+  classifyMarketState,
   matchFactionTransfers,
   systemLogisticsGeneration,
   type SystemLogisticsState,
@@ -10,7 +11,10 @@ import {
   type PlannedTransfer,
 } from "@/lib/engine/directed-logistics";
 import type { LaneLoad, LogisticsBlockedEntry } from "@/lib/engine/lane-routing";
-import { toGoodMarketStates, type DrawBrakeCeiling } from "@/lib/tick/processors/good-market-state";
+import {
+  toGoodMarketStates, stockpileScaleFor, type DrawBrakeCeiling,
+} from "@/lib/tick/processors/good-market-state";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { freightArrivalTick } from "@/lib/engine/freight";
 import { LANES } from "@/lib/constants/lanes";
 import type {
@@ -20,6 +24,7 @@ import type {
   LogisticsMarketUpdate,
   LogisticsFundingBoundUpdate,
   UnservedShortfallUpdate,
+  SupplierShortRunsUpdate,
   LaneLoadUpdate,
 } from "@/lib/tick/world/directed-logistics-world";
 import type { WorldPendingArrival } from "@/lib/world/types";
@@ -42,6 +47,9 @@ export interface DirectedLogisticsProcessorParams {
   /** Latched funded.logistics per faction (0–1) — scales the haul budget. Missing
    *  faction or omitted map → 1 (ungated: engine tests, independents). */
   fundingByFaction?: ReadonlyMap<string, number>;
+  /** The owning faction's `stockpileScale`, multiplying every logistics line of every role.
+   *  Missing faction or omitted map → 1 (unowned systems, and callers with no faction in scope). */
+  stockpileScaleByFaction?: ReadonlyMap<string, number>;
   /** Harness-only third-arm pin for the draw figure's brake (see `DrawBrakeCeiling`);
    *  absent ⇒ "live", the only value the live game ever passes. */
   drawBrakeCeiling?: DrawBrakeCeiling;
@@ -62,6 +70,7 @@ function toLogisticsState(
   row: SystemLogisticsRow,
   catchUp: number,
   funded: number,
+  stockpileScale: number,
   drawBrakeCeiling: DrawBrakeCeiling | undefined,
   scheduledInbound: ReadonlyMap<string, number> | undefined,
 ): SystemLogisticsState {
@@ -77,6 +86,7 @@ function toLogisticsState(
       scheduledInboundFor: scheduledInbound
         ? (goodId) => scheduledInbound.get(`${row.systemId}|${goodId}`) ?? 0
         : undefined,
+      stockpileScale,
     }),
   };
 }
@@ -167,16 +177,34 @@ export async function runDirectedLogisticsProcessor(
   // classification — the engine only records an entry where that residue is strictly positive — so
   // there is no separate bit to keep in step with it.
   const unservedShortfallByMarketId = new Map<string, number>();
+  // Market id → whether this run read the market as a supplier sitting short of its own want. Both
+  // halves are read off the very state the match was made from, so the drop rule counts the runs the
+  // matcher actually saw rather than a re-derivation that could drift from it.
+  const supplierShortThisRun = new Set<string>();
   // Calibration instrumentation only: every faction's `RouteBlocked` entries this cycle, tagged with
   // the hauling faction key — the harness's `contentionShortfallByFaction` reading.
   const logisticsBlocked: LogisticsBlockedEntry[] = [];
+  const stockpileScaleByFaction = params.stockpileScaleByFaction ?? new Map<string, number>();
   for (const factionId of orderedFactionKeys(byFaction.keys())) {
     const group = byFaction.get(factionId);
     if (!group) continue; // unreachable: factionId is drawn from byFaction's own keys
     const funded = factionId === null ? 1 : params.fundingByFaction?.get(factionId) ?? 1;
+    const stockpileScale = stockpileScaleFor(factionId, stockpileScaleByFaction);
     const states = group.map((r) =>
-      toLogisticsState(r, catchUp, funded, params.drawBrakeCeiling, params.scheduledInbound),
+      toLogisticsState(r, catchUp, funded, stockpileScale, params.drawBrakeCeiling, params.scheduledInbound),
     );
+    for (const state of states) {
+      for (const g of state.goods) {
+        if (g.role !== "supplier") continue;
+        const market = marketByKey.get(`${state.systemId}|${g.goodId}`);
+        if (!market) continue;
+        // The sink test the matcher itself applies — stock plus what is already in flight, against
+        // this market's own want.
+        const short =
+          classifyMarketState(g.stock + (g.scheduledInbound ?? 0), g.logisticsTarget).kind === "deficit";
+        if (short) supplierShortThisRun.add(market.id);
+      }
+    }
     const booker = params.bookerFor(factionId);
     const match = matchFactionTransfers(states, booker);
     for (const t of match.transfers) allTransfers.push({ ...t, factionId });
@@ -286,6 +314,7 @@ export async function runDirectedLogisticsProcessor(
   // worth of state and would otherwise walk the identical nested collection twice.
   const fundingUpdates: LogisticsFundingBoundUpdate[] = [];
   const unservedShortfallUpdates: UnservedShortfallUpdate[] = [];
+  const supplierShortRunsUpdates: SupplierShortRunsUpdate[] = [];
   for (const row of rows) {
     for (const market of row.markets) {
       const logisticsFundingBound = fundingBoundMarketIds.has(market.id);
@@ -299,10 +328,33 @@ export async function runDirectedLogisticsProcessor(
       if ((market.unservedShortfall ?? 0) !== unservedShortfall) {
         unservedShortfallUpdates.push({ id: market.id, unservedShortfall });
       }
+      // Losing the supplier role is fast where qualifying for it is slow: a run this market spent
+      // short with nothing credited since the last fold advances the counter, and a non-short run
+      // breaks the streak. At `SUPPLIER_DROP_RUNS` the count LATCHES — a world cut off from its
+      // supply reverts to consumer and stays one until something actually arrives, rather than
+      // pulsing back into the role on the very next run because the reversion cleared its own
+      // counter. Only a credit clears it, and `inboundSinceFold` is what says "something arrived
+      // here at all": the rolling `steadyInbound` average decays toward zero without reaching it.
+      // The credit is read off `inboundCreditedLastCycle`, what the economy's fold consumed earlier
+      // on this very tick — the live accumulator it folded is already zero by the time this runs, so
+      // reading that instead would make the clear unreachable.
+      const priorShortRuns = market.supplierShortRuns ?? 0;
+      const supplierShortRuns =
+        (market.inboundCreditedLastCycle ?? 0) > 0
+          ? 0
+          : priorShortRuns >= DIRECTED_LOGISTICS.SUPPLIER_DROP_RUNS
+            ? priorShortRuns
+            : supplierShortThisRun.has(market.id)
+              ? priorShortRuns + 1
+              : 0;
+      if (priorShortRuns !== supplierShortRuns) {
+        supplierShortRunsUpdates.push({ id: market.id, supplierShortRuns });
+      }
     }
   }
   if (fundingUpdates.length > 0) await world.applyFundingBoundUpdates(fundingUpdates);
   if (unservedShortfallUpdates.length > 0) await world.applyUnservedShortfallUpdates(unservedShortfallUpdates);
+  if (supplierShortRunsUpdates.length > 0) await world.applySupplierShortRunsUpdates(supplierShortRunsUpdates);
 
   return {
     workPerformedByFaction, logisticsBudget, logisticsDispatched: dispatchedTotal, logisticsBlocked,
