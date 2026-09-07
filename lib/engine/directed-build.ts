@@ -16,7 +16,7 @@ import { LANES } from "@/lib/constants/lanes";
 import { DIRECTED_BUILD, SPECULATIVE_BASICS } from "@/lib/constants/directed-build";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { systemDevelopment, type DevelopmentRefs } from "@/lib/engine/development";
-import { surplusDrawable, type LogisticsRole } from "@/lib/engine/directed-logistics";
+import { classifyLogisticsRole, surplusDrawable, type LogisticsRole } from "@/lib/engine/directed-logistics";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { clamp } from "@/lib/utils/math";
 import { hasSurvivalShortfall } from "@/lib/engine/population";
@@ -117,6 +117,50 @@ export interface BuildGoodState {
   /** The deep line a full-rate consumer would keep — see `GoodMarketState.consumerDeepLine`. Optional
    *  for engine-test fixtures; the tick path always supplies it via `toGoodMarketStates`. */
   consumerDeepLine?: number;
+}
+
+/**
+ * The give-down-to line for one market row. The tick path authors it from the row's role; a fixture
+ * that omits it is read as a full-rate consumer's deep line from `demand` alone, without
+ * `anchorMult` — the same demand-denominated rule the live path applies to that role.
+ */
+function giveLineOf(g: BuildGoodState): number {
+  return g.donorReserve ?? DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * Math.max(0, g.demand);
+}
+
+/**
+ * What this market is doing with the good. The tick path carries the role the line author decided;
+ * a fixture that omits it is classified here from the same inputs, so the gate below and the
+ * logistics matcher can never disagree about what counts as a replenished source.
+ */
+function roleOf(g: BuildGoodState): LogisticsRole {
+  return g.role ?? classifyLogisticsRole({
+    demand: g.demand,
+    production: g.production ?? 0,
+    productionSuppressed: g.productionSuppressed,
+    steadyInbound: g.steadyInbound,
+    anchorMult: 1,
+  });
+}
+
+/**
+ * What a founding manifest may draw from one of its founder's markets: what the export rule spares,
+ * capped at the stock above the deep line a full-rate consumer of the good would keep, whatever
+ * this market's own role is — a colony never draws a relay, a producer or an idle world below what
+ * a consumer would have held. The cap subsumes the row's live stock (the line is never negative), so
+ * a plan can never promise goods that are not physically there.
+ *
+ * The staging plan and the construction readout both call this, so what a colony is told the next
+ * cycle asks for is what the tick will actually be able to take.
+ */
+export function foundingDrawableAt(g: BuildGoodState): number {
+  const deepLine = g.consumerDeepLine ?? DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * Math.max(0, g.demand);
+  return Math.min(
+    surplusDrawable(
+      g.stock, giveLineOf(g), g.marginFree ?? false, g.demand, g.production ?? 0, g.productionSuppressed,
+    ),
+    Math.max(0, g.stock - deepLine),
+  );
 }
 
 /** A system's buildable state — markets + the body-derived capacity it can build into. */
@@ -1007,12 +1051,20 @@ function planFactionBundles(
   // faction. Built from the untouched `systems` market state, ahead of the speculative-floor loop
   // below (which only ever writes `remainingByGood`, never a system's goods) — so no floor write
   // can feed this map.
+  //
+  // Only a producer's or a supplier's stock counts. Both are replenished — one by its own output,
+  // the other by a steady inbound stream — so what they hold above their line is a RATE a factory
+  // downstream can be fed on. A consumer's or an idle world's drawable stock is a one-off level:
+  // an ore pile released by a refinery that stopped drawing would otherwise license a factory that
+  // outlives the pile by an order of magnitude.
   const surplusSystemsByGood = new Map<string, string[]>();
   for (const s of systems) {
     for (const g of s.goods) {
-      const donorReserve = g.donorReserve
-        ?? DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * Math.max(0, g.demand);
-      if (surplusDrawable(g.stock, donorReserve, g.demand, g.production ?? 0, g.productionSuppressed) > 0) {
+      const role = roleOf(g);
+      if (role !== "producer" && role !== "supplier") continue;
+      if (surplusDrawable(
+        g.stock, giveLineOf(g), g.marginFree ?? false, g.demand, g.production ?? 0, g.productionSuppressed,
+      ) > 0) {
         const list = surplusSystemsByGood.get(g.goodId) ?? [];
         list.push(s.systemId);
         surplusSystemsByGood.set(g.goodId, list);

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
 import { setWorld, getWorld, clearWorld } from "@/lib/world/store";
-import { getFactionConstruction, getSystemConstruction } from "@/lib/services/construction";
+import { foundingReadoutInputs, getFactionConstruction, getSystemConstruction } from "@/lib/services/construction";
 import { orderBuild } from "@/lib/services/construction-orders";
 import { seatWorld } from "./seat-world";
 import { ServiceError } from "@/lib/services/errors";
@@ -388,15 +388,15 @@ describe("getSystemConstruction", () => {
     const stalled = world.constructionProjects.map((p) =>
       p.kind === "colony_establish" ? { ...p, stalledCycles: 3 } : p,
     );
-    // Per-good stock at the source's OWN demand × the midpoint of the exporter and ordinary-donor
-    // reserve covers — derived from the source's real (rich) production/demand, not a flat absolute
-    // figure, so it sits between the two reserves whatever scale world-gen authors for this system.
-    // An exporting source (production > demand, the rich case below) can spare stock down to the
-    // exporter reserve; a non-exporting one (barren: no buildings, or no yields) cannot spare past
-    // the higher ordinary-donor reserve — that is the branch `surplusDrawable` actually chooses
+    // Per-good stock at the source's OWN demand × the midpoint of the deep reserve and the
+    // dead-band above it — derived from the source's real (rich) production/demand, not a flat
+    // absolute figure, so it sits in that band whatever scale world-gen authors for this system.
+    // An exporting source (production > demand, the rich case below) spares everything above the
+    // founding cap; a non-exporting one (barren: no buildings, or no yields) is still inside its
+    // own 1.4x dead-band and spares nothing — that is the branch the export rule actually chooses
     // between, and the one this test pins.
     const reserveMidCover =
-      (DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER + DIRECTED_LOGISTICS.DONOR_RESERVE_COVER) / 2;
+      DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * (1 + DIRECTED_LOGISTICS.SURPLUS_MARGIN) / 2;
     const richStates = toGoodMarketStates({
       buildings: buildingsBySystem().get(dev.id) ?? {},
       population: dev.population,
@@ -437,6 +437,47 @@ describe("getSystemConstruction", () => {
 
     expect(noYields).not.toEqual(rich);
     expect(noBuildings).not.toEqual(rich);
+  });
+
+  it("quotes the founding cap the tick's own plan applies, never the bare export rule", () => {
+    // One rule, two readers: the plan writes the ledger, this readout tells the player what the next
+    // cycle asks for. Parked between the source's give line and the deep line a full-rate consumer
+    // would keep, the export rule alone offers stock the tick will refuse to move — so the readout
+    // must quote nothing there, and above that line must quote exactly the excess.
+    const statesOf = (w: World) => toGoodMarketStates({
+      buildings: buildingsBySystem().get(dev.id) ?? {},
+      population: dev.population,
+      yields: yieldsOf(dev),
+      extractionEff: effOf(dev),
+      markets: marketRowsBySystem(w.markets).get(dev.id) ?? [],
+    });
+    const readAt = (coverOf: (deepLine: number) => number) => {
+      const base = new Map(statesOf(world).map((g) => [g.goodId, g]));
+      const staged: World = {
+        ...world,
+        markets: world.markets.map((m) => {
+          const good = m.systemId === dev.id ? base.get(m.goodId) : undefined;
+          return good === undefined ? m : { ...m, stock: coverOf(good.consumerDeepLine) };
+        }),
+      };
+      setWorld(staged);
+      const sparable = foundingReadoutInputs(
+        staged, factionId, staged.constructionProjects, buildingsBySystem(),
+      ).supplyBySource.get(dev.id) ?? [];
+      const deepLines = new Map(statesOf(staged).map((g) => [g.goodId, g.consumerDeepLine]));
+      return { sparable, deepLines };
+    };
+
+    const under = readAt((deepLine) => deepLine * 0.9);
+    expect(under.sparable.length).toBeGreaterThan(0);
+    for (const line of under.sparable) expect(line.sparable).toBe(0);
+
+    const over = readAt((deepLine) => deepLine * 2);
+    for (const line of over.sparable) {
+      const deepLine = over.deepLines.get(line.goodId) ?? 0;
+      expect(line.sparable).toBeCloseTo(deepLine, 6); // 2x the line, so exactly one line above it
+    }
+    expect(over.sparable.some((l) => l.sparable > 0)).toBe(true);
   });
 
   it('throws ServiceError("not_found") naming the id for an unknown system', () => {

@@ -4,6 +4,7 @@ import type {
 import { cycleStartShard, catchUpFactor } from "@/lib/tick/shard";
 import {
   planFactionProposals, planFactionColonyProposals, assessColonyCandidates, planLaneUpgradeProposals,
+  foundingDrawableAt,
   type BuildSystemState, type ColonyProposal, type ColonyEstablishCandidate, type ColonyEstablishParams,
   type LaneUpgradeProposal,
 } from "@/lib/engine/directed-build";
@@ -14,7 +15,7 @@ import { GOODS } from "@/lib/constants/goods";
 import { systemDevelopment } from "@/lib/engine/development";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { workCostPerLevel } from "@/lib/constants/construction";
-import { surplusDrawable, type GoodMarketState } from "@/lib/engine/directed-logistics";
+import type { GoodMarketState } from "@/lib/engine/directed-logistics";
 import type { RouteCost } from "@/lib/engine/directed-build";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { charterFee, foundingGoodsValue, stagingShareLines } from "@/lib/engine/founding-cost";
@@ -129,7 +130,7 @@ interface StagingDraw {
  * a 2-pop seed flattens nearly every good to one figure and erases the basket's shape. It is drawn in
  * slices rather than in one raid at completion: `workShare` is the fraction of the whole establish the
  * ordinary absorption cap would build this cycle, so the materials arrive in step with the work. Per
- * good the draw is the least of what is still wanted, what the source can spare (`surplusDrawable`,
+ * good the draw is the least of what is still wanted, what the source can spare (`foundingDrawableAt`,
  * under the running per-(source, good) balance so two colonies drawing on one founder share a
  * shrinking pile), and what the faction's money buys through the valuation seam.
  *
@@ -180,16 +181,13 @@ function planStagingDraw(
     targetValue += target * unitValue;
 
     const key = `${source.systemId}|${good.goodId}`;
-    // Bounded by the row's LIVE stock as well as by the export rule, because this plan is written
-    // straight into the project's ledger and that ledger is what the colony is credited on delivery.
-    // A plan promising more than the row physically holds would record goods that never left the
-    // founder; `applyFoundingStagingDraws` refuses such a draw outright rather than shorten it, so
-    // overshooting here fails the tick. Bounding keeps the ledger equal to what is actually debited.
-    const remaining = stockBalance.get(key)
-      ?? Math.min(
-        surplusDrawable(good.stock, good.donorReserve, good.demand, good.production ?? 0, good.productionSuppressed),
-        Math.max(0, good.stock),
-      );
+    // Bounded by the founder's deep line as well as by the export rule, and so by the row's LIVE
+    // stock, because this plan is written straight into the project's ledger and that ledger is what
+    // the colony is credited on delivery. A plan promising more than the row physically holds would
+    // record goods that never left the founder; `applyFoundingStagingDraws` refuses such a draw
+    // outright rather than shorten it, so overshooting here fails the tick. Bounding keeps the
+    // ledger equal to what is actually debited.
+    const remaining = stockBalance.get(key) ?? foundingDrawableAt(good);
     // An unreadable headroom spares nothing rather than poisoning the ledger: staged quantities are
     // world state, and `JSON.stringify` turns a NaN into null.
     const headroom = Number.isFinite(remaining) ? Math.max(0, remaining) : 0;
@@ -765,8 +763,11 @@ export async function runDirectedBuildProcessor(
       const source = rowBySystem.get(p.sourceSystemId);
       let tonnage = 0;
       // The founder's own remaining cover on the good this draw binds hardest: post-draw stock over
-      // that good's donor floor, minimum across the goods it moved. A good the founder has no use
-      // for has no floor to be drawn under, so it is skipped rather than counted as a cover of 0.
+      // the deep line a full-rate consumer of that good would keep, minimum across the goods it
+      // moved. Denominated on that line rather than on the founder's own give line so the reading
+      // means one thing across roles — a producer's give line is a restart buffer and would read
+      // four times the cover for the same physical stock. A good the founder has no use for has no
+      // line to be drawn under, so it is skipped rather than counted as a cover of 0.
       let binding = Infinity;
       for (const line of staged) {
         stagingDraws.push({ sourceSystemId: p.sourceSystemId, goodId: line.goodId, quantity: line.quantity });
@@ -775,8 +776,8 @@ export async function runDirectedBuildProcessor(
         const drawn = (founderDrawn.get(key) ?? 0) + line.quantity;
         founderDrawn.set(key, drawn);
         const good = source === undefined ? undefined : founderGoodState(source, line.goodId);
-        if (good === undefined || !(good.donorReserve > 0)) continue;
-        binding = Math.min(binding, (good.stock - drawn) / good.donorReserve);
+        if (good === undefined || !(good.consumerDeepLine > 0)) continue;
+        binding = Math.min(binding, (good.stock - drawn) / good.consumerDeepLine);
       }
       const spent = (plan?.cost ?? 0) * share;
       if (spent > 0 && factionId !== null) {

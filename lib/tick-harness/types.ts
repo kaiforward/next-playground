@@ -521,8 +521,9 @@ export interface FoundingStockSummary {
   meanFoundingMoneyCost: number;
   /** Median, over colonies with a measurable cover reading, of the founder's own remaining cover on
    *  the binding good — the deepest any one of that colony's staging draws left it (post-draw stock
-   *  ÷ that good's donor floor, minimum across draws). Below 1 means founding is drawing founders
-   *  under the floor they are meant to keep. Null when no founding produced a measurable reading —
+   *  ÷ the deep line a full-rate consumer of that good would hold, minimum across draws). Below 1
+   *  means founding is leaving founders with less of the binding good than a full-rate consumer
+   *  keeps, whatever line their own role trades on. Null when no founding produced a measurable reading —
    *  the median of nothing must not print as a founder drained to 0.00×.
    *
    *  Not comparable with a run measured before materials were staged per cycle, where the same name

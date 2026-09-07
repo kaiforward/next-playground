@@ -329,9 +329,13 @@ describe("toGoodMarketStates: the two demand figures", () => {
     expect(evented.donorReserve).toBe(running.donorReserve);
     expect(evented.civilianDemand).toBe(running.civilianDemand);
     expect(
-      surplusDrawable(ore.stock, evented.donorReserve, evented.demand, evented.production),
+      surplusDrawable(
+        ore.stock, evented.donorReserve, evented.marginFree, evented.demand, evented.production,
+      ),
     ).toBe(
-      surplusDrawable(ore.stock, running.donorReserve, running.demand, running.production),
+      surplusDrawable(
+        ore.stock, running.donorReserve, running.marginFree, running.demand, running.production,
+      ),
     );
   });
 
@@ -532,6 +536,34 @@ describe("toGoodMarketStates: roles and the two lines", () => {
     ]) {
       expect(linesOf(row, 1.5).consumerDeepLine).toBeCloseTo(R * U * 1.5, 9);
     }
+  });
+
+  it("carries the stockpile scale through to what a producer can actually be drawn of", () => {
+    // The lever reaches a producer only through the line the author hands the donor rule: a rule
+    // that rebuilt a producer's floor from the constant would return the same figure at both scales.
+    const stock = 20 * U;
+    const drawableAt = (scale: number) => {
+      const g = linesOf({ realisedProductionRate: 2 * U, stock }, scale);
+      return surplusDrawable(g.stock, g.donorReserve, g.marginFree, g.demand, g.production);
+    };
+    expect(drawableAt(1)).toBeCloseTo(stock - F * U, 9);
+    expect(drawableAt(0.75)).toBeCloseTo(stock - F * U * 0.75, 9);
+    expect(drawableAt(0.75)).toBeGreaterThan(drawableAt(1));
+  });
+
+  it("makes a supplier's shallow stock drawable where a full-rate consumer's deeper stock is not", () => {
+    // Same good, same use rate, same 15 cycles on the shelf: the supplier is 5 cycles above its
+    // margin-free buffer and gives them, while the consumer sits far under its deep reserve. At 50
+    // cycles the consumer is above that reserve but inside the 1.4x dead-band, and still gives none.
+    const drawableOf = (g: ReturnType<typeof linesOf>) =>
+      surplusDrawable(g.stock, g.donorReserve, g.marginFree, g.demand, g.production);
+    const supplier = linesOf({ realisedProductionRate: 0.95 * U, stock: 15 * U });
+    expect(supplier.role).toBe("supplier");
+    expect(drawableOf(supplier)).toBeCloseTo(5 * U, 9);
+    // Including inside the 1.4x dead-band a deep line would impose: at 12 cycles it still gives.
+    expect(drawableOf(linesOf({ realisedProductionRate: 0.95 * U, stock: 12 * U }))).toBeCloseTo(2 * U, 9);
+    expect(drawableOf(linesOf({ realisedUse: U, stock: 15 * U }))).toBe(0);
+    expect(drawableOf(linesOf({ realisedUse: U, stock: 50 * U }))).toBe(0);
   });
 
   it("drops a supplier back to the consumer's lines once the drop counter reaches its bound", () => {

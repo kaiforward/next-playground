@@ -6,6 +6,8 @@ import type { WorldConstructionProject, WorldColonyEstablishProject, WorldLane, 
 import type { LaneEndpointOwner } from "@/lib/engine/lanes";
 import { LANES } from "@/lib/constants/lanes";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import { foundingDrawableAt } from "@/lib/engine/directed-build";
 import { emptyResourceVector, unitResourceVector, makeResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import { OUTPUT_PER_UNIT, BUILDING_TYPES, labourTotal, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES, HEAVY_INDUSTRY_COMPLEX, ANCHOR_MIN_THROUGHPUT, effectiveSpaceCost, HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
 import { TARGET_COVER } from "@/lib/constants/market-economy";
@@ -489,8 +491,10 @@ describe("planFactionBuilds — tier-1+ input reachability", () => {
       oreSurplus: {
         systemId: "S", factionId: "f1", population: 100, control: "unclaimed", buildings: {},
         depositCounts: emptyResourceVector(), peopleLand: 0,
-        // The gate reconstructs the donor reserve from demand for a fixture that carries no `donorReserve`.
-        goods: [{ goodId: "ore", stock: 100, demand: 0.5, production: 0, capacityProduction: 0 }],
+        // A producer of the input: the gate admits a market's stock only where the market is
+        // replenished, and reconstructs its give line from demand for a fixture carrying no
+        // `donorReserve`.
+        goods: [{ goodId: "ore", stock: 100, demand: 0.5, production: 30, capacityProduction: 30 }],
       },
     };
   }
@@ -519,24 +523,83 @@ describe("planFactionBuilds — tier-1+ input reachability", () => {
   });
 
   it("does not greenlight the factory when the in-band input holder is a non-producer (no phantom source)", () => {
-    // Same stock 22 in the 1.0–1.4× band above its reserve of 20, but production 0 → sitting on
-    // imported inventory, not a structural exporter. surplusDrawable returns 0, so ore is not a
-    // reachable input and no metals factory is built — mirroring the matcher's re-export guard at the
-    // build-planner gate.
+    // Same stock 22 in the 1.0–1.4× band above its reserve of 20, but production 0 and nothing
+    // arriving → sitting on imported inventory, neither a structural exporter nor a replenished
+    // relay. Its pile is a level, not a rate: the gate refuses it and no metals factory is built.
     const { deficit, builder, oreSurplus } = scenario();
     oreSurplus.goods = [{ goodId: "ore", stock: 22, demand: 0.5, production: 0, capacityProduction: 0 }];
     expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], () => 1, DEV_REFS), "B", "metals")).toBe(0);
   });
 
+  it("refuses an idle world's released stock as an input source, and admits a supplier's", () => {
+    // A refinery that stopped drawing releases everything above its restart buffer — here 30 cycles
+    // of use with a 10-cycle buffer, so 20 cycles are drawable. That pile is a LEVEL: a factory built
+    // on it outlives it. A supplier holding the identical stock on the identical line is being
+    // refilled, so the same figure is a RATE and does license the factory. Only the role differs.
+    const released = (role: "idle" | "supplier"): BuildGoodState[] => [{
+      goodId: "ore", stock: 30 * 0.5, demand: 0.5, production: 0, capacityProduction: 0,
+      donorReserve: DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * 0.5, marginFree: true,
+      consumerDeepLine: DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * 0.5, role,
+    }];
+    const idle = scenario();
+    idle.oreSurplus.goods = released("idle");
+    expect(countFor(planFactionBuilds([idle.deficit, idle.builder, idle.oreSurplus], () => 1, DEV_REFS), "B", "metals")).toBe(0);
+    const supplier = scenario();
+    supplier.oreSurplus.goods = released("supplier");
+    expect(countFor(planFactionBuilds([supplier.deficit, supplier.builder, supplier.oreSurplus], () => 1, DEV_REFS), "B", "metals")).toBeGreaterThan(0);
+  });
+
   it("greenlights the factory from a floored input holder sitting above its own demand reserve", () => {
-    // The gate reads the donor rule, not the price anchor. S is a small market: its anchor is pinned
-    // at the MIN_DEMAND floor (20), while 40 cycles of the 0.01/cycle it really uses is a reserve of
-    // 0.4. Stock 22 is under the anchor and far over the reserve, so the inputs a factory at B would
-    // receive are there — and the fixture carries no `donorReserve`, so this is also the gate's
-    // reconstruction of it from demand.
+    // The gate reads the donor rule, not the price anchor. S is a small market kept topped up by its
+    // own part-production: its anchor is pinned at the MIN_DEMAND floor (20), while 40 cycles of the
+    // 0.01/cycle it really uses is a reserve of 0.4. Stock 22 is far over that reserve, so the inputs
+    // a factory at B would receive are there — and the fixture carries no `donorReserve`, so this is
+    // also the gate's reconstruction of it from demand.
     const { deficit, builder, oreSurplus } = scenario();
-    oreSurplus.goods = [{ goodId: "ore", stock: 22, demand: 0.01, production: 0, capacityProduction: 0 }];
+    oreSurplus.goods = [{
+      goodId: "ore", stock: 22, demand: 0.01, production: 0.0095, capacityProduction: 0.0095,
+    }];
     expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], () => 1, DEV_REFS), "B", "metals")).toBeGreaterThan(0);
+  });
+});
+
+describe("foundingDrawableAt", () => {
+  const U = 2;
+  const { EXPORT_RESERVE_COVER: F, DONOR_RESERVE_COVER: R } = DIRECTED_LOGISTICS;
+  const producer = (stock: number): BuildGoodState => ({
+    goodId: "food", stock, demand: U, production: 3 * U, capacityProduction: 3 * U,
+    donorReserve: F * U, marginFree: true, consumerDeepLine: R * U, role: "producer",
+  });
+
+  it("spares nothing from a founder holding less than a full-rate consumer's deep line", () => {
+    // The export rule alone would give 20 cycles of use away here — everything above the producer's
+    // own 10-cycle buffer. The founding cap is what stops a colony taking a founder that low.
+    const founder = producer(30 * U);
+    expect(foundingDrawableAt(founder)).toBe(0);
+  });
+
+  it("spares exactly the stock above that deep line, whatever role the founder trades on", () => {
+    expect(foundingDrawableAt(producer(48 * U))).toBeCloseTo(8 * U, 9);
+    // For a full-rate consumer the cap and its own give line coincide, so what binds is the
+    // dead-band above that line: it spares nothing until it clears 1.4x, then everything above it.
+    const consumer = (stock: number): BuildGoodState => ({
+      goodId: "food", stock, demand: U, production: 0, capacityProduction: 0,
+      donorReserve: R * U, marginFree: false, consumerDeepLine: R * U, role: "consumer",
+    });
+    expect(foundingDrawableAt(consumer(48 * U))).toBe(0);
+    expect(foundingDrawableAt(consumer(60 * U))).toBeCloseTo(20 * U, 9);
+  });
+
+  it("never promises stock the row does not physically hold", () => {
+    expect(foundingDrawableAt(producer(0))).toBe(0);
+    expect(foundingDrawableAt(producer(-5))).toBe(0);
+  });
+
+  it("reconstructs the deep line from demand for a fixture that states no lines", () => {
+    const bare: BuildGoodState = {
+      goodId: "food", stock: 48 * U, demand: U, production: 3 * U, capacityProduction: 3 * U,
+    };
+    expect(foundingDrawableAt(bare)).toBeCloseTo(8 * U, 9);
   });
 });
 

@@ -64,15 +64,20 @@ export function classifyMarketState(stock: number, target: number): MarketClassi
 }
 
 /**
- * Drawable directed-logistics surplus for one (system, good). A structural exporter
- * (production > demand) may ship down to EXPORT_RESERVE_COVER cycles of its own demand; every other
- * donor must clear SURPLUS_MARGIN and stops at `donorReserve`, DONOR_RESERVE_COVER cycles of its own
- * real demand. Realised production keeps suppressed or input-starved former exporters on the
- * ordinary-donor path.
+ * Drawable directed-logistics surplus for one (system, good), against the give-down-to line its
+ * role authored (`logisticsLinesFor`). A structural exporter (production > demand) ships everything
+ * above that line; every other donor stops at it, and clears `SURPLUS_MARGIN` above it first unless
+ * `marginFree` says the line is a restart buffer rather than a deep reserve. Realised production
+ * keeps suppressed or input-starved former exporters on the ordinary-donor path.
  * One definition, shared by the logistics matcher and the build planner so both read
  * "surplus" alike.
  *
- * The exporter's reserve is denominated in cycles of demand, not as a fraction of `targetStock`: the
+ * The line is passed in rather than rebuilt here, on either branch: a producer's buffer, a
+ * supplier's buffer and a consumer's deep reserve are all authored at one site from the market's
+ * role, its realised use and its faction's stockpile scale, so a scale or a role the author applied
+ * would be silently discarded by any branch that recomputed a floor from a constant.
+ *
+ * The lines are denominated in cycles of demand, not as a fraction of `targetStock`: the
  * anchor is a price-curve reference (TARGET_COVER = 40 cycles), and borrowing it as a shipping
  * threshold set the bar at 30 cycles — which a producer built to demand + PROVISION_MARGIN reaches
  * only to be drained straight back to it, so it exported its thin margin and nothing more.
@@ -89,9 +94,8 @@ export function classifyMarketState(stock: number, target: number): MarketClassi
  * sits inside the transient for high-tier consumer cover, which is why any A/B of it is taken at
  * 12,000+ or as a trajectory.
  *
- * At `demand === 0` the reserve is 0, the SURPLUS_MARGIN test is vacuous and the market's entire
- * stock is drawable. Deliberate: there is no local consumption to hold stock for, and it mirrors
- * what the exporter branch already does at demand 0.
+ * At `demand === 0` the line is 0, the SURPLUS_MARGIN test is vacuous and the market's entire
+ * stock is drawable on either branch. Deliberate: there is no local consumption to hold stock for.
  *
  * `productionSuppressed` here is NOT the same test the build planner's structural
  * assessment makes, and the two must not be collapsed into one. This is a DRAWDOWN
@@ -103,18 +107,18 @@ export function classifyMarketState(stock: number, target: number): MarketClassi
  */
 export function surplusDrawable(
   stock: number,
-  donorReserve: number,
+  giveLine: number,
+  marginFree: boolean,
   demand: number,
   production: number,
   productionSuppressed = false,
 ): number {
-  const exporterReserve = DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * Math.max(0, demand);
-  if (production > demand && !productionSuppressed) return Math.max(0, stock - exporterReserve);
+  if (production > demand && !productionSuppressed) return Math.max(0, stock - giveLine);
 
-  const aboveReserve = stock - donorReserve;
-  if (aboveReserve <= 0) return 0;
-  const clearsMargin = stock >= donorReserve * DIRECTED_LOGISTICS.SURPLUS_MARGIN;
-  return clearsMargin ? aboveReserve : 0;
+  const aboveLine = stock - giveLine;
+  if (aboveLine <= 0) return 0;
+  if (marginFree) return aboveLine;
+  return stock >= giveLine * DIRECTED_LOGISTICS.SURPLUS_MARGIN ? aboveLine : 0;
 }
 
 /**
@@ -650,7 +654,9 @@ export function matchFactionTransfers(
       }
       // Surplus source — standing excess inventory above the donor's own reserve OR a structural
       // producer (see surplusDrawable; the latter is what the production throttle would otherwise suppress).
-      const drawable = surplusDrawable(g.stock, g.donorReserve, g.demand, g.production, g.productionSuppressed);
+      const drawable = surplusDrawable(
+        g.stock, g.donorReserve, g.marginFree, g.demand, g.production, g.productionSuppressed,
+      );
       if (drawable > 0) {
         const bySystem = surplusesByGood.get(g.goodId) ?? new Map<string, Surplus>();
         bySystem.set(s.systemId, {

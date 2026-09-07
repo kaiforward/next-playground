@@ -21,10 +21,11 @@ export const DIRECTED_LOGISTICS = {
    * brake) rather than silently starving every haul under the new, larger cost.
    */
   GENERATION_PER_POP: scaleValue(5 * 8.5),
-  /** A good is a surplus when stock ≥ its warehousing target × this (`classifyMarketState`), and an
-   *  ordinary donor gives only once stock clears donorReserve × this (`surplusDrawable`) — both
-   *  demand-denominated since the role split; no price-anchor quantity. Margin > 1 leaves a
-   *  deliberate residual (negative space). */
+  /** A good is a surplus when stock ≥ its warehousing target × this (`classifyMarketState`), and a
+   *  donor holding a DEEP reserve gives only once stock clears that give line × this
+   *  (`surplusDrawable`) — both demand-denominated since the role split; no price-anchor quantity.
+   *  A give line that is the restart buffer is margin-free and carries no dead-band above it, as a
+   *  producer's always has. Margin > 1 leaves a deliberate residual (negative space). */
   SURPLUS_MARGIN: 1.4,
   /**
    * Cycles of its own demand a structural exporter keeps on hand before shipping the rest — a

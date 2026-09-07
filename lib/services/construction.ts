@@ -21,7 +21,7 @@ import {
   type SystemConstructionRow,
 } from "@/lib/engine/construction-readout";
 import { orderOpenProjects } from "@/lib/engine/construction";
-import { surplusDrawable } from "@/lib/engine/directed-logistics";
+import { foundingDrawableAt } from "@/lib/engine/directed-build";
 import { yieldsOf, effOf } from "@/lib/engine/resources";
 import { foundingWorkingBalance } from "@/lib/engine/treasury";
 import { catchUpFactor } from "@/lib/tick/shard";
@@ -36,9 +36,9 @@ import type { SystemConstructionData, FactionConstructionData } from "@/lib/type
 
 /**
  * What each in-flight colony's source can spare it, read exactly as the staging draw reads it: the
- * shared market-state derivation, then the export rule, then the row's live stock (a plan may never
- * promise more goods than physically sit there). Only the sources of open colonies are derived —
- * on the common queue that is nothing at all.
+ * shared market-state derivation, then the one founding-drawable rule the tick's plan runs, so the
+ * readout and the plan cannot quote two different figures for the same shelf. Only the sources of
+ * open colonies are derived — on the common queue that is nothing at all.
  */
 function foundingSupplyBySource(
   world: World,
@@ -64,13 +64,7 @@ function foundingSupplyBySource(
     });
     supply.set(
       sourceId,
-      states.map((g) => ({
-        goodId: g.goodId,
-        sparable: Math.min(
-          surplusDrawable(g.stock, g.donorReserve, g.demand, g.production, g.productionSuppressed),
-          Math.max(0, g.stock),
-        ),
-      })),
+      states.map((g) => ({ goodId: g.goodId, sparable: foundingDrawableAt(g) })),
     );
   }
   return supply;

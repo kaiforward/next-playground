@@ -18,9 +18,9 @@ describe("runTickHarness: the cycle-gated samplers", () => {
     // `firstRunWhere` above), so search forward for the first tickCount where at least one colony
     // has founded and been sampled but at least one other founded colony has not yet met its first
     // economy cycle, rather than hardcode the boundary tick.
-    // Under the recut habitability tables the earliest two-colony window (one sampled, one still
-    // waiting) lands at tick 5,260 — the pre-5,000 prefix never satisfies the condition, so starting
-    // the search there wastes ~50 no-op harness runs and blows the timeout below. Start just ahead
+    // Under role-authored reserve lines the earliest two-colony window (one sampled, one still
+    // waiting) lands at tick 6,660 — the prefix before it never satisfies the condition, so starting
+    // the search there wastes no-op harness runs and blows the timeout below. Start just ahead
     // of that dead prefix instead of at the first colony's own opening tick (~4,128).
     const results = await firstRunWhere(
       { systemCount: 60, seed: 7 },
@@ -28,7 +28,7 @@ describe("runTickHarness: the cycle-gated samplers", () => {
         r.foundingStock.foundedCount > 0 &&
         r.foundingStock.sampledCount > 0 &&
         r.foundingStock.sampledCount < r.foundingStock.foundedCount,
-      { start: 5_000, step: 20, maxTickCount: 6_000 },
+      { start: 6_600, step: 20, maxTickCount: 7_000 },
     );
     const stock = results.foundingStock;
 

@@ -206,10 +206,13 @@ export interface FoundingStagingEvent {
   goodIds: string[];
   /** What the faction paid for this draw through the founding valuation seam (charter excluded). */
   moneyCost: number;
-  /** The founder's post-draw stock ÷ donor floor, minimum across the goods this draw moved. Below 1
-   *  means the draw left the founder under the floor it keeps for itself. Absent when nothing was
-   *  measurable — no good this draw moved carries a positive donor floor — because "could not
-   *  measure" and "drained to nothing" are opposite readings and must never share a value. */
+  /** The founder's post-draw stock ÷ the deep line a full-rate consumer of the good would hold at
+   *  this world's scale and anchor, minimum across the goods this draw moved. Below 1 means the draw
+   *  left the founder holding less of the binding good than a full-rate consumer keeps — deliberately
+   *  NOT "under its own floor", which is role-dependent: a producer's and a supplier's floor is a
+   *  restart buffer a quarter of that line. Absent when nothing was measurable — no good this draw
+   *  moved carries a positive deep line — because "could not measure" and "drained to nothing" are
+   *  opposite readings and must never share a value. */
   founderCover?: number;
 }
 
