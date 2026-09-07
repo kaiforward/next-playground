@@ -46,6 +46,9 @@ function targetInfo(logisticsTarget: number, over: Partial<LogisticsTargetInfo> 
     demand: Math.max(logisticsTarget, 1),
     production: 0,
     productionSuppressed: false,
+    role: "consumer",
+    capacityProduction: 0,
+    consumerDeepLine: logisticsTarget * (DIRECTED_LOGISTICS.DONOR_RESERVE_COVER / DIRECTED_LOGISTICS.WAREHOUSE_COVER),
     ...over,
   };
 }

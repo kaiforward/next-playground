@@ -985,6 +985,52 @@ export function formatTable(results: HarnessResults): string {
         `goods-arrivals median ${stageTiming.goodsArrivalsMsMedian.toFixed(2)}ms ` +
         `(${(stageTiming.goodsArrivalsShare * 100).toFixed(1)}% of Σ tick)`,
     );
+
+    // The supplier-floor re-measure metric and its guards (spec §6/§10): the falsifier's own
+    // instrument, promoted from temp/depot-diag.ts, plus the reads that separate a fall driven by
+    // stock actually released from one driven by smaller, nearer raises.
+    const il = lm.inboundLatency;
+    lines.push("");
+    lines.push("Re-measure metric — inbound latency (last 10 cycles before this horizon):");
+    lines.push(...renderTable(["Metric", "Value"], [30, 20], [
+      ["Served sinks", String(il.servedSinks)],
+      ["Share mean latency > 24 ticks", il.shareOver24Ticks.toFixed(3)],
+      ["  — treated cohort (supplier/idle)", `${il.shareOver24TreatedCohort.toFixed(3)} (n=${il.treatedSinks})`],
+      ["  — gate-excluded share", `${il.gateExcludedShare.toFixed(3)} (n=${il.gateExcludedSinks})`],
+      ["Median raise size", fmtNum(il.medianRaiseSize)],
+      ["Hauls per served sink", il.haulsPerServedSink.toFixed(2)],
+      ["Per-haul latency P50/P90", `${il.perHaulLatencyP50.toFixed(1)} / ${il.perHaulLatencyP90.toFixed(1)}`],
+    ]));
+    lines.push(`  logistics work per delivered unit: ${lm.logisticsWorkPerDeliveredUnit.toFixed(3)}`);
+    if (lm.fundingBoundIncidenceByFaction.length > 0) {
+      lines.push("  funding-bound incidence by faction:");
+      for (const f of lm.fundingBoundIncidenceByFaction) {
+        lines.push(`    ${f.factionId ?? "(independent)"}: ${f.flagged}/${f.marketCount} (${f.rate.toFixed(3)})`);
+      }
+    }
+    if (lm.physicalCoverAtRationByRole.length > 0) {
+      lines.push("  physical cover at the ration line, by role:");
+      for (const r of lm.physicalCoverAtRationByRole) {
+        lines.push(
+          `    ${r.role}: median ${r.medianCoverCycles.toFixed(1)} cycles, ` +
+            `under RATION_COVER ${r.underRationShare.toFixed(3)} (n=${r.n})`,
+        );
+      }
+    }
+    if (lm.anchorEventCohort.some((e) => e.count > 0)) {
+      lines.push("  anchor-event cohort (anchorMult < 0.5), by role, with brake state:");
+      for (const e of lm.anchorEventCohort) {
+        if (e.count === 0) continue;
+        lines.push(`    ${e.role}: ${e.count} markets, ${e.brakedCount} braked`);
+      }
+    }
+    const rt = lm.releasedTonnageFirstCycle;
+    lines.push(
+      rt.tick === null
+        ? "  released tonnage, first cycle: no supplier/idle role ever released stock this run"
+        : `  released tonnage, first cycle: t=${rt.tick}, total ${fmtNum(rt.total)} ` +
+          `(${rt.byGood.slice(0, 5).map((g) => `${g.goodId} ${fmtNum(g.quantity)}`).join(", ")})`,
+    );
   }
 
   // Geography acceptance instruments (spec §5) — flow concentration, fuel-cost spread over both

@@ -465,7 +465,7 @@ describe("logisticsTargetsByKey", () => {
     const info = logisticsTargetsByKey(systems, markets).get("s1|water");
     expect(info).toEqual({
       logisticsTarget: 0, donorReserve: 0, marginFree: false, demand: 0, production: 0,
-      productionSuppressed: false,
+      productionSuppressed: false, role: "consumer", capacityProduction: 0, consumerDeepLine: 0,
     });
   });
 });

@@ -19,13 +19,16 @@ import {
   flushActiveEvents,
   computeEventImpacts,
 } from "./event-analysis";
-import { summariseLogistics, fundingBoundCensus, LOGISTICS_WARMUP_TICKS } from "./logistics-analysis";
+import {
+  summariseLogistics, fundingBoundCensus, fundingBoundIncidenceByFaction, LOGISTICS_WARMUP_TICKS,
+} from "./logistics-analysis";
 import type { LogisticsBudgetTotals } from "./logistics-analysis";
 import { summariseGeography, ownershipAt, type OwnershipSnapshot } from "./geography-analysis";
 import { pairKey } from "@/lib/tick/world/relations-world";
 import {
   newLaneRunAccumulator, sampleLaneUtilisation, sampleInTransitVolume, sampleLaneOccupancy, sampleLaneDispatch,
-  recordLogisticsBlocked, recordOvershootVolume, recordBudgetSkipped, summariseLanes,
+  recordLogisticsBlocked, recordOvershootVolume, recordBudgetSkipped, recordLogisticsWork,
+  recordDeliveredQuantity, sampleReleasedTonnage, computeReleasedByGood, summariseLanes,
 } from "./lane-analysis";
 import { catchUpFactor } from "@/lib/tick/shard";
 import { laneKey as laneKeyOf } from "@/lib/engine/lanes";
@@ -272,7 +275,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   const provisionSnapshots: Array<Map<string, number>> = [];
   // Lane-mechanics (spec §7) and survival-spell accumulators — see their own modules' docstrings for
   // why these are folded per tick/cycle rather than read off the final world.
-  const laneAcc = newLaneRunAccumulator();
+  const laneAcc = newLaneRunAccumulator(config.tickCount);
   // Fuel costs are static (never change once generated), so this lookup — the same shape
   // `sampleLaneOccupancy`'s `hopFuelCostsOf` needs — is built once for the whole run, not once per
   // tick or per row.
@@ -333,12 +336,15 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     }
 
     if (result.instrumentation.logisticsBudget && world.meta.currentTick >= LOGISTICS_WARMUP_TICKS) {
+      let workThisTick = 0;
       for (const b of result.instrumentation.logisticsBudget.values()) {
         logisticsBudgetTotals.total += b.total;
         logisticsBudgetTotals.spent += b.spent;
         logisticsBudgetTotals.fundingBoundEvents += b.fundingBoundCount;
         recordBudgetSkipped(laneAcc, b.budgetSkipped);
+        workThisTick += b.spent;
       }
+      recordLogisticsWork(laneAcc, workThisTick);
     }
 
     // Lane mechanics (spec §7) and the fifth conservation identity. The dispatch/applied-credit
@@ -351,6 +357,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     dispatchDrain.appliedCreditTotal += result.instrumentation.goodsArrivals?.appliedCreditTotal ?? 0;
     if (world.meta.currentTick >= LOGISTICS_WARMUP_TICKS) {
       recordOvershootVolume(laneAcc, result.instrumentation.goodsArrivals?.overshootVolume ?? 0);
+      recordDeliveredQuantity(laneAcc, result.instrumentation.goodsArrivals?.appliedCreditTotal ?? 0);
       if (result.instrumentation.logisticsBlocked) {
         recordLogisticsBlocked(laneAcc, result.instrumentation.logisticsBlocked);
       }
@@ -374,6 +381,20 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
         // cadence) — sampled on the logistics boundary, not the economy cycle, even though the two
         // intervals default equal.
         sampleSurvivalSpells(spellAcc, currentMarkets, world.meta.currentTick, LOGISTICS_WARMUP_TICKS);
+        // First-release transient (spec §6): reuses this same per-cycle boundary rather than a
+        // second walk over the galaxy, and stops paying for it once the first positive run is
+        // found — `sampleReleasedTonnage` is a no-op past that point.
+        if (!laneAcc.releasedFirst) {
+          const cycleStockpileScale = new Map(
+            world.treasuries.map((t) => [t.factionId, t.stockpileScale ?? 1]),
+          );
+          const cycleSystems = toTickSystems(world);
+          const cycleTargets = logisticsTargetsByKey(cycleSystems, currentMarkets, cycleStockpileScale);
+          const marketByKey = new Map(currentMarkets.map((m) => [`${m.systemId}|${m.goodId}`, m]));
+          sampleReleasedTonnage(
+            laneAcc, world.meta.currentTick, computeReleasedByGood(cycleTargets, marketByKey),
+          );
+        }
       }
     }
 
@@ -543,7 +564,27 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   const developedSystemIds = new Set(
     finalTickSystems.filter((s) => s.control === "developed").map((s) => s.id),
   );
-  const laneMetrics = summariseLanes(laneAcc, world.constructionProjects, developedSystemIds, currentMarkets);
+
+  // Every treasury's stockpile scale, resolved exactly as the tick's own callers resolve it — the
+  // harness reads through this so a faction's lines never drift from what the tick itself computed.
+  const stockpileScaleByFaction = new Map(
+    world.treasuries.map((t) => [t.factionId, t.stockpileScale ?? 1]),
+  );
+
+  // The two horizon-wide role reads, taken once and reused by every reader below (`marketHealth`,
+  // `roleCoverLevels`, `marketRoles`, `kneeBinding` and the lane-mechanics re-measure metric) —
+  // one `toGoodMarketStates` pass per system, never recomputed per reader.
+  const targetsByKey = logisticsTargetsByKey(finalTickSystems, currentMarkets, stockpileScaleByFaction);
+  // The live partition — what this arm actually classified — published so a later arm can pin to
+  // it. Taken before the pin is applied below, so a pinned run still reports its own membership
+  // and the drift between arms stays visible.
+  const roleInfoByKey = marketRolesByKey(finalTickSystems, currentMarkets, stockpileScaleByFaction);
+
+  const fundingBoundByFaction = fundingBoundIncidenceByFaction(finalTickSystems, currentMarkets);
+  const laneMetrics = summariseLanes(
+    laneAcc, world.constructionProjects, developedSystemIds, currentMarkets,
+    targetsByKey, roleInfoByKey, fundingBoundByFaction,
+  );
   const survivalSpellDistribution = summariseSpellDistribution(spellAcc);
   const stageTiming: StageTimingSummary = {
     tickMsMedian: median(tickMsSamples),
@@ -553,24 +594,11 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     goodsArrivalsShare: tickMsSum > 0 ? goodsArrivalsMsSum / tickMsSum : 0,
   };
 
-  // Every treasury's stockpile scale, resolved exactly as the tick's own callers resolve it — the
-  // harness reads through this so a faction's lines never drift from what the tick itself computed.
-  const stockpileScaleByFaction = new Map(
-    world.treasuries.map((t) => [t.factionId, t.stockpileScale ?? 1]),
-  );
-
   // The deficit share is measured against the warehousing target, which needs the systems'
   // real demand — a market row carries only the MIN_DEMAND-floored rate.
-  const marketHealth = computeMarketHealth(
-    currentMarkets,
-    logisticsTargetsByKey(finalTickSystems, currentMarkets, stockpileScaleByFaction),
-  );
+  const marketHealth = computeMarketHealth(currentMarkets, targetsByKey);
 
   const homeworldIds = new Set(world.factions.map((f) => f.homeworldId));
-  // The live partition — what this arm actually classified — published so a later arm can pin to
-  // it. Taken before the pin is applied below, so a pinned run still reports its own membership
-  // and the drift between arms stays visible.
-  const roleInfoByKey = marketRolesByKey(finalTickSystems, currentMarkets, stockpileScaleByFaction);
   const marketRoles: Record<string, MarketRole> = {};
   for (const [key, info] of roleInfoByKey) {
     marketRoles[key] = info.role;

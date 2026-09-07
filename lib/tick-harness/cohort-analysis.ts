@@ -16,7 +16,7 @@ import { median } from "@/lib/utils/math";
 import { nearBandFloor } from "./market-analysis";
 import { perSystemSupplyState, quantileLevels, worstGoodSatisfaction } from "./population-analysis";
 import type { EpisodeCostTotals } from "./population-analysis";
-import type { GoodMarketState } from "@/lib/engine/directed-logistics";
+import type { GoodMarketState, LogisticsRole } from "@/lib/engine/directed-logistics";
 import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldEvent, WorldMarket } from "@/lib/world/types";
 import { MARKET_ROLES } from "./types";
@@ -116,6 +116,20 @@ export interface LogisticsTargetInfo {
   demand: number;
   production: number;
   productionSuppressed: boolean;
+  /** The engine's own four-way role (`GoodMarketState.role`) — the re-measure metric's treated
+   *  cohort (supplier/idle) and the founding-cap/drop-rule readers all key off this, not the
+   *  harness's six-way `MarketRole`. */
+  role: LogisticsRole;
+  /** `GoodMarketState.capacityProduction` — the brake knee's output term, read by the harness's
+   *  anchor-event cohort (`brakeKnee`). */
+  capacityProduction: number;
+  /** `GoodMarketState.consumerDeepLine` — what a full-rate consumer of this good would keep,
+   *  regardless of this market's own role. The first-release transient read
+   *  (`releasedTonnageFirstCycle`) measures a supplier/idle market's give line against this. */
+  consumerDeepLine: number;
+  /** `GoodMarketState.lateInboundShare` — absent means never measured, never 0; the re-measure
+   *  metric's gate-excluded cohort reads it directly. */
+  lateInboundShare?: number;
 }
 
 /**
@@ -150,6 +164,10 @@ export function logisticsTargetsByKey(
         demand: state.demand,
         production: state.production,
         productionSuppressed: state.productionSuppressed ?? false,
+        role: state.role,
+        capacityProduction: state.capacityProduction,
+        consumerDeepLine: state.consumerDeepLine,
+        lateInboundShare: state.lateInboundShare,
       });
     }
   }

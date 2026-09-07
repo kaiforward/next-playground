@@ -1,10 +1,13 @@
 import { describe, it, expect } from "vitest";
 import {
   newLaneRunAccumulator, sampleLaneUtilisation, sampleInTransitVolume, sampleLaneOccupancy, sampleLaneDispatch,
-  recordLogisticsBlocked, recordOvershootVolume, recordBudgetSkipped, summariseLanes,
+  recordLogisticsBlocked, recordOvershootVolume, recordBudgetSkipped, recordLogisticsWork,
+  recordDeliveredQuantity, sampleReleasedTonnage, computeReleasedByGood, summariseLanes,
 } from "../lane-analysis";
 import { laneCapacity } from "@/lib/engine/lanes";
 import type { WorldLane, WorldMarket, WorldPendingArrival, WorldConstructionProject } from "@/lib/world/types";
+import type { LogisticsTargetInfo } from "../cohort-analysis";
+import type { LogisticsRole } from "@/lib/engine/directed-logistics";
 
 function lane(key: string, aId: string, bId: string, level: number, bookedLoad: number, blockedVolume = 0): WorldLane {
   return { key, aId, bId, level, bookedLoad, blockedVolume, idleCycles: 0 };
@@ -150,6 +153,236 @@ describe("summariseLanes", () => {
     ];
     const summary = summariseLanes(newLaneRunAccumulator(), [], developed, markets);
     expect(summary.survivalStockFalling).toEqual({ count: 1, share: 0.5 });
+  });
+});
+
+function dispatchRow(
+  toSystemId: string,
+  goodId: string,
+  quantity: number,
+  dispatchTick: number,
+  arrivalTick: number,
+): WorldPendingArrival {
+  return {
+    id: `${toSystemId}-${goodId}-${arrivalTick}`, factionId: "f1", fromSystemId: "origin",
+    toSystemId, goodId, quantity, dispatchTick, arrivalTick, routeEdges: [], leg: "outbound",
+  };
+}
+
+function target(role: LogisticsRole, lateInboundShare?: number): LogisticsTargetInfo {
+  return {
+    logisticsTarget: 0, donorReserve: 0, marginFree: false, demand: 0, production: 0,
+    productionSuppressed: false, role, capacityProduction: 0, consumerDeepLine: 0, lateInboundShare,
+  };
+}
+
+const NO_OWNER = (): null => null;
+
+describe("summariseLanes — inboundLatency (the re-measure metric)", () => {
+  it("reproduces temp/depot-diag.ts's Claim-1 arithmetic: mean latency per sink, share strictly over 24 ticks", () => {
+    // Three served sinks, one haul each, exactly the fixture the falsifier's vacuity check names:
+    // 24 ticks (not over), 25 ticks (over), 12 ticks (not over) — depot-diag's own definition,
+    // written out here rather than imported: sink mean = Σ latency×qty ÷ Σqty, share = sinks with
+    // mean > 24 ÷ served sinks.
+    const acc = newLaneRunAccumulator(25);
+    const rows = [
+      dispatchRow("at-line", "water", 10, 0, 24),
+      dispatchRow("over-line", "water", 10, 0, 25),
+      dispatchRow("well-under", "water", 10, 0, 12),
+    ];
+    sampleLaneDispatch(acc, rows, new Map(), NO_OWNER);
+
+    const summary = summariseLanes(acc, [], new Set(), []);
+    expect(summary.inboundLatency.servedSinks).toBe(3);
+    expect(summary.inboundLatency.shareOver24Ticks).toBeCloseTo(1 / 3, 9);
+  });
+
+  it("keeps a haul of exactly 24 ticks out of the over-24 population — the boundary is strict", () => {
+    const acc = newLaneRunAccumulator(24);
+    sampleLaneDispatch(acc, [dispatchRow("s1", "water", 10, 0, 24)], new Map(), NO_OWNER);
+    const summary = summariseLanes(acc, [], new Set(), []);
+    expect(summary.inboundLatency.shareOver24Ticks).toBe(0);
+  });
+
+  it("only retains rows whose arrivalTick falls in the ten cycles before the accumulator's horizon", () => {
+    const acc = newLaneRunAccumulator(1000);
+    // Outside the 240-tick window before tick 1000 (arrivalTick 700 ⇒ 1000-700=300 > 240).
+    sampleLaneDispatch(acc, [dispatchRow("outside", "water", 10, 680, 700)], new Map(), NO_OWNER);
+    // Inside it.
+    sampleLaneDispatch(acc, [dispatchRow("inside", "water", 10, 900, 950)], new Map(), NO_OWNER);
+    const summary = summariseLanes(acc, [], new Set(), []);
+    expect(summary.inboundLatency.servedSinks).toBe(1);
+  });
+
+  it("the treated-cohort share reads only supplier/idle sinks, and gate-excluded is only the late-share cohort", () => {
+    const acc = newLaneRunAccumulator(30);
+    sampleLaneDispatch(
+      acc,
+      [
+        dispatchRow("treated-over", "water", 5, 0, 30), // supplier, over 24
+        dispatchRow("consumer-over", "water", 5, 0, 30), // consumer, over 24, unmeasured late share
+        dispatchRow("gate-excluded", "water", 5, 0, 10), // consumer, late share over the constant
+        dispatchRow("treated-under", "water", 5, 0, 5), // idle, under 24
+      ],
+      new Map(),
+      NO_OWNER,
+    );
+    const targetsByKey = new Map<string, LogisticsTargetInfo>([
+      ["treated-over|water", target("supplier")],
+      ["consumer-over|water", target("consumer")],
+      ["gate-excluded|water", target("consumer", 0.5)],
+      ["treated-under|water", target("idle")],
+    ]);
+
+    const summary = summariseLanes(acc, [], new Set(), [], targetsByKey);
+    const latency = summary.inboundLatency;
+    expect(latency.servedSinks).toBe(4);
+    expect(latency.shareOver24Ticks).toBeCloseTo(0.5, 9); // treated-over, consumer-over
+    expect(latency.treatedSinks).toBe(2); // treated-over, treated-under
+    expect(latency.shareOver24TreatedCohort).toBeCloseTo(0.5, 9); // only treated-over is over 24
+    expect(latency.gateExcludedSinks).toBe(1); // gate-excluded only — never consumer-over
+    expect(latency.gateExcludedShare).toBeCloseTo(0.25, 9);
+  });
+
+  it("reports the guards beside the metric: median raise size, hauls per sink, per-haul latency quantiles", () => {
+    const acc = newLaneRunAccumulator(50);
+    sampleLaneDispatch(
+      acc,
+      [
+        dispatchRow("s1", "water", 10, 0, 10),
+        dispatchRow("s1", "water", 20, 10, 30),
+        dispatchRow("s2", "water", 30, 0, 40),
+      ],
+      new Map(),
+      NO_OWNER,
+    );
+    const summary = summariseLanes(acc, [], new Set(), []);
+    expect(summary.inboundLatency.haulsPerServedSink).toBeCloseTo(3 / 2, 9);
+    expect(summary.inboundLatency.medianRaiseSize).toBe(20);
+  });
+
+  it("reports zeroes, never NaN, when nothing was dispatched inside the window", () => {
+    const summary = summariseLanes(newLaneRunAccumulator(1000), [], new Set(), []);
+    expect(summary.inboundLatency).toEqual({
+      servedSinks: 0, shareOver24Ticks: 0, shareOver24TreatedCohort: 0, treatedSinks: 0,
+      gateExcludedShare: 0, gateExcludedSinks: 0, medianRaiseSize: 0, haulsPerServedSink: 0,
+      perHaulLatencyP50: 0, perHaulLatencyP90: 0,
+    });
+  });
+});
+
+describe("summariseLanes — logisticsWorkPerDeliveredUnit", () => {
+  it("reads 1× when total billed work equals total delivered quantity — a galaxy of only direct hauls", () => {
+    const acc = newLaneRunAccumulator();
+    recordLogisticsWork(acc, 400);
+    recordDeliveredQuantity(acc, 400);
+    const summary = summariseLanes(acc, [], new Set(), []);
+    expect(summary.logisticsWorkPerDeliveredUnit).toBeCloseTo(1, 9);
+  });
+
+  it("rises above 1× when relaying bills a second leg for the same delivered unit", () => {
+    const acc = newLaneRunAccumulator();
+    recordLogisticsWork(acc, 800); // two legs' worth of cost for the same tonnage
+    recordDeliveredQuantity(acc, 400);
+    const summary = summariseLanes(acc, [], new Set(), []);
+    expect(summary.logisticsWorkPerDeliveredUnit).toBeCloseTo(2, 9);
+  });
+
+  it("reports 0, not NaN, when nothing was delivered", () => {
+    const acc = newLaneRunAccumulator();
+    recordLogisticsWork(acc, 50);
+    const summary = summariseLanes(acc, [], new Set(), []);
+    expect(summary.logisticsWorkPerDeliveredUnit).toBe(0);
+  });
+});
+
+describe("computeReleasedByGood", () => {
+  function targetFor(
+    role: LogisticsRole,
+    donorReserve: number,
+    consumerDeepLine: number,
+  ): LogisticsTargetInfo {
+    return {
+      logisticsTarget: 0, donorReserve, marginFree: true, demand: 1, production: 0,
+      productionSuppressed: false, role, capacityProduction: 0, consumerDeepLine,
+    };
+  }
+
+  it("reads 0 on a run with no role change — a consumer market contributes nothing", () => {
+    // donorReserve (20) and consumerDeepLine (40) deliberately differ, so a consumer market that
+    // slipped through the role filter would still show a nonzero gap — this is not vacuous on a
+    // market whose two lines happen to coincide.
+    const targetsByKey = new Map<string, LogisticsTargetInfo>([
+      ["s1|water", targetFor("consumer", 20, 40)],
+    ]);
+    const marketByKey = new Map([["s1|water", { goodId: "water", stock: 60 }]]);
+    const released = computeReleasedByGood(targetsByKey, marketByKey);
+    expect(released.size).toBe(0);
+  });
+
+  it("credits a supplier the gap between its buffer and the deep line a consumer would have kept", () => {
+    // Buffer 10, deep line 40, stock 60: drawable to 10 is 50, drawable to 40 (deep) is 20 — the
+    // 30-unit gap is what became drawable ONLY because this market stopped being a consumer.
+    const targetsByKey = new Map<string, LogisticsTargetInfo>([
+      ["s1|water", targetFor("supplier", 10, 40)],
+    ]);
+    const marketByKey = new Map([["s1|water", { goodId: "water", stock: 60 }]]);
+    const released = computeReleasedByGood(targetsByKey, marketByKey);
+    expect(released.get("water")).toBe(30);
+  });
+});
+
+describe("sampleReleasedTonnage / releasedTonnageFirstCycle", () => {
+  it("reads tick null and every total 0 on a run with no role change", () => {
+    // No call to sampleReleasedTonnage at all — the runner's own convention for a cycle whose
+    // supplier/idle release summed to 0 (nothing crossed the deep line).
+    const summary = summariseLanes(newLaneRunAccumulator(), [], new Set(), []);
+    expect(summary.releasedTonnageFirstCycle).toEqual({ tick: null, total: 0, byGood: [] });
+  });
+
+  it("a released total of exactly 0 does not set the first-cycle read", () => {
+    const acc = newLaneRunAccumulator();
+    sampleReleasedTonnage(acc, 100, new Map([["water", 0]]));
+    const summary = summariseLanes(acc, [], new Set(), []);
+    expect(summary.releasedTonnageFirstCycle).toEqual({ tick: null, total: 0, byGood: [] });
+  });
+
+  it("records the first positive run and never overwrites it on a later positive run", () => {
+    const acc = newLaneRunAccumulator();
+    sampleReleasedTonnage(acc, 100, new Map([["water", 5]]));
+    sampleReleasedTonnage(acc, 200, new Map([["water", 50]]));
+    const summary = summariseLanes(acc, [], new Set(), []);
+    expect(summary.releasedTonnageFirstCycle.tick).toBe(100);
+    expect(summary.releasedTonnageFirstCycle.total).toBe(5);
+    expect(summary.releasedTonnageFirstCycle.byGood).toEqual([{ goodId: "water", quantity: 5 }]);
+  });
+});
+
+describe("summariseLanes — physicalCoverAtRationByRole / anchorEventCohort", () => {
+  it("reports an empty table, never NaN, when no market carries a role at the horizon", () => {
+    const markets: WorldMarket[] = [
+      { systemId: "s1", goodId: "water", stock: 5, anchorMult: 1, demandRate: 1, storageCapacity: 0 },
+    ];
+    const summary = summariseLanes(newLaneRunAccumulator(), [], new Set(), markets);
+    expect(summary.physicalCoverAtRationByRole).toEqual([]);
+    // Every role still gets a zeroed row for the anchor-event cohort, never a missing entry.
+    expect(summary.anchorEventCohort.every((e) => e.count === 0 && e.brakedCount === 0)).toBe(true);
+    expect(summary.anchorEventCohort.length).toBeGreaterThan(0);
+  });
+
+  it("reads stock ÷ use in cycles per role, ration-flagging only markets under RATION_COVER × use", () => {
+    const markets: WorldMarket[] = [
+      { systemId: "s1", goodId: "water", stock: 1, anchorMult: 1, demandRate: 1, storageCapacity: 0 },
+      { systemId: "s2", goodId: "water", stock: 100, anchorMult: 1, demandRate: 1, storageCapacity: 0 },
+    ];
+    const rolesByKey = new Map([
+      ["s1|water", { role: "consumer" as const, demand: 2 }], // 0.5 cycles, well under RATION_COVER
+      ["s2|water", { role: "consumer" as const, demand: 2 }], // 50 cycles
+    ]);
+    const summary = summariseLanes(newLaneRunAccumulator(), [], new Set(), markets, new Map(), rolesByKey);
+    const entry = summary.physicalCoverAtRationByRole.find((e) => e.role === "consumer");
+    expect(entry?.n).toBe(2);
+    expect(entry?.underRationShare).toBeCloseTo(0.5, 9);
   });
 });
 

@@ -229,6 +229,25 @@ describe("ExperimentConfig", () => {
       expect(saved.foundingStock).toEqual(results.foundingStock);
     });
 
+    it("includes the lane-mechanics re-measure metric and its guards in the saved JSON", () => {
+      const results = minimalResults();
+      results.laneMetrics = {
+        ...results.laneMetrics,
+        inboundLatency: {
+          servedSinks: 40, shareOver24Ticks: 0.55, shareOver24TreatedCohort: 0.3, treatedSinks: 25,
+          gateExcludedShare: 0.1, gateExcludedSinks: 4, medianRaiseSize: 12, haulsPerServedSink: 2.1,
+          perHaulLatencyP50: 30, perHaulLatencyP90: 90,
+        },
+        logisticsWorkPerDeliveredUnit: 1.8,
+        fundingBoundIncidenceByFaction: [{ factionId: "f1", flagged: 3, marketCount: 20, rate: 0.15 }],
+        physicalCoverAtRationByRole: [{ role: "supplier", n: 10, medianCoverCycles: 11, underRationShare: 0.05 }],
+        anchorEventCohort: [{ role: "supplier", count: 2, brakedCount: 1 }],
+        releasedTonnageFirstCycle: { tick: 5600, total: 120, byGood: [{ goodId: "ore", quantity: 120 }] },
+      };
+      const saved = buildExperimentResult(results);
+      expect(saved.laneMetrics).toEqual(results.laneMetrics);
+    });
+
     it("includes the founding lifecycle, founder cohort and money bars in the saved JSON", () => {
       // A gate arm run through --config saves this document and nothing else. A reading the report
       // prints but the document drops cannot be compared between arms, which is the only way these

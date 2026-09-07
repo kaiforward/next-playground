@@ -69,6 +69,49 @@ export function fundingBoundCensus(
   };
 }
 
+/** One faction's share of `fundingBoundCensus`'s question — whether the change raises total haul
+ *  work enough to push a particular faction's funded band, rather than the galaxy as a whole. */
+export interface FundingBoundIncidenceEntry {
+  factionId: string | null;
+  flagged: number;
+  marketCount: number;
+  rate: number;
+}
+
+/**
+ * `fundingBoundCensus`, broken out per owning faction — a faction whose markets sit deep inside
+ * relayed chains can carry the whole galaxy's incidence while every other faction reads clean, a
+ * split the galaxy-wide count cannot show. Same developed-only, absent-reads-unflagged
+ * conventions as `fundingBoundCensus`; independents (and any market whose system carries no
+ * faction) fold into the `null` entry.
+ */
+export function fundingBoundIncidenceByFaction(
+  systems: ReadonlyArray<{ id: string; control: SystemControl; factionId: string | null }>,
+  markets: ReadonlyArray<{ systemId: string; logisticsFundingBound?: boolean }>,
+): FundingBoundIncidenceEntry[] {
+  const factionBySystem = new Map(systems.map((s) => [s.id, s.factionId]));
+  const developedIds = new Set(
+    systems.filter((s) => s.control === "developed").map((s) => s.id),
+  );
+  const byFaction = new Map<string | null, { flagged: number; marketCount: number }>();
+  for (const m of markets) {
+    if (!developedIds.has(m.systemId)) continue;
+    const factionId = factionBySystem.get(m.systemId) ?? null;
+    const entry = byFaction.get(factionId) ?? { flagged: 0, marketCount: 0 };
+    entry.marketCount++;
+    if (m.logisticsFundingBound ?? false) entry.flagged++;
+    byFaction.set(factionId, entry);
+  }
+  return [...byFaction.entries()]
+    .map(([factionId, e]) => ({
+      factionId,
+      flagged: e.flagged,
+      marketCount: e.marketCount,
+      rate: e.marketCount > 0 ? e.flagged / e.marketCount : 0,
+    }))
+    .sort((a, b) => (a.factionId ?? "").localeCompare(b.factionId ?? ""));
+}
+
 export function summariseLogistics(
   flows: WorldFlowEvent[],
   budget: LogisticsBudgetTotals,
