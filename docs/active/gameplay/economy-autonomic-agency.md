@@ -186,8 +186,9 @@ Qualifying as a supplier takes a real window of steady replenishment — one ref
 0.2 of the way, so a consumer served once is not a supplier. Losing the role is immediate: a supplier
 that sits short for `SUPPLIER_DROP_RUNS` (4) consecutive runs with nothing credited reverts to consumer
 on the spot, whatever its rolling average still says. The counter that tracks this is a latch: it stops
-advancing once it reaches the threshold, and only a run that actually credits something resets it to
-zero — so a world cut off from its supply reverts once and stays reverted, rather than pulsing back into
+advancing once it reaches the threshold, and only a run whose cycle actually credited something —
+goods that arrived over the cycle the economy has just closed, not a rolling average still decaying
+toward zero — resets it to zero — so a world cut off from its supply reverts once and stays reverted, rather than pulsing back into
 the role the moment its short streak would otherwise wrap around. This bounds the cascade in a chain of
 producer → supplier → supplier → supplier: if the producer stops, each link gives down to its buffer and
 then holds it — a supplier's reserve against a stopped supply is 10-12 cycles, not 40, but the reversion

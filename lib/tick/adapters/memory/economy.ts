@@ -200,6 +200,8 @@ export class InMemoryEconomyWorld implements EconomyWorld {
             : m.lateInboundShare,
         inboundSinceFold: isFinite(u.inboundSinceFold) ? Math.max(0, u.inboundSinceFold) : 0,
         lateInboundSinceFold: isFinite(u.lateInboundSinceFold) ? Math.max(0, u.lateInboundSinceFold) : 0,
+        inboundCreditedLastCycle:
+          isFinite(u.inboundCreditedLastCycle) ? Math.max(0, u.inboundCreditedLastCycle) : 0,
       };
     });
     return Promise.resolve();

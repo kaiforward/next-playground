@@ -730,6 +730,15 @@ export interface WorldMarket {
    */
   lateInboundSinceFold?: number;
   /**
+   * Credited inbound volume the most recent economy fold consumed — `inboundSinceFold` as it stood
+   * the instant before that fold zeroed it, written by the same economy update. It survives the
+   * zeroing so a later stage on the same tick can still answer "did anything actually arrive here
+   * over the cycle just closed?": the directed-logistics run that follows the economy on every cycle
+   * boundary reads it to clear the supplier drop latch, which the live accumulator can no longer
+   * tell it (the economy always zeroes that first). Absent reads as 0. Cleared on abandonment.
+   */
+  inboundCreditedLastCycle?: number;
+  /**
    * Consecutive directed-logistics runs this market has sat short (below its deficit line) with
    * nothing credited, while it held supplier status — the drop rule's counter
    * (`SUPPLIER_DROP_RUNS`): reaching the threshold reverts the market to consumer regardless of what

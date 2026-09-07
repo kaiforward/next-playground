@@ -902,19 +902,22 @@ describe("runDirectedLogisticsProcessor: the supplier drop counter", () => {
   });
 
   it("clears the counter on a run that credited the market, however short it still is", async () => {
-    // Two short runs, then one where the arrivals stage credited something since the last fold: the
-    // market is still short and still a supplier, and the count starts again from nothing.
+    // Two short runs, then one whose cycle the arrivals stage credited: the market is still short
+    // and still a supplier, and the count starts again from nothing. The credit is read off
+    // `inboundCreditedLastCycle` — the record the economy's fold leaves on the row earlier in the
+    // same tick — because the live accumulator that fold consumed is always zero by the time this
+    // processor runs. That stage order is pinned end to end in `lib/world/__tests__/tick.test.ts`.
     expect((await runWith(undefined)).counter).toBe(1);
     expect((await runWith(1)).counter).toBe(2);
-    expect((await runWith(2, { inboundSinceFold: 6 })).counter).toBe(0);
+    expect((await runWith(2, { inboundCreditedLastCycle: 6 })).counter).toBe(0);
     // And the run after the credited one starts the count over rather than resuming at three.
     expect((await runWith(0)).counter).toBe(1);
     // The credited run is still a supplier short of its own want — the reset is the credit, not a
     // change of role or a comfortable shelf.
-    expect((await runWith(2, { inboundSinceFold: 6 })).shortfall).toBeCloseTo(SUPPLIER_WANT, 6);
+    expect((await runWith(2, { inboundCreditedLastCycle: 6 })).shortfall).toBeCloseTo(SUPPLIER_WANT, 6);
     // And a credit is the only thing that lifts a LATCHED counter: a world that lost the role gets
     // it back when its supply comes back, not because it waited.
-    expect((await runWith(DIRECTED_LOGISTICS.SUPPLIER_DROP_RUNS, { inboundSinceFold: 6 })).counter).toBe(0);
+    expect((await runWith(DIRECTED_LOGISTICS.SUPPLIER_DROP_RUNS, { inboundCreditedLastCycle: 6 })).counter).toBe(0);
   });
 
   it("leaves a comfortable supplier's counter alone rather than writing a zero every run", async () => {

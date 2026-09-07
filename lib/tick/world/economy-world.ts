@@ -89,6 +89,10 @@ export interface MarketUpdate {
   inboundSinceFold: number;
   /** Zeroes `WorldMarket.lateInboundSinceFold`, alongside `inboundSinceFold`. */
   lateInboundSinceFold: number;
+  /** What `inboundSinceFold` held immediately before the zeroing above — `WorldMarket
+   *  .inboundCreditedLastCycle`, the record of this cycle's credited arrivals that outlives the
+   *  accumulator the fold consumed. Always written. */
+  inboundCreditedLastCycle: number;
 }
 
 export interface EconomyWorld {

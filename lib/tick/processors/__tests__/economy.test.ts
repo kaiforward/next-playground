@@ -1446,6 +1446,35 @@ describe("economy processor: reserve-rate folding", () => {
     expect(world.markets[0].steadyInbound).toBeCloseTo(80, 6);
   });
 
+  it("records the credited inbound the fold consumed, so a later stage on the same tick can still see it", async () => {
+    // The directed-logistics run that follows on every cycle boundary asks "did anything arrive here
+    // over the cycle just closed?" — a question the zeroed accumulator can no longer answer.
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-record", 0)],
+      markets: [{
+        ...makeMarket("sys-record", "food", FIXTURE_BAND.targetStock),
+        inboundSinceFold: 40,
+      }],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
+    expect(world.markets[0].inboundSinceFold).toBe(0);
+    expect(world.markets[0].inboundCreditedLastCycle).toBe(40);
+  });
+
+  it("records a zero for a cycle that credited nothing, clearing a prior cycle's record", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-record-none", 0)],
+      markets: [{
+        ...makeMarket("sys-record-none", "food", FIXTURE_BAND.targetStock),
+        inboundCreditedLastCycle: 40,
+      }],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval: REFERENCE_INTERVAL });
+    expect(world.markets[0].inboundCreditedLastCycle).toBe(0);
+  });
+
   it("zeroes inboundSinceFold and lateInboundSinceFold after folding them", async () => {
     const world = new InMemoryEconomyWorld({
       systems: [makeConsumerSystem("sys-zero", 0)],

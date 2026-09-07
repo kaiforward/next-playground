@@ -473,7 +473,7 @@ export function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRo
       steadyInbound: m.steadyInbound,
       lateInboundShare: m.lateInboundShare,
       supplierShortRuns: m.supplierShortRuns,
-      inboundSinceFold: m.inboundSinceFold,
+      inboundCreditedLastCycle: m.inboundCreditedLastCycle,
     };
     const list = bySystem.get(m.systemId);
     if (list) list.push(row);
@@ -1012,11 +1012,12 @@ export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: str
  * structural reading names a shortfall THIS colony's donors and production could not close, and a
  * resettled colony has neither yet — its own local-supply story starts over. The same clear covers
  * the supplier-floor rolling figures — `realisedUse`, `steadyInbound`, `lateInboundShare`, their
- * since-last-fold accumulators `inboundSinceFold`/`lateInboundSinceFold`, and the drop-rule counter
+ * since-last-fold accumulators `inboundSinceFold`/`lateInboundSinceFold`, the record of the last
+ * fold's credited inbound `inboundCreditedLastCycle`, and the drop-rule counter
  * `supplierShortRuns` — for the identical reason: each names what THIS colony's economy actually did
  * over its rolling window, and a resettled colony has done nothing yet. Absent already reads as
  * unknown for the three rates (never 0 — an unknown rate reads as a plain consumer on the deep
- * reserve, the role every world starts in) and as 0 for the two accumulators and the counter, so a
+ * reserve, the role every world starts in) and as 0 for the three accumulators and the counter, so a
  * resettled colony opens exactly as a freshly-created market row would.
  */
 export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds: string[]): WorldMarket[] {
@@ -1036,6 +1037,7 @@ export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds
     delete next.lateInboundShare;
     delete next.inboundSinceFold;
     delete next.lateInboundSinceFold;
+    delete next.inboundCreditedLastCycle;
     delete next.supplierShortRuns;
     return next;
   });

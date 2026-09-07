@@ -335,9 +335,12 @@ export async function runDirectedLogisticsProcessor(
       // pulsing back into the role on the very next run because the reversion cleared its own
       // counter. Only a credit clears it, and `inboundSinceFold` is what says "something arrived
       // here at all": the rolling `steadyInbound` average decays toward zero without reaching it.
+      // The credit is read off `inboundCreditedLastCycle`, what the economy's fold consumed earlier
+      // on this very tick — the live accumulator it folded is already zero by the time this runs, so
+      // reading that instead would make the clear unreachable.
       const priorShortRuns = market.supplierShortRuns ?? 0;
       const supplierShortRuns =
-        (market.inboundSinceFold ?? 0) > 0
+        (market.inboundCreditedLastCycle ?? 0) > 0
           ? 0
           : priorShortRuns >= DIRECTED_LOGISTICS.SUPPLIER_DROP_RUNS
             ? priorShortRuns

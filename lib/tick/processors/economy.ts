@@ -234,9 +234,12 @@ export async function runEconomyProcessor(
         lateInboundShare !== undefined && Number.isFinite(lateInboundShare)
           ? Math.max(0, Math.min(1, lateInboundShare))
           : undefined,
-      // The fold above just consumed both accumulators — zero them so the next cycle starts fresh.
+      // The fold above just consumed both accumulators — zero them so the next cycle starts fresh,
+      // and keep what the inbound one held, so a stage running later on this same tick can still
+      // see that something arrived over the cycle just closed.
       inboundSinceFold: 0,
       lateInboundSinceFold: 0,
+      inboundCreditedLastCycle: inboundSinceFold,
     };
   });
 

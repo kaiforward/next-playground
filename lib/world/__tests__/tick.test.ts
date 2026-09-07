@@ -26,6 +26,7 @@ import {
 import { CROWDING, POPULATION_PARAMS, STRIKE_PARAMS, UNREST_PARAMS } from "@/lib/constants/population";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { EXPANSION } from "@/lib/constants/expansion";
 import type { TaxLevel } from "@/lib/types/game";
 import type { SystemDevelopment } from "@/lib/tick/world/directed-build-world";
@@ -2669,7 +2670,7 @@ describe("marketRowsBySystem carries the supplier-floor rolling figures through 
       steadyInbound: 8,
       lateInboundShare: 0.4,
       supplierShortRuns: 2,
-      inboundSinceFold: 5,
+      inboundCreditedLastCycle: 5,
     };
     const rows = marketRowsBySystem([flagged]).get(flagged.systemId);
     const row = rows?.find((r) => r.goodId === flagged.goodId);
@@ -2677,8 +2678,9 @@ describe("marketRowsBySystem carries the supplier-floor rolling figures through 
     expect(row?.steadyInbound).toBe(8);
     expect(row?.lateInboundShare).toBeCloseTo(0.4, 10);
     expect(row?.supplierShortRuns).toBe(2);
-    // The drop rule asks "was anything credited here at all", which only the raw accumulator answers.
-    expect(row?.inboundSinceFold).toBe(5);
+    // The drop rule asks "was anything credited here at all over the cycle just folded", which only
+    // this record answers — the live accumulator is zero by the time logistics reads the row.
+    expect(row?.inboundCreditedLastCycle).toBe(5);
   });
 
   it("carries absence through as undefined, never as 0 — matching unservedShortfall's own projection", () => {
@@ -2688,14 +2690,14 @@ describe("marketRowsBySystem carries the supplier-floor rolling figures through 
     delete untouched.steadyInbound;
     delete untouched.lateInboundShare;
     delete untouched.supplierShortRuns;
-    delete untouched.inboundSinceFold;
+    delete untouched.inboundCreditedLastCycle;
     const rows = marketRowsBySystem([untouched]).get(untouched.systemId);
     const row = rows?.find((r) => r.goodId === untouched.goodId);
     expect(row?.realisedUse).toBeUndefined();
     expect(row?.steadyInbound).toBeUndefined();
     expect(row?.lateInboundShare).toBeUndefined();
     expect(row?.supplierShortRuns).toBeUndefined();
-    expect(row?.inboundSinceFold).toBeUndefined();
+    expect(row?.inboundCreditedLastCycle).toBeUndefined();
   });
 });
 
@@ -2713,7 +2715,7 @@ describe("resetAbandonedMarkets clears unservedShortfall", () => {
 });
 
 describe("resetAbandonedMarkets clears the supplier-floor rolling figures", () => {
-  it("deletes all six new fields on abandonment, leaving stock untouched — a resettled world opens unknown, not as an idle market on a ten-cycle line", () => {
+  it("deletes all seven new fields on abandonment, leaving stock untouched — a resettled world opens unknown, not as an idle market on a ten-cycle line", () => {
     const base = generateWorld({ systemCount: 20, seed: 3 }).markets[0];
     const stale: WorldMarket = {
       ...base,
@@ -2722,6 +2724,7 @@ describe("resetAbandonedMarkets clears the supplier-floor rolling figures", () =
       lateInboundShare: 0.4,
       inboundSinceFold: 3,
       lateInboundSinceFold: 1,
+      inboundCreditedLastCycle: 9,
       supplierShortRuns: 2,
       stock: 777,
     };
@@ -2733,6 +2736,7 @@ describe("resetAbandonedMarkets clears the supplier-floor rolling figures", () =
     expect("lateInboundShare" in reset).toBe(false);
     expect("inboundSinceFold" in reset).toBe(false);
     expect("lateInboundSinceFold" in reset).toBe(false);
+    expect("inboundCreditedLastCycle" in reset).toBe(false);
     expect("supplierShortRuns" in reset).toBe(false);
     expect(reset.stock).toBe(777);
   });
@@ -2746,6 +2750,58 @@ describe("resetAbandonedMarkets clears the supplier-floor rolling figures", () =
     const [, keptUntouched] = resetAbandonedMarkets([stale, untouched], [stale.systemId]);
 
     expect(keptUntouched.realisedUse).toBe(9);
+  });
+});
+
+// The drop latch's clear runs INSIDE one tick's stage order: the economy folds this cycle's credited
+// inbound (zeroing the accumulator it consumed) and directed logistics reads the fold's record
+// afterwards, on the same tick. Pinned end to end through `runWorldTick` rather than by handing the
+// processor a hand-built row, because the vacuity the fix exists to close is exactly a row shape the
+// real order never presents.
+describe("runWorldTick — a credited cycle clears the supplier drop latch", () => {
+  const LATCH_CADENCE: TickCadence = { cycle: 1, logistics: 1, construction: 999 };
+
+  /** A world whose first owned market carries a fully-latched counter, plus whatever inbound the
+   *  arrivals stage is supposed to have credited it since the last fold. */
+  function latchedWorld(inboundSinceFold: number): { world: World; marketId: string } {
+    const base = generateWorld({ systemCount: 20, seed: 3 });
+    const owned = base.systems.find((s) => s.factionId !== null);
+    if (!owned) throw new Error("no owned system");
+    const target = base.markets.find((m) => m.systemId === owned.id);
+    if (!target) throw new Error("no market on the owned system");
+    return {
+      marketId: `${target.systemId}|${target.goodId}`,
+      world: {
+        ...base,
+        markets: base.markets.map((m) =>
+          m.systemId === target.systemId && m.goodId === target.goodId
+            ? {
+              ...m,
+              supplierShortRuns: DIRECTED_LOGISTICS.SUPPLIER_DROP_RUNS,
+              inboundSinceFold,
+              lateInboundSinceFold: 0,
+            }
+            : m,
+        ),
+      },
+    };
+  }
+
+  const counterAfterOneTick = async (inboundSinceFold: number): Promise<number | undefined> => {
+    const { world, marketId } = latchedWorld(inboundSinceFold);
+    const after = (await runWorldTick(world, { cadence: LATCH_CADENCE })).world;
+    const [systemId, goodId] = marketId.split("|");
+    return after.markets.find((m) => m.systemId === systemId && m.goodId === goodId)?.supplierShortRuns;
+  };
+
+  it("clears a latched counter on the cycle its arrivals were credited", async () => {
+    // The economy zeroes `inboundSinceFold` before logistics ever sees the row, so the clear can
+    // only fire off the record the fold leaves behind.
+    expect(await counterAfterOneTick(6)).toBeUndefined();
+  });
+
+  it("holds the latch through a cycle that credited nothing", async () => {
+    expect(await counterAfterOneTick(0)).toBe(DIRECTED_LOGISTICS.SUPPLIER_DROP_RUNS);
   });
 });
 

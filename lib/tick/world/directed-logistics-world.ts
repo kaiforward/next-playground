@@ -49,10 +49,12 @@ export interface MarketRowForLogistics {
   lateInboundShare?: number;
   /** Consecutive short supplier runs; see `WorldMarket.supplierShortRuns`. Missing ⇒ 0. */
   supplierShortRuns?: number;
-  /** Inbound credited since the last fold; see `WorldMarket.inboundSinceFold`. Missing ⇒ 0. Read
-   *  only by the drop rule, which needs "was anything credited here at all since the last fold",
-   *  a question the rolling `steadyInbound` average cannot answer — it decays but never reaches 0. */
-  inboundSinceFold?: number;
+  /** Inbound credited over the cycle the economy has just folded; see
+   *  `WorldMarket.inboundCreditedLastCycle`. Missing ⇒ 0. Read only by the drop rule, which needs
+   *  "was anything credited here at all over the last cycle", a question the rolling `steadyInbound`
+   *  average cannot answer — it decays but never reaches 0 — and which the live `inboundSinceFold`
+   *  accumulator cannot answer either, the economy having zeroed it earlier on this very tick. */
+  inboundCreditedLastCycle?: number;
 }
 
 /** One system's logistics-relevant state. */
